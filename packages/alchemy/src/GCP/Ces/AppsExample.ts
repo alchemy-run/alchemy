@@ -37,7 +37,7 @@ export type AppsExampleProps = {
   app: string;
   /**
    * Region used when `app` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -136,9 +136,14 @@ export class AppsExampleNotResolved extends Data.TaggedError(
 const resourceName = (app: string, exampleId: string) =>
   `${app}/examples/${exampleId}`;
 
-const toAttrs = (example: ces.Example, project: string, appHint?: string) => {
+const toAttrs = (
+  example: ces.Example,
+  project: string,
+  region: string,
+  appHint?: string,
+) => {
   const name = example.name ?? "";
-  const parsed = parseResourceName(name, "examples");
+  const parsed = parseResourceName(name, "examples", region);
   return {
     name,
     exampleId: parsed.id,
@@ -163,7 +168,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAppsExamples({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsExamples.pages({ parent, pageSize: 100 }),
     (page) => page.examples,
@@ -171,7 +176,7 @@ const listAt = (parent: string, project: string) =>
     Effect.map((examples) =>
       examples
         .filter((example) => hasOwnershipMarker(example.description))
-        .map((example) => toAttrs(example, project, parent)),
+        .map((example) => toAttrs(example, project, region, parent)),
     ),
   );
 
@@ -191,7 +196,10 @@ export const AppsExampleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const app = olds?.app
         ? expandApp(olds.app, env.project, location)
         : output?.app;
@@ -204,7 +212,7 @@ export const AppsExampleProvider = () =>
         output?.name ?? (app !== undefined ? resourceName(app, exampleId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, app);
+      const attrs = toAttrs(existing, env.project, env.region, app);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -213,15 +221,18 @@ export const AppsExampleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* forEachApp(env.project, (parent) =>
-          listAt(parent, env.project),
+        return yield* forEachApp(
+          env.project,
+          (parent) => listAt(parent, env.project, env.region),
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? "us-central1",
+        news.location ?? output?.location,
+        env.region,
       );
       const app = expandApp(news.app, env.project, location);
       const exampleId = yield* toPhysicalId(
@@ -287,7 +298,7 @@ export const AppsExampleProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project, app);
+      return toAttrs(current, env.project, env.region, app);
     }),
 
     delete: Effect.fn(function* ({ output }) {

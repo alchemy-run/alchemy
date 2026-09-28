@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   annotationsOf,
   encodeBytes,
   hasAlchemyLabelMap,
@@ -54,7 +53,7 @@ export type ApisVersionsSpecProps = {
   specId?: string;
   /**
    * Location used when parsing parent names.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -163,9 +162,9 @@ export const ApisVersionsSpec = Resource<ApisVersionsSpec>(
 const resourceName = (version: string, specId: string) =>
   `${version}/specs/${specId}`;
 
-const toAttrs = (spec: registry.ApiSpec, project: string) => {
+const toAttrs = (spec: registry.ApiSpec, project: string, region: string) => {
   const name = spec.name ?? "";
-  const parsed = parseResourceName(name, "specs");
+  const parsed = parseResourceName(name, "specs", region);
   return {
     name,
     specId: parsed.id,
@@ -211,7 +210,7 @@ export const ApisVersionsSpecProvider = () =>
         output?.name ?? (version ? resourceName(version, specId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -220,14 +219,12 @@ export const ApisVersionsSpecProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const apis = yield* listApis(locationParent(env.project, env.region));
         const versions = yield* listChildResources(namedOf(apis), listVersions);
         const specs = yield* listChildResources(namedOf(versions), listSpecs);
         return specs
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -319,7 +316,7 @@ export const ApisVersionsSpecProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

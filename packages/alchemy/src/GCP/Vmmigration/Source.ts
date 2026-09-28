@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   fieldMask,
   fingerprint,
   hasAlchemyLabelMap,
@@ -48,7 +47,7 @@ export type SourceProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * source. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -161,9 +160,9 @@ const resourceName = (project: string, location: string, sourceId: string) =>
 const kindOf = (value: { aws?: unknown; azure?: unknown; vmware?: unknown }) =>
   value.aws ? "aws" : value.azure ? "azure" : value.vmware ? "vmware" : "";
 
-const toAttrs = (source: vm.Source, project: string) => {
+const toAttrs = (source: vm.Source, project: string, region: string) => {
   const name = source.name ?? "";
-  const parsed = parseName(name, "sources");
+  const parsed = parseName(name, "sources", region);
   return {
     name,
     sourceId: parsed.id,
@@ -187,7 +186,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsSources({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   vm.listProjectsLocationsSources
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -201,7 +200,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         vm.listProjectsLocationsSources
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -260,6 +259,7 @@ export const SourceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = kindOf({
         aws: olds?.aws ?? output?.aws,
         azure: olds?.azure ?? output?.azure,
@@ -282,9 +282,13 @@ export const SourceProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.sourceId ?? output?.sourceId,
         nextId: news.sourceId ?? olds?.sourceId ?? output?.sourceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousKind !== nextKind ||
@@ -303,12 +307,15 @@ export const SourceProvider = () =>
         output?.sourceId,
         "source",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, sourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -317,8 +324,8 @@ export const SourceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -329,7 +336,10 @@ export const SourceProvider = () =>
         output?.sourceId,
         "source",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, sourceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -411,7 +421,7 @@ export const SourceProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

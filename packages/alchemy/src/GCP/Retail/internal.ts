@@ -342,7 +342,10 @@ export const collectPages = <Page, Item, E, R>(
     Effect.map((chunk) => Array.from(chunk) as Item[]),
   );
 
-export const LIST_LOCATIONS = ["global", "us-central1"] as const;
+/** Locations `list` scans: `global`, the pre-`GCP.Region` default, and the stack region. */
+export const listLocations = (region: string): string[] => [
+  ...new Set(["global", "us-central1", region]),
+];
 
 export const listCatalogs = (project: string, location: string) =>
   collectPages(
@@ -357,9 +360,9 @@ export const listCatalogs = (project: string, location: string) =>
     ),
   );
 
-export const listProjectCatalogs = (project: string) =>
+export const listProjectCatalogs = (project: string, region: string) =>
   Effect.forEach(
-    LIST_LOCATIONS,
+    listLocations(region),
     (location) => listCatalogs(project, location),
     { concurrency: 2 },
   ).pipe(

@@ -7,7 +7,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   DEFAULT_THROUGHPUT_CAPACITY,
   ResourceNotResolved,
   fieldMask,
@@ -41,7 +40,7 @@ export type AdminReservationProps = {
    * Region (`us-central1`, `us-east1`, …). Reservations are regional.
    * Immutable — changing it replaces the reservation. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -132,7 +131,7 @@ const toAttrs = (
     name,
     reservationId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location,
     throughputCapacity: reservation.throughputCapacity,
   };
 };
@@ -143,17 +142,18 @@ export const AdminReservationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.reservationId ?? output?.reservationId,
         nextId:
           news.reservationId ?? olds?.reservationId ?? output?.reservationId,
         previousLocation: normalizeLocation(
           olds?.location ?? output?.location,
-          DEFAULT_REGION,
+          env.region,
         ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
-          DEFAULT_REGION,
+          env.region,
         ),
       });
     }),
@@ -167,7 +167,7 @@ export const AdminReservationProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
@@ -198,7 +198,7 @@ export const AdminReservationProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(
         env.project,

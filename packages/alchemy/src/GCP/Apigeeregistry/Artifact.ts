@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   artifactAttrs,
   contentsOf,
   hasAlchemyLabelMap,
@@ -35,7 +34,7 @@ export type ArtifactProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * artifact.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -133,19 +132,27 @@ export const ArtifactProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.artifactId ?? output?.artifactId,
         nextId: news.artifactId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const artifactId = yield* toPhysicalId(
         id,
         olds?.artifactId,
@@ -155,7 +162,7 @@ export const ArtifactProvider = () =>
       const name = output?.name ?? resourceName(parent, artifactId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = artifactAttrs(existing, env.project);
+      const attrs = artifactAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -165,16 +172,19 @@ export const ArtifactProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* locationArtifacts(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         return items
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => artifactAttrs(item, env.project));
+          .map((item) => artifactAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const artifactId = yield* toPhysicalId(
         id,
@@ -216,7 +226,7 @@ export const ArtifactProvider = () =>
           getContents,
         },
       });
-      return artifactAttrs(current, env.project);
+      return artifactAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

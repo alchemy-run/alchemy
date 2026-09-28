@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
-  DEFAULT_REGION,
   changedFields,
   collectPages,
   hasAlchemyLabelKeys,
@@ -265,6 +264,7 @@ const lastSegmentOf = (value: string | undefined) =>
 
 const toTarget = (
   project: string,
+  region: string,
   news: {
     network?: string;
     subnet?: string;
@@ -278,25 +278,20 @@ const toTarget = (
       : undefined,
   subnet:
     news.subnet !== undefined
-      ? toSubnetworkResource(project, DEFAULT_REGION, news.subnet)
+      ? toSubnetworkResource(project, region, news.subnet)
       : undefined,
   interconnectAttachment:
     news.interconnectAttachment !== undefined
       ? toRegionalComputeResource(
           project,
-          DEFAULT_REGION,
+          region,
           "interconnectAttachments",
           news.interconnectAttachment,
         )
       : undefined,
   vpnTunnel:
     news.vpnTunnel !== undefined
-      ? toRegionalComputeResource(
-          project,
-          DEFAULT_REGION,
-          "vpnTunnels",
-          news.vpnTunnel,
-        )
+      ? toRegionalComputeResource(project, region, "vpnTunnels", news.vpnTunnel)
       : undefined,
 });
 
@@ -439,7 +434,7 @@ export const VpcFlowLogsConfigProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const target = toTarget(env.project, news);
+      const target = toTarget(env.project, env.region, news);
       const state = stateOf(news.state);
       const createState = state === "DISABLED" ? DEFAULT_STATE : state;
       const aggregationInterval = intervalOf(news.aggregationInterval);

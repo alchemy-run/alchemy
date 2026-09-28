@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   jsonEqual,
@@ -244,7 +243,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider
           Effect.gen(function* () {
             const env = yield* GcpEnvironment.current;
             return yield* listAllAt(
-              locationParent(env.project, DEFAULT_LOCATION),
+              locationParent(env.project, env.region),
               env.project,
             );
           }),

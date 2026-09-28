@@ -13,7 +13,6 @@ import {
   toLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MIN_ID_LENGTH = 4;
 export const LIST_LOCATIONS = [
@@ -42,8 +41,10 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -54,7 +55,7 @@ export const resourceName = (
   jobTemplateId: string,
 ) => `${locationParent(project, location)}/jobTemplates/${jobTemplateId}`;
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const templatesAt = parts.lastIndexOf("jobTemplates");
   const locationsAt = parts.lastIndexOf("locations");
@@ -65,7 +66,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     jobTemplateId:
       templatesAt >= 0 && parts[templatesAt + 1]
         ? parts[templatesAt + 1]!
@@ -77,8 +78,8 @@ export const parseName = (name: string) => {
   };
 };
 
-export const parentOfName = (name: string) => {
-  const parsed = parseName(name);
+export const parentOfName = (name: string, defaultLocation: string) => {
+  const parsed = parseName(name, defaultLocation);
   return parsed.parent.length > 0
     ? parsed.parent
     : locationParent(parsed.project, parsed.location);
@@ -209,10 +210,10 @@ export const listJobTemplatesAt = (parent: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () => emptyList()),
     );
 
-export const listOwnedJobTemplates = (project: string) =>
+export const listOwnedJobTemplates = (project: string, region: string) =>
   Effect.gen(function* () {
     const pages = yield* Effect.forEach(
-      LIST_LOCATIONS,
+      [...new Set<string>([region, ...LIST_LOCATIONS])],
       (location) => listJobTemplatesAt(locationParent(project, location)),
       { concurrency: 4 },
     );
@@ -231,12 +232,13 @@ export const listOwnedJobTemplates = (project: string) =>
 export const findOwnedJobTemplate = (
   id: string,
   project: string,
+  region: string,
   name?: string,
 ) =>
   Effect.gen(function* () {
     const existing = yield* getJobTemplate(name ?? "");
     if (existing !== undefined) return existing;
-    const rows = yield* listOwnedJobTemplates(project);
+    const rows = yield* listOwnedJobTemplates(project, region);
     for (const row of rows) {
       if (yield* ownedByAlchemy(id, row.labels)) {
         return row;

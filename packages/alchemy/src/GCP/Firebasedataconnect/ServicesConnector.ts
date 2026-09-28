@@ -61,7 +61,7 @@ export type ServicesConnectorProps = {
   service: string;
   /**
    * Region used when `service` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -218,9 +218,10 @@ const toClientCache = (
 const toAttrs = (
   item: firebasedataconnect.Connector,
   project: string,
+  region: string,
 ): ServicesConnector["Attributes"] => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "connectors");
+  const parsed = parseName(name, "connectors", region);
   return {
     name,
     connectorId: parsed.id,
@@ -245,8 +246,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsServicesConnectors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "services/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, "services/-", region, (parent) =>
     listLabeledPages(
       firebasedataconnect.listProjectsLocationsServicesConnectors.pages({
         parent,
@@ -274,9 +275,11 @@ export const ServicesConnectorProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent =
         (olds?.service ?? output?.service)
@@ -311,7 +314,10 @@ export const ServicesConnectorProvider = () =>
         output?.connectorId,
         "connector",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const service =
         output?.service ??
         (olds?.service
@@ -323,7 +329,7 @@ export const ServicesConnectorProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -332,8 +338,8 @@ export const ServicesConnectorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -344,7 +350,10 @@ export const ServicesConnectorProvider = () =>
         output?.connectorId,
         "connector",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const service = expandParent(
         news.service,
         env.project,
@@ -426,7 +435,7 @@ export const ServicesConnectorProvider = () =>
         getByName(current.name ?? name),
         current.name ?? name,
       );
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

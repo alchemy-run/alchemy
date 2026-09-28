@@ -47,7 +47,7 @@ export type AgentsEnvironmentProps = {
   environmentId?: string;
   /**
    * Location used when `agent` is a bare id.
-   * @default "us-central1"
+   * @default "global"
    */
   location?: string;
   /** Human-readable name, unique within the agent. */

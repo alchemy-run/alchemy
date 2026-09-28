@@ -11,7 +11,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   fingerprint,
   hasAlchemyLabelMap,
   locationParent,
@@ -41,7 +40,8 @@ export type AssetsExportJobProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -156,9 +156,9 @@ const resourceName = (
 ) =>
   `${locationParent(project, location)}/assetsExportJobs/${assetsExportJobId}`;
 
-const toAttrs = (job: mc.AssetsExportJob, project: string) => {
+const toAttrs = (job: mc.AssetsExportJob, project: string, region: string) => {
   const name = job.name ?? "";
-  const parsed = parseName(name, "assetsExportJobs");
+  const parsed = parseName(name, "assetsExportJobs", region);
   return {
     name,
     assetsExportJobId: parsed.id,
@@ -204,7 +204,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAssetsExportJobs({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsAssetsExportJobs
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -220,7 +220,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsAssetsExportJobs
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -243,6 +243,7 @@ export const AssetsExportJobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const payloadChanged =
         fingerprint({
           fileFormat: news.fileFormat ?? DEFAULT_FORMAT,
@@ -270,9 +271,13 @@ export const AssetsExportJobProvider = () =>
           news.assetsExportJobId ??
           olds?.assetsExportJobId ??
           output?.assetsExportJobId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: payloadChanged,
       });
@@ -286,12 +291,15 @@ export const AssetsExportJobProvider = () =>
         output?.assetsExportJobId,
         "exportjob",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, assetsExportJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -300,8 +308,8 @@ export const AssetsExportJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -312,7 +320,10 @@ export const AssetsExportJobProvider = () =>
         output?.assetsExportJobId,
         "exportjob",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, assetsExportJobId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -339,7 +350,7 @@ export const AssetsExportJobProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

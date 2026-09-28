@@ -663,10 +663,9 @@ export const GkeKubernetesAdapter = () =>
       ): Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices> =>
         Effect.gen(function* () {
           const state = options.state;
+          const env = yield* GcpEnvironment.current;
           const location =
-            typeof state?.location === "string"
-              ? state.location
-              : "us-central1";
+            typeof state?.location === "string" ? state.location : env.region;
           const repositoryName =
             typeof state?.repositoryName === "string"
               ? state.repositoryName
@@ -676,7 +675,6 @@ export const GkeKubernetesAdapter = () =>
             state.repositoryName === repositoryName
               ? state.repositoryUri
               : undefined;
-          const env = yield* GcpEnvironment.current;
           const resolved = yield* imageSource.resolve({
             id: options.id,
             source: options.source as ImageSourceLike,

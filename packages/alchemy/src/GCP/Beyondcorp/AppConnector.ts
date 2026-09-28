@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   collectPages,
   fieldMask,
@@ -57,7 +56,7 @@ export type AppConnectorProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * connector. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -173,9 +172,10 @@ const toPrincipal = (
 const toAttrs = (
   item: beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnector,
   project: string,
+  region: string,
 ) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_LOCATION);
+  const parsed = parseName(name, COLLECTION, region);
   const principalInfo = toPrincipal(item.principalInfo);
   return {
     name,
@@ -198,8 +198,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsAppConnectors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, DEFAULT_LOCATION, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       beyondcorp.listProjectsLocationsAppConnectors.pages({
         parent,
@@ -230,6 +230,7 @@ export const AppConnectorProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousEmail =
         olds?.serviceAccountEmail ??
         olds?.principalInfo?.serviceAccount?.email ??
@@ -240,9 +241,13 @@ export const AppConnectorProvider = () =>
         nextId: news.appConnectorId
           ? rfc1035(news.appConnectorId, "appconnector")
           : (olds?.appConnectorId ?? output?.appConnectorId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousEmail !== undefined &&
@@ -259,12 +264,15 @@ export const AppConnectorProvider = () =>
         output?.appConnectorId,
         "appconnector",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, appConnectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -273,8 +281,8 @@ export const AppConnectorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -285,7 +293,10 @@ export const AppConnectorProvider = () =>
         output?.appConnectorId,
         "appconnector",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, appConnectorId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -347,7 +358,7 @@ export const AppConnectorProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -7,6 +7,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -22,11 +23,11 @@ const { getWhenReady } = Test;
 
 // Out-of-band calls to the Google APIs resolve the same stored credentials
 // the deploy uses, so the test runs against the configured profile.
-// `GcpHttpClient` routes the regional secret to its regional endpoint.
+// Distilled routes the regional secret to its regional endpoint.
 const GcpHttp = Layer.mergeAll(
   GCP.GcpAuth,
   GCP.fromAuthProvider(),
-  GCP.GcpHttpClient,
+  FetchHttpClient.layer,
 );
 
 const hasGcpCreds = !!(

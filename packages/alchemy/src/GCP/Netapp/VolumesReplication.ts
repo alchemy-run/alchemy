@@ -102,7 +102,7 @@ export type VolumesReplicationProps = {
    * Region used when `volume` is a bare id. Immutable — changing it
    * replaces the replication. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -285,9 +285,13 @@ const destFingerprint = (params: DestinationVolumeParameters | undefined) =>
 const isMirrorRunning = (mirrorState: string | undefined) =>
   ENABLED_MIRROR_STATES.has((mirrorState ?? "").toUpperCase());
 
-const toAttrs = (replication: netapp.Replication, project: string) => {
+const toAttrs = (
+  replication: netapp.Replication,
+  project: string,
+  region: string,
+) => {
   const name = replication.name ?? "";
-  const parsed = parseName(name, "replications");
+  const parsed = parseName(name, "replications", region);
   return {
     name,
     replicationId: parsed.id,
@@ -330,8 +334,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsVolumesReplications({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "volumes/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "volumes/-", (parent) =>
     listLabeledPages(
       netapp.listProjectsLocationsVolumesReplications.pages({
         parent,
@@ -382,9 +386,11 @@ export const VolumesReplicationProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousVolume = volumeOf(
         olds?.volume ?? output?.volume ?? "",
@@ -414,7 +420,10 @@ export const VolumesReplicationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const volume = volumeOf(
         olds?.volume ?? output?.volume ?? "",
         env.project,
@@ -429,7 +438,7 @@ export const VolumesReplicationProvider = () =>
       const name = output?.name ?? resourceName(volume, replicationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -438,15 +447,18 @@ export const VolumesReplicationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const locationHint = normalizeLocation(news.location ?? output?.location);
+      const locationHint = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const volume = volumeOf(news.volume, env.project, locationHint);
-      const location = parseName(volume, "volumes").location;
+      const location = parseName(volume, "volumes", locationHint).location;
       const replicationId = yield* toPhysicalId(
         id,
         news.replicationId,
@@ -599,7 +611,7 @@ export const VolumesReplicationProvider = () =>
         current = yield* waitUntilMirror(current.name ?? name, enabled);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {

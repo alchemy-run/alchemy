@@ -72,7 +72,7 @@ export type ServiceProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * service. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -272,9 +272,9 @@ const desiredHiveConfig = (
   auxiliaryVersions: config?.auxiliaryVersions,
 });
 
-const toAttrs = (item: metastore.Service, project: string) => {
+const toAttrs = (item: metastore.Service, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "services");
+  const parsed = parseName(name, "services", region);
   return {
     name,
     serviceId: parsed.id,
@@ -312,8 +312,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsServices({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsServices.pages({
         parent,
@@ -340,6 +340,7 @@ export const ServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousVersion =
         olds?.hiveMetastoreConfig?.version ??
         output?.hiveMetastoreConfig?.version;
@@ -350,9 +351,13 @@ export const ServiceProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.serviceId ?? output?.serviceId,
         nextId: news.serviceId ?? olds?.serviceId ?? output?.serviceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousVersion !== undefined &&
@@ -386,12 +391,15 @@ export const ServiceProvider = () =>
         output?.serviceId,
         "service",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -400,8 +408,8 @@ export const ServiceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -412,7 +420,10 @@ export const ServiceProvider = () =>
         output?.serviceId,
         "service",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, serviceId);
       const hive = desiredHiveConfig(news.hiveMetastoreConfig);
       const desiredLabels = {
@@ -539,7 +550,7 @@ export const ServiceProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

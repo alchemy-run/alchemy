@@ -39,7 +39,7 @@ export type RegionsWorkflowTemplateProps = Omit<
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   region?: string;
 };
@@ -114,7 +114,7 @@ const toAttrs = (
   region: string,
 ) => {
   const name = template.name ?? "";
-  const parsed = parseResourceName(name, "workflowTemplates");
+  const parsed = parseResourceName(name, "workflowTemplates", region);
   return {
     name,
     templateId: template.id ?? parsed.id,
@@ -186,11 +186,16 @@ export const RegionsWorkflowTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const nextId = news.templateId ?? previousId;
-      const previousRegion = normalizeLocation(olds?.region ?? output?.region);
+      const previousRegion = normalizeLocation(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeLocation(
         news.region ?? olds?.region ?? output?.region,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -211,7 +216,10 @@ export const RegionsWorkflowTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(olds?.region ?? output?.region);
+      const region = normalizeLocation(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const templateId = yield* toPhysicalId(
         id,
         olds?.templateId,
@@ -233,7 +241,7 @@ export const RegionsWorkflowTemplateProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          [...new Set([env.region, ...LIST_LOCATIONS])],
           (region) => listRegion(env.project, region),
           { concurrency: 4 },
         );
@@ -242,7 +250,10 @@ export const RegionsWorkflowTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(news.region ?? output?.region);
+      const region = normalizeLocation(
+        news.region ?? output?.region,
+        env.region,
+      );
       const templateId = yield* toPhysicalId(
         id,
         news.templateId,

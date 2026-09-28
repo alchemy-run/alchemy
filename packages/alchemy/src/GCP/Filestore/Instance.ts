@@ -20,7 +20,6 @@ import {
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_ZONAL_LOCATION = "us-central1-a";
-const DEFAULT_REGIONAL_LOCATION = "us-central1";
 const DEFAULT_TIER = "BASIC_HDD";
 const DEFAULT_PROTOCOL = "NFS_V3";
 const DEFAULT_CONNECT_MODE = "DIRECT_PEERING";
@@ -211,7 +210,8 @@ export type InstanceProps = {
    * (`us-central1-a`). Enterprise and Regional use a region
    * (`us-central1`). Immutable — changing it replaces the instance.
    * `US-CENTRAL1-A` is accepted and normalized to `us-central1-a`.
-   * @default "us-central1-a" (zonal tiers) or "us-central1" (regional)
+   * @default "us-central1-a" (zonal tiers) or the stack's GCP region
+   * (`GCP.Region`, profile region, `us-central1`) for regional tiers
    */
   location?: string;
   /**
@@ -454,13 +454,14 @@ const canonicalizeTier = (tier: string | undefined) => {
 const isRegionalTier = (tier: string | undefined) =>
   REGIONAL_TIERS.has(canonicalizeTier(tier));
 
-const defaultLocationFor = (tier: string | undefined) =>
-  isRegionalTier(tier) ? DEFAULT_REGIONAL_LOCATION : DEFAULT_ZONAL_LOCATION;
+const defaultLocationFor = (tier: string | undefined, region: string) =>
+  isRegionalTier(tier) ? region : DEFAULT_ZONAL_LOCATION;
 
 const normalizeLocation = (
   location: string | undefined,
   tier: string | undefined,
-) => lastSegment(location ?? defaultLocationFor(tier)).toLowerCase();
+  region: string,
+) => lastSegment(location ?? defaultLocationFor(tier, region)).toLowerCase();
 
 const normalizeProtocol = (protocol: string | undefined) => {
   const value = (protocol ?? DEFAULT_PROTOCOL).toUpperCase();
@@ -1061,6 +1062,7 @@ export const InstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
@@ -1069,10 +1071,12 @@ export const InstanceProvider = () =>
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         previousTier,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? output?.location,
         nextTier,
+        env.region,
       );
       const previousProtocol = normalizeProtocol(
         olds?.protocol ?? output?.protocol,
@@ -1137,6 +1141,7 @@ export const InstanceProvider = () =>
       const location = normalizeLocation(
         olds?.location ?? output?.location,
         tier,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, instanceId);
@@ -1180,6 +1185,7 @@ export const InstanceProvider = () =>
       const location = normalizeLocation(
         news.location ?? output?.location,
         tier,
+        env.region,
       );
       const protocol = normalizeProtocol(news.protocol);
       const name = resourceName(env.project, location, instanceId);

@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_TIME_ZONE = "UTC";
 const DEFAULT_HTTP_METHOD = "POST";
 const MAX_NAME_LENGTH = 63;
@@ -182,7 +181,7 @@ export type JobProps = {
    * Cloud Scheduler location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the job. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -370,8 +369,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const resourceName = (project: string, location: string, jobId: string) =>
   `projects/${project}/locations/${location}/jobs/${jobId}`;
@@ -379,7 +378,7 @@ const resourceName = (project: string, location: string, jobId: string) =>
 const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const jobsAt = parts.lastIndexOf("jobs");
   const locationsAt = parts.lastIndexOf("locations");
@@ -390,7 +389,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     jobId:
       jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
@@ -463,9 +462,9 @@ const compact = <T extends Record<string, unknown>>(value: T): T =>
     Object.entries(value).filter(([, item]) => item !== undefined),
   ) as T;
 
-const toAttrs = (job: scheduler.Job, project: string) => {
+const toAttrs = (job: scheduler.Job, project: string, region: string) => {
   const name = job.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const { description } = parseDescription(job.description);
   return {
     name,
@@ -651,7 +650,7 @@ const appEngineTargetDrift = (
   );
 };
 
-const listJobsAt = (parent: string, project: string) =>
+const listJobsAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
@@ -663,7 +662,7 @@ const listJobsAt = (parent: string, project: string) =>
       });
       for (const job of response.jobs ?? []) {
         if (hasOwnershipMarker(job.description)) {
-          found.push(toAttrs(job, project));
+          found.push(toAttrs(job, project, region));
         }
       }
       pageToken = response.nextPageToken;
@@ -741,6 +740,7 @@ export const JobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobId ?? output?.jobId;
       const nextId = news.jobId ?? previousId;
       const idChanged =
@@ -750,8 +750,12 @@ export const JobProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -763,11 +767,14 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(
         id,
         parseDescription(existing.description).labels,
@@ -793,8 +800,8 @@ export const JobProvider = () =>
                 Effect.succeed({
                   locations: [
                     {
-                      name: parentOf(env.project, DEFAULT_LOCATION),
-                      locationId: DEFAULT_LOCATION,
+                      name: parentOf(env.project, env.region),
+                      locationId: env.region,
                     },
                   ],
                   nextPageToken: undefined as string | undefined,
@@ -805,10 +812,8 @@ export const JobProvider = () =>
             .map((location) => location.name)
             .filter((name): name is string => !!name);
           const pages = yield* Effect.forEach(
-            parents.length > 0
-              ? parents
-              : [parentOf(env.project, DEFAULT_LOCATION)],
-            (parent) => listJobsAt(parent, env.project),
+            parents.length > 0 ? parents : [parentOf(env.project, env.region)],
+            (parent) => listJobsAt(parent, env.project, env.region),
             { concurrency: 4 },
           );
           for (const jobs of pages) {
@@ -823,7 +828,10 @@ export const JobProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, jobId);
       const parent = parentOf(env.project, location);
       if (!hasTarget(news)) {
@@ -933,7 +941,7 @@ export const JobProvider = () =>
 
       current = yield* syncPaused(name, current, desiredPaused);
       current = yield* waitForJobState(name, desiredPaused);
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

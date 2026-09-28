@@ -1,6 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import {
-  DEFAULT_REGION,
   lastSegment,
   normalizeRegion,
   runRegionOp,
@@ -55,7 +54,7 @@ export type RegionInstanceTemplateProps = {
   /**
    * Region the template lives in. Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -232,7 +231,7 @@ const resolvedNics = (props: RegionInstanceTemplateProps) =>
 const fingerprint = (props: RegionInstanceTemplateProps): string =>
   JSON.stringify({
     templateName: props.templateName ?? "",
-    region: normalizeRegion(props.region),
+    region: props.region ? lastSegment(props.region).toLowerCase() : "",
     description: props.description ?? "",
     machineType: props.machineType ?? DEFAULT_MACHINE_TYPE,
     canIpForward: props.canIpForward === true,
@@ -351,7 +350,7 @@ const toAttrs = (
 ): RegionInstanceTemplate["Attributes"] => ({
   templateName: template.name ?? lastSegment(template.selfLink),
   project,
-  region: normalizeRegion(template.region),
+  region: lastSegment(template.region).toLowerCase(),
   description: template.description,
   machineType: template.properties?.machineType,
   labels: userLabels(template.properties?.labels),
@@ -405,11 +404,16 @@ export const RegionInstanceTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.templateName ?? output?.templateName;
       const nextName = news.templateName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       if (previousName === undefined && output === undefined) {
         return undefined;
@@ -450,7 +454,10 @@ export const RegionInstanceTemplateProvider = () =>
         output?.templateName,
         "template",
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, templateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -502,7 +509,7 @@ export const RegionInstanceTemplateProvider = () =>
         output?.templateName,
         "template",
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -541,7 +548,7 @@ export const RegionInstanceTemplateProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* runRegionOp(
         env.project,
         region,

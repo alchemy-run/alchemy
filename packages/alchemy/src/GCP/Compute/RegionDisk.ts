@@ -31,7 +31,7 @@ export type RegionDiskProps = {
    * Region the disk lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the disk. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -222,7 +222,6 @@ export class RegionDiskStillExists extends Data.TaggedError(
   status: string;
 }> {}
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_TYPE = "pd-standard";
 const DEFAULT_SIZE_GB = 200;
 
@@ -232,8 +231,8 @@ const lastSegment = (value: string | undefined): string | undefined => {
   return parts[parts.length - 1] || value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  (lastSegment(region) ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  (lastSegment(region ?? defaultRegion) ?? defaultRegion).toLowerCase();
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -280,7 +279,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const toAttrs = (disk: compute.Disk, project: string) => {
-  const region = normalizeRegion(disk.region);
+  const region = (lastSegment(disk.region) ?? "").toLowerCase();
   return {
     diskName: disk.name ?? disk.id ?? "",
     diskId: disk.id,
@@ -442,9 +441,16 @@ export const RegionDiskProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const previousType =
         lastSegment(olds?.type) ?? lastSegment(output?.type) ?? DEFAULT_TYPE;
       const nextType = lastSegment(news.type) ?? DEFAULT_TYPE;
@@ -490,7 +496,10 @@ export const RegionDiskProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, olds?.diskName, output?.diskName);
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, diskName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -527,7 +536,7 @@ export const RegionDiskProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const diskName = yield* toName(id, news.diskName, output?.diskName);
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const diskType = lastSegment(news.type) ?? DEFAULT_TYPE;
       const sizeGb = news.sizeGb ?? DEFAULT_SIZE_GB;
       const replicaZones = normalizeReplicaZones(region, news.replicaZones);

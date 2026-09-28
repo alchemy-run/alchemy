@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   expandParent,
   hasOwnershipMarker,
@@ -40,7 +39,8 @@ export type ImportJobsImportDataFileProps = {
   importJob: string;
   /**
    * Region used when `importJob` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -131,9 +131,9 @@ const jobNameOf = (value: string, project: string, location: string) =>
 const resourceName = (importJob: string, importDataFileId: string) =>
   `${importJob}/importDataFiles/${importDataFileId}`;
 
-const toAttrs = (item: mc.ImportDataFile, project: string) => {
+const toAttrs = (item: mc.ImportDataFile, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "importDataFiles");
+  const parsed = parseName(name, "importDataFiles", region);
   const ownership = parseOwnership(item.displayName);
   return {
     name,
@@ -169,7 +169,7 @@ const listFiles = (parent: string) =>
       ),
     );
 
-const listJobs = (project: string) =>
+const listJobs = (project: string, region: string) =>
   mc.listProjectsLocationsImportJobs
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -183,7 +183,7 @@ const listJobs = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsImportJobs
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
             view: "IMPORT_JOB_VIEW_BASIC",
           })
@@ -200,9 +200,9 @@ const listJobs = (project: string) =>
       ),
     );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const jobs = yield* listJobs(project);
+    const jobs = yield* listJobs(project, region);
     const files: mc.ImportDataFile[] = [];
     for (const job of jobs) {
       if (job.name === undefined) continue;
@@ -227,6 +227,7 @@ export const ImportJobsImportDataFileProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousFormat = olds?.format ?? output?.format ?? DEFAULT_FORMAT;
       const nextFormat = news.format ?? previousFormat;
       const previousJob = olds?.importJob ?? output?.importJob;
@@ -237,9 +238,13 @@ export const ImportJobsImportDataFileProvider = () =>
           news.importDataFileId ??
           olds?.importDataFileId ??
           output?.importDataFileId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: previousJob,
         nextParent: nextJob,
@@ -249,7 +254,10 @@ export const ImportJobsImportDataFileProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const importJob = jobNameOf(
         olds?.importJob ?? output?.importJob ?? "",
         env.project,
@@ -266,7 +274,7 @@ export const ImportJobsImportDataFileProvider = () =>
         (importJob.length > 0 ? resourceName(importJob, importDataFileId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.displayName))
         ? attrs
         : Unowned(attrs);
@@ -275,13 +283,16 @@ export const ImportJobsImportDataFileProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const importJob = jobNameOf(news.importJob, env.project, location);
       const importDataFileId = yield* toPhysicalId(
         id,
@@ -317,7 +328,7 @@ export const ImportJobsImportDataFileProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

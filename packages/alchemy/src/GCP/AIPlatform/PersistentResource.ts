@@ -15,11 +15,11 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   jsonEqual,
   locationParent,
@@ -87,7 +87,7 @@ export type PersistentResourceProps = {
   persistentResourceId?: string;
   /**
    * Vertex AI location. Immutable — changing it replaces the resource.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -294,14 +294,19 @@ export const PersistentResourceProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId =
         olds?.persistentResourceId ?? output?.persistentResourceId;
       const nextId = news.persistentResourceId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const networkChanged =
         (news.network ?? olds?.network ?? "") !== (olds?.network ?? "");
       const machineChanged =
@@ -331,7 +336,10 @@ export const PersistentResourceProvider = () =>
         olds?.persistentResourceId,
         output?.persistentResourceId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, resourceId);
       const existing = yield* getByName(name);
@@ -345,15 +353,19 @@ export const PersistentResourceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = yield* collectPages(
-          aiplatform.listProjectsLocationsPersistentResources.pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
-            pageSize: 100,
-          }),
-        ).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        const pages = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) =>
+            collectPages(
+              aiplatform.listProjectsLocationsPersistentResources.pages({
+                parent: locationParent(env.project, location),
+                pageSize: 100,
+              }),
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        )).flat();
         return pages.flatMap((page) =>
           (page.persistentResources ?? [])
             .filter((resource) =>
@@ -372,7 +384,10 @@ export const PersistentResourceProvider = () =>
         news.persistentResourceId,
         output?.persistentResourceId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, resourceId);
       const desiredLabels = {
         ...toLabels(news.labels),

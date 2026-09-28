@@ -14,7 +14,7 @@ import {
   createInternalLabels,
   encodeDescription,
   hasOwnershipMarker,
-  LIST_LOCATIONS,
+  listLocations,
   locationOf,
   lastSegment,
   normalizeLocation,
@@ -34,7 +34,7 @@ export type MetadataStoreProps = {
   metadataStoreId?: string;
   /**
    * Vertex AI location. Immutable — changing it replaces the store.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -200,14 +200,17 @@ export const MetadataStoreProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.metadataStoreId ?? output?.metadataStoreId;
       const nextId = news.metadataStoreId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousKms =
         olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
@@ -237,7 +240,10 @@ export const MetadataStoreProvider = () =>
         olds?.metadataStoreId,
         output?.metadataStoreId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, metadataStoreId);
       const existing = yield* getByName(name);
@@ -251,7 +257,7 @@ export const MetadataStoreProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          listLocations(env.region),
           (location) =>
             listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
@@ -269,7 +275,10 @@ export const MetadataStoreProvider = () =>
         news.metadataStoreId,
         output?.metadataStoreId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, metadataStoreId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);

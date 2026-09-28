@@ -7,7 +7,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   expandRepository,
   hasAlchemyLabelMap,
@@ -41,7 +40,7 @@ export type RepositoriesPackagesTagProps = {
   packageId: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the repository's location, else the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -135,16 +134,20 @@ const expandVersion = (packageName: string, version: string) => {
 const resourceNameOf = (packageName: string, tagId: string) =>
   `${packageName}/tags/${tagId}`;
 
-const toAttrs = (tag: artifactregistry.Tag, project: string) => {
+const toAttrs = (
+  tag: artifactregistry.Tag,
+  project: string,
+  region: string,
+) => {
   const name = tag.name ?? "";
-  const parsed = parseName(name, "tags");
+  const parsed = parseName(name, "tags", region);
   const pkg = parsed.parent;
   return {
     name,
     tagId: parsed.id,
     package: pkg,
     packageId: lastSegment(pkg),
-    repository: parseName(pkg, "packages").parent,
+    repository: parseName(pkg, "packages", region).parent,
     project: parsed.project || project,
     location: parsed.location,
     version: tag.version,
@@ -173,14 +176,17 @@ export const RepositoriesPackagesTagProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.tagId ?? output?.tagId;
       const nextId = news.tagId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ??
           locationFromRepository(news.repository, previousLocation),
+        env.region,
       );
       const previousPackage = lastSegment(
         olds?.packageId ?? output?.packageId ?? "",
@@ -207,8 +213,9 @@ export const RepositoriesPackagesTagProvider = () =>
           output?.location ??
           locationFromRepository(
             olds?.repository ?? output?.repository,
-            DEFAULT_LOCATION,
+            env.region,
           ),
+        env.region,
       );
       const repository = expandRepository(
         olds?.repository ?? output?.repository ?? "",
@@ -223,7 +230,7 @@ export const RepositoriesPackagesTagProvider = () =>
       const name = output?.name ?? resourceNameOf(packageName, tagId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const repo = yield* getRepository(attrs.repository);
       return hasAlchemyLabelMap(repo?.labels) ? attrs : Unowned(attrs);
     }),
@@ -234,7 +241,7 @@ export const RepositoriesPackagesTagProvider = () =>
         const repos = yield* listAlchemyRepositories(env.project);
         const packages = yield* listChildResources(repos, listPackages);
         const tags = yield* listChildResources(packages, listTags);
-        return tags.map((tag) => toAttrs(tag, env.project));
+        return tags.map((tag) => toAttrs(tag, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -242,7 +249,8 @@ export const RepositoriesPackagesTagProvider = () =>
       const location = normalizeLocation(
         news.location ??
           output?.location ??
-          locationFromRepository(news.repository, DEFAULT_LOCATION),
+          locationFromRepository(news.repository, env.region),
+        env.region,
       );
       const repository = expandRepository(
         news.repository,
@@ -288,7 +296,7 @@ export const RepositoriesPackagesTagProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

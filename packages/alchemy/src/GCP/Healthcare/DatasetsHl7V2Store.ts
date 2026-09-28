@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   forEachDataset,
   hasAlchemyLabelMap,
@@ -57,7 +56,7 @@ export type DatasetsHl7V2StoreProps = {
   dataset: string;
   /**
    * Region used when `dataset` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -166,9 +165,13 @@ const parserOf = (
   };
 };
 
-const toAttrs = (store: healthcare.Hl7V2Store, project: string) => {
+const toAttrs = (
+  store: healthcare.Hl7V2Store,
+  project: string,
+  region: string,
+) => {
   const name = store.name ?? "";
-  const parsed = parseResourceName(name, "hl7V2Stores");
+  const parsed = parseResourceName(name, "hl7V2Stores", region);
   return {
     name,
     hl7V2StoreId: parsed.id,
@@ -210,7 +213,7 @@ export const DatasetsHl7V2StoreProvider = () =>
         nextParent: datasetOf(
           news.dataset,
           env.project,
-          normalizeLocation(news.location ?? output?.location),
+          normalizeLocation(news.location ?? output?.location, env.region),
         ),
         extra,
       });
@@ -218,7 +221,10 @@ export const DatasetsHl7V2StoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const hl7V2StoreId = yield* toPhysicalId(
         id,
         olds?.hl7V2StoreId,
@@ -233,7 +239,7 @@ export const DatasetsHl7V2StoreProvider = () =>
         (dataset.length > 0 ? resourceName(dataset, hl7V2StoreId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -242,24 +248,28 @@ export const DatasetsHl7V2StoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* forEachDataset(env.project, (parent) =>
-          collectPages(
-            healthcare.listProjectsLocationsDatasetsHl7V2Stores.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.hl7V2Stores,
-          ),
+        const stores = yield* forEachDataset(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              healthcare.listProjectsLocationsDatasetsHl7V2Stores.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.hl7V2Stores,
+            ),
         );
         return stores
           .filter((store) => hasAlchemyLabelMap(store.labels))
-          .map((store) => toAttrs(store, env.project));
+          .map((store) => toAttrs(store, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const dataset = datasetOf(news.dataset, env.project, location);
       const hl7V2StoreId = yield* toPhysicalId(
@@ -336,7 +346,7 @@ export const DatasetsHl7V2StoreProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

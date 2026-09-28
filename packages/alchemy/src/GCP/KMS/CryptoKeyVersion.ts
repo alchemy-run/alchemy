@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_STATE: kms.CryptoKeyVersionStateEnum = "ENABLED";
 const DELETABLE_STATES = new Set([
   "DESTROYED",
@@ -51,7 +50,7 @@ export type CryptoKeyVersionProps = {
    * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
    * `cryptoKey` is a bare id. Immutable — changing it replaces the
    * version. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -196,10 +195,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const versionsAt = parts.lastIndexOf("cryptoKeyVersions");
   const cryptoKeysAt = parts.lastIndexOf("cryptoKeys");
@@ -216,7 +215,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     keyRing,
     cryptoKey,
     cryptoKeyVersionId:
@@ -231,9 +230,10 @@ const resolveParent = (
   cryptoKey: string,
   keyRing: string | undefined,
   location: string | undefined,
+  region: string,
 ) => {
   if (cryptoKey.includes("/cryptoKeyVersions/")) {
-    const parsed = parseName(cryptoKey);
+    const parsed = parseName(cryptoKey, region);
     return {
       parent: parsed.cryptoKey,
       location: parsed.location,
@@ -241,14 +241,14 @@ const resolveParent = (
     };
   }
   if (cryptoKey.includes("/cryptoKeys/")) {
-    const parsed = parseName(`${cryptoKey}/cryptoKeyVersions/_`);
+    const parsed = parseName(`${cryptoKey}/cryptoKeyVersions/_`, region);
     return {
       parent: parsed.cryptoKey,
       location: parsed.location,
       project: parsed.project || project,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   const ring =
     keyRing !== undefined && keyRing.includes("/")
       ? keyRing
@@ -273,9 +273,10 @@ const desiredState = (
 const toAttrs = (
   version: kms.CryptoKeyVersion,
   project: string,
+  region: string,
 ): CryptoKeyVersionAttrs => {
   const name = version.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const options = version.externalProtectionLevelOptions;
   return {
     name,
@@ -648,6 +649,7 @@ export const CryptoKeyVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.cryptoKeyVersionId ?? output?.cryptoKeyVersionId;
       const nextId = news.cryptoKeyVersionId ?? previousId;
@@ -659,14 +661,20 @@ export const CryptoKeyVersionProvider = () =>
       const previousParent =
         output?.cryptoKey ??
         (olds?.cryptoKey
-          ? resolveParent("", olds.cryptoKey, olds.keyRing, olds.location)
-              .parent
+          ? resolveParent(
+              "",
+              olds.cryptoKey,
+              olds.keyRing,
+              olds.location,
+              env.region,
+            ).parent
           : undefined);
       const nextParent = resolveParent(
         output?.project ?? "",
         news.cryptoKey,
         news.keyRing ?? output?.keyRing,
         news.location ?? output?.location,
+        env.region,
       ).parent;
       const parentChanged =
         previousParent !== undefined && previousParent !== nextParent;
@@ -684,6 +692,7 @@ export const CryptoKeyVersionProvider = () =>
               olds?.cryptoKey ?? output?.cryptoKey ?? "",
               olds?.keyRing ?? output?.keyRing,
               olds?.location ?? output?.location,
+              env.region,
             ).parent
           : undefined;
       const name = resolveName({
@@ -699,7 +708,7 @@ export const CryptoKeyVersionProvider = () =>
       // Versions have no labels. Existence at the stored name is
       // ownership; adopting a version of an alchemy-labeled key is
       // harmless.
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
@@ -724,7 +733,7 @@ export const CryptoKeyVersionProvider = () =>
           for (const versions of batches) {
             for (const version of versions) {
               if (version.state === "DESTROY_SCHEDULED") continue;
-              found.push(toAttrs(version, env.project));
+              found.push(toAttrs(version, env.project, env.region));
             }
           }
           pageToken = response.nextPageToken;
@@ -740,6 +749,7 @@ export const CryptoKeyVersionProvider = () =>
         news.cryptoKey,
         news.keyRing ?? output?.keyRing,
         news.location ?? output?.location,
+        env.region,
       );
       const name = resolveName({
         outputName: output?.name,
@@ -830,7 +840,7 @@ export const CryptoKeyVersionProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

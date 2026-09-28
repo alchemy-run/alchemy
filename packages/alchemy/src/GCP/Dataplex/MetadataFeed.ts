@@ -19,7 +19,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   fingerprint,
   hasAlchemyLabelMap,
   lastSegment,
@@ -63,7 +62,7 @@ export type MetadataFeedProps = {
   metadataFeedId?: string;
   /**
    * Region. Immutable — changing it replaces the feed.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -291,13 +290,16 @@ export const MetadataFeedProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.metadataFeedId ?? output?.metadataFeedId;
       const nextId = news.metadataFeedId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -316,7 +318,10 @@ export const MetadataFeedProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const feedId = yield* toPhysicalRfc1035(
         id,
         olds?.metadataFeedId,
@@ -334,7 +339,7 @@ export const MetadataFeedProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const feeds = yield* listMetadataFeeds(env.project, DEFAULT_LOCATION);
+        const feeds = yield* listMetadataFeeds(env.project, env.region);
         return feeds
           .filter((feed) => hasAlchemyLabelMap(feed.labels))
           .map((feed) => toAttrs(feed, env.project));
@@ -342,7 +347,10 @@ export const MetadataFeedProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const feedId = yield* toPhysicalRfc1035(
         id,
         news.metadataFeedId,

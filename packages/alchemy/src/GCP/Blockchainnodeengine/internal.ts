@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_BLOCKCHAIN_TYPE = "ETHEREUM";
 export const DEFAULT_NETWORK = "TESTNET_SEPOLIA";
 export const DEFAULT_NODE_TYPE = "FULL";
@@ -76,16 +75,18 @@ export const rfc1035 = (name: string, fallback = "node"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const normalizeEnum = (value: string | undefined, fallback: string) => {
   const next = (value ?? fallback).toUpperCase();
   return next.length === 0 || next.endsWith("_UNSPECIFIED") ? fallback : next;
 };
 
-export const parentOf = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const parentOf = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const resourceName = (
   project: string,
@@ -112,7 +113,7 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(COLLECTION);
   const locationsAt = parts.lastIndexOf("locations");
@@ -123,7 +124,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -375,11 +376,12 @@ export const waitUntilReady = <A, E, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], never, R> =>
   Effect.firstSuccessOf<Effect.Effect<A[], E, R>>([
     list(`projects/${project}/locations/-`),
-    list(`projects/${project}/locations/${DEFAULT_LOCATION}`),
+    list(`projects/${project}/locations/${region}`),
   ]).pipe(Effect.orElseSucceed((): A[] => []));
 
 export const listLabeledPages = <Page, A, E, R>(

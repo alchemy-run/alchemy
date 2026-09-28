@@ -1,6 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import {
-  DEFAULT_REGION,
   encodeDescription,
   hasOwnershipMarker,
   lastSegment,
@@ -38,7 +37,7 @@ export type RegionHealthSourceProps = {
   /**
    * Region the source lives in. Immutable — changing it replaces the
    * source. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -187,7 +186,7 @@ const toAttrs = (
   return {
     sourceName: source.name ?? lastSegment(source.selfLink),
     project,
-    region: normalizeRegion(source.region),
+    region: lastSegment(source.region).toLowerCase(),
     sourceType: typeOf(source.sourceType),
     description: parsed.description,
     sources: source.sources ?? [],
@@ -240,11 +239,16 @@ export const RegionHealthSourceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.sourceName ?? output?.sourceName;
       const nextName = news.sourceName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       const nameChanged =
         previousName !== undefined &&
@@ -272,7 +276,10 @@ export const RegionHealthSourceProvider = () =>
         output?.sourceName,
         "source",
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, sourceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -315,7 +322,7 @@ export const RegionHealthSourceProvider = () =>
         output?.sourceName,
         "source",
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const sourceType = typeOf(news.sourceType);
@@ -400,7 +407,7 @@ export const RegionHealthSourceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* runRegionOp(
         env.project,
         region,

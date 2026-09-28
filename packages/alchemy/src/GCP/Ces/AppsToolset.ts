@@ -39,7 +39,7 @@ export type AppsToolsetProps = {
   app: string;
   /**
    * Region used when `app` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -168,9 +168,14 @@ const openApiOf = (news: AppsToolsetProps): ces.OpenApiToolset | undefined => {
   );
 };
 
-const toAttrs = (toolset: ces.Toolset, project: string, appHint?: string) => {
+const toAttrs = (
+  toolset: ces.Toolset,
+  project: string,
+  region: string,
+  appHint?: string,
+) => {
   const name = toolset.name ?? "";
-  const parsed = parseResourceName(name, "toolsets");
+  const parsed = parseResourceName(name, "toolsets", region);
   return {
     name,
     toolsetId: parsed.id,
@@ -197,7 +202,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAppsToolsets({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsToolsets.pages({ parent, pageSize: 100 }),
     (page) => page.toolsets,
@@ -205,7 +210,7 @@ const listAt = (parent: string, project: string) =>
     Effect.map((toolsets) =>
       toolsets
         .filter((toolset) => hasOwnershipMarker(toolset.description))
-        .map((toolset) => toAttrs(toolset, project, parent)),
+        .map((toolset) => toAttrs(toolset, project, region, parent)),
     ),
   );
 
@@ -228,7 +233,10 @@ export const AppsToolsetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const app = olds?.app
         ? expandApp(olds.app, env.project, location)
         : output?.app;
@@ -241,7 +249,7 @@ export const AppsToolsetProvider = () =>
         output?.name ?? (app !== undefined ? resourceName(app, toolsetId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, app);
+      const attrs = toAttrs(existing, env.project, env.region, app);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -250,15 +258,18 @@ export const AppsToolsetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* forEachApp(env.project, (parent) =>
-          listAt(parent, env.project),
+        return yield* forEachApp(
+          env.project,
+          (parent) => listAt(parent, env.project, env.region),
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? "us-central1",
+        news.location ?? output?.location,
+        env.region,
       );
       const app = expandApp(news.app, env.project, location);
       const toolsetId = yield* toPhysicalId(
@@ -356,7 +367,7 @@ export const AppsToolsetProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project, app);
+      return toAttrs(current, env.project, env.region, app);
     }),
 
     delete: Effect.fn(function* ({ output }) {

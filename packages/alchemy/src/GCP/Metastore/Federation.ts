@@ -58,7 +58,7 @@ export type FederationProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * federation. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -197,9 +197,13 @@ const desiredBackends = (
   };
 };
 
-const toAttrs = (item: metastore.Federation, project: string) => {
+const toAttrs = (
+  item: metastore.Federation,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "federations");
+  const parsed = parseName(name, "federations", region);
   return {
     name,
     federationId: parsed.id,
@@ -224,8 +228,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsFederations({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsFederations.pages({
         parent,
@@ -250,6 +254,7 @@ export const FederationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousVersion = olds?.version ?? output?.version;
       const nextVersion =
         news.version ??
@@ -259,9 +264,13 @@ export const FederationProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.federationId ?? output?.federationId,
         nextId: news.federationId ?? olds?.federationId ?? output?.federationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: previousVersion !== undefined && nextVersion !== previousVersion,
       });
@@ -275,12 +284,15 @@ export const FederationProvider = () =>
         output?.federationId,
         "federation",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, federationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -289,8 +301,8 @@ export const FederationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -301,7 +313,10 @@ export const FederationProvider = () =>
         output?.federationId,
         "federation",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, federationId);
       const version = news.version ?? output?.version ?? DEFAULT_HIVE_VERSION;
       const backends = desiredBackends(env.project, news.backendMetastores);
@@ -373,7 +388,7 @@ export const FederationProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

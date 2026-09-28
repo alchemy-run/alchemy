@@ -46,7 +46,7 @@ export type DataAttributeBindingProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * binding.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -173,7 +173,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listBindings = (project: string) => {
+const listBindings = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsDataAttributeBindings.pages({
@@ -188,7 +188,7 @@ const listBindings = (project: string) => {
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
 export const DataAttributeBindingProvider = () =>
@@ -205,6 +205,7 @@ export const DataAttributeBindingProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId:
           olds?.dataAttributeBindingId ?? output?.dataAttributeBindingId,
@@ -212,9 +213,13 @@ export const DataAttributeBindingProvider = () =>
           news.dataAttributeBindingId ??
           olds?.dataAttributeBindingId ??
           output?.dataAttributeBindingId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (news.resource ?? olds?.resource ?? output?.resource ?? "") !==
@@ -230,7 +235,10 @@ export const DataAttributeBindingProvider = () =>
         output?.dataAttributeBindingId,
         "attrbinding",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, dataAttributeBindingId);
@@ -245,7 +253,7 @@ export const DataAttributeBindingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listBindings(env.project);
+        const items = yield* listBindings(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -257,7 +265,10 @@ export const DataAttributeBindingProvider = () =>
         output?.dataAttributeBindingId,
         "attrbinding",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, dataAttributeBindingId);
       const desiredLabels = {
         ...toLabels(news.labels),

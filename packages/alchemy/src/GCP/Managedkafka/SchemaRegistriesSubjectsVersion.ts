@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandParent,
   getSchemaVersion,
   hasAlchemyLabelMap,
@@ -44,7 +43,7 @@ export type SchemaRegistriesSubjectsVersionProps = {
   schemaRegistry: string;
   /**
    * Region used when `schemaRegistry` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -203,7 +202,10 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const schemaChanged =
         (olds?.schema ?? output?.schema ?? "") !== news.schema ||
         (olds?.schemaType ?? output?.schemaType ?? "") !==
@@ -227,7 +229,10 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const subject = yield* toSubjectId(id, olds?.subject, output?.subject);
       const schemaRegistry =
         olds?.schemaRegistry !== undefined
@@ -260,7 +265,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const registries = yield* listSchemaRegistries(env.project);
+        const registries = yield* listSchemaRegistries(env.project, env.region);
         const owned = yield* Effect.forEach(
           registries.filter((registry) => (registry.name ?? "").length > 0),
           (registry) =>
@@ -351,7 +356,8 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const schemaRegistry = registryOf(
         news.schemaRegistry,

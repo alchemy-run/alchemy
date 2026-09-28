@@ -13,7 +13,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 40;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 export const LIST_LOCATIONS = ["us-central1", "US", "EU"] as const;
@@ -33,8 +32,10 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION);
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -79,9 +80,7 @@ export const parseResourceName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -349,9 +348,9 @@ export const listQueryTemplates = (parent: string) =>
         ),
       );
 
-export const listExchangesInProject = (project: string) =>
+export const listExchangesInProject = (project: string, region: string) =>
   Effect.forEach(
-    LIST_LOCATIONS,
+    [...new Set<string>([region, ...LIST_LOCATIONS])],
     (location) => listDataExchanges(locationParent(project, location)),
     { concurrency: 2 },
   ).pipe(Effect.map((groups) => groups.flat()));

@@ -11,7 +11,6 @@ import { stripInternalLabels } from "../Labels.ts";
 
 const noRetryLayer = Layer.succeed(GcpRetry, { while: () => false });
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 export class RapidmigrationassessmentOperationFailed extends Data.TaggedError(
@@ -72,11 +71,13 @@ export const rfc1035 = (name: string, fallback = "collector"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const locationParent = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const locationParent = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const toPhysicalId = (
   id: string,
@@ -106,9 +107,7 @@ export const parseName = (name: string, collection = "collectors") => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -367,8 +366,8 @@ export const listCollectors = (parent: string) =>
           Effect.catchTag(["NotFound", "Forbidden"], () => emptyCollectors),
         );
 
-export const listOwnedCollectors = (project: string) =>
+export const listOwnedCollectors = (project: string, region: string) =>
   Effect.firstSuccessOf([
     listCollectors(`projects/${project}/locations/-`),
-    listCollectors(locationParent(project, DEFAULT_LOCATION)),
+    listCollectors(locationParent(project, region)),
   ]).pipe(Effect.orElseSucceed((): rma.Collector[] => []));

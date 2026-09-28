@@ -45,7 +45,7 @@ export type EntryGroupProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the entry group. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -165,7 +165,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listGroups = (project: string) => {
+const listGroups = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsEntryGroups.pages({
@@ -178,10 +178,11 @@ const listGroups = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
-export const listAlchemyEntryGroups = (project: string) => listGroups(project);
+export const listAlchemyEntryGroups = (project: string, region: string) =>
+  listGroups(project, region);
 
 export const EntryGroupProvider = () =>
   Provider.succeed(EntryGroup, {
@@ -189,12 +190,17 @@ export const EntryGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.entryGroupId ?? output?.entryGroupId,
         nextId: news.entryGroupId ?? olds?.entryGroupId ?? output?.entryGroupId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -207,7 +213,10 @@ export const EntryGroupProvider = () =>
         output?.entryGroupId,
         "entrygroup",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, entryGroupId);
       const existing = yield* getByName(name);
@@ -221,7 +230,7 @@ export const EntryGroupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listGroups(env.project);
+        const items = yield* listGroups(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -233,7 +242,10 @@ export const EntryGroupProvider = () =>
         output?.entryGroupId,
         "entrygroup",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, entryGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type SingleTenantHsmAddQuorumMember = {
@@ -52,7 +51,7 @@ export type SingleTenantHsmInstanceProposalProps = {
    * `singleTenantHsmInstance` is a bare id. Immutable — changing it
    * replaces the proposal. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -230,10 +229,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const proposalsAt = parts.lastIndexOf("proposals");
   const instancesAt = parts.lastIndexOf("singleTenantHsmInstances");
@@ -247,7 +246,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     singleTenantHsmInstance: instance,
     proposalId:
       proposalsAt >= 0 && parts[proposalsAt + 1]
@@ -260,10 +259,12 @@ const resolveParent = (
   project: string,
   instance: string,
   location: string | undefined,
+  region: string,
 ) => {
   if (instance.includes("/")) {
     const parsed = parseName(
       instance.includes("/proposals/") ? instance : `${instance}/proposals/_`,
+      region,
     );
     return {
       parent: parsed.singleTenantHsmInstance,
@@ -271,7 +272,7 @@ const resolveParent = (
       project: parsed.project || project,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   return {
     parent: `projects/${project}/locations/${loc}/singleTenantHsmInstances/${instance}`,
     location: loc,
@@ -300,9 +301,10 @@ const present = (value: unknown) => value !== undefined && value !== false;
 const toAttrs = (
   proposal: kms.SingleTenantHsmInstanceProposal,
   project: string,
+  region: string,
 ): SingleTenantHsmInstanceProposalAttrs => {
   const name = proposal.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     proposalId: parsed.proposalId,
@@ -603,6 +605,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.proposalId ?? output?.proposalId;
       const nextId = news.proposalId ?? previousId;
@@ -614,13 +617,18 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
       const previousParent =
         output?.singleTenantHsmInstance ??
         (olds?.singleTenantHsmInstance
-          ? resolveParent("", olds.singleTenantHsmInstance, olds.location)
-              .parent
+          ? resolveParent(
+              "",
+              olds.singleTenantHsmInstance,
+              olds.location,
+              env.region,
+            ).parent
           : undefined);
       const nextParent = resolveParent(
         output?.project ?? "",
         news.singleTenantHsmInstance,
         news.location ?? output?.location,
+        env.region,
       ).parent;
       const parentChanged =
         previousParent !== undefined && previousParent !== nextParent;
@@ -667,6 +675,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
                   output?.singleTenantHsmInstance ??
                   "",
                 olds?.location ?? output?.location,
+                env.region,
               ).parent,
               proposalId,
             )
@@ -676,7 +685,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
       if (existing === undefined) return undefined;
       // Proposals have no labels. Existence at the computed name is
       // ownership.
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
@@ -700,7 +709,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
           );
           for (const proposals of batches) {
             for (const proposal of proposals) {
-              found.push(toAttrs(proposal, env.project));
+              found.push(toAttrs(proposal, env.project, env.region));
             }
           }
           pageToken = response.nextPageToken;
@@ -716,6 +725,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
         env.project,
         news.singleTenantHsmInstance,
         news.location ?? output?.location,
+        env.region,
       );
       const name = resourceName(parent.parent, proposalId);
 
@@ -750,7 +760,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
         current = yield* waitReady(current.name ?? name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

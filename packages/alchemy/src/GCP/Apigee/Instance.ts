@@ -26,7 +26,6 @@ import {
   parseOwnership,
 } from "./ownership.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 32;
 
 export type AccessLoggingConfig = {
@@ -90,7 +89,7 @@ export type InstanceProps = {
   /**
    * Compute Engine location where the instance resides (region, for
    * example `us-central1`). Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -266,8 +265,8 @@ const resourceName = (organization: string, instanceId: string) =>
 const instanceIdOf = (instance: apigee.GoogleCloudApigeeV1Instance) =>
   lastSegment(instance.name ?? "");
 
-const locationOf = (location: string | undefined) =>
-  (location ?? DEFAULT_LOCATION).toLowerCase();
+const locationOf = (location: string | undefined, defaultLocation: string) =>
+  (location ?? defaultLocation).toLowerCase();
 
 const accessLoggingOf = (
   config:
@@ -308,6 +307,7 @@ const maintenanceOf = (
 const toAttrs = (
   instance: apigee.GoogleCloudApigeeV1Instance,
   organization: string,
+  region: string,
 ) => {
   const instanceId = instanceIdOf(instance);
   const parsed = parseOwnership(instance.description);
@@ -318,7 +318,7 @@ const toAttrs = (
     name,
     instanceId,
     organization: organizationFromName(name) ?? organization,
-    location: instance.location ?? DEFAULT_LOCATION,
+    location: instance.location ?? region,
     description: parsed.text,
     displayName: instance.displayName,
     peeringCidrRange: instance.peeringCidrRange,
@@ -447,7 +447,7 @@ export const InstanceProvider = () =>
           news.organization !== previousOrg) ||
         (previousLocation !== undefined &&
           news.location !== undefined &&
-          locationOf(news.location) !== locationOf(previousLocation)) ||
+          news.location.toLowerCase() !== previousLocation.toLowerCase()) ||
         (news.peeringCidrRange !== undefined &&
           previousPeering !== undefined &&
           news.peeringCidrRange !== previousPeering) ||
@@ -476,7 +476,7 @@ export const InstanceProvider = () =>
       const name = output?.name ?? resourceName(organization, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, organization);
+      const attrs = toAttrs(existing, organization, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -494,7 +494,9 @@ export const InstanceProvider = () =>
             Stream.filter((instance) =>
               hasOwnershipMarker(instance.description),
             ),
-            Stream.map((instance) => toAttrs(instance, env.project)),
+            Stream.map((instance) =>
+              toAttrs(instance, env.project, env.region),
+            ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag(["NotFound", "Forbidden"], () =>
@@ -513,7 +515,10 @@ export const InstanceProvider = () =>
         output?.instanceId,
         MAX_NAME_LENGTH,
       );
-      const location = locationOf(news.location ?? output?.location);
+      const location = locationOf(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(organization, instanceId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
@@ -606,7 +611,7 @@ export const InstanceProvider = () =>
         current = (yield* getByName(name)) ?? current;
       }
 
-      return toAttrs(current, organization);
+      return toAttrs(current, organization, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

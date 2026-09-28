@@ -20,7 +20,6 @@ import {
   waitForOperation,
 } from "./operations.ts";
 
-const DEFAULT_ANALYTICS_REGION = "us-central1";
 const DEFAULT_RUNTIME_TYPE = "CLOUD";
 const DEFAULT_BILLING_TYPE = "EVALUATION";
 
@@ -49,7 +48,7 @@ export type OrganizationProps = {
   /**
    * Primary Google Cloud region for analytics data storage.
    * Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   analyticsRegion?: string;
   /**
@@ -267,8 +266,9 @@ const getByName = (name: string) =>
 const toBody = (
   props: OrganizationProps,
   description: string,
+  analyticsRegion: string,
 ): apigee.GoogleCloudApigeeV1Organization => ({
-  analyticsRegion: props.analyticsRegion ?? DEFAULT_ANALYTICS_REGION,
+  analyticsRegion,
   runtimeType: props.runtimeType ?? DEFAULT_RUNTIME_TYPE,
   billingType: props.billingType ?? DEFAULT_BILLING_TYPE,
   description,
@@ -296,12 +296,13 @@ export const OrganizationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.organizationId ?? output?.organizationId;
       const previousRegion = olds?.analyticsRegion ?? output?.analyticsRegion;
       const previousRuntime = olds?.runtimeType ?? output?.runtimeType;
       const previousBilling = olds?.billingType ?? output?.billingType;
       const nextId = news.organizationId ?? previousId;
-      const nextRegion = news.analyticsRegion ?? DEFAULT_ANALYTICS_REGION;
+      const nextRegion = news.analyticsRegion ?? previousRegion ?? env.region;
       const nextRuntime = news.runtimeType ?? DEFAULT_RUNTIME_TYPE;
       const nextBilling = news.billingType ?? DEFAULT_BILLING_TYPE;
       if (
@@ -372,6 +373,8 @@ export const OrganizationProvider = () =>
       const name = orgName(organizationId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
+      const analyticsRegion =
+        news.analyticsRegion ?? output?.analyticsRegion ?? env.region;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -379,7 +382,7 @@ export const OrganizationProvider = () =>
         const created = yield* apigee
           .createOrganizations({
             parent: `projects/${env.project}`,
-            body: toBody(news, desiredDescription),
+            body: toBody(news, desiredDescription, analyticsRegion),
           })
           .pipe(
             Effect.flatMap((operation) => waitForOperation(operation)),
@@ -393,7 +396,7 @@ export const OrganizationProvider = () =>
         return yield* new OrganizationNotResolved({ name });
       }
 
-      const desired = toBody(news, desiredDescription);
+      const desired = toBody(news, desiredDescription, analyticsRegion);
       const needsUpdate =
         (current.description ?? "") !== desiredDescription ||
         (current.displayName ?? "") !== (news.displayName ?? "") ||

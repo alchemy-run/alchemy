@@ -18,6 +18,10 @@ export const MAX_DISPLAY_NAME_LENGTH = 100;
 export const MAX_CONTENT_POLICY_DISPLAY_NAME_LENGTH = 63;
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_REGIONAL_LOCATION = "us";
+/**
+ * Locations swept by `list`, alongside the stack region. `us-central1` stays
+ * so resources created under the former hard-coded default remain reachable.
+ */
 export const LIST_LOCATIONS = ["us-central1", "global", "us"] as const;
 
 export class DlpNotResolved extends Data.TaggedError("GCP.Dlp.NotResolved")<{
@@ -174,8 +178,8 @@ export const organizationLocationParent = (
   location: string,
 ) => `${organizationParent(organization)}/locations/${location}`;
 
-export const locationParentsOf = (organization: string) =>
-  LIST_LOCATIONS.map((location) =>
+export const locationParentsOf = (organization: string, region: string) =>
+  Array.from(new Set<string>([...LIST_LOCATIONS, region])).map((location) =>
     organizationLocationParent(organization, location),
   );
 

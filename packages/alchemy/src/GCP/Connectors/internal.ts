@@ -9,7 +9,6 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const ALCHEMY_FIELD_MARKER = "alchemy";
 
 export type EntityFields = Record<string, unknown>;
@@ -34,7 +33,7 @@ export const parseEntityName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   return {
     project: segmentAfter(parts, "projects"),
-    location: segmentAfter(parts, "locations") || DEFAULT_LOCATION,
+    location: segmentAfter(parts, "locations"),
     connection: segmentAfter(parts, "connections"),
     entityType: segmentAfter(parts, "entityTypes"),
     entityId: segmentAfter(parts, "entities") || lastSegment(name),
@@ -220,15 +219,13 @@ const listConnectionsAt = (parent: string) =>
       ),
     );
 
-export const listConnections = (project: string) =>
+export const listConnections = (project: string, region: string) =>
   Effect.gen(function* () {
     const wildcard = yield* listConnectionsAt(
       `projects/${project}/locations/-`,
     );
     if (wildcard.length > 0) return wildcard;
-    return yield* listConnectionsAt(
-      `projects/${project}/locations/${DEFAULT_LOCATION}`,
-    );
+    return yield* listConnectionsAt(`projects/${project}/locations/${region}`);
   });
 
 const entityTypeParent = (
@@ -241,9 +238,9 @@ const entityTypeParent = (
   return `${connectionName}/entityTypes/${lastSegment(name)}`;
 };
 
-export const listOwnedEntities = (project: string) =>
+export const listOwnedEntities = (project: string, region: string) =>
   Effect.gen(function* () {
-    const connections = yield* listConnections(project);
+    const connections = yield* listConnections(project, region);
     const connectionNames = connections
       .map((connection) => connection.name)
       .filter((name): name is string => (name ?? "").length > 0);

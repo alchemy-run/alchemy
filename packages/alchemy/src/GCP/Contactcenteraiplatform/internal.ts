@@ -12,7 +12,6 @@ import { isTransientGcpError } from "../Errors.ts";
 
 const noRetryLayer = Layer.succeed(GcpRetry, { while: () => false });
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_INSTANCE_SIZE = "DEV_SMALL";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DOMAIN_PREFIX_LENGTH = 16;
@@ -53,8 +52,10 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const rfc1035 = (
   name: string,
@@ -118,7 +119,7 @@ export const toDomainPrefix = (
     );
   });
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf("contactCenters");
   const locationsAt = parts.lastIndexOf("locations");
@@ -129,7 +130,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -338,7 +339,7 @@ export const listContactCenters = (parent: string) =>
         );
 
 const FALLBACK_LOCATIONS = [
-  DEFAULT_LOCATION,
+  "us-central1",
   "us-east1",
   "europe-west1",
   "asia-southeast1",
@@ -362,11 +363,13 @@ const listLocationIds = (project: string) =>
       Effect.orElseSucceed(() => [] as string[]),
     );
 
-const listAcrossLocations = (project: string) =>
+const listAcrossLocations = (project: string, region: string) =>
   Effect.gen(function* () {
     const discovered = yield* listLocationIds(project);
     const locations =
-      discovered.length > 0 ? discovered : [...FALLBACK_LOCATIONS];
+      discovered.length > 0
+        ? discovered
+        : [...new Set([region, ...FALLBACK_LOCATIONS])];
     const pages = yield* Effect.forEach(
       locations,
       (location) => listContactCenters(locationParent(project, location)),
@@ -375,7 +378,7 @@ const listAcrossLocations = (project: string) =>
     return pages.flat();
   });
 
-export const listOwnedContactCenters = (project: string) =>
+export const listOwnedContactCenters = (project: string, region: string) =>
   listContactCenters(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
       (error) =>
@@ -383,6 +386,6 @@ export const listOwnedContactCenters = (project: string) =>
         error._tag === "InternalServerError" ||
         error._tag === "BadGateway" ||
         error._tag === "GatewayTimeout",
-      () => listAcrossLocations(project),
+      () => listAcrossLocations(project, region),
     ),
   );

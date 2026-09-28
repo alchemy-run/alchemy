@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expectedAssetCountOf,
   fieldMask,
   isGoneState,
@@ -50,7 +49,7 @@ export type CollectorProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * collector. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -296,12 +295,17 @@ export const CollectorProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.collectorId ?? output?.collectorId,
         nextId: news.collectorId ?? olds?.collectorId ?? output?.collectorId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -313,7 +317,10 @@ export const CollectorProvider = () =>
         olds?.collectorId,
         output?.collectorId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, collectorId);
       const existing = yield* getByName(name);
@@ -327,7 +334,7 @@ export const CollectorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwnedCollectors(env.project);
+        const items = yield* listOwnedCollectors(env.project, env.region);
         return items
           .filter((item) => !isGoneState(item.state))
           .map((item) => toAttrs(item, env.project));
@@ -341,7 +348,8 @@ export const CollectorProvider = () =>
         output?.collectorId,
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const name = resourceName(env.project, location, collectorId);
       const displayName = news.displayName ?? collectorId;

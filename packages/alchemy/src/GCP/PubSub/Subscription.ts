@@ -328,6 +328,24 @@ const getByName = (name: string) =>
     .getProjectsSubscriptions({ subscription: name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+const waitUntilGone = (name: string) =>
+  getByName(name).pipe(
+    Effect.filterOrFail(
+      (existing) => existing === undefined,
+      () => new SubscriptionStillExists({ name }),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.PubSub.SubscriptionStillExists",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 30,
+    }),
+    Effect.asVoid,
+  );
+
+export class SubscriptionStillExists extends Data.TaggedError(
+  "GCP.PubSub.SubscriptionStillExists",
+)<{ name: string }> {}
+
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
@@ -678,5 +696,7 @@ export const SubscriptionProvider = () =>
       yield* pubsub
         .deleteProjectsSubscriptions({ subscription: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      // Pub/Sub reads lag deletes; block until it stops serving it.
+      yield* waitUntilGone(output.name);
     }),
   });

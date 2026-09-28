@@ -51,7 +51,7 @@ export type ConversionWorkspacesMappingRuleProps = {
   conversionWorkspace: string;
   /**
    * Region used when `conversionWorkspace` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -288,9 +288,9 @@ const listRules = (parent: string) =>
       ),
     );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const workspaces = yield* listConversionWorkspaces(project);
+    const workspaces = yield* listConversionWorkspaces(project, region);
     const groups = yield* Effect.forEach(
       workspaces.filter((item) => (item.name ?? "").length > 0),
       (workspace) => listRules(workspace.name!),
@@ -311,6 +311,7 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previous = {
         ruleScope: olds?.ruleScope ?? output?.ruleScope,
         filter: olds?.filter ?? output?.filter,
@@ -341,9 +342,13 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
         previousId: olds?.mappingRuleId ?? output?.mappingRuleId,
         nextId:
           news.mappingRuleId ?? olds?.mappingRuleId ?? output?.mappingRuleId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent:
           olds?.conversionWorkspace ?? output?.conversionWorkspace,
@@ -356,7 +361,10 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const conversionWorkspace = conversionWorkspaceOf(
         olds?.conversionWorkspace ?? output?.conversionWorkspace ?? "",
         env.project,
@@ -384,13 +392,16 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const conversionWorkspace = conversionWorkspaceOf(
         news.conversionWorkspace,
         env.project,

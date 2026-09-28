@@ -12,7 +12,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const DEFAULT_VCPU_COUNT = 3;
 export const DEFAULT_MEMORY_BYTES = 3_221_225_472;
@@ -90,8 +89,10 @@ export const schemaRegistryIdOf = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -162,10 +163,9 @@ export const parseName = (name: string, collection: string) => {
   return {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    // API resource names always carry a `locations/{location}` segment.
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts.slice(collectionAt + 1).join("/")
@@ -436,17 +436,16 @@ export const collectPages = <Page, A, E, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
-    Effect.catch(() =>
-      list(`projects/${project}/locations/${DEFAULT_LOCATION}`),
-    ),
+    Effect.catch(() => list(`projects/${project}/locations/${region}`)),
     Effect.orElseSucceed(() => [] as A[]),
   );
 
-export const listClusters = (project: string) =>
-  listAtLocation(project, (parent) =>
+export const listClusters = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       kafka.listProjectsLocationsClusters.pages({ parent, pageSize: 1000 }),
       (page) => page.clusters,
@@ -456,15 +455,15 @@ export const listClusters = (project: string) =>
     ),
   );
 
-export const listAlchemyClusters = (project: string) =>
-  listClusters(project).pipe(
+export const listAlchemyClusters = (project: string, region: string) =>
+  listClusters(project, region).pipe(
     Effect.map((clusters: kafka.Cluster[]) =>
       clusters.filter((cluster) => hasAlchemyLabelMap(cluster.labels)),
     ),
   );
 
-export const listConnectClusters = (project: string) =>
-  listAtLocation(project, (parent) =>
+export const listConnectClusters = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       kafka.listProjectsLocationsConnectClusters.pages({
         parent,
@@ -481,16 +480,16 @@ export const listConnectClusters = (project: string) =>
     ),
   );
 
-export const listAlchemyConnectClusters = (project: string) =>
-  listConnectClusters(project).pipe(
+export const listAlchemyConnectClusters = (project: string, region: string) =>
+  listConnectClusters(project, region).pipe(
     Effect.map((clusters: kafka.ConnectCluster[]) =>
       clusters.filter((cluster) => hasAlchemyLabelMap(cluster.labels)),
     ),
   );
 
-export const listSchemaRegistries = (project: string, location?: string) => {
+export const listSchemaRegistries = (project: string, location: string) => {
   const parents = [
-    `projects/${project}/locations/${location ?? DEFAULT_LOCATION}`,
+    `projects/${project}/locations/${location}`,
     `projects/${project}/locations/-`,
   ];
   return Effect.forEach(

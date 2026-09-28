@@ -10,6 +10,7 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
+// Product Search only exists in PRODUCT_SEARCH_LOCATIONS, so the stack region is not a usable default.
 export const DEFAULT_LOCATION = "us-west1";
 export const DEFAULT_PRODUCT_CATEGORY = "homegoods-v2";
 export const MAX_ID_LENGTH = 128;

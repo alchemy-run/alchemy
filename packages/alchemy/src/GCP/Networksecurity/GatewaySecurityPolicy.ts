@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworksecurityNotResolved,
   canonicalizeLink,
   changedFields,
@@ -41,7 +40,7 @@ export type GatewaySecurityPolicyProps = {
    * Region of the policy (`us-central1`, …). Immutable — changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -125,15 +124,16 @@ const resourceName = (
 const toAttrs = (
   policy: networksecurity.GatewaySecurityPolicy,
   project: string,
+  region: string,
 ) => {
   const name = policy.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(policy.description);
   return {
     name,
     gatewaySecurityPolicyId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     description: ownership.text,
     tlsInspectionPolicy: policy.tlsInspectionPolicy
       ? canonicalizeLink(policy.tlsInspectionPolicy)
@@ -160,6 +160,7 @@ export const GatewaySecurityPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.gatewaySecurityPolicyId ?? output?.gatewaySecurityPolicyId;
       const nextId = news.gatewaySecurityPolicyId
@@ -167,11 +168,11 @@ export const GatewaySecurityPolicyProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -194,14 +195,14 @@ export const GatewaySecurityPolicyProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, gatewaySecurityPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -218,7 +219,7 @@ export const GatewaySecurityPolicyProvider = () =>
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -231,7 +232,7 @@ export const GatewaySecurityPolicyProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(env.project, location, gatewaySecurityPolicyId);
       const ownership = yield* createInternalLabels(id);
@@ -298,7 +299,7 @@ export const GatewaySecurityPolicyProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

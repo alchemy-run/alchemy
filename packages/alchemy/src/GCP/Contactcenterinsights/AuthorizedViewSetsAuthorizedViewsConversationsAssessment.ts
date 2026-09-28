@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   lastSegment,
@@ -245,7 +244,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider =
       list: () =>
         Effect.gen(function* () {
           const env = yield* GcpEnvironment.current;
-          const viewsParent = `${locationParent(env.project, DEFAULT_LOCATION)}/authorizedViewSets/-`;
+          const viewsParent = `${locationParent(env.project, env.region)}/authorizedViewSets/-`;
           const views =
             yield* cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViews
               .pages({ parent: viewsParent, pageSize: 1000 })

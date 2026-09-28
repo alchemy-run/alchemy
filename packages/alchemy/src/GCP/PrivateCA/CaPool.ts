@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_TIER = "DEVOPS";
 const MAX_NAME_LENGTH = 63;
 
@@ -76,7 +75,7 @@ export type CaPoolProps = {
    * Certificate Authority Service location (`us-central1`, `us-east1`,
    * …). Immutable — changing it replaces the pool. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -228,8 +227,8 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "ca-pool";
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeTier = (tier: string | undefined) => {
   const value = (tier ?? DEFAULT_TIER).toUpperCase();
@@ -248,9 +247,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     caPoolId:
       poolsAt >= 0 && parts[poolsAt + 1]
         ? parts[poolsAt + 1]!
@@ -521,6 +518,7 @@ export const CaPoolProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.caPoolId ?? output?.caPoolId;
       const nextId = news.caPoolId ?? previousId;
@@ -530,10 +528,10 @@ export const CaPoolProvider = () =>
         nextId !== previousId;
 
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
+        news.location ?? olds?.location ?? output?.location ?? env.region,
       );
       const locationChanged = previousLocation !== nextLocation;
 
@@ -570,7 +568,9 @@ export const CaPoolProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const caPoolId = yield* toId(id, olds?.caPoolId, output?.caPoolId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, caPoolId);
       const existing = yield* getByName(name);
@@ -590,7 +590,9 @@ export const CaPoolProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const caPoolId = yield* toId(id, news.caPoolId, output?.caPoolId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, caPoolId);
       const desiredLabels = {
         ...toLabels(news.labels),

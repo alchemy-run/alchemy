@@ -113,7 +113,7 @@ export type ServicesSchemaProps = {
   service: string;
   /**
    * Region used when `service` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -291,9 +291,10 @@ const toDatasource = (value: firebasedataconnect.Datasource): Datasource => ({
 const toAttrs = (
   item: firebasedataconnect.Firebasedataconnect_Schema,
   project: string,
+  region: string,
 ): ServicesSchema["Attributes"] => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "schemas");
+  const parsed = parseName(name, "schemas", region);
   return {
     name,
     schemaId: parsed.id,
@@ -321,8 +322,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsServicesSchemas({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "services/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, "services/-", region, (parent) =>
     listLabeledPages(
       firebasedataconnect.listProjectsLocationsServicesSchemas.pages({
         parent,
@@ -353,9 +354,11 @@ export const ServicesSchemaProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent =
         (olds?.service ?? output?.service)
@@ -385,7 +388,10 @@ export const ServicesSchemaProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = schemaIdOf(olds?.schemaId ?? output?.schemaId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const service =
         output?.service ??
         (olds?.service
@@ -396,7 +402,7 @@ export const ServicesSchemaProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -405,14 +411,17 @@ export const ServicesSchemaProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = schemaIdOf(news.schemaId ?? output?.schemaId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const service = expandParent(
         news.service,
         env.project,
@@ -494,7 +503,7 @@ export const ServicesSchemaProvider = () =>
         getByName(current.name ?? name),
         current.name ?? name,
       );
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

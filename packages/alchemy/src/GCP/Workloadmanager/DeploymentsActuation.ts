@@ -63,7 +63,7 @@ export type DeploymentsActuationProps = {
   deployment: string;
   /**
    * Region used when `deployment` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -162,9 +162,13 @@ const toOutput = (
         hasUserFacingErrorMsg: output.hasUserFacingErrorMsg,
       };
 
-const toAttrs = (item: workloadmanager.Actuation, project: string) => {
+const toAttrs = (
+  item: workloadmanager.Actuation,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "actuations");
+  const parsed = parseName(name, "actuations", region);
   return {
     name,
     actuationId: parsed.id,
@@ -187,8 +191,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsDeploymentsActuations({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "deployments/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "deployments/-", (parent) =>
     listPages(
       workloadmanager.listProjectsLocationsDeploymentsActuations.pages({
         parent,
@@ -215,9 +219,11 @@ export const DeploymentsActuationProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent =
         (olds?.deployment ?? output?.deployment)
@@ -251,7 +257,10 @@ export const DeploymentsActuationProvider = () =>
         olds?.actuationId,
         output?.actuationId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const deployment = expandNamed(
         olds?.deployment ?? output?.deployment ?? "",
         env.project,
@@ -261,14 +270,14 @@ export const DeploymentsActuationProvider = () =>
       const name = output?.name ?? resourceName(deployment, actuationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -278,7 +287,10 @@ export const DeploymentsActuationProvider = () =>
         news.actuationId,
         output?.actuationId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const deployment = expandNamed(
         news.deployment,
         env.project,
@@ -312,7 +324,7 @@ export const DeploymentsActuationProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

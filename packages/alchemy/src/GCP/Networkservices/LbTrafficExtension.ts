@@ -20,7 +20,6 @@ import type {
   ExtensionChainMatchCondition,
 } from "./LbEdgeExtension.ts";
 import {
-  DEFAULT_REGION,
   canonicalizeLink,
   changedFields,
   collectPages,
@@ -71,7 +70,7 @@ export type LbTrafficExtensionProps = {
    * Location matching the forwarding rules (`global` or a region).
    * Immutable — changing it replaces the extension. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -215,14 +214,15 @@ const toForwardingRules = (rules: readonly string[] | undefined) =>
 const toAttrs = (
   extension: networkservices.LbTrafficExtension,
   project: string,
+  region: string,
 ) => {
   const name = extension.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     lbTrafficExtensionId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     description: extension.description,
     forwardingRules: toForwardingRules(extension.forwardingRules),
     extensionChains: (extension.extensionChains ?? []).map(toChain),
@@ -254,6 +254,7 @@ export const LbTrafficExtensionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.lbTrafficExtensionId ?? output?.lbTrafficExtensionId;
       const nextId = news.lbTrafficExtensionId
@@ -261,11 +262,11 @@ export const LbTrafficExtensionProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const previousScheme = (
         olds?.loadBalancingScheme ??
@@ -295,14 +296,14 @@ export const LbTrafficExtensionProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, lbTrafficExtensionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -320,7 +321,7 @@ export const LbTrafficExtensionProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -333,7 +334,7 @@ export const LbTrafficExtensionProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(
         env.project,
@@ -379,7 +380,7 @@ export const LbTrafficExtensionProvider = () =>
         current = yield* waitUntilPresent(getByName(name), name);
       }
 
-      const observed = toAttrs(current, env.project);
+      const observed = toAttrs(current, env.project, env.region);
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
@@ -419,7 +420,7 @@ export const LbTrafficExtensionProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -44,7 +44,7 @@ export type RestoreChannelProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the channel. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -144,9 +144,13 @@ const resourceName = (
 ) =>
   `projects/${project}/locations/${location}/restoreChannels/${restoreChannelId}`;
 
-const toAttrs = (item: gkebackup.RestoreChannel, project: string) => {
+const toAttrs = (
+  item: gkebackup.RestoreChannel,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "restoreChannels");
+  const parsed = parseName(name, "restoreChannels", region);
   return {
     name,
     restoreChannelId: parsed.id,
@@ -167,8 +171,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsRestoreChannels({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       gkebackup.listProjectsLocationsRestoreChannels.pages({
         parent,
@@ -192,6 +196,7 @@ export const RestoreChannelProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousDest =
         olds?.destinationProject ?? output?.destinationProject;
       const nextDest = news.destinationProject;
@@ -201,9 +206,13 @@ export const RestoreChannelProvider = () =>
           news.restoreChannelId ??
           olds?.restoreChannelId ??
           output?.restoreChannelId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousDest !== undefined &&
@@ -222,12 +231,15 @@ export const RestoreChannelProvider = () =>
         output?.restoreChannelId,
         "restorechannel",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, restoreChannelId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -236,8 +248,8 @@ export const RestoreChannelProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -248,7 +260,10 @@ export const RestoreChannelProvider = () =>
         output?.restoreChannelId,
         "restorechannel",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, restoreChannelId);
       const destinationProject = projectName(
         news.destinationProject,
@@ -308,7 +323,7 @@ export const RestoreChannelProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

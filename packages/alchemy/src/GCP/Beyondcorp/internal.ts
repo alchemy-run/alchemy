@@ -12,7 +12,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_GLOBAL = "global";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
@@ -85,7 +84,7 @@ export const rfc1035 = (name: string, fallback = "beyondcorp"): string => {
 
 export const normalizeLocation = (
   location: string | undefined,
-  fallback = DEFAULT_LOCATION,
+  fallback: string,
 ) => lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>

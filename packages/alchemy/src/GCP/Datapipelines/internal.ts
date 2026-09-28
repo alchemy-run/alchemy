@@ -10,7 +10,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_TYPE = "PIPELINE_TYPE_BATCH";
 export const DEFAULT_STATE = "STATE_ACTIVE";
 export const MAX_ID_LENGTH = 63;
@@ -32,8 +31,10 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -44,7 +45,7 @@ export const resourceName = (
   pipelineId: string,
 ) => `${locationParent(project, location)}/pipelines/${pipelineId}`;
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const projectsAt = parts.lastIndexOf("projects");
   const locationsAt = parts.lastIndexOf("locations");
@@ -55,7 +56,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     pipelineId:
       pipelinesAt >= 0 && parts[pipelinesAt + 1]
         ? parts[pipelinesAt + 1]!
@@ -231,10 +232,10 @@ export const listPipelinesAt = (parent: string) =>
       ),
     );
 
-export const listOwnedPipelines = (project: string) =>
+export const listOwnedPipelines = (project: string, region: string) =>
   Effect.gen(function* () {
     const pages = yield* Effect.forEach(
-      LIST_LOCATIONS,
+      [...new Set([region, ...LIST_LOCATIONS])],
       (location) => listPipelinesAt(locationParent(project, location)),
       { concurrency: 2 },
     );
@@ -250,11 +251,16 @@ export const listOwnedPipelines = (project: string) =>
     return owned;
   });
 
-export const findOwnedPipeline = (id: string, project: string, name?: string) =>
+export const findOwnedPipeline = (
+  id: string,
+  project: string,
+  region: string,
+  name?: string,
+) =>
   Effect.gen(function* () {
     const existing = yield* getPipeline(name ?? "");
     if (existing !== undefined) return existing;
-    const rows = yield* listOwnedPipelines(project);
+    const rows = yield* listOwnedPipelines(project, region);
     for (const row of rows) {
       if (yield* ownedByAlchemy(id, row.pipelineSources)) {
         return row;

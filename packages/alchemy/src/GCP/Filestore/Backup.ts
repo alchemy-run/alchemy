@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   DEFAULT_SHARE_NAME,
   DEFAULT_ZONE,
   expandParent,
@@ -62,7 +61,7 @@ export type BackupProps = {
    * regional and may live in a different region than the instance.
    * Immutable — changing it replaces the backup. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default the region of the source instance, or "us-central1"
+   * @default the region of the source instance
    */
   location?: string;
   /**
@@ -199,7 +198,7 @@ const parseInstanceRef = (
 ) => {
   const trimmed = value.trim();
   if (trimmed.includes("/")) {
-    const parsed = parseName(trimmed, "instances");
+    const parsed = parseName(trimmed, "instances", DEFAULT_ZONE);
     const instanceLocation = normalizeLocation(parsed.location, DEFAULT_ZONE);
     return {
       project: parsed.project || fallbackProject,
@@ -233,14 +232,11 @@ const backupLocationOf = (
   outputLocation: string | undefined,
   instanceLocation: string,
 ) =>
-  normalizeLocation(
-    newsLocation ?? outputLocation ?? regionOf(instanceLocation),
-    DEFAULT_REGION,
-  );
+  normalizeLocation(newsLocation ?? outputLocation, regionOf(instanceLocation));
 
-const toAttrs = (backup: file.Backup, project: string) => {
+const toAttrs = (backup: file.Backup, project: string, region: string) => {
   const name = backup.name ?? "";
-  const parsed = parseName(name, "backups");
+  const parsed = parseName(name, "backups", region);
   return {
     name,
     backupId: parsed.id,
@@ -307,9 +303,8 @@ export const BackupProvider = () =>
           previousInstance.location,
       );
       const previousLocation = normalizeLocation(
-        olds?.location ??
-          output?.location ??
-          regionOf(previousInstance.location),
+        olds?.location ?? output?.location,
+        regionOf(previousInstance.location),
       );
       const nextLocation = backupLocationOf(
         news.location,
@@ -355,7 +350,7 @@ export const BackupProvider = () =>
         output?.name ?? resourceName(env.project, location, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined || isPlaceholder(existing)) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -374,7 +369,7 @@ export const BackupProvider = () =>
         );
         return items
           .filter((item) => !isPlaceholder(item))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -480,7 +475,7 @@ export const BackupProvider = () =>
         }
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

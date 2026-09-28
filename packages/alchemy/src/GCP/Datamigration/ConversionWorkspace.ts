@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   fieldMask,
   fingerprint,
@@ -47,7 +46,7 @@ export type ConversionWorkspaceProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * workspace. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -207,7 +206,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsConversionWorkspaces({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   dm.listProjectsLocationsConversionWorkspaces
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -223,7 +222,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         dm.listProjectsLocationsConversionWorkspaces
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -258,6 +257,7 @@ export const ConversionWorkspaceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId:
           olds?.conversionWorkspaceId ?? output?.conversionWorkspaceId,
@@ -265,9 +265,13 @@ export const ConversionWorkspaceProvider = () =>
           news.conversionWorkspaceId ??
           olds?.conversionWorkspaceId ??
           output?.conversionWorkspaceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           engineOf(news.source) !== engineOf(olds?.source ?? output?.source) ||
@@ -292,7 +296,10 @@ export const ConversionWorkspaceProvider = () =>
         output?.conversionWorkspaceId,
         "workspace",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, conversionWorkspaceId);
@@ -307,7 +314,7 @@ export const ConversionWorkspaceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -319,7 +326,10 @@ export const ConversionWorkspaceProvider = () =>
         output?.conversionWorkspaceId,
         "workspace",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, conversionWorkspaceId);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);

@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_CLUSTER_TYPE = "SINGLE_NODE";
 const DEFAULT_MACHINE_TYPE = "e2-standard-2";
 const DEFAULT_BOOT_DISK_GB = 30;
@@ -60,7 +59,7 @@ export type ClusterProps = {
    * Dataproc region (`us-central1`, `us-east1`, …). Immutable — changing
    * it replaces the cluster. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   region?: string;
   /**
@@ -381,8 +380,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, fallback: string) =>
+  lastSegment(region ?? fallback).toLowerCase();
 
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
@@ -422,7 +421,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, region: string, clusterName: string) =>
   `projects/${project}/regions/${region}/clusters/${clusterName}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackRegion: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const clustersAt = parts.lastIndexOf("clusters");
   const regionsAt = parts.lastIndexOf("regions");
@@ -433,7 +432,7 @@ const parseName = (name: string) => {
     region:
       regionsAt >= 0 && parts[regionsAt + 1]
         ? parts[regionsAt + 1]!
-        : DEFAULT_REGION,
+        : fallbackRegion,
     clusterName:
       clustersAt >= 0 && parts[clustersAt + 1]
         ? parts[clustersAt + 1]!
@@ -881,11 +880,18 @@ export const ClusterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName = olds?.clusterName ?? output?.clusterName;
       const nextName = news.clusterName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const previousType = normalizeClusterType(
         olds?.clusterType ?? output?.clusterType,
         olds?.workerNumInstances ?? output?.workerNumInstances,
@@ -1004,8 +1010,11 @@ export const ClusterProvider = () =>
         olds?.clusterName,
         output?.clusterName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
-      const parsed = output?.name ? parseName(output.name) : undefined;
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const parsed = output?.name ? parseName(output.name, region) : undefined;
       const project = parsed?.project || env.project;
       const existing = yield* getById(project, region, clusterName);
       if (existing === undefined) return undefined;
@@ -1019,7 +1028,7 @@ export const ClusterProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_REGIONS,
+          [...new Set([env.region, ...LIST_REGIONS])],
           (region) => listRegion(env.project, region),
           { concurrency: 4 },
         );
@@ -1033,8 +1042,8 @@ export const ClusterProvider = () =>
         news.clusterName,
         output?.clusterName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
-      const parsed = output?.name ? parseName(output.name) : undefined;
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
+      const parsed = output?.name ? parseName(output.name, region) : undefined;
       const projectId = parsed?.project || env.project;
       const desiredLabels = {
         ...toLabels(news.labels),

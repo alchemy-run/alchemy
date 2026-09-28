@@ -49,7 +49,7 @@ export type FeaturestoreProps = {
   featurestoreId?: string;
   /**
    * Region. Immutable — changing it replaces the store.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -252,13 +252,18 @@ export const FeaturestoreProvider = () =>
     stables: ["name", "featurestoreId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featurestoreId ?? output?.featurestoreId;
       const nextId = news.featurestoreId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousKey =
         olds?.encryptionSpec?.kmsKeyName ??
         output?.encryptionSpec?.kmsKeyName ??
@@ -288,7 +293,10 @@ export const FeaturestoreProvider = () =>
         output?.featurestoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, storeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -327,7 +335,10 @@ export const FeaturestoreProvider = () =>
         output?.featurestoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, storeId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type RepositoryProps = {
@@ -33,7 +32,7 @@ export type RepositoryProps = {
    * Cloud Build location (`us-central1`, `us-east1`, …). Used when
    * `connection` is a bare id. Immutable — changing it replaces the
    * repository. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -175,8 +174,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -190,9 +189,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     connection,
     connectionId:
       connectionsAt >= 0 && parts[connectionsAt + 1]
@@ -209,6 +206,7 @@ const resolveParent = (
   project: string,
   connection: string,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   if (connection.includes("/")) {
     const parsed = parseName(
@@ -223,7 +221,7 @@ const resolveParent = (
       connectionId: parsed.connectionId,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, defaultLocation);
   return {
     parent: `projects/${project}/locations/${loc}/connections/${connection}`,
     location: loc,
@@ -235,9 +233,10 @@ const resolveParent = (
 const parentKey = (
   connection: string | undefined,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   if (connection === undefined || connection === "") return undefined;
-  const parsed = resolveParent("", connection, location);
+  const parsed = resolveParent("", connection, location, defaultLocation);
   return `${parsed.location}/${parsed.connectionId}`;
 };
 
@@ -483,6 +482,7 @@ export const RepositoryProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       if (output === undefined && olds === undefined) return undefined;
 
@@ -490,19 +490,23 @@ export const RepositoryProvider = () =>
       const nextId = news.repositoryId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent = parentKey(
         olds?.connection ?? output?.connection,
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextParent =
         news.connection !== undefined
           ? parentKey(
               news.connection,
               news.location ?? olds?.location ?? output?.location,
+              env.region,
             )
           : previousParent;
       const previousUri = olds?.remoteUri ?? output?.remoteUri ?? "";
@@ -551,6 +555,7 @@ export const RepositoryProvider = () =>
           env.project,
           connectionRef,
           olds?.location ?? output?.location,
+          env.region,
         );
         name = resourceName(parent.parent, repositoryId);
       }
@@ -579,6 +584,7 @@ export const RepositoryProvider = () =>
         env.project,
         news.connection ?? output?.connection ?? "",
         news.location ?? output?.location,
+        env.region,
       );
       const name = resourceName(parent.parent, repositoryId);
       const desiredAnnotations = {

@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasAlchemyLabelMap,
   hasOwnershipMarker,
@@ -42,7 +41,7 @@ export type AppProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * app. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -218,9 +217,9 @@ const modelSettingsOf = (news: AppProps): ces.ModelSettings | undefined =>
     ? { model: news.model, temperature: news.temperature }
     : undefined);
 
-const toAttrs = (app: ces.App, project: string) => {
+const toAttrs = (app: ces.App, project: string, region: string) => {
   const name = app.name ?? "";
-  const parsed = parseResourceName(name, "apps");
+  const parsed = parseResourceName(name, "apps", region);
   return {
     name,
     appId: parsed.id,
@@ -263,11 +262,13 @@ export const AppProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
+      const nextLocation = normalizeLocation(news.location, env.region);
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        news.location !== undefined &&
+        normalizeLocation(previousLocation, env.region) !== nextLocation
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -279,17 +280,22 @@ export const AppProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const appId =
         olds?.appId ??
         output?.appId ??
-        (output?.name ? parseResourceName(output.name, "apps").id : "");
+        (output?.name
+          ? parseResourceName(output.name, "apps", env.region).id
+          : "");
       const name =
         output?.name ??
         (appId.length > 0 ? resourceName(env.project, location, appId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const labeled = yield* ownedByAlchemyLabels(id, existing.metadata);
       const described = yield* ownedByAlchemy(id, existing.description);
       return labeled || described ? attrs : Unowned(attrs);
@@ -298,16 +304,17 @@ export const AppProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apps = yield* listApps(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
-        return apps.filter(isOwnedApp).map((app) => toAttrs(app, env.project));
+        const apps = yield* listApps(locationParent(env.project, env.region));
+        return apps
+          .filter(isOwnedApp)
+          .map((app) => toAttrs(app, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const appId = yield* toPhysicalId(id, news.appId, output?.appId);
       const name = output?.name ?? resourceName(env.project, location, appId);
@@ -434,7 +441,7 @@ export const AppProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

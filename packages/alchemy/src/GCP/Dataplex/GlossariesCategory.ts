@@ -50,7 +50,7 @@ export type GlossariesCategoryProps = {
   /**
    * Region used when `glossary` is a bare id. Immutable — changing it
    * replaces the category.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -146,11 +146,12 @@ const resolveParent = (
   project: string,
   glossary: string,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   const parent = expandParent(
     glossary,
     project,
-    normalizeLocation(location),
+    normalizeLocation(location, defaultLocation),
     "glossaries",
   );
   const parsed = parseName(`${parent}/categories/_`, "categories");
@@ -225,12 +226,17 @@ export const GlossariesCategoryProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.categoryId ?? output?.categoryId,
         nextId: news.categoryId ?? olds?.categoryId ?? output?.categoryId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.glossary ?? output?.glossary,
         nextParent: news.glossary ?? olds?.glossary ?? output?.glossary,
@@ -243,6 +249,7 @@ export const GlossariesCategoryProvider = () =>
         env.project,
         olds?.glossary ?? output?.glossary ?? "",
         olds?.location ?? output?.location,
+        env.region,
       );
       const categoryId = yield* toPhysicalId(
         id,
@@ -262,18 +269,21 @@ export const GlossariesCategoryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const glossaries = yield* listAtLocation(env.project, (parent) =>
-          collectPages(
-            dataplex.listProjectsLocationsGlossaries.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.glossaries,
-          ).pipe(
-            Effect.map((items) =>
-              items.filter((item) => hasAlchemyLabelMap(item.labels)),
+        const glossaries = yield* listAtLocation(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              dataplex.listProjectsLocationsGlossaries.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.glossaries,
+            ).pipe(
+              Effect.map((items) =>
+                items.filter((item) => hasAlchemyLabelMap(item.labels)),
+              ),
             ),
-          ),
         );
         const nested = yield* Effect.forEach(
           glossaries,
@@ -292,6 +302,7 @@ export const GlossariesCategoryProvider = () =>
         env.project,
         news.glossary,
         news.location ?? output?.location,
+        env.region,
       );
       const categoryId = yield* toPhysicalId(
         id,

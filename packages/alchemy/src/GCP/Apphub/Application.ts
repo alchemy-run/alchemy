@@ -46,7 +46,8 @@ export type ApplicationProps = {
    * replaces the application. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`. Regional applications use `scope.type = REGIONAL`;
    * global applications use `scope.type = GLOBAL`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -160,9 +161,9 @@ const resourceName = (
   applicationId: string,
 ) => `${locationParent(project, location)}/applications/${applicationId}`;
 
-const toAttrs = (item: apphub.Application, project: string) => {
+const toAttrs = (item: apphub.Application, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "applications");
+  const parsed = parseName(name, "applications", region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -187,8 +188,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsApplications({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocations(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocations(project, region, (parent) =>
     listOwnedPages(
       apphub.listProjectsLocationsApplications.pages({
         parent,
@@ -212,15 +213,20 @@ export const ApplicationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousScope = olds?.scope?.type ?? output?.scope?.type;
       const nextScope = news.scope?.type ?? previousScope;
       return replaceOnIdentity({
         previousId: olds?.applicationId ?? output?.applicationId,
         nextId:
           news.applicationId ?? olds?.applicationId ?? output?.applicationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousScope !== undefined &&
@@ -237,12 +243,15 @@ export const ApplicationProvider = () =>
         output?.applicationId,
         "app",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, applicationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -251,8 +260,8 @@ export const ApplicationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -263,7 +272,10 @@ export const ApplicationProvider = () =>
         output?.applicationId,
         "app",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, applicationId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -327,7 +339,7 @@ export const ApplicationProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

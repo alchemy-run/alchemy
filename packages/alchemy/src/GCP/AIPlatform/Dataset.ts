@@ -17,8 +17,8 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   DEFAULT_TABULAR_METADATA_SCHEMA_URI,
   hasAlchemyLabelKeys,
   normalizeLocation,
@@ -43,7 +43,7 @@ export type DatasetProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the dataset. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -244,10 +244,15 @@ const getByName = (name: string) =>
         Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
       );
 
-const listDatasets = (project: string, location = DEFAULT_LOCATION) =>
+const listDatasets = (project: string, region: string) =>
+  Effect.forEach(listLocations(region), (location) =>
+    listDatasetsAt(parentOf(project, location)),
+  ).pipe(Effect.map((pages) => pages.flat()));
+
+const listDatasetsAt = (parent: string) =>
   aiplatform.listProjectsLocationsDatasets
     .pages({
-      parent: parentOf(project, location),
+      parent,
       pageSize: 100,
     })
     .pipe(
@@ -259,13 +264,18 @@ const listDatasets = (project: string, location = DEFAULT_LOCATION) =>
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
-const findOwned = (id: string, project: string, hinted?: string) =>
+const findOwned = (
+  id: string,
+  project: string,
+  region: string,
+  hinted?: string,
+) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
       if (existing !== undefined) return existing;
     }
-    const owned = yield* listDatasets(project);
+    const owned = yield* listDatasets(project, region);
     for (const dataset of owned) {
       if (yield* hasAlchemyLabels(id, tagRecord(dataset.labels))) {
         return dataset;
@@ -314,14 +324,17 @@ export const DatasetProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.datasetId ?? output?.datasetId;
       const nextId = news.datasetId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousSchema = schemaUriOf(
         olds?.metadataSchemaUri ?? output?.metadataSchemaUri,
@@ -353,11 +366,19 @@ export const DatasetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(id, env.project, output?.name);
+      const existing = yield* findOwned(
+        id,
+        env.project,
+        env.region,
+        output?.name,
+      );
       if (existing === undefined) {
         if (output?.name) return undefined;
         const datasetId = yield* toId(id, olds?.datasetId, output?.datasetId);
-        const location = normalizeLocation(olds?.location ?? output?.location);
+        const location = normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        );
         const named = yield* getByName(
           resourceName(env.project, location, datasetId),
         );
@@ -376,13 +397,16 @@ export const DatasetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const datasets = yield* listDatasets(env.project);
+        const datasets = yield* listDatasets(env.project, env.region);
         return datasets.map((dataset) => toAttrs(dataset, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const datasetId = yield* toId(id, news.datasetId, output?.datasetId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -391,7 +415,7 @@ export const DatasetProvider = () =>
       const displayName = news.displayName ?? datasetId;
       const metadataSchemaUri = schemaUriOf(news.metadataSchemaUri);
 
-      let current = yield* findOwned(id, env.project, output?.name);
+      let current = yield* findOwned(id, env.project, env.region, output?.name);
       if (current === undefined && news.datasetId !== undefined) {
         current = yield* getByName(
           resourceName(env.project, location, news.datasetId),
@@ -421,13 +445,13 @@ export const DatasetProvider = () =>
           });
           const createdName =
             resourceNameFromOperation(done) ??
-            (yield* findOwned(id, env.project))?.name;
+            (yield* findOwned(id, env.project, env.region))?.name;
           if (createdName !== undefined && createdName.length > 0) {
             current = yield* waitUntilExists(createdName);
           }
         }
         if (current === undefined) {
-          current = yield* findOwned(id, env.project);
+          current = yield* findOwned(id, env.project, env.region);
         }
       }
 

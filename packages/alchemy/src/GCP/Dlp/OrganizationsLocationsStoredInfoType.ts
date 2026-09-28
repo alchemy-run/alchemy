@@ -52,7 +52,7 @@ export type OrganizationsLocationsStoredInfoTypeProps = {
   /**
    * Processing location (`us-central1`, `global`, `us`, …). Immutable —
    * changing it replaces the infoType.
-   * @default "us-central1"
+   * @default "global"
    */
   location?: string;
   /**
@@ -269,7 +269,7 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
         const organization = yield* tryResolveOrganization();
         if (organization === undefined) return [];
         const pages = yield* Effect.forEach(
-          locationParentsOf(organization),
+          locationParentsOf(organization, env.region),
           (parent) => listAt(parent, organization, env.project),
           { concurrency: 3 },
         );

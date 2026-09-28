@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   hasOwnershipMarker,
   lastSegment,
   locationOf,
@@ -198,9 +198,10 @@ export const StudiesTrialProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const studies = yield* listStudies(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const studies = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listStudies(locationParent(env.project, location)),
+        )).flat();
         const pages = yield* Effect.forEach(
           studies,
           (parent) => listAtParent(parent, env.project),

@@ -10,7 +10,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   hasOwnershipMarker,
   lastSegment,
   locationOf,
@@ -224,7 +223,7 @@ export const QaScorecardsRevisionProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const scorecards = yield* listScorecards(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         const pages = yield* Effect.forEach(
           scorecards,

@@ -45,7 +45,7 @@ export type GlossaryProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the glossary. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -166,7 +166,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listGlossaries = (project: string) => {
+const listGlossaries = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsGlossaries.pages({
@@ -179,11 +179,11 @@ const listGlossaries = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
-export const listAlchemyGlossaries = (project: string) =>
-  listGlossaries(project);
+export const listAlchemyGlossaries = (project: string, region: string) =>
+  listGlossaries(project, region);
 
 export const GlossaryProvider = () =>
   Provider.succeed(Glossary, {
@@ -191,12 +191,17 @@ export const GlossaryProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.glossaryId ?? output?.glossaryId,
         nextId: news.glossaryId ?? olds?.glossaryId ?? output?.glossaryId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -209,7 +214,10 @@ export const GlossaryProvider = () =>
         output?.glossaryId,
         "glossary",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, glossaryId);
       const existing = yield* getByName(name);
@@ -223,7 +231,7 @@ export const GlossaryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listGlossaries(env.project);
+        const items = yield* listGlossaries(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -235,7 +243,10 @@ export const GlossaryProvider = () =>
         output?.glossaryId,
         "glossary",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, glossaryId);
       const desiredLabels = {
         ...toLabels(news.labels),

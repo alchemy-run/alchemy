@@ -52,7 +52,7 @@ export type AgentsEntityTypeProps = {
   entityTypeId?: string;
   /**
    * Location used when `agent` is a bare id.
-   * @default "us-central1"
+   * @default "global"
    */
   location?: string;
   /**

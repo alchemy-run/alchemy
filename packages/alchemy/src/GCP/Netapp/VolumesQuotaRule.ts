@@ -44,7 +44,7 @@ export type VolumesQuotaRuleProps = {
   volume: string;
   /**
    * Region used when `volume` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -163,9 +163,9 @@ export const VolumesQuotaRule = Resource<VolumesQuotaRule>(
 const resourceName = (volume: string, quotaRuleId: string) =>
   `${volume}/quotaRules/${quotaRuleId}`;
 
-const toAttrs = (item: netapp.QuotaRule, project: string) => {
+const toAttrs = (item: netapp.QuotaRule, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "quotaRules");
+  const parsed = parseName(name, "quotaRules", region);
   return {
     name,
     quotaRuleId: parsed.id,
@@ -188,8 +188,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsVolumesQuotaRules({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "volumes/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "volumes/-", (parent) =>
     listLabeledPages(
       netapp.listProjectsLocationsVolumesQuotaRules.pages({
         parent,
@@ -213,15 +213,20 @@ export const VolumesQuotaRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.type ?? output?.type;
       const previousTarget = olds?.target ?? output?.target;
       const nextType = news.type ?? DEFAULT_TYPE;
       return replaceOnIdentity({
         previousId: olds?.quotaRuleId ?? output?.quotaRuleId,
         nextId: news.quotaRuleId ?? olds?.quotaRuleId ?? output?.quotaRuleId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.volume ?? output?.volume,
         nextParent: news.volume,
@@ -239,7 +244,10 @@ export const VolumesQuotaRuleProvider = () =>
         output?.quotaRuleId,
         "quotarule",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const volume = expandParent(
         olds?.volume ?? output?.volume ?? "",
         env.project,
@@ -249,7 +257,7 @@ export const VolumesQuotaRuleProvider = () =>
       const name = output?.name ?? resourceName(volume, quotaRuleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -258,8 +266,8 @@ export const VolumesQuotaRuleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -270,7 +278,10 @@ export const VolumesQuotaRuleProvider = () =>
         output?.quotaRuleId,
         "quotarule",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const volume = expandParent(
         news.volume,
         env.project,
@@ -350,7 +361,7 @@ export const VolumesQuotaRuleProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

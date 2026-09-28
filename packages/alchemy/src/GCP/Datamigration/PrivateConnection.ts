@@ -11,7 +11,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   fingerprint,
   hasAlchemyLabelMap,
   locationParent,
@@ -45,7 +44,7 @@ export type PrivateConnectionProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * connection. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -200,7 +199,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsPrivateConnections({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   dm.listProjectsLocationsPrivateConnections
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -216,7 +215,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         dm.listProjectsLocationsPrivateConnections
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -245,6 +244,7 @@ export const PrivateConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = kindOf({
         vpcPeeringConfig: olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig,
         pscInterfaceConfig:
@@ -271,9 +271,13 @@ export const PrivateConnectionProvider = () =>
           news.privateConnectionId ??
           olds?.privateConnectionId ??
           output?.privateConnectionId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (olds !== undefined || output !== undefined) &&
@@ -295,7 +299,10 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, privateConnectionId);
@@ -310,7 +317,7 @@ export const PrivateConnectionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -322,7 +329,10 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, privateConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { GcpEnvironment } from "../Environment.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
@@ -13,6 +14,11 @@ import {
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_SESSION = "alchemy";
 export const LIST_LOCATIONS = ["global", "us-central1"] as const;
+
+/** Locations scanned by `list`: the fixed set plus the stack region. */
+export const listLocations = (region: string): string[] => [
+  ...new Set<string>([...LIST_LOCATIONS, region]),
+];
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
 export const MAX_ROUTE_GROUP_DISPLAY_NAME_LENGTH = 30;
@@ -382,23 +388,24 @@ const collect = <Page, Item, E extends { _tag: string }, R>(
     ),
   );
 
-export const listAgents = (project: string, location?: string) => {
-  const locations = location
-    ? [normalizeLocation(location)]
-    : [...LIST_LOCATIONS];
-  return Effect.forEach(
-    locations,
-    (loc) =>
-      collect(
-        dialogflow.listProjectsLocationsAgents.pages({
-          parent: locationParent(project, loc),
-          pageSize: 1000,
-        }),
-        (page) => page.agents,
-      ),
-    { concurrency: 2 },
-  ).pipe(Effect.map((groups) => groups.flat()));
-};
+export const listAgents = (project: string, location?: string) =>
+  Effect.gen(function* () {
+    const locations = location
+      ? [normalizeLocation(location)]
+      : listLocations((yield* GcpEnvironment.current).region);
+    return yield* Effect.forEach(
+      locations,
+      (loc) =>
+        collect(
+          dialogflow.listProjectsLocationsAgents.pages({
+            parent: locationParent(project, loc),
+            pageSize: 1000,
+          }),
+          (page) => page.agents,
+        ),
+      { concurrency: 2 },
+    ).pipe(Effect.map((groups) => groups.flat()));
+  });
 
 export const namedAgents = (project: string) =>
   listAgents(project).pipe(

@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   lastSegment,
@@ -39,7 +38,8 @@ export type IntegrationsVersionsTestCasesProps = {
   /**
    * Location used when `version` is a bare id. Immutable — changing it
    * replaces the test case.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -131,6 +131,7 @@ const resourceName = (version: string, testCaseId: string) =>
 const toAttrs = (
   testCase: integrations.GoogleCloudIntegrationsV1alphaTestCase,
   project: string,
+  region: string,
   version: string,
 ) => {
   const name = testCase.name ?? "";
@@ -139,7 +140,7 @@ const toAttrs = (
     name,
     testCaseId: lastSegment(name),
     version,
-    location: locationOf(name),
+    location: locationOf(name, region),
     project,
     displayName: testCase.displayName,
     description: parsed.text,
@@ -160,13 +161,13 @@ const getByName = (name: string) =>
           ),
         );
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsIntegrationsVersionsTestCases
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.testCases ?? [])),
       Stream.filter((testCase) => hasOwnershipMarker(testCase.description)),
-      Stream.map((testCase) => toAttrs(testCase, project, parent)),
+      Stream.map((testCase) => toAttrs(testCase, project, region, parent)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -193,6 +194,7 @@ const listWildcard = (project: string, location: string) =>
   listAt(
     `${locationParent(project, location)}/integrations/-/versions/-`,
     project,
+    location,
   );
 
 export const IntegrationsVersionsTestCasesProvider = () =>
@@ -229,7 +231,10 @@ export const IntegrationsVersionsTestCasesProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const version = expandVersion(
         olds?.version ?? output?.version ?? "",
         env.project,
@@ -246,7 +251,7 @@ export const IntegrationsVersionsTestCasesProvider = () =>
         existing = yield* findOwned(version, id);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, version);
+      const attrs = toAttrs(existing, env.project, env.region, version);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -255,13 +260,14 @@ export const IntegrationsVersionsTestCasesProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listWildcard(env.project, DEFAULT_LOCATION);
+        return yield* listWildcard(env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const version = expandVersion(news.version, env.project, location);
       const testCaseId = yield* toResourceId(
@@ -323,7 +329,7 @@ export const IntegrationsVersionsTestCasesProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project, version);
+      return toAttrs(current, env.project, env.region, version);
     }),
 
     delete: Effect.fn(function* ({ output }) {

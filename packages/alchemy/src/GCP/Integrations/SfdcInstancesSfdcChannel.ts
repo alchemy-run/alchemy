@@ -14,7 +14,6 @@ import {
   parseResourceName,
 } from "./internal.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   expandSfdcInstance,
   hasOwnershipMarker,
@@ -46,7 +45,8 @@ export type SfdcInstancesSfdcChannelProps = {
   sfdcChannelId?: string;
   /**
    * Location used when `sfdcInstance` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -148,17 +148,18 @@ const resourceName = (sfdcInstance: string, sfdcChannelId: string) =>
 const toAttrs = (
   channel: integrations.GoogleCloudIntegrationsV1alphaSfdcChannel,
   project: string,
+  region: string,
   instanceHint?: string,
 ) => {
   const name = channel.name ?? "";
-  const parsed = parseResourceName(name, "sfdcChannels");
+  const parsed = parseResourceName(name, "sfdcChannels", region);
   return {
     name,
     sfdcChannelId: lastSegment(name),
     sfdcInstance: name.includes("/sfdcChannels/")
       ? parsed.sfdcInstance
       : (instanceHint ?? parsed.parent),
-    location: locationOf(name),
+    location: locationOf(name, region),
     project: projectOf(name) || project,
     displayName: channel.displayName,
     description: parseOwnership(channel.description).text,
@@ -191,6 +192,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousInstance = olds?.sfdcInstance ?? output?.sfdcInstance;
       const instanceChanged =
         previousInstance !== undefined &&
@@ -204,14 +206,17 @@ export const SfdcInstancesSfdcChannelProvider = () =>
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
-        normalizeLocation(news.location) !==
-          normalizeLocation(previousLocation);
+        normalizeLocation(news.location, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(instanceChanged || idChanged || locationChanged);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const sfdcInstance = olds?.sfdcInstance
         ? expandSfdcInstance(olds.sfdcInstance, env.project, location)
         : output?.sfdcInstance;
@@ -238,7 +243,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, sfdcInstance);
+      const attrs = toAttrs(existing, env.project, env.region, sfdcInstance);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -247,19 +252,17 @@ export const SfdcInstancesSfdcChannelProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwnedSfdcChannels(
-          env.project,
-          DEFAULT_LOCATION,
-        );
+        const items = yield* listOwnedSfdcChannels(env.project, env.region);
         return items
           .filter((channel) => hasOwnershipMarker(channel.description))
-          .map((channel) => toAttrs(channel, env.project));
+          .map((channel) => toAttrs(channel, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const sfdcInstance = expandSfdcInstance(
         news.sfdcInstance,
@@ -325,7 +328,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project, sfdcInstance);
+      return toAttrs(current, env.project, env.region, sfdcInstance);
     }),
 
     delete: Effect.fn(function* ({ output }) {

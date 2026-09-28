@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandRepository,
   forEachOwnedRepository,
   hasAlchemyLabelMap,
@@ -32,7 +31,7 @@ export type RepositoriesWorkflowInvocationProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -126,9 +125,13 @@ export class RepositoriesWorkflowInvocationNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (invocation: dataform.WorkflowInvocation, project: string) => {
+const toAttrs = (
+  invocation: dataform.WorkflowInvocation,
+  project: string,
+  region: string,
+) => {
   const name = invocation.name ?? "";
-  const parsed = parseResourceName(name, "workflowInvocations");
+  const parsed = parseResourceName(name, "workflowInvocations", region);
   return {
     name,
     workflowInvocationId: parsed.id,
@@ -187,6 +190,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const compilationChanged =
         (olds?.compilationResult ?? output?.compilationResult) !== undefined &&
@@ -215,7 +219,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       const env = yield* GcpEnvironment.current;
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
         .pipe(
@@ -231,15 +235,20 @@ export const RepositoriesWorkflowInvocationProvider = () =>
         const env = yield* GcpEnvironment.current;
         const invocations = yield* forEachOwnedRepository(
           env.project,
-          DEFAULT_LOCATION,
+          env.region,
           (repo) => listWorkflowInvocations(repo.name ?? ""),
         );
-        return invocations.map((item) => toAttrs(item, env.project));
+        return invocations.map((item) =>
+          toAttrs(item, env.project, env.region),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         news.repository,
         env.project,
@@ -263,7 +272,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

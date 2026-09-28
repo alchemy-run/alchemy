@@ -82,7 +82,7 @@ export type DeliveryPipelineProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the pipeline. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -253,8 +253,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsDeliveryPipelines({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       clouddeploy.listProjectsLocationsDeliveryPipelines.pages({
         parent,
@@ -278,15 +278,18 @@ export const DeliveryPipelineProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deliveryPipelineId ?? output?.deliveryPipelineId,
         nextId:
           news.deliveryPipelineId ??
           olds?.deliveryPipelineId ??
           output?.deliveryPipelineId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
       });
     }),
@@ -299,7 +302,9 @@ export const DeliveryPipelineProvider = () =>
         output?.deliveryPipelineId,
         "deliverypipeline",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, deliveryPipelineId);
       const existing = yield* getByName(name);
@@ -313,7 +318,7 @@ export const DeliveryPipelineProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -325,7 +330,9 @@ export const DeliveryPipelineProvider = () =>
         output?.deliveryPipelineId,
         "deliverypipeline",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, deliveryPipelineId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -28,7 +28,7 @@ export type BucketProps = {
   /**
    * Location of the bucket (`US`, `EU`, `US-CENTRAL1`, …). Immutable —
    * changing it replaces the bucket.
-   * @default "US-CENTRAL1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -213,8 +213,6 @@ export class BucketNotResolved extends Data.TaggedError(
   bucketName: string;
 }> {}
 
-const DEFAULT_LOCATION = "US-CENTRAL1";
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
@@ -234,7 +232,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 
 const toAttrs = (bucket: storage.Bucket) => ({
   bucketName: bucket.name ?? bucket.id ?? "",
-  location: bucket.location ?? DEFAULT_LOCATION,
+  location: bucket.location ?? "",
   locationType: bucket.locationType,
   storageClass: bucket.storageClass,
   versioning: bucket.versioning?.enabled === true,
@@ -346,9 +344,10 @@ export const BucketProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.location ?? output?.location;
-      const next = news.location ?? DEFAULT_LOCATION;
+      const next = news.location;
       if (
         previous !== undefined &&
+        next !== undefined &&
         previous.toUpperCase() !== next.toUpperCase()
       ) {
         const previousName = olds?.bucketName ?? output?.bucketName;
@@ -406,7 +405,8 @@ export const BucketProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = yield* toName(id, news.bucketName, output?.bucketName);
-      const location = news.location ?? DEFAULT_LOCATION;
+      const location =
+        news.location ?? output?.location ?? env.region.toUpperCase();
       const storageClass = news.storageClass ?? "STANDARD";
       const versioning = news.versioning === true;
       const hierarchicalNamespace = news.hierarchicalNamespace === true;

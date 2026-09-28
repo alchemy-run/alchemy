@@ -11,7 +11,6 @@ import type { Providers } from "../Providers.ts";
 import {
   collectPages,
   decodeDataId,
-  DEFAULT_LOCATION,
   encodeDataId,
   expandParent,
   hasOwnedDataId,
@@ -39,7 +38,7 @@ export type DatasetsConsentStoresUserDataMappingProps = {
   dataset?: string;
   /**
    * Region used when `consentStore` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -134,9 +133,13 @@ const storeOf = (
   return `${datasetName}/consentStores/${consentStore}`;
 };
 
-const toAttrs = (mapping: healthcare.UserDataMapping, project: string) => {
+const toAttrs = (
+  mapping: healthcare.UserDataMapping,
+  project: string,
+  region: string,
+) => {
   const name = mapping.name ?? "";
-  const parsed = parseResourceName(name, "userDataMappings");
+  const parsed = parseResourceName(name, "userDataMappings", region);
   return {
     name,
     userDataMappingId: parsed.id,
@@ -175,7 +178,7 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
       const nextParent = storeOf(
         news.consentStore,
         env.project,
-        normalizeLocation(news.location ?? output?.location),
+        normalizeLocation(news.location ?? output?.location, env.region),
         news.dataset,
       );
       if (previousParent !== undefined && previousParent !== nextParent) {
@@ -188,14 +191,14 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
       const env = yield* GcpEnvironment.current;
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return hasOwnedDataId(existing.dataId) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* listAlchemyConsentStores(env.project);
+        const stores = yield* listAlchemyConsentStores(env.project, env.region);
         const mappings = yield* Effect.forEach(
           stores,
           (store) =>
@@ -213,13 +216,14 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
         return mappings
           .flat()
           .filter((mapping) => hasOwnedDataId(mapping.dataId))
-          .map((mapping) => toAttrs(mapping, env.project));
+          .map((mapping) => toAttrs(mapping, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const consentStore = storeOf(
         news.consentStore,
@@ -281,7 +285,7 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

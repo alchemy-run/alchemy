@@ -11,7 +11,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_USER_TYPE = "ALLOYDB_BUILT_IN";
 const MAX_NAME_LENGTH = 63;
 
@@ -29,7 +28,7 @@ export type ClustersUserProps = {
    * `cluster` is a full resource name. Immutable — changing it replaces
    * the user. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -155,8 +154,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeUserType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_USER_TYPE).toUpperCase();
@@ -198,9 +197,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     clusterId:
       clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
     userId:
@@ -213,7 +210,7 @@ const parseName = (name: string) => {
 const parseClusterRef = (
   cluster: string,
   fallbackProject: string,
-  fallbackLocation: string | undefined,
+  fallbackLocation: string,
 ) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
@@ -374,15 +371,18 @@ export const ClustersUserProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.userId ?? output?.userId;
       const nextId = news.userId ?? previousId;
       const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId);
       const nextCluster = lastSegment(news.cluster ?? previousCluster);
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousType = normalizeUserType(
         olds?.userType ?? output?.userType,
       );
@@ -421,7 +421,7 @@ export const ClustersUserProvider = () =>
       const ref = parseClusterRef(
         olds?.cluster ?? output?.clusterName ?? output?.clusterId ?? "",
         env.project,
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) return undefined;
       const name = resourceName(
@@ -492,7 +492,7 @@ export const ClustersUserProvider = () =>
       const ref = parseClusterRef(
         news.cluster,
         env.project,
-        news.location ?? output?.location,
+        news.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) {
         return yield* new ClustersUserClusterMissing({

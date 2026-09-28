@@ -8,7 +8,6 @@ import { tagRecord } from "../../Tags.ts";
 import { alchemyLabelKeys, stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_GLOBAL = "global";
-export const DEFAULT_REGION = "us-central1";
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_NAME_LENGTH = 63;
 

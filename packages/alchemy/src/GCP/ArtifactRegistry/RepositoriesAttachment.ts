@@ -13,7 +13,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   expandRepository,
   hasAlchemyLabelMap,
@@ -46,7 +45,7 @@ export type RepositoriesAttachmentProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the repository's location, else the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -172,9 +171,13 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(annotations));
 
-const toAttrs = (attachment: artifactregistry.Attachment, project: string) => {
+const toAttrs = (
+  attachment: artifactregistry.Attachment,
+  project: string,
+  region: string,
+) => {
   const name = attachment.name ?? "";
-  const parsed = parseName(name, "attachments");
+  const parsed = parseName(name, "attachments", region);
   return {
     name,
     attachmentId: parsed.id,
@@ -209,14 +212,17 @@ export const RepositoriesAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.attachmentId ?? output?.attachmentId;
       const nextId = news.attachmentId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ??
           locationFromRepository(news.repository, previousLocation),
+        env.region,
       );
       const extra =
         !sameText(olds?.target ?? output?.target, news.target) ||
@@ -249,8 +255,9 @@ export const RepositoriesAttachmentProvider = () =>
           output?.location ??
           locationFromRepository(
             olds?.repository ?? output?.repository,
-            DEFAULT_LOCATION,
+            env.region,
           ),
+        env.region,
       );
       const repository = expandRepository(
         olds?.repository ?? output?.repository ?? "",
@@ -266,7 +273,7 @@ export const RepositoriesAttachmentProvider = () =>
       const name = output?.name ?? resourceNameOf(repository, attachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.annotations)))
         ? attrs
         : Unowned(attrs);
@@ -279,7 +286,7 @@ export const RepositoriesAttachmentProvider = () =>
         const attachments = yield* listChildResources(repos, listAttachments);
         return attachments
           .filter((attachment) => hasAlchemyLabelMap(attachment.annotations))
-          .map((attachment) => toAttrs(attachment, env.project));
+          .map((attachment) => toAttrs(attachment, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -287,7 +294,8 @@ export const RepositoriesAttachmentProvider = () =>
       const location = normalizeLocation(
         news.location ??
           output?.location ??
-          locationFromRepository(news.repository, DEFAULT_LOCATION),
+          locationFromRepository(news.repository, env.region),
+        env.region,
       );
       const repository = expandRepository(
         news.repository,
@@ -336,7 +344,7 @@ export const RepositoriesAttachmentProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

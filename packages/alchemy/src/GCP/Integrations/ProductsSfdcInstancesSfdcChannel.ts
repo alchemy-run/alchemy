@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   DEFAULT_PRODUCT,
   encodeOwnership,
   hasOwnershipMarker,
@@ -42,7 +41,8 @@ export type ProductsSfdcInstancesSfdcChannelProps = {
   /**
    * Location used when `sfdcInstance` is a bare id. Immutable —
    * changing it replaces the channel.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -148,6 +148,7 @@ const resourceName = (sfdcInstance: string, sfdcChannelId: string) =>
 const toAttrs = (
   channel: integrations.GoogleCloudIntegrationsV1alphaSfdcChannel,
   project: string,
+  region: string,
   sfdcInstance: string,
 ) => {
   const name = channel.name ?? "";
@@ -156,7 +157,7 @@ const toAttrs = (
     name,
     sfdcChannelId: lastSegment(name),
     sfdcInstance,
-    location: locationOf(name),
+    location: locationOf(name, region),
     product: productOf(name),
     project,
     displayName: channel.displayName,
@@ -179,13 +180,13 @@ const getByName = (name: string) =>
           ),
         );
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsSfdcInstancesSfdcChannels
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.sfdcChannels ?? [])),
       Stream.filter((channel) => hasOwnershipMarker(channel.description)),
-      Stream.map((channel) => toAttrs(channel, project, parent)),
+      Stream.map((channel) => toAttrs(channel, project, region, parent)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -229,7 +230,7 @@ const listOwnedChannels = (
       instances,
       (instance) =>
         instance.name
-          ? listAt(instance.name, project)
+          ? listAt(instance.name, project, location)
           : Effect.succeed([] as ReturnType<typeof toAttrs>[]),
       { concurrency: 4 },
     );
@@ -271,7 +272,10 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const product = normalizeProduct(olds?.product ?? output?.product);
       const sfdcInstance = expandInstance(
         olds?.sfdcInstance ?? output?.sfdcInstance ?? "",
@@ -290,7 +294,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
         existing = yield* findOwned(sfdcInstance, id);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, sfdcInstance);
+      const attrs = toAttrs(existing, env.project, env.region, sfdcInstance);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -301,7 +305,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
         const env = yield* GcpEnvironment.current;
         return yield* listOwnedChannels(
           env.project,
-          DEFAULT_LOCATION,
+          env.region,
           DEFAULT_PRODUCT,
         );
       }),
@@ -309,7 +313,8 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const product = normalizeProduct(
         news.product ?? output?.product ?? DEFAULT_PRODUCT,
@@ -380,7 +385,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project, sfdcInstance);
+      return toAttrs(current, env.project, env.region, sfdcInstance);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceFailed,
   ResourceNotReady,
   ResourceNotResolved,
@@ -46,7 +45,7 @@ export type ObservationJobProps = {
   /**
    * Region of the job (`us-central1`, …). Immutable — changing it
    * replaces the job.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -122,7 +121,11 @@ export const ObservationJob = Resource<ObservationJob>(
   "GCP.Apim.ObservationJob",
 );
 
-const toAttrs = (item: apim.ObservationJob, project: string) => {
+const toAttrs = (
+  location: string,
+  item: apim.ObservationJob,
+  project: string,
+) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION);
   const state = item.state;
@@ -130,7 +133,7 @@ const toAttrs = (item: apim.ObservationJob, project: string) => {
     name,
     observationJobId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || location,
     sources: [...(item.sources ?? [])],
     enabled: (state ?? "").toUpperCase() === "ENABLED",
     state,
@@ -150,8 +153,8 @@ const getByName = (name: string) =>
           ),
         );
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       apim.listProjectsLocationsObservationJobs.pages({
         parent,
@@ -180,6 +183,7 @@ export const ObservationJobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSources = olds?.sources ?? output?.sources;
       return replaceOnIdentity({
         previousId: olds?.observationJobId ?? output?.observationJobId,
@@ -187,9 +191,11 @@ export const ObservationJobProvider = () =>
           news.observationJobId ??
           olds?.observationJobId ??
           output?.observationJobId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           previousSources !== undefined &&
@@ -206,13 +212,15 @@ export const ObservationJobProvider = () =>
         output?.observationJobId,
         "job",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, observationJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(location, existing, env.project);
       if (output !== undefined || hasAlchemyId(attrs.observationJobId)) {
         return attrs;
       }
@@ -222,8 +230,8 @@ export const ObservationJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(env.region, item, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -234,7 +242,9 @@ export const ObservationJobProvider = () =>
         output?.observationJobId,
         "job",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(
         env.project,
         location,
@@ -307,7 +317,7 @@ export const ObservationJobProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(location, current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {

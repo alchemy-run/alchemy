@@ -41,7 +41,7 @@ export type BackupPlansBackupProps = {
   backupPlan: string;
   /**
    * Region used when `backupPlan` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -167,9 +167,9 @@ export const BackupPlansBackup = Resource<BackupPlansBackup>(
 const resourceName = (plan: string, backupId: string) =>
   `${plan}/backups/${backupId}`;
 
-const toAttrs = (item: gkebackup.Backup, project: string) => {
+const toAttrs = (item: gkebackup.Backup, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "backups");
+  const parsed = parseName(name, "backups", region);
   return {
     name,
     backupId: parsed.id,
@@ -198,8 +198,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBackupPlansBackups({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "backupPlans/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "backupPlans/-", (parent) =>
     listLabeledPages(
       gkebackup.listProjectsLocationsBackupPlansBackups.pages({
         parent,
@@ -224,12 +224,17 @@ export const BackupPlansBackupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.backupId ?? output?.backupId,
         nextId: news.backupId ?? olds?.backupId ?? output?.backupId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.backupPlan ?? output?.backupPlan,
         nextParent: news.backupPlan,
@@ -244,7 +249,10 @@ export const BackupPlansBackupProvider = () =>
         output?.backupId,
         "backup",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const plan = expandParent(
         olds?.backupPlan ?? output?.backupPlan ?? "",
         env.project,
@@ -254,7 +262,7 @@ export const BackupPlansBackupProvider = () =>
       const name = output?.name ?? resourceName(plan, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -263,8 +271,8 @@ export const BackupPlansBackupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -275,7 +283,10 @@ export const BackupPlansBackupProvider = () =>
         output?.backupId,
         "backup",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const plan = expandParent(
         news.backupPlan,
         env.project,
@@ -346,7 +357,7 @@ export const BackupPlansBackupProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

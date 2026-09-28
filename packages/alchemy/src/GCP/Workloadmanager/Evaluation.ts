@@ -93,7 +93,7 @@ export type EvaluationProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the evaluation. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -278,9 +278,13 @@ const desiredFilter = (
   resourceIdPatterns: filter?.resourceIdPatterns,
 });
 
-const toAttrs = (item: workloadmanager.Evaluation, project: string) => {
+const toAttrs = (
+  item: workloadmanager.Evaluation,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "evaluations");
+  const parsed = parseName(name, "evaluations", region);
   return {
     name,
     evaluationId: parsed.id,
@@ -306,8 +310,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsEvaluations({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       workloadmanager.listProjectsLocationsEvaluations.pages({
         parent,
@@ -331,12 +335,17 @@ export const EvaluationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.evaluationId ?? output?.evaluationId,
         nextId: news.evaluationId ?? olds?.evaluationId ?? output?.evaluationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (olds?.kmsKey ?? output?.kmsKey) !== undefined &&
@@ -353,12 +362,15 @@ export const EvaluationProvider = () =>
         output?.evaluationId,
         "evaluation",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, evaluationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -367,8 +379,8 @@ export const EvaluationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -379,7 +391,10 @@ export const EvaluationProvider = () =>
         output?.evaluationId,
         "evaluation",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, evaluationId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -457,7 +472,7 @@ export const EvaluationProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

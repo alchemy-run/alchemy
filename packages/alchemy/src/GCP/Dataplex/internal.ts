@@ -12,7 +12,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 export const GENERIC_ENTRY_TYPE =
@@ -52,8 +51,10 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const rfc1035 = (
   name: string,
@@ -104,10 +105,9 @@ export const parseName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
+    // API resource names always carry a `locations/{location}` segment.
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0
         ? parts.slice(collectionAt + 1).join("/")
@@ -129,8 +129,8 @@ export const expandParent = (
   return `projects/${project}/locations/${location}/${collection}/${value}`;
 };
 
-export const parentOf = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const parentOf = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -314,11 +314,12 @@ export const collectPages = <Page, A, E, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catch(() =>
-      list(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+      list(`projects/${project}/locations/${region}`).pipe(
         Effect.orElseSucceed(() => [] as A[]),
       ),
     ),

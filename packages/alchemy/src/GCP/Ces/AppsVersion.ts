@@ -34,7 +34,7 @@ export type AppsVersionProps = {
   app: string;
   /**
    * Region used when `app` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -120,10 +120,11 @@ const resourceName = (app: string, appVersionId: string) =>
 const toAttrs = (
   version: ces.AppVersion,
   project: string,
+  region: string,
   appHint?: string,
 ) => {
   const name = version.name ?? "";
-  const parsed = parseResourceName(name, "versions");
+  const parsed = parseResourceName(name, "versions", region);
   return {
     name,
     appVersionId: parsed.id,
@@ -145,7 +146,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAppsVersions({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsVersions.pages({ parent, pageSize: 100 }),
     (page) => page.appVersions,
@@ -153,7 +154,7 @@ const listAt = (parent: string, project: string) =>
     Effect.map((versions) =>
       versions
         .filter((version) => hasOwnershipMarker(version.description))
-        .map((version) => toAttrs(version, project, parent)),
+        .map((version) => toAttrs(version, project, region, parent)),
     ),
   );
 
@@ -181,7 +182,10 @@ export const AppsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const app = olds?.app
         ? expandApp(olds.app, env.project, location)
         : output?.app;
@@ -195,7 +199,7 @@ export const AppsVersionProvider = () =>
         (app !== undefined ? resourceName(app, appVersionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, app);
+      const attrs = toAttrs(existing, env.project, env.region, app);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -204,15 +208,18 @@ export const AppsVersionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* forEachApp(env.project, (parent) =>
-          listAt(parent, env.project),
+        return yield* forEachApp(
+          env.project,
+          (parent) => listAt(parent, env.project, env.region),
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? "us-central1",
+        news.location ?? output?.location,
+        env.region,
       );
       const app = expandApp(news.app, env.project, location);
       const appVersionId = yield* toPhysicalId(
@@ -245,7 +252,7 @@ export const AppsVersionProvider = () =>
         return yield* new AppsVersionNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, app);
+      return toAttrs(current, env.project, env.region, app);
     }),
 
     delete: Effect.fn(function* ({ output }) {

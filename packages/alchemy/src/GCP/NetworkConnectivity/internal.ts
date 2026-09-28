@@ -8,7 +8,6 @@ import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_GLOBAL = "global";
-export const DEFAULT_REGION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 export class NetworkConnectivityNotResolved extends Data.TaggedError(

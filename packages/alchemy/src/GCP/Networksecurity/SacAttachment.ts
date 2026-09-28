@@ -29,7 +29,6 @@ import {
 import { waitForOperation } from "./operations.ts";
 
 const COLLECTION = "sacAttachments";
-const DEFAULT_LOCATION = "us-central1";
 
 export type SacAttachmentProps = {
   /**
@@ -43,7 +42,7 @@ export type SacAttachmentProps = {
    * Region of the attachment (e.g. `us-central1`). Immutable — changing
    * it replaces the attachment. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -142,6 +141,7 @@ export class SacAttachmentStillExists extends Data.TaggedError(
 const toAttrs = (
   attachment: networksecurity.SACAttachment,
   project: string,
+  region: string,
 ) => {
   const name = attachment.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
@@ -149,7 +149,7 @@ const toAttrs = (
     name,
     sacAttachmentId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || region,
     sacRealm: attachment.sacRealm,
     nccGateway: attachment.nccGateway,
     labels: userLabels(attachment.labels),
@@ -194,7 +194,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   networksecurity.listProjectsLocationsSacAttachments
     .pages({
       parent: parentOf(project, "-"),
@@ -207,7 +207,7 @@ const listOwned = (project: string) =>
           key.startsWith("alchemy-"),
         ),
       ),
-      Stream.map((attachment) => toAttrs(attachment, project)),
+      Stream.map((attachment) => toAttrs(attachment, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -228,15 +228,16 @@ export const SacAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.sacAttachmentId ?? output?.sacAttachmentId;
       const nextId = news.sacAttachmentId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const previousRealm = lastSegment(
         olds?.sacRealm ?? output?.sacRealm ?? "",
@@ -272,14 +273,14 @@ export const SacAttachmentProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, sacAttachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -288,7 +289,7 @@ export const SacAttachmentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listOwned(env.project);
+        return yield* listOwned(env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -301,7 +302,7 @@ export const SacAttachmentProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name = resourceName(
         env.project,
@@ -347,7 +348,7 @@ export const SacAttachmentProvider = () =>
         return yield* new SacAttachmentNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -10,11 +10,11 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   locationParent,
   normalizeLocation,
@@ -65,7 +65,7 @@ export type NotebookExecutionJobProps = {
   notebookExecutionJobId?: string;
   /**
    * Vertex AI location. Immutable — changing it replaces the job.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -256,14 +256,19 @@ export const NotebookExecutionJobProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId =
         olds?.notebookExecutionJobId ?? output?.notebookExecutionJobId;
       const nextId = news.notebookExecutionJobId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const sourceChanged =
         (news.gcsNotebookSource?.uri ?? "") !==
           (olds?.gcsNotebookSource?.uri ?? "") ||
@@ -296,7 +301,10 @@ export const NotebookExecutionJobProvider = () =>
         olds?.notebookExecutionJobId,
         output?.notebookExecutionJobId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -309,15 +317,19 @@ export const NotebookExecutionJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = yield* collectPages(
-          aiplatform.listProjectsLocationsNotebookExecutionJobs.pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
-            pageSize: 100,
-          }),
-        ).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        const pages = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) =>
+            collectPages(
+              aiplatform.listProjectsLocationsNotebookExecutionJobs.pages({
+                parent: locationParent(env.project, location),
+                pageSize: 100,
+              }),
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        )).flat();
         return pages.flatMap((page) =>
           (page.notebookExecutionJobs ?? [])
             .filter((job) =>
@@ -336,7 +348,10 @@ export const NotebookExecutionJobProvider = () =>
         news.notebookExecutionJobId,
         output?.notebookExecutionJobId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),

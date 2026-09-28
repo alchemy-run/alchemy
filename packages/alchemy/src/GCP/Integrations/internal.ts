@@ -1,14 +1,13 @@
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import {
-  DEFAULT_LOCATION,
-  isDeleted,
-  lastSegment,
-  locationParent,
-} from "./ownership.ts";
+import { isDeleted, lastSegment, locationParent } from "./ownership.ts";
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -20,7 +19,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

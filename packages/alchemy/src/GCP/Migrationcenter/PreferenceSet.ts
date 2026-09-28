@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   fieldMask,
   fingerprint,
@@ -42,7 +41,8 @@ export type PreferenceSetProps = {
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * preference set. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -88,6 +88,8 @@ export type PreferenceSet = Resource<
   Providers
 >;
 
+// Report input rather than the preference set's own location; kept fixed so a
+// stack-region change doesn't rewrite existing preference sets.
 const DEFAULT_VM: VirtualMachinePreferences = {
   targetProduct: "COMPUTE_MIGRATION_TARGET_PRODUCT_COMPUTE_ENGINE",
   regionPreferences: { preferredRegions: ["us-central1"] },
@@ -137,9 +139,9 @@ const resourceName = (
   preferenceSetId: string,
 ) => `${locationParent(project, location)}/preferenceSets/${preferenceSetId}`;
 
-const toAttrs = (item: mc.PreferenceSet, project: string) => {
+const toAttrs = (item: mc.PreferenceSet, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "preferenceSets");
+  const parsed = parseName(name, "preferenceSets", region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -161,7 +163,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsPreferenceSets({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsPreferenceSets
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -175,7 +177,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsPreferenceSets
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -198,15 +200,20 @@ export const PreferenceSetProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.preferenceSetId ?? output?.preferenceSetId,
         nextId:
           news.preferenceSetId ??
           olds?.preferenceSetId ??
           output?.preferenceSetId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -219,12 +226,15 @@ export const PreferenceSetProvider = () =>
         output?.preferenceSetId,
         "prefset",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, preferenceSetId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -233,8 +243,8 @@ export const PreferenceSetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -245,7 +255,10 @@ export const PreferenceSetProvider = () =>
         output?.preferenceSetId,
         "prefset",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, preferenceSetId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -306,7 +319,7 @@ export const PreferenceSetProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

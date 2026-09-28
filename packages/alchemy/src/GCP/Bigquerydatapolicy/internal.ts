@@ -7,10 +7,13 @@ import {
   sanitizeLabelValue,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_DATA_POLICY_TYPE = "RAW_DATA_ACCESS_POLICY";
 export const MAX_NAME_LENGTH = 200;
-export const LIST_LOCATIONS = ["-", DEFAULT_LOCATION, "US", "EU"] as const;
+/**
+ * Locations swept by `list`, alongside the stack region. `us-central1` stays
+ * so resources created under the former hard-coded default remain reachable.
+ */
+export const LIST_LOCATIONS = ["-", "us-central1", "US", "EU"] as const;
 const OWNER_PREFIX = "alch___";
 const OWNER_SEP = "___";
 
@@ -20,8 +23,11 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) => {
-  const value = lastSegment(location ?? DEFAULT_LOCATION);
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => {
+  const value = lastSegment(location ?? defaultLocation);
   const upper = value.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
   return value.toLowerCase();
@@ -36,7 +42,11 @@ export const resourceNameOf = (
   dataPolicyId: string,
 ) => `${parentOf(project, location)}/dataPolicies/${dataPolicyId}`;
 
-export const parseName = (name: string, fallbackProject: string) => {
+export const parseName = (
+  name: string,
+  fallbackProject: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf("dataPolicies");
   const locationsAt = parts.lastIndexOf("locations");
@@ -49,7 +59,7 @@ export const parseName = (name: string, fallbackProject: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     dataPolicyId:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

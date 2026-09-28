@@ -10,7 +10,6 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_DEST_GROUP_ID_LENGTH = 63;
 export const MIN_DEST_GROUP_ID_LENGTH = 4;
 export const MAX_DISPLAY_NAME_LENGTH = 255;
@@ -31,8 +30,10 @@ export const parentOf = (name: string) => {
   return parts.slice(0, -2).join("/");
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -79,7 +80,11 @@ export const destGroupNameOf = (
   return `${destGroupParent(project, location)}/destGroups/${lastSegment(destGroupId)}`;
 };
 
-export const parseDestGroupName = (name: string, fallbackProject: string) => {
+export const parseDestGroupName = (
+  name: string,
+  fallbackProject: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const destAt = parts.lastIndexOf("destGroups");
   const locationsAt = parts.lastIndexOf("locations");
@@ -92,7 +97,7 @@ export const parseDestGroupName = (name: string, fallbackProject: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     destGroupId:
       destAt >= 0 && parts[destAt + 1] ? parts[destAt + 1]! : lastSegment(name),
   };

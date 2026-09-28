@@ -16,7 +16,7 @@ import {
   createInternalLabels,
   hasAlchemyPrefix,
   labelsDiffer,
-  LIST_LOCATIONS,
+  listLocations,
   locationOf,
   lastSegment,
   normalizeLocation,
@@ -31,7 +31,7 @@ import { waitForOperation } from "./operations.ts";
 export type ModelDeploymentMonitoringJobProps = {
   /**
    * Vertex AI location. Immutable — changing it replaces the job.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -278,12 +278,15 @@ export const ModelDeploymentMonitoringJobProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousEndpoint = olds?.endpoint ?? output?.endpoint;
       const nextEndpoint = news.endpoint ?? previousEndpoint;
@@ -300,7 +303,10 @@ export const ModelDeploymentMonitoringJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const ownership = yield* createInternalLabels(id);
       const existing =
         (output?.name !== undefined
@@ -317,7 +323,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          listLocations(env.region),
           (location) =>
             listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
@@ -330,7 +336,10 @@ export const ModelDeploymentMonitoringJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const displayName = yield* toDisplayName(
         id,
         news.displayName,

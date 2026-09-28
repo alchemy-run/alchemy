@@ -10,7 +10,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { findTemplateByDescription, listTemplates } from "./internal.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   fingerprint,
   hasOwnershipMarker,
@@ -80,7 +79,8 @@ export type TemplateProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -253,12 +253,13 @@ const resourceName = (project: string, location: string, templateId: string) =>
 const toAttrs = (
   template: integrations.GoogleCloudIntegrationsV1alphaTemplate,
   project: string,
+  region: string,
 ) => {
   const name = template.name ?? "";
   return {
     name,
     templateId: lastSegment(name),
-    location: locationOf(name),
+    location: locationOf(name, region),
     project: projectOf(name) || project,
     displayName: template.displayName,
     description: parseOwnership(template.description).text,
@@ -291,6 +292,7 @@ export const TemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const idChanged =
         previousId !== undefined &&
@@ -300,8 +302,8 @@ export const TemplateProvider = () =>
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
-        normalizeLocation(news.location) !==
-          normalizeLocation(previousLocation);
+        normalizeLocation(news.location, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
 
@@ -312,7 +314,10 @@ export const TemplateProvider = () =>
         olds?.templateId,
         output?.templateId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, templateId);
       let existing = yield* getByName(name);
@@ -328,7 +333,7 @@ export const TemplateProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -338,17 +343,18 @@ export const TemplateProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listTemplates(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         return items
           .filter((template) => hasOwnershipMarker(template.description))
-          .map((template) => toAttrs(template, env.project));
+          .map((template) => toAttrs(template, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const parent = locationParent(env.project, location);
       const templateId = yield* toResourceId(
@@ -457,7 +463,7 @@ export const TemplateProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

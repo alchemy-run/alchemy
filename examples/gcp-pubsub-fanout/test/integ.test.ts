@@ -66,6 +66,8 @@ const tableRefOf = (tableName: string) => {
 };
 
 /** The push subscriptions the two consumers' event sources created. */
+// Pub/Sub reads are eventually consistent: a just-created subscription can
+// briefly read as missing, so re-list until every listed one resolves.
 const subscriptionsOf = (topic: string) =>
   pubsub.listProjectsTopicsSubscriptions({ topic }).pipe(
     Effect.map((page) => page.subscriptions ?? []),
@@ -74,6 +76,11 @@ const subscriptionsOf = (topic: string) =>
         pubsub.getProjectsSubscriptions({ subscription }),
       ),
     ),
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
     Effect.provide(GcpHttp),
   );
 

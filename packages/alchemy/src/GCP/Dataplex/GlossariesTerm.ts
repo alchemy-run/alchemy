@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandParent,
   hasAlchemyLabelMap,
   listGlossaries,
@@ -44,7 +43,7 @@ export type GlossariesTermProps = {
   parent?: string;
   /**
    * Region used when `glossary` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -191,15 +190,18 @@ export const GlossariesTermProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.termId ?? output?.termId;
       const nextId = news.termId ?? previousId;
       const previousGlossary = olds?.glossary ?? output?.glossary;
       const nextGlossary = news.glossary ?? previousGlossary;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -220,7 +222,10 @@ export const GlossariesTermProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const glossary = glossaryOf(
         olds?.glossary ?? output?.glossary ?? "",
         env.project,
@@ -239,7 +244,7 @@ export const GlossariesTermProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const glossaries = yield* listGlossaries(env.project, DEFAULT_LOCATION);
+        const glossaries = yield* listGlossaries(env.project, env.region);
         const terms = yield* Effect.forEach(
           glossaries.filter((glossary) => (glossary.name ?? "").length > 0),
           (glossary) => listTerms(glossary.name!),
@@ -253,7 +258,10 @@ export const GlossariesTermProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const glossary = glossaryOf(news.glossary, env.project, location);
       const termId = yield* toPhysicalRfc1035(id, news.termId, output?.termId);
       const name = output?.name ?? resourceName(glossary, termId);

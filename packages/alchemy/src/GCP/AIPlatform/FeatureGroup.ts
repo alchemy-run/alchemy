@@ -61,7 +61,7 @@ export type FeatureGroupProps = {
   featureGroupId?: string;
   /**
    * Region. Immutable — changing it replaces the group.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -258,13 +258,18 @@ export const FeatureGroupProvider = () =>
     stables: ["name", "featureGroupId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featureGroupId ?? output?.featureGroupId;
       const nextId = news.featureGroupId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousUri =
         inputUriOf(olds?.bigQuery) ?? inputUriOf(output?.bigQuery) ?? "";
       const nextUri = inputUriOf(news.bigQuery) ?? previousUri;
@@ -292,7 +297,10 @@ export const FeatureGroupProvider = () =>
         output?.featureGroupId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, featureGroupId);
       const existing = yield* getByName(name);
@@ -332,7 +340,10 @@ export const FeatureGroupProvider = () =>
         output?.featureGroupId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, featureGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),

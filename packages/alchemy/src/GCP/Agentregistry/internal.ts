@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 2048;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
@@ -57,11 +56,13 @@ export const rfc1035 = (name: string, fallback = "bind"): string => {
   return next.slice(0, MAX_ID_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const resourceName = (
   project: string,
@@ -79,9 +80,7 @@ export const parseResourceName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -387,13 +386,13 @@ const listAt = (parent: string) =>
         ),
       );
 
-export const listBindings = (project: string) =>
+export const listBindings = (project: string, region: string) =>
   listAt(`projects/${project}/locations/-`).pipe(
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
         : Effect.all([
-            listAt(locationParent(project, DEFAULT_LOCATION)),
+            listAt(locationParent(project, region)),
             listAt(locationParent(project, "global")),
           ]).pipe(Effect.map((groups) => groups.flat())),
     ),

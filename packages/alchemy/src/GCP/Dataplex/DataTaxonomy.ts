@@ -45,7 +45,7 @@ export type DataTaxonomyProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the taxonomy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -169,7 +169,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listTaxonomies = (project: string) => {
+const listTaxonomies = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsDataTaxonomies.pages({
@@ -182,7 +182,7 @@ const listTaxonomies = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
 export const DataTaxonomyProvider = () =>
@@ -191,13 +191,18 @@ export const DataTaxonomyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataTaxonomyId ?? output?.dataTaxonomyId,
         nextId:
           news.dataTaxonomyId ?? olds?.dataTaxonomyId ?? output?.dataTaxonomyId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -210,7 +215,10 @@ export const DataTaxonomyProvider = () =>
         output?.dataTaxonomyId,
         "taxonomy",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, dataTaxonomyId);
       const existing = yield* getByName(name);
@@ -224,7 +232,7 @@ export const DataTaxonomyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listTaxonomies(env.project);
+        const items = yield* listTaxonomies(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -236,7 +244,10 @@ export const DataTaxonomyProvider = () =>
         output?.dataTaxonomyId,
         "taxonomy",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, dataTaxonomyId);
       const desiredLabels = {
         ...toLabels(news.labels),

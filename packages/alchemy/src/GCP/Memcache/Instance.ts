@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_NODE_COUNT = 1;
 const DEFAULT_CPU_COUNT = 1;
 const DEFAULT_MEMORY_SIZE_MB = 1024;
@@ -78,7 +77,7 @@ export type InstanceProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -272,8 +271,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -291,7 +292,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, location: string, instanceId: string) =>
   `projects/${project}/locations/${location}/instances/${instanceId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const instancesAt = parts.lastIndexOf("instances");
   const locationsAt = parts.lastIndexOf("locations");
@@ -302,7 +303,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     instanceId:
       instancesAt >= 0 && parts[instancesAt + 1]
         ? parts[instancesAt + 1]!
@@ -412,9 +413,13 @@ const versionDecreasing = (previous: string | undefined, next: string) => {
   return newN < oldN;
 };
 
-const toAttrs = (instance: memcache.Instance, project: string) => {
+const toAttrs = (
+  instance: memcache.Instance,
+  project: string,
+  region: string,
+) => {
   const name = instance.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     instanceId: parsed.instanceId,
@@ -593,13 +598,18 @@ export const InstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousNetwork =
         olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "";
       const nextNetwork = news.authorizedNetwork ?? previousNetwork;
@@ -650,12 +660,15 @@ export const InstanceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -678,7 +691,9 @@ export const InstanceProvider = () =>
                   key.startsWith("alchemy-"),
                 ),
             ),
-            Stream.map((instance) => toAttrs(instance, env.project)),
+            Stream.map((instance) =>
+              toAttrs(instance, env.project, env.region),
+            ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -689,7 +704,10 @@ export const InstanceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, instanceId);
       const nodeCount = news.nodeCount ?? DEFAULT_NODE_COUNT;
       const nodeConfig = nodeConfigOf(news.nodeConfig);
@@ -807,7 +825,7 @@ export const InstanceProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

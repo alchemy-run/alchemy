@@ -9,7 +9,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   BiglakeNotResolved,
-  DEFAULT_LOCATION,
+  listLocations,
   createInternalLabels,
   expandCatalog,
   hasAlchemyLabelMap,
@@ -64,7 +64,7 @@ export type CatalogsDatabaseProps = {
   databaseId?: string;
   /**
    * Location used when `catalog` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -230,6 +230,7 @@ export const CatalogsDatabaseProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const typeChanged =
         (olds?.type ?? output?.type) !== undefined &&
@@ -240,7 +241,10 @@ export const CatalogsDatabaseProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.databaseId ?? output?.databaseId,
         nextId: news.databaseId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.catalog ?? output?.catalog,
         nextParent: catalogOf(news.catalog, env.project, location),
@@ -249,7 +253,10 @@ export const CatalogsDatabaseProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const databaseId = yield* toPhysicalId(
         id,
         olds?.databaseId,
@@ -276,9 +283,10 @@ export const CatalogsDatabaseProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listCatalogs(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const catalogs = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listCatalogs(locationParent(env.project, location)),
+        )).flat();
         const databases = yield* listChildResources(
           namedOf(catalogs),
           listDatabases,
@@ -291,7 +299,8 @@ export const CatalogsDatabaseProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const catalog = catalogOf(news.catalog, env.project, location);
       const databaseId = yield* toPhysicalId(

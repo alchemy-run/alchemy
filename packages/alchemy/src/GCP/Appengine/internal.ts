@@ -10,6 +10,7 @@ import {
 } from "../Labels.ts";
 import { GcpEnvironment } from "../Environment.ts";
 
+// App Engine location ids (`us-central`, `europe-west`) are not Compute regions, and the app's own locationId wins.
 export const DEFAULT_LOCATION = "us-central";
 export const DEFAULT_SERVICE = "default";
 export const DEFAULT_ACTION = "ALLOW";

@@ -50,7 +50,7 @@ export type AspectTypeProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * AspectType. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -190,7 +190,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listTypes = (project: string) => {
+const listTypes = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsAspectTypes.pages({
@@ -205,7 +205,7 @@ const listTypes = (project: string) => {
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
 export const AspectTypeProvider = () =>
@@ -221,12 +221,17 @@ export const AspectTypeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.aspectTypeId ?? output?.aspectTypeId,
         nextId: news.aspectTypeId ?? olds?.aspectTypeId ?? output?.aspectTypeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           fingerprint(news.dataClassification ?? olds?.dataClassification) !==
@@ -246,7 +251,10 @@ export const AspectTypeProvider = () =>
         output?.aspectTypeId,
         "aspecttype",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, aspectTypeId);
       const existing = yield* getByName(name);
@@ -260,7 +268,7 @@ export const AspectTypeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listTypes(env.project);
+        const items = yield* listTypes(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -272,7 +280,10 @@ export const AspectTypeProvider = () =>
         output?.aspectTypeId,
         "aspecttype",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, aspectTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),

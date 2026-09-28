@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   fingerprint,
   getAcl,
@@ -53,7 +52,7 @@ export type ClustersAclProps = {
   cluster: string;
   /**
    * Region used when `cluster` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -223,7 +222,10 @@ export const ClustersAclProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       return replaceOnIdentity({
         previousId: olds?.aclId ?? output?.aclId,
         nextId: news.aclId ?? olds?.aclId ?? output?.aclId,
@@ -234,7 +236,10 @@ export const ClustersAclProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const aclId = yield* toAclId(id, olds?.aclId, output?.aclId);
       const cluster =
         olds?.cluster !== undefined
@@ -254,7 +259,7 @@ export const ClustersAclProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyClusters(env.project);
+        const clusters = yield* listAlchemyClusters(env.project, env.region);
         const acls = yield* Effect.forEach(
           clusters.filter((cluster) => (cluster.name ?? "").length > 0),
           (cluster: kafka.Cluster) =>
@@ -280,7 +285,8 @@ export const ClustersAclProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const cluster = clusterOf(news.cluster, env.project, location);
       const aclId = yield* toAclId(id, news.aclId, output?.aclId);

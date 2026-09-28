@@ -175,7 +175,7 @@ export type RestorePlanProps = {
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the plan. Must match the target cluster region.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -323,9 +323,13 @@ const toRestoreConfig = (
         noNamespaces: config.noNamespaces,
       };
 
-const toAttrs = (item: gkebackup.RestorePlan, project: string) => {
+const toAttrs = (
+  item: gkebackup.RestorePlan,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "restorePlans");
+  const parsed = parseName(name, "restorePlans", region);
   return {
     name,
     restorePlanId: parsed.id,
@@ -350,8 +354,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsRestorePlans({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       gkebackup.listProjectsLocationsRestorePlans.pages({
         parent,
@@ -375,15 +379,20 @@ export const RestorePlanProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousCluster = olds?.cluster ?? output?.cluster;
       const previousPlan = olds?.backupPlan ?? output?.backupPlan;
       return replaceOnIdentity({
         previousId: olds?.restorePlanId ?? output?.restorePlanId,
         nextId:
           news.restorePlanId ?? olds?.restorePlanId ?? output?.restorePlanId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousCluster !== undefined &&
@@ -405,12 +414,15 @@ export const RestorePlanProvider = () =>
         output?.restorePlanId,
         "restoreplan",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, restorePlanId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -419,8 +431,8 @@ export const RestorePlanProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -431,7 +443,10 @@ export const RestorePlanProvider = () =>
         output?.restorePlanId,
         "restoreplan",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, restorePlanId);
       const cluster = clusterName(news.cluster, env.project, location);
       const backupPlan = expandParent(
@@ -513,7 +528,7 @@ export const RestorePlanProvider = () =>
         }
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

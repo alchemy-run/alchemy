@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type TransportBandwidth =
@@ -47,7 +46,8 @@ export type TransportProps = {
    * are location-scoped, so this must match the profile's location.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`. Immutable
    * — changing it replaces the transport.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -278,8 +278,10 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "transport";
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const networkNameOf = (network: string | undefined) =>
   network === undefined || network.length === 0
@@ -314,7 +316,7 @@ const resourceName = (project: string, location: string, transportId: string) =>
 const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const transportsAt = parts.lastIndexOf("transports");
   const locationsAt = parts.lastIndexOf("locations");
@@ -325,7 +327,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     transportId:
       transportsAt >= 0 && parts[transportsAt + 1]
         ? parts[transportsAt + 1]!
@@ -365,14 +367,18 @@ const normalizeStackType = (value: string | undefined) =>
     ? ""
     : value;
 
-const toAttrs = (transport: networkconnectivity.Transport, project: string) => {
+const toAttrs = (
+  transport: networkconnectivity.Transport,
+  project: string,
+  region: string,
+) => {
   const name = transport.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     transportId: parsed.transportId,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || region,
     network: transport.network,
     networkName: networkNameOf(transport.network),
     remoteProfile: transport.remoteProfile,
@@ -529,7 +535,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listOwnedTransports = (parent: string, project: string) =>
+const listOwnedTransports = (parent: string, project: string, region: string) =>
   networkconnectivity.listProjectsLocationsTransports
     .pages({
       parent,
@@ -542,7 +548,7 @@ const listOwnedTransports = (parent: string, project: string) =>
           key.startsWith("alchemy-"),
         ),
       ),
-      Stream.map((transport) => toAttrs(transport, project)),
+      Stream.map((transport) => toAttrs(transport, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -581,6 +587,7 @@ export const TransportProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.transportId ?? output?.transportId;
       const nextId = news.transportId ?? previousId;
@@ -591,9 +598,11 @@ export const TransportProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const locationChanged = previousLocation !== nextLocation;
 
@@ -653,12 +662,15 @@ export const TransportProvider = () =>
         olds?.transportId,
         output?.transportId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, transportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -670,11 +682,13 @@ export const TransportProvider = () =>
         const aggregated = yield* listOwnedTransports(
           parentOf(env.project, "-"),
           env.project,
+          env.region,
         );
         if (aggregated.length > 0) return aggregated;
         return yield* listOwnedTransports(
-          parentOf(env.project, DEFAULT_LOCATION),
+          parentOf(env.project, env.region),
           env.project,
+          env.region,
         );
       }),
 
@@ -685,7 +699,10 @@ export const TransportProvider = () =>
         news.transportId,
         output?.transportId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, transportId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -772,7 +789,7 @@ export const TransportProvider = () =>
         current = yield* waitUntilReady(current.name ?? name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

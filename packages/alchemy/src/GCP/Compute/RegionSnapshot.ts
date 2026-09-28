@@ -20,7 +20,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_SNAPSHOT_TYPE = "STANDARD";
 
 export type RegionSnapshotProps = {
@@ -34,7 +33,7 @@ export type RegionSnapshotProps = {
    * Region the snapshot lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the snapshot. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -194,8 +193,8 @@ const lastSegment = (value: string | undefined): string | undefined => {
   return parts[parts.length - 1] || value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  (lastSegment(region) ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  (lastSegment(region ?? defaultRegion) ?? defaultRegion).toLowerCase();
 
 const canonicalizeSource = (source: string | undefined): string => {
   if (source === undefined || source.length === 0) return "";
@@ -240,7 +239,7 @@ const toAttrs = (snapshot: compute.Snapshot, project: string) => ({
   snapshotName: snapshot.name ?? snapshot.id ?? "",
   snapshotId: snapshot.id,
   project,
-  region: normalizeRegion(snapshot.region),
+  region: (lastSegment(snapshot.region) ?? "").toLowerCase(),
   sourceDisk: snapshot.sourceDisk,
   sourceDiskId: snapshot.sourceDiskId,
   sourceInstantSnapshot: snapshot.sourceInstantSnapshot,
@@ -411,11 +410,18 @@ export const RegionSnapshotProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName = olds?.snapshotName ?? output?.snapshotName;
       const nextName = news.snapshotName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const previousSource = canonicalizeSource(
         olds?.sourceDisk ?? output?.sourceDisk,
       );
@@ -472,7 +478,10 @@ export const RegionSnapshotProvider = () =>
         olds?.snapshotName,
         output?.snapshotName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, snapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -487,7 +496,7 @@ export const RegionSnapshotProvider = () =>
         return yield* compute.listRegionSnapshots
           .items({
             project: env.project,
-            region: DEFAULT_REGION,
+            region: env.region,
             filter: "labels.alchemy-id:*",
             maxResults: 500,
             returnPartialSuccess: true,
@@ -511,7 +520,7 @@ export const RegionSnapshotProvider = () =>
         news.snapshotName,
         output?.snapshotName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -587,7 +596,8 @@ export const RegionSnapshotProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const region = normalizeRegion(output.region);
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(output.region, env.region);
       const deleted = yield* compute
         .deleteRegionSnapshots({
           project: output.project,

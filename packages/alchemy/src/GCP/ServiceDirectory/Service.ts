@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_SERVICE_ID_LENGTH = 63;
 
 export type ServiceProps = {
@@ -32,7 +31,8 @@ export type ServiceProps = {
    * Location of the service (e.g. `us-central1`). Used when `namespace`
    * is a bare id. Immutable — changing it replaces the service.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -129,10 +129,12 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const servicesAt = parts.lastIndexOf("services");
   const namespacesAt = parts.lastIndexOf("namespaces");
@@ -146,7 +148,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     namespace,
     namespaceId:
       namespacesAt >= 0 && parts[namespacesAt + 1]
@@ -163,10 +165,12 @@ const resolveParent = (
   project: string,
   namespace: string,
   location: string | undefined,
+  region: string,
 ) => {
   if (namespace.includes("/")) {
     const parsed = parseName(
       namespace.includes("/services/") ? namespace : `${namespace}/services/_`,
+      region,
     );
     return {
       parent: parsed.namespace,
@@ -175,7 +179,7 @@ const resolveParent = (
       namespaceId: parsed.namespaceId,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   return {
     parent: `projects/${project}/locations/${loc}/namespaces/${namespace}`,
     location: loc,
@@ -210,9 +214,13 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
       .replace(/-+$/g, "");
   });
 
-const toAttrs = (service: servicedirectory.Service, project: string) => {
+const toAttrs = (
+  service: servicedirectory.Service,
+  project: string,
+  region: string,
+) => {
   const name = service.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     serviceId: parsed.serviceId,
@@ -234,7 +242,7 @@ const hasAlchemyAnnotation = (
   annotations: Record<string, string | undefined> | null | undefined,
 ) => Object.keys(annotations ?? {}).some((key) => key.startsWith("alchemy-"));
 
-const listServicesAt = (parent: string, project: string) =>
+const listServicesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
@@ -247,7 +255,7 @@ const listServicesAt = (parent: string, project: string) =>
         });
       for (const service of response.services ?? []) {
         if (hasAlchemyAnnotation(service.annotations)) {
-          found.push(toAttrs(service, project));
+          found.push(toAttrs(service, project, region));
         }
       }
       pageToken = response.nextPageToken;
@@ -297,6 +305,7 @@ export const ServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.serviceId ?? output?.serviceId;
       const nextId = news.serviceId ?? previousId;
       const idChanged =
@@ -314,14 +323,16 @@ export const ServiceProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = news.namespace.includes("/")
         ? parseName(
             news.namespace.includes("/services/")
               ? news.namespace
               : `${news.namespace}/services/_`,
+            env.region,
           ).location
-        : normalizeLocation(news.location ?? output?.location);
+        : normalizeLocation(news.location ?? output?.location, env.region);
 
       if (idChanged || parentChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
@@ -341,6 +352,7 @@ export const ServiceProvider = () =>
                 env.project,
                 namespaceRef,
                 olds?.location ?? output?.location,
+                env.region,
               ).parent,
               serviceId,
             )
@@ -348,7 +360,7 @@ export const ServiceProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.annotations)))
         ? attrs
         : Unowned(attrs);
@@ -357,7 +369,7 @@ export const ServiceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const fallback = [locationParent(env.project, DEFAULT_LOCATION)];
+        const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
         for (let page = 0; page < 10; page++) {
@@ -373,7 +385,7 @@ export const ServiceProvider = () =>
                   locations: [
                     {
                       name: fallback[0],
-                      locationId: DEFAULT_LOCATION,
+                      locationId: env.region,
                     } satisfies servicedirectory.Location,
                   ],
                   nextPageToken: undefined as string | undefined,
@@ -391,7 +403,7 @@ export const ServiceProvider = () =>
           const namespaceNames = namespacePages.flat();
           const servicePages = yield* Effect.forEach(
             namespaceNames,
-            (parent) => listServicesAt(parent, env.project),
+            (parent) => listServicesAt(parent, env.project, env.region),
             { concurrency: 4 },
           );
           for (const services of servicePages) {
@@ -409,6 +421,7 @@ export const ServiceProvider = () =>
         env.project,
         news.namespace,
         news.location ?? output?.location,
+        env.region,
       );
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
       const name = resourceName(parent.parent, serviceId);
@@ -453,7 +466,7 @@ export const ServiceProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

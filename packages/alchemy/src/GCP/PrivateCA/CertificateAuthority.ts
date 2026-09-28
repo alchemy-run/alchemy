@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_TYPE: privateca.CertificateAuthorityTypeEnum = "SELF_SIGNED";
 const DEFAULT_LIFETIME = "315360000s";
 const DEFAULT_ALGORITHM: privateca.KeyVersionSpecAlgorithmEnum =
@@ -174,7 +173,7 @@ export type CertificateAuthorityProps = {
    * Location (`us-central1`, …). Used when `caPool` is a bare id.
    * Immutable — changing it replaces the CA. `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -402,8 +401,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_TYPE).toUpperCase();
@@ -431,20 +430,14 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     caPool,
     certificateAuthorityId:
       casAt >= 0 && parts[casAt + 1] ? parts[casAt + 1]! : lastSegment(name),
   };
 };
 
-const resolveParent = (
-  project: string,
-  caPool: string,
-  location: string | undefined,
-) => {
+const resolveParent = (project: string, caPool: string, location: string) => {
   if (caPool.includes("/")) {
     const parsed = parseName(
       caPool.includes("/certificateAuthorities/")
@@ -917,6 +910,7 @@ export const CertificateAuthorityProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId =
         olds?.certificateAuthorityId ?? output?.certificateAuthorityId;
@@ -924,9 +918,11 @@ export const CertificateAuthorityProvider = () =>
       const previousPool = olds?.caPool ?? output?.caPool ?? "";
       const nextPool = news.caPool;
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousType = normalizeType(olds?.type ?? output?.type);
       const nextType = normalizeType(news.type ?? output?.type);
       const previousLifetime = olds?.lifetime ?? output?.lifetime ?? "";
@@ -974,7 +970,7 @@ export const CertificateAuthorityProvider = () =>
       const { parent } = resolveParent(
         env.project,
         olds?.caPool ?? output?.caPool ?? "",
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const name = output?.name ?? resourceName(parent, certificateAuthorityId);
       if (name.endsWith("/certificateAuthorities/") || name.endsWith("/_")) {
@@ -1007,7 +1003,7 @@ export const CertificateAuthorityProvider = () =>
       const { parent, project } = resolveParent(
         env.project,
         news.caPool,
-        news.location ?? output?.location,
+        news.location ?? output?.location ?? env.region,
       );
       const name = resourceName(parent, certificateAuthorityId);
       const desiredLabels = {

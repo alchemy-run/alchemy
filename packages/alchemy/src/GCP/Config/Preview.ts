@@ -41,7 +41,8 @@ export type PreviewProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the preview. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -195,9 +196,9 @@ export const Preview = Resource<Preview>("GCP.Config.Preview");
 const resourceName = (project: string, location: string, previewId: string) =>
   `projects/${project}/locations/${location}/previews/${previewId}`;
 
-const toAttrs = (item: config.Preview, project: string) => {
+const toAttrs = (item: config.Preview, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "previews");
+  const parsed = parseName(name, "previews", region);
   return {
     name,
     previewId: parsed.id,
@@ -252,8 +253,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsPreviews({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       config.listProjectsLocationsPreviews.pages({
         parent,
@@ -273,6 +274,7 @@ export const PreviewProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const extra =
         olds === undefined
@@ -330,7 +332,10 @@ export const PreviewProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.previewId ?? output?.previewId,
         nextId: news.previewId ?? olds?.previewId ?? output?.previewId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         extra,
       });
@@ -344,12 +349,15 @@ export const PreviewProvider = () =>
         output?.previewId,
         "preview",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, previewId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -358,8 +366,8 @@ export const PreviewProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -370,7 +378,10 @@ export const PreviewProvider = () =>
         output?.previewId,
         "preview",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, previewId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -420,7 +431,7 @@ export const PreviewProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

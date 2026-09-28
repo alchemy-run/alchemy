@@ -1,6 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import {
-  DEFAULT_REGION,
   encodeDescription,
   hasOwnershipMarker,
   lastSegment,
@@ -33,7 +32,7 @@ export type RegionBackendBucketProps = {
    * Region the backend bucket lives in. Immutable — changing it replaces
    * the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -189,7 +188,7 @@ const toAttrs = (
     name: bucket.name ?? lastSegment(bucket.selfLink),
     bucketName: bucket.bucketName ?? "",
     project,
-    region: normalizeRegion(bucket.region),
+    region: lastSegment(bucket.region).toLowerCase(),
     description: parsed.description,
     enableCdn: bucket.enableCdn === true,
     compressionMode: bucket.compressionMode,
@@ -238,11 +237,16 @@ export const RegionBackendBucketProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       const nameChanged =
         previousName !== undefined &&
@@ -273,7 +277,10 @@ export const RegionBackendBucketProvider = () =>
         output?.name,
         "backend",
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -317,7 +324,7 @@ export const RegionBackendBucketProvider = () =>
         output?.name,
         "backend",
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const enableCdn = news.enableCdn === true;
@@ -436,7 +443,7 @@ export const RegionBackendBucketProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* runRegionOp(
         env.project,
         region,

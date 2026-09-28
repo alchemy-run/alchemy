@@ -26,7 +26,6 @@ import {
   sameStringList,
 } from "./ownership.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const COLLECTION = "urlLists";
 
 export type UrlListProps = {
@@ -42,7 +41,7 @@ export type UrlListProps = {
    * Location (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the list. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -136,7 +135,11 @@ export class UrlListStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (list: networksecurity.UrlList, project: string) => {
+const toAttrs = (
+  list: networksecurity.UrlList,
+  project: string,
+  region: string,
+) => {
   const name = list.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const owned = parseDescription(list.description);
@@ -144,7 +147,7 @@ const toAttrs = (list: networksecurity.UrlList, project: string) => {
     name,
     urlListId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || region,
     values: list.values ?? [],
     description: owned.description,
     createTime: list.createTime,
@@ -185,7 +188,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   networksecurity.listProjectsLocationsUrlLists
     .pages({
       parent: parentOf(project, "-"),
@@ -194,7 +197,7 @@ const listOwned = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.urlLists ?? [])),
       Stream.filter((list) => hasOwnershipMarker(list.description)),
-      Stream.map((list) => toAttrs(list, project)),
+      Stream.map((list) => toAttrs(list, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -207,15 +210,16 @@ export const UrlListProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.urlListId ?? output?.urlListId;
       const nextId = news.urlListId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -238,14 +242,14 @@ export const UrlListProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, urlListId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -253,7 +257,7 @@ export const UrlListProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listOwned(env.project);
+        return yield* listOwned(env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -266,7 +270,7 @@ export const UrlListProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name = resourceName(env.project, location, COLLECTION, urlListId);
       const ownership = yield* createInternalLabels(id);
@@ -327,7 +331,7 @@ export const UrlListProvider = () =>
         current = yield* waitUntilExists(current.name ?? name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

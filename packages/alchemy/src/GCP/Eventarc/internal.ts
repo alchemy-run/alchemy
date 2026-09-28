@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 export class EventarcNotResolved extends Data.TaggedError(
@@ -68,8 +67,10 @@ export const rfc1035 = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -81,7 +82,11 @@ export const resourceName = (
   id: string,
 ) => `projects/${project}/locations/${location}/${collection}/${id}`;
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -92,7 +97,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

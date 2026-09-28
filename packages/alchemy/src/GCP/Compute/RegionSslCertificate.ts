@@ -17,8 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
-
 export type RegionSslCertificateType = "SELF_MANAGED" | "MANAGED";
 
 export type RegionSslCertificateSelfManaged = {
@@ -47,7 +45,7 @@ export type RegionSslCertificateProps = {
    * Region the certificate lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -184,8 +182,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -312,7 +310,7 @@ const toAttrs = (cert: compute.SslCertificate, project: string) => {
   return {
     sslCertificateName: cert.name ?? cert.id ?? "",
     project,
-    region: normalizeRegion(cert.region),
+    region: lastSegment(cert.region).toLowerCase(),
     type: asType(cert.type),
     description: parsed.description,
     certificate: cert.certificate,
@@ -477,11 +475,18 @@ export const RegionSslCertificateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.sslCertificateName ?? output?.sslCertificateName;
       const nextName = news.sslCertificateName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
       const nameChanged =
         news.sslCertificateName !== undefined &&
@@ -507,7 +512,10 @@ export const RegionSslCertificateProvider = () =>
         olds?.sslCertificateName,
         output?.sslCertificateName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -546,7 +554,7 @@ export const RegionSslCertificateProvider = () =>
         news.sslCertificateName,
         output?.sslCertificateName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(sslCertificateName, news, ownership);
 
@@ -583,7 +591,7 @@ export const RegionSslCertificateProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionSslCertificates({
           project: env.project,

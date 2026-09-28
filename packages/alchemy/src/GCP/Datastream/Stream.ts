@@ -65,7 +65,7 @@ export type StreamProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * stream. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -247,9 +247,9 @@ const expandDestination = (
 
 const profileIdOf = (value: string | undefined) => lastSegment(value ?? "");
 
-const toAttrs = (item: ds.Stream, project: string) => {
+const toAttrs = (item: ds.Stream, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "streams");
+  const parsed = parseName(name, "streams", region);
   return {
     name,
     streamId: parsed.id,
@@ -280,8 +280,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsStreams({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       ds.listProjectsLocationsStreams.pages({
         parent,
@@ -315,6 +315,7 @@ export const StreamProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource = profileIdOf(
         olds?.sourceConfig?.sourceConnectionProfile ??
           output?.sourceConfig?.sourceConnectionProfile,
@@ -340,9 +341,13 @@ export const StreamProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.streamId ?? output?.streamId,
         nextId: news.streamId ?? olds?.streamId ?? output?.streamId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousSource.length > 0 &&
@@ -366,12 +371,15 @@ export const StreamProvider = () =>
         output?.streamId,
         "stream",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, streamId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -380,8 +388,8 @@ export const StreamProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -392,7 +400,10 @@ export const StreamProvider = () =>
         output?.streamId,
         "stream",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, streamId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -525,7 +536,7 @@ export const StreamProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

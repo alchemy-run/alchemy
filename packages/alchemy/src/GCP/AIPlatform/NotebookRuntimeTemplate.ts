@@ -15,11 +15,11 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   jsonEqual,
   locationParent,
@@ -85,7 +85,7 @@ export type NotebookRuntimeTemplateProps = {
   /**
    * Vertex AI location. Immutable — changing it replaces the template.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -298,14 +298,19 @@ export const NotebookRuntimeTemplateProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId =
         olds?.notebookRuntimeTemplateId ?? output?.notebookRuntimeTemplateId;
       const nextId = news.notebookRuntimeTemplateId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousMachine =
         olds?.machineSpec?.machineType ?? output?.machineType;
       const nextMachine = desiredMachine(news.machineSpec).machineType;
@@ -336,7 +341,10 @@ export const NotebookRuntimeTemplateProvider = () =>
         olds?.notebookRuntimeTemplateId,
         output?.notebookRuntimeTemplateId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
@@ -350,15 +358,19 @@ export const NotebookRuntimeTemplateProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = yield* collectPages(
-          aiplatform.listProjectsLocationsNotebookRuntimeTemplates.pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
-            pageSize: 100,
-          }),
-        ).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        const pages = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) =>
+            collectPages(
+              aiplatform.listProjectsLocationsNotebookRuntimeTemplates.pages({
+                parent: locationParent(env.project, location),
+                pageSize: 100,
+              }),
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        )).flat();
         return pages.flatMap((page) =>
           (page.notebookRuntimeTemplates ?? [])
             .filter((template) =>
@@ -377,7 +389,10 @@ export const NotebookRuntimeTemplateProvider = () =>
         news.notebookRuntimeTemplateId,
         output?.notebookRuntimeTemplateId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, templateId);
       const desiredLabels = {
         ...toLabels(news.labels),

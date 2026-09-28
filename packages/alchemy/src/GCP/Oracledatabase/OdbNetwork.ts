@@ -41,7 +41,7 @@ export type OdbNetworkProps = {
    * Region (`us-central1`, `us-east4`, …). Immutable — changing it
    * replaces the network. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -151,8 +151,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsOdbNetworks({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     oracle.listProjectsLocationsOdbNetworks
       .pages({ parent, pageSize: 1000 })
       .pipe(
@@ -179,6 +179,7 @@ export const OdbNetworkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousNetwork = lastSegment(
         olds?.network ?? output?.network ?? DEFAULT_NETWORK,
       );
@@ -190,9 +191,11 @@ export const OdbNetworkProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.odbNetworkId ?? output?.odbNetworkId,
         nextId: news.odbNetworkId ?? olds?.odbNetworkId ?? output?.odbNetworkId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra: previousNetwork !== nextNetwork || previousZone !== nextZone,
       });
@@ -206,7 +209,9 @@ export const OdbNetworkProvider = () =>
         output?.odbNetworkId,
         "odbnetwork",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, odbNetworkId);
       const existing = yield* getByName(name);
@@ -220,7 +225,7 @@ export const OdbNetworkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -232,7 +237,9 @@ export const OdbNetworkProvider = () =>
         output?.odbNetworkId,
         "odbnetwork",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, odbNetworkId);
       const network = networkName(env.project, news.network);
       const desiredLabels = {

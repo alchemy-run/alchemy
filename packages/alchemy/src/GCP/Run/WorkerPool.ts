@@ -51,7 +51,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/worker-pool";
 const MAX_NAME_LENGTH = 49;
 
@@ -169,7 +168,7 @@ export type WorkerPoolProps = PlatformProps & {
    * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the pool. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -411,8 +410,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (
   project: string,
@@ -420,7 +421,7 @@ const resourceName = (
   workerPoolId: string,
 ) => `projects/${project}/locations/${location}/workerPools/${workerPoolId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const poolsAt = parts.lastIndexOf("workerPools");
   const locationsAt = parts.lastIndexOf("locations");
@@ -431,7 +432,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     workerPoolId:
       poolsAt >= 0 && parts[poolsAt + 1]
         ? parts[poolsAt + 1]!
@@ -704,10 +705,11 @@ const bootstrapFor = (news: WorkerPoolProps) =>
 const toAttrs = (
   pool: cloudrun.GoogleCloudRunV2WorkerPool,
   project: string,
+  region: string,
   extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
 ): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     workerPoolId: parsed.workerPoolId,
@@ -893,7 +895,7 @@ const toCreateBody = (
   template,
 });
 
-const listAt = (project: string, location: string) =>
+const listAt = (project: string, location: string, region: string) =>
   cloudrun.listProjectsLocationsWorkerPools
     .pages({
       parent: `projects/${project}/locations/${location}`,
@@ -908,7 +910,7 @@ const listAt = (project: string, location: string) =>
             key.startsWith("alchemy-"),
           ),
       ),
-      Stream.map((pool) => toAttrs(pool, project)),
+      Stream.map((pool) => toAttrs(pool, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
     );
@@ -926,12 +928,17 @@ export const WorkerPoolProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.workerPoolId ?? output?.workerPoolId;
       const nextId = news.workerPoolId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const idChanged =
         previousId !== undefined &&
         nextId !== undefined &&
@@ -963,14 +970,17 @@ export const WorkerPoolProvider = () =>
         olds?.workerPoolId,
         output?.workerPoolId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, workerPoolId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project, {
+      const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
@@ -983,10 +993,16 @@ export const WorkerPoolProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         // WorkerPools list rejects the `-` wildcard; Services/Jobs accept it.
-        return yield* listAt(env.project, "-").pipe(
+        return yield* listAt(env.project, "-", env.region).pipe(
           Effect.catchTag(
             ["NotFound", "Forbidden", "LocationWildcardUnsupported"],
-            () => listAt(env.project, DEFAULT_LOCATION),
+            () =>
+              // `us-central1` was the default before `GCP.Region`; keep
+              // listing it so older pools are still found.
+              Effect.forEach(
+                [...new Set([env.region, "us-central1"])],
+                (location) => listAt(env.project, location, env.region),
+              ).pipe(Effect.map((groups) => groups.flat())),
           ),
         );
       }),
@@ -998,7 +1014,10 @@ export const WorkerPoolProvider = () =>
         news.workerPoolId,
         output?.workerPoolId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, workerPoolId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -1165,7 +1184,7 @@ export const WorkerPoolProvider = () =>
         return yield* new WorkerPoolNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, {
+      return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
       });

@@ -13,7 +13,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_DESCRIPTION_LENGTH = 8000;
@@ -36,10 +35,16 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -51,7 +56,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     appId: appsAt >= 0 && parts[appsAt + 1] ? parts[appsAt + 1]! : "",
     app: appsAt >= 0 ? parts.slice(0, appsAt + 2).join("/") : parentOf(name),
     id:
@@ -387,7 +392,7 @@ export const listApps = (parent: string) =>
         (page) => page.apps,
       );
 
-export const namedApps = (project: string, location = DEFAULT_LOCATION) =>
+export const namedApps = (project: string, location: string) =>
   listApps(locationParent(project, location)).pipe(
     Effect.map((apps) =>
       apps.filter(
@@ -400,7 +405,7 @@ export const namedApps = (project: string, location = DEFAULT_LOCATION) =>
 export const forEachApp = <A, E, R>(
   project: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
-  location = DEFAULT_LOCATION,
+  location: string,
 ) =>
   Effect.gen(function* () {
     const apps = yield* namedApps(project, location);

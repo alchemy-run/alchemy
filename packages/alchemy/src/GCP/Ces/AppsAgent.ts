@@ -37,7 +37,7 @@ export type AppsAgentProps = {
   app: string;
   /**
    * Region used when `app` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -167,9 +167,14 @@ export class AppsAgentNotResolved extends Data.TaggedError(
 const resourceName = (app: string, agentId: string) =>
   `${app}/agents/${agentId}`;
 
-const toAttrs = (agent: ces.Agent, project: string, appHint?: string) => {
+const toAttrs = (
+  agent: ces.Agent,
+  project: string,
+  region: string,
+  appHint?: string,
+) => {
   const name = agent.name ?? "";
-  const parsed = parseResourceName(name, "agents");
+  const parsed = parseResourceName(name, "agents", region);
   return {
     name,
     agentId: parsed.id,
@@ -199,7 +204,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAppsAgents({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsAgents.pages({ parent, pageSize: 100 }),
     (page) => page.agents,
@@ -207,7 +212,7 @@ const listAt = (parent: string, project: string) =>
     Effect.map((agents) =>
       agents
         .filter((agent) => hasOwnershipMarker(agent.description))
-        .map((agent) => toAttrs(agent, project, parent)),
+        .map((agent) => toAttrs(agent, project, region, parent)),
     ),
   );
 
@@ -217,12 +222,13 @@ export const AppsAgentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
+      const nextLocation = normalizeLocation(news.location, env.region);
       if (
         previousLocation !== undefined &&
         news.location !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        normalizeLocation(previousLocation, env.region) !== nextLocation
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -236,7 +242,10 @@ export const AppsAgentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const app = olds?.app
         ? expandApp(olds.app, env.project, location)
         : output?.app;
@@ -245,7 +254,7 @@ export const AppsAgentProvider = () =>
         output?.name ?? (app !== undefined ? resourceName(app, agentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, app);
+      const attrs = toAttrs(existing, env.project, env.region, app);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -254,15 +263,18 @@ export const AppsAgentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* forEachApp(env.project, (parent) =>
-          listAt(parent, env.project),
+        return yield* forEachApp(
+          env.project,
+          (parent) => listAt(parent, env.project, env.region),
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? "us-central1",
+        news.location ?? output?.location,
+        env.region,
       );
       const app = expandApp(news.app, env.project, location);
       const agentId = yield* toPhysicalId(id, news.agentId, output?.agentId);
@@ -364,7 +376,7 @@ export const AppsAgentProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project, app);
+      return toAttrs(current, env.project, env.region, app);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -106,7 +106,7 @@ const resourceName = (hostProject: string, targetProjectId: string) =>
 
 const toAttrs = (target: vm.TargetProject, hostProject: string) => {
   const name = target.name ?? "";
-  const parsed = parseName(name, "targetProjects");
+  const parsed = parseName(name, "targetProjects", "global");
   const ownership = parseOwnership(target.description);
   return {
     name,

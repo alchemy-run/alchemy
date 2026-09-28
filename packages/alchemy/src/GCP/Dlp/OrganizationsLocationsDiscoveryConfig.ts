@@ -57,7 +57,7 @@ export type OrganizationsLocationsDiscoveryConfigProps = {
   /**
    * Processing location (`us-central1`, `global`, `us`, …). Immutable —
    * changing it replaces the config.
-   * @default "us-central1"
+   * @default "global"
    */
   location?: string;
   /**
@@ -298,7 +298,7 @@ export const OrganizationsLocationsDiscoveryConfigProvider = () =>
         const organization = yield* tryResolveOrganization();
         if (organization === undefined) return [];
         const pages = yield* Effect.forEach(
-          locationParentsOf(organization),
+          locationParentsOf(organization, env.region),
           (parent) => listAt(parent, organization, env.project),
           { concurrency: 3 },
         );

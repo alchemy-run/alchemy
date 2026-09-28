@@ -137,7 +137,7 @@ export type BackendsBuildProps = {
   backend: string;
   /**
    * Region used when `backend` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -347,8 +347,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBackendsBuilds({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "backends/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "backends/-", (parent) =>
     listLabeledPages(
       firebaseapphosting.listProjectsLocationsBackendsBuilds.pages({
         parent,
@@ -376,9 +376,11 @@ export const BackendsBuildProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent =
         (olds?.backend ?? output?.backend)
@@ -418,7 +420,10 @@ export const BackendsBuildProvider = () =>
         output?.buildId,
         "build",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const backend =
         output?.backend ??
         (olds?.backend
@@ -438,7 +443,7 @@ export const BackendsBuildProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -450,7 +455,10 @@ export const BackendsBuildProvider = () =>
         output?.buildId,
         "build",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const backend = expandParent(
         news.backend,
         env.project,

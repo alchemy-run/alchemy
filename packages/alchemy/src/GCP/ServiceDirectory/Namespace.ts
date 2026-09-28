@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAMESPACE_ID_LENGTH = 63;
 
 export type NamespaceProps = {
@@ -35,7 +34,8 @@ export type NamespaceProps = {
    * Location of the namespace (e.g. `us-central1`). Immutable — changing
    * it replaces the namespace. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -103,8 +103,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, namespaceId: string) =>
   `projects/${project}/locations/${location}/namespaces/${namespaceId}`;
@@ -112,7 +114,7 @@ const resourceName = (project: string, location: string, namespaceId: string) =>
 const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const namespacesAt = parts.lastIndexOf("namespaces");
   const locationsAt = parts.lastIndexOf("locations");
@@ -123,7 +125,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     namespaceId:
       namespacesAt >= 0 && parts[namespacesAt + 1]
         ? parts[namespacesAt + 1]!
@@ -152,9 +154,13 @@ const toId = (id: string, namespaceId: string | undefined, existing?: string) =>
       .replace(/-+$/g, "");
   });
 
-const toAttrs = (namespace: servicedirectory.Namespace, project: string) => {
+const toAttrs = (
+  namespace: servicedirectory.Namespace,
+  project: string,
+  region: string,
+) => {
   const name = namespace.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     namespaceId: parsed.namespaceId,
@@ -170,7 +176,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsNamespaces({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listNamespacesAt = (parent: string, project: string) =>
+const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
@@ -186,7 +192,7 @@ const listNamespacesAt = (parent: string, project: string) =>
             key.startsWith("alchemy-"),
           )
         ) {
-          found.push(toAttrs(namespace, project));
+          found.push(toAttrs(namespace, project, region));
         }
       }
       pageToken = response.nextPageToken;
@@ -205,6 +211,7 @@ export const NamespaceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.namespaceId ?? output?.namespaceId;
       const nextId = news.namespaceId ?? previousId;
       const idChanged =
@@ -214,8 +221,12 @@ export const NamespaceProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       if (idChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
       }
@@ -229,12 +240,15 @@ export const NamespaceProvider = () =>
         olds?.namespaceId,
         output?.namespaceId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, namespaceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -243,7 +257,7 @@ export const NamespaceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const fallback = [locationParent(env.project, DEFAULT_LOCATION)];
+        const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
         for (let page = 0; page < 10; page++) {
@@ -259,7 +273,7 @@ export const NamespaceProvider = () =>
                   locations: [
                     {
                       name: fallback[0],
-                      locationId: DEFAULT_LOCATION,
+                      locationId: env.region,
                     } satisfies servicedirectory.Location,
                   ],
                   nextPageToken: undefined as string | undefined,
@@ -271,7 +285,7 @@ export const NamespaceProvider = () =>
             .filter((name): name is string => !!name);
           const pages = yield* Effect.forEach(
             parents.length > 0 ? parents : fallback,
-            (parent) => listNamespacesAt(parent, env.project),
+            (parent) => listNamespacesAt(parent, env.project, env.region),
             { concurrency: 4 },
           );
           for (const namespaces of pages) {
@@ -290,7 +304,10 @@ export const NamespaceProvider = () =>
         news.namespaceId,
         output?.namespaceId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, namespaceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -329,7 +346,7 @@ export const NamespaceProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

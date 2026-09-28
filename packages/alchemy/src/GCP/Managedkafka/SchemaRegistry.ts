@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   getSchemaRegistry,
   hasAlchemyLabelMap,
   hasSchemaRegistryOwnership,
@@ -34,7 +33,7 @@ export type SchemaRegistryProps = {
   schemaRegistryId?: string;
   /**
    * Region (`us-central1`, …). Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
 };
@@ -117,13 +116,20 @@ export const SchemaRegistryProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.schemaRegistryId ?? output?.schemaRegistryId,
         nextId: news.schemaRegistryId
           ? schemaRegistryIdOf(news.schemaRegistryId)
           : (olds?.schemaRegistryId ?? output?.schemaRegistryId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
-        nextLocation: normalizeLocation(news.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
+        nextLocation: normalizeLocation(
+          news.location ?? output?.location,
+          env.region,
+        ),
       });
     }),
 
@@ -134,7 +140,10 @@ export const SchemaRegistryProvider = () =>
         olds?.schemaRegistryId,
         output?.schemaRegistryId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, schemaRegistryId);
       const existing = yield* getSchemaRegistry(name);
@@ -148,7 +157,7 @@ export const SchemaRegistryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const registries = yield* listSchemaRegistries(env.project);
+        const registries = yield* listSchemaRegistries(env.project, env.region);
         const owned = yield* Effect.forEach(
           registries.filter((registry) => (registry.name ?? "").length > 0),
           (registry) =>
@@ -174,7 +183,8 @@ export const SchemaRegistryProvider = () =>
         output?.schemaRegistryId,
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, schemaRegistryId);

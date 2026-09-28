@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   collectPages,
   expandName,
@@ -67,7 +66,7 @@ export type ReleaseProps = {
    * Region of the release (`us-central1`, …). Immutable — changing it
    * replaces the release. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -190,7 +189,7 @@ const toAttrs = (item: saasservicemgmt.Release, project: string) => {
     name,
     releaseId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location,
     unitKind: item.unitKind,
     unitKindId: item.unitKind ? lastSegment(item.unitKind) : undefined,
     blueprint: item.blueprint
@@ -267,15 +266,18 @@ export const ReleaseProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousPackage =
         olds?.blueprint?.package ?? output?.blueprint?.package;
       const nextPackage = news.blueprint?.package ?? previousPackage;
       return replaceOnIdentity({
         previousId: olds?.releaseId ?? output?.releaseId,
         nextId: news.releaseId ?? olds?.releaseId ?? output?.releaseId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           !sameRef(olds?.unitKind ?? output?.unitKind, news.unitKind) ||
@@ -293,7 +295,9 @@ export const ReleaseProvider = () =>
         output?.releaseId,
         "rel",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, releaseId);
@@ -308,7 +312,7 @@ export const ReleaseProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, DEFAULT_LOCATION);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -320,7 +324,9 @@ export const ReleaseProvider = () =>
         output?.releaseId,
         "rel",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, COLLECTION, releaseId);
       const desiredLabels = {
         ...toLabels(news.labels),

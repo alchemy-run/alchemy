@@ -110,7 +110,7 @@ const resourceName = (
 
 const toAttrs = (item: apphub.ServiceProjectAttachment, project: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "serviceProjectAttachments");
+  const parsed = parseName(name, "serviceProjectAttachments", GLOBAL_LOCATION);
   return {
     name,
     serviceProjectAttachmentId: parsed.id,
@@ -205,8 +205,11 @@ export const ServiceProjectAttachmentProvider = () =>
             Stream.filter(
               (item) =>
                 projectIdOf(item.serviceProject, "") === env.project ||
-                parseName(item.name ?? "", "serviceProjectAttachments").id ===
-                  env.project,
+                parseName(
+                  item.name ?? "",
+                  "serviceProjectAttachments",
+                  GLOBAL_LOCATION,
+                ).id === env.project,
             ),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,

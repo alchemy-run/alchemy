@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_CONNECTION_PREFERENCE = "ACCEPT_AUTOMATIC";
 const MAX_NAME_LENGTH = 63;
 
@@ -37,7 +36,7 @@ export type NetworkAttachmentProps = {
   /**
    * Region the attachment lives in. Immutable — changing it replaces the
    * attachment. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -178,8 +177,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -260,7 +259,7 @@ const toAttrs = (
   fallbackName?: string,
 ): NetworkAttachment["Attributes"] => {
   const parsed = parseDescription(attachment.description);
-  const region = normalizeRegion(attachment.region);
+  const region = lastSegment(attachment.region).toLowerCase();
   const networkAttachmentName =
     attachment.name ||
     lastSegment(attachment.selfLink) ||
@@ -470,6 +469,7 @@ export const NetworkAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.networkAttachmentName ?? output?.networkAttachmentName;
       const nextName = news.networkAttachmentName ?? previousName;
@@ -477,8 +477,14 @@ export const NetworkAttachmentProvider = () =>
         previousName !== undefined &&
         nextName !== undefined &&
         previousName !== nextName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       const previousPreference = preferenceOf(
         olds?.connectionPreference ?? output?.connectionPreference,
       );
@@ -502,7 +508,10 @@ export const NetworkAttachmentProvider = () =>
         olds?.networkAttachmentName,
         output?.networkAttachmentName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -540,7 +549,7 @@ export const NetworkAttachmentProvider = () =>
         news.networkAttachmentName,
         output?.networkAttachmentName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const subnetworks = news.subnetworks.map((subnet) =>
@@ -632,7 +641,7 @@ export const NetworkAttachmentProvider = () =>
       if (!output.networkAttachmentName) return;
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteNetworkAttachments({
           project,

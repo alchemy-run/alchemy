@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_ENDPOINT_ID_LENGTH = 63;
 const DEFAULT_PORT = 0;
 
@@ -41,7 +40,8 @@ export type EndpointProps = {
    * Location of the endpoint (e.g. `us-central1`). Used when `service`
    * is a bare id. Immutable — changing it replaces the endpoint.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -169,8 +169,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const normalizeOptional = (value: string | undefined) =>
   value === undefined || value === "" ? undefined : value;
@@ -178,7 +180,7 @@ const normalizeOptional = (value: string | undefined) =>
 const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const endpointsAt = parts.lastIndexOf("endpoints");
   const servicesAt = parts.lastIndexOf("services");
@@ -195,7 +197,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     namespace,
     namespaceId:
       namespacesAt >= 0 && parts[namespacesAt + 1]
@@ -216,12 +218,14 @@ const resolveParent = (
   service: string,
   namespace: string | undefined,
   location: string | undefined,
+  region: string,
 ) => {
   if (service.includes("/")) {
     const parsed = parseName(
       service.includes("/endpoints/")
         ? service
         : `${service.replace(/\/+$/, "")}/endpoints/_`,
+      region,
     );
     return {
       parent: parsed.service,
@@ -230,14 +234,14 @@ const resolveParent = (
       namespace: parsed.namespace,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   if (namespace === undefined || namespace === "") {
     return undefined;
   }
   const namespaceName = namespace.includes("/namespaces/")
     ? namespace.replace(/\/+$/, "")
     : `projects/${project}/locations/${loc}/namespaces/${namespace}`;
-  const parsed = parseName(`${namespaceName}/services/_/endpoints/_`);
+  const parsed = parseName(`${namespaceName}/services/_/endpoints/_`, region);
   return {
     parent: `${parsed.namespace}/services/${service}`,
     location: parsed.location,
@@ -250,9 +254,10 @@ const parentKey = (
   service: string | undefined,
   namespace: string | undefined,
   location: string | undefined,
+  region: string,
 ) => {
   if (service === undefined || service === "") return undefined;
-  const resolved = resolveParent("_", service, namespace, location);
+  const resolved = resolveParent("_", service, namespace, location, region);
   if (resolved === undefined) return undefined;
   return `${resolved.location}/${lastSegment(resolved.namespace)}/${lastSegment(resolved.parent)}`;
 };
@@ -293,9 +298,13 @@ const toId = (id: string, endpointId: string | undefined, existing?: string) =>
       .replace(/-+$/g, "");
   });
 
-const toAttrs = (endpoint: servicedirectory.Endpoint, project: string) => {
+const toAttrs = (
+  endpoint: servicedirectory.Endpoint,
+  project: string,
+  region: string,
+) => {
   const name = endpoint.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     endpointId: parsed.endpointId,
@@ -451,6 +460,7 @@ export const EndpointProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.endpointId ?? output?.endpointId;
       const nextId = news.endpointId ?? previousId;
       const idChanged =
@@ -462,11 +472,13 @@ export const EndpointProvider = () =>
         olds?.service ?? output?.service,
         olds?.namespace ?? output?.namespace,
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextParent = parentKey(
         news.service,
         news.namespace ?? olds?.namespace ?? output?.namespace,
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const parentChanged =
         previousParent !== undefined &&
@@ -499,6 +511,7 @@ export const EndpointProvider = () =>
         olds?.service ?? output?.service ?? "",
         olds?.namespace ?? output?.namespace,
         olds?.location ?? output?.location,
+        env.region,
       );
       const name =
         output?.name ??
@@ -508,7 +521,7 @@ export const EndpointProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.annotations)))
         ? attrs
         : Unowned(attrs);
@@ -517,7 +530,7 @@ export const EndpointProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const fallback = [locationParent(env.project, DEFAULT_LOCATION)];
+        const fallback = [locationParent(env.project, env.region)];
         const locations = yield* listLocations(env.project);
         const parents = locations.length > 0 ? locations : fallback;
         const namespacePages = yield* Effect.forEach(
@@ -546,7 +559,7 @@ export const EndpointProvider = () =>
         return endpointPages
           .flat()
           .filter((endpoint) => hasAlchemyAnnotation(endpoint.annotations))
-          .map((endpoint) => toAttrs(endpoint, env.project));
+          .map((endpoint) => toAttrs(endpoint, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -557,6 +570,7 @@ export const EndpointProvider = () =>
         news.service,
         news.namespace ?? output?.namespace,
         news.location ?? output?.location,
+        env.region,
       );
       if (parent === undefined) {
         return yield* new EndpointParentMissing({ service: news.service });
@@ -632,7 +646,7 @@ export const EndpointProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

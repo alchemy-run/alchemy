@@ -39,7 +39,7 @@ export type GoldengateConnectionProps = {
   goldengateConnectionId?: string;
   /**
    * Region. Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -197,7 +197,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listConnections = (project: string) => {
+const listConnections = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       oracle.listProjectsLocationsGoldengateConnections.pages({
@@ -210,7 +210,7 @@ const listConnections = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect).pipe(
+  return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
@@ -229,6 +229,7 @@ export const GoldengateConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType =
         olds?.connectionType ??
         olds?.properties?.connectionType ??
@@ -245,9 +246,11 @@ export const GoldengateConnectionProvider = () =>
           news.goldengateConnectionId ??
           olds?.goldengateConnectionId ??
           output?.goldengateConnectionId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra: nextType !== previousType || nextOdb !== previousOdb,
       });
@@ -261,7 +264,9 @@ export const GoldengateConnectionProvider = () =>
         output?.goldengateConnectionId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceNameOf(
@@ -281,7 +286,7 @@ export const GoldengateConnectionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listConnections(env.project);
+        const items = yield* listConnections(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -293,7 +298,9 @@ export const GoldengateConnectionProvider = () =>
         output?.goldengateConnectionId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceNameOf(
         env.project,
         location,

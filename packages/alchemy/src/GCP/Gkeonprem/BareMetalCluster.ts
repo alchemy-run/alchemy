@@ -62,7 +62,7 @@ export type BareMetalClusterProps = {
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the cluster. `US-CENTRAL1` is accepted and normalized.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -300,9 +300,13 @@ const resourceName = (
   bareMetalClusterId: string,
 ) => `${parentOf(project, location)}/${COLLECTION}/${bareMetalClusterId}`;
 
-const toAttrs = (item: gkeonprem.BareMetalCluster, project: string) => {
+const toAttrs = (
+  item: gkeonprem.BareMetalCluster,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
   const annotations = userLabels(item.annotations);
   return {
@@ -349,8 +353,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBareMetalClusters({ name, view: "FULL" })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       gkeonprem.listProjectsLocationsBareMetalClusters.pages({
         parent,
@@ -406,6 +410,7 @@ export const BareMetalClusterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousMembership =
         olds?.adminClusterMembership ?? output?.adminClusterMembership;
       const nextMembership = news.adminClusterMembership;
@@ -414,9 +419,13 @@ export const BareMetalClusterProvider = () =>
         nextId: news.bareMetalClusterId
           ? rfc1035(news.bareMetalClusterId, "baremetalcluster")
           : (olds?.bareMetalClusterId ?? output?.bareMetalClusterId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousMembership !== undefined &&
@@ -434,12 +443,15 @@ export const BareMetalClusterProvider = () =>
         output?.bareMetalClusterId,
         "baremetalcluster",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, bareMetalClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const fromDescription = parseOwnership(existing.description).labels;
       const owned =
         (yield* hasAlchemyLabels(id, tagRecord(existing.annotations))) ||
@@ -450,9 +462,9 @@ export const BareMetalClusterProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item: gkeonprem.BareMetalCluster) =>
-          toAttrs(item, env.project),
+          toAttrs(item, env.project, env.region),
         );
       }),
 
@@ -464,7 +476,10 @@ export const BareMetalClusterProvider = () =>
         output?.bareMetalClusterId,
         "baremetalcluster",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, bareMetalClusterId);
       const ownership = yield* createInternalLabels(id);
       const annotations = desiredAnnotations(
@@ -546,7 +561,7 @@ export const BareMetalClusterProvider = () =>
       if (current === undefined) {
         return yield* new ResourceNotResolved({ name });
       }
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

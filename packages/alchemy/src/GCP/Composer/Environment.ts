@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 64;
 
 /**
@@ -108,7 +107,7 @@ export type EnvironmentProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the environment. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -270,8 +269,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -292,7 +293,7 @@ const resourceName = (
   environmentId: string,
 ) => `projects/${project}/locations/${location}/environments/${environmentId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const environmentsAt = parts.lastIndexOf("environments");
   const locationsAt = parts.lastIndexOf("locations");
@@ -303,7 +304,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     environmentId:
       environmentsAt >= 0 && parts[environmentsAt + 1]
         ? parts[environmentsAt + 1]!
@@ -509,9 +510,13 @@ const immutableChanged = (
   );
 };
 
-const toAttrs = (environment: composer.Environment, project: string) => {
+const toAttrs = (
+  environment: composer.Environment,
+  project: string,
+  region: string,
+) => {
   const name = environment.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     environmentId: parsed.environmentId,
@@ -684,7 +689,7 @@ const listOwnedAt = (project: string, location: string) =>
             key.startsWith("alchemy-"),
           ),
       ),
-      Stream.map((environment) => toAttrs(environment, project)),
+      Stream.map((environment) => toAttrs(environment, project, location)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -974,13 +979,18 @@ export const EnvironmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.environmentId ?? output?.environmentId;
       const nextId = news.environmentId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const replace =
         (previousId !== undefined &&
           nextId !== undefined &&
@@ -1005,12 +1015,15 @@ export const EnvironmentProvider = () =>
         olds?.environmentId,
         output?.environmentId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, environmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -1020,7 +1033,7 @@ export const EnvironmentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          Array.from(new Set<string>([...LIST_LOCATIONS, env.region])),
           (location) => listOwnedAt(env.project, location),
           { concurrency: 8 },
         );
@@ -1034,7 +1047,10 @@ export const EnvironmentProvider = () =>
         news.environmentId,
         output?.environmentId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, environmentId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -1104,7 +1120,7 @@ export const EnvironmentProvider = () =>
         current = yield* waitUntilRunning(current.name ?? name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

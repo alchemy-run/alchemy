@@ -51,7 +51,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 49;
 
 export type JobEnvVar = {
@@ -136,7 +135,7 @@ export type JobProps = PlatformProps & {
    * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the job. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -401,8 +400,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -418,7 +419,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, location: string, jobId: string) =>
   `projects/${project}/locations/${location}/jobs/${jobId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const jobsAt = parts.lastIndexOf("jobs");
   const locationsAt = parts.lastIndexOf("locations");
@@ -429,7 +430,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     jobId:
       jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
@@ -464,10 +465,11 @@ const bootstrapFor = (news: JobProps) =>
 const toAttrs = (
   job: cloudrun.GoogleCloudRunV2Job,
   project: string,
+  region: string,
   extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
 ): Job["Attributes"] => {
   const name = job.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const task = job.template?.template;
   const container = task?.containers?.[0];
   return {
@@ -770,13 +772,18 @@ export const JobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.jobId ?? output?.jobId;
       const nextId = news.jobId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
 
       const idChanged =
         previousId !== undefined &&
@@ -805,13 +812,16 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project, {
+      const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
@@ -837,7 +847,7 @@ export const JobProvider = () =>
                   key.startsWith("alchemy-"),
                 ),
             ),
-            Stream.map((job) => toAttrs(job, env.project)),
+            Stream.map((job) => toAttrs(job, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -846,7 +856,10 @@ export const JobProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -1046,7 +1059,7 @@ export const JobProvider = () =>
         return yield* new JobNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, {
+      return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
       });

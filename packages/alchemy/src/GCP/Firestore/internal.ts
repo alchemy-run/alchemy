@@ -9,7 +9,6 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const DATABASE_OWNERSHIP_DOCUMENT = "_alchemy/ownership";
 

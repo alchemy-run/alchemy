@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 256;
 
 export const lastSegment = (value: string) => {
@@ -31,8 +30,10 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -43,7 +44,11 @@ export const sameJson = (left: unknown, right: unknown) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -54,7 +59,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -284,14 +289,20 @@ export const listMessages = (parent: string) =>
           Effect.catchTag("Forbidden", () => emptyList<healthcare.Message>()),
         );
 
+// `us-central1` was the fixed default before `GCP.Region`; list paths keep
+// it alongside the stack region so datasets created under it are found.
+export const listRegionDatasets = (project: string, region: string) =>
+  Effect.forEach([...new Set([region, "us-central1"])], (location) =>
+    listDatasets(locationParent(project, location)),
+  ).pipe(Effect.map((groups) => groups.flat()));
+
 export const forEachDataset = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.gen(function* () {
-    const datasets = yield* listDatasets(
-      locationParent(project, DEFAULT_LOCATION),
-    );
+    const datasets = yield* listRegionDatasets(project, region);
     const named = datasets.filter((dataset) => (dataset.name ?? "").length > 0);
     const groups = yield* Effect.forEach(
       named,
@@ -301,8 +312,8 @@ export const forEachDataset = <A, E, R>(
     return groups.flat();
   });
 
-export const listAlchemyConsentStores = (project: string) =>
-  forEachDataset(project, (parent) =>
+export const listAlchemyConsentStores = (project: string, region: string) =>
+  forEachDataset(project, region, (parent) =>
     collectPages(
       healthcare.listProjectsLocationsDatasetsConsentStores.pages({
         parent,

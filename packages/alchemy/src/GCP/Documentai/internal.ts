@@ -13,6 +13,8 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
+// Document AI is only served from the `us` / `eu` multi-region deployments, so the
+// default stays `us` rather than following `GCP.Region`.
 export const DEFAULT_LOCATION = "us";
 /**
  * The distilled Document AI client talks to `documentai.googleapis.com`

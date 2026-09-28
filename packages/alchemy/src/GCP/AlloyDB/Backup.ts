@@ -21,7 +21,6 @@ import type { Providers } from "../Providers.ts";
 import type { EncryptionConfig } from "./Cluster.ts";
 import { waitForOperation } from "./operations.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_BACKUP_TYPE = "ON_DEMAND";
 const MAX_NAME_LENGTH = 63;
 
@@ -37,7 +36,7 @@ export type BackupProps = {
    * `clusterName` is a full resource name unless set explicitly.
    * Immutable — changing it replaces the backup. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -212,8 +211,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_BACKUP_TYPE).toUpperCase();
@@ -248,9 +247,7 @@ const parseBackupName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     backupId:
       backupsAt >= 0 && parts[backupsAt + 1]
         ? parts[backupsAt + 1]!
@@ -261,7 +258,7 @@ const parseBackupName = (name: string) => {
 const parseClusterRef = (
   cluster: string,
   fallbackProject: string,
-  fallbackLocation: string | undefined,
+  fallbackLocation: string,
 ) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
@@ -493,6 +490,7 @@ export const BackupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.backupId ?? output?.backupId;
       const nextId = news.backupId ?? previousId;
@@ -501,9 +499,11 @@ export const BackupProvider = () =>
       );
       const nextCluster = lastSegment(news.clusterName ?? previousCluster);
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousType = normalizeType(olds?.type ?? output?.type);
       const nextType = normalizeType(news.type ?? output?.type);
       const previousKey =
@@ -551,7 +551,7 @@ export const BackupProvider = () =>
       const ref = parseClusterRef(
         olds?.clusterName ?? output?.clusterName ?? output?.clusterId ?? "",
         env.project,
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location ?? ref.location,
@@ -596,7 +596,7 @@ export const BackupProvider = () =>
       const ref = parseClusterRef(
         news.clusterName,
         env.project,
-        news.location ?? output?.location,
+        news.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) {
         return yield* new BackupClusterMissing({

@@ -44,7 +44,8 @@ export type ApplicationsServiceProps = {
   application: string;
   /**
    * Region used when `application` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -166,9 +167,9 @@ export const ApplicationsService = Resource<ApplicationsService>(
 const resourceName = (application: string, serviceId: string) =>
   `${application}/services/${serviceId}`;
 
-const toAttrs = (item: apphub.Service, project: string) => {
+const toAttrs = (item: apphub.Service, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "services");
+  const parsed = parseName(name, "services", region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -196,8 +197,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsApplicationsServices({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listNestedOwned(project, (application) =>
+const listOwned = (project: string, region: string) =>
+  listNestedOwned(project, region, (application) =>
     listOwnedPages(
       apphub.listProjectsLocationsApplicationsServices.pages({
         parent: application,
@@ -223,14 +224,19 @@ export const ApplicationsServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousDiscovered =
         olds?.discoveredService ?? output?.discoveredService;
       return replaceOnIdentity({
         previousId: olds?.serviceId ?? output?.serviceId,
         nextId: news.serviceId ?? olds?.serviceId ?? output?.serviceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.application ?? output?.application,
         nextParent: news.application,
@@ -251,7 +257,10 @@ export const ApplicationsServiceProvider = () =>
         output?.serviceId,
         "service",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const application = expandApplication(
         olds?.application ?? output?.application ?? "",
         env.project,
@@ -260,7 +269,7 @@ export const ApplicationsServiceProvider = () =>
       const name = output?.name ?? resourceName(application, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -269,8 +278,8 @@ export const ApplicationsServiceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -281,7 +290,10 @@ export const ApplicationsServiceProvider = () =>
         output?.serviceId,
         "service",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const application = expandApplication(
         news.application,
         env.project,
@@ -356,7 +368,7 @@ export const ApplicationsServiceProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

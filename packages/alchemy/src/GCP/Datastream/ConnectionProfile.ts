@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   emptyMessage,
   fieldMask,
   fingerprint,
@@ -69,7 +68,7 @@ export type ConnectionProfileProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * profile. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -629,15 +628,15 @@ const sshHasSecret = (ssh: ForwardSshTunnelConnectivity | undefined) =>
 const toAttrs = (
   profile: ds.ConnectionProfile,
   project: string,
-  locationHint?: string,
+  locationHint: string,
 ) => {
   const name = profile.name ?? "";
-  const parsed = parseName(name, "connectionProfiles");
+  const parsed = parseName(name, "connectionProfiles", locationHint);
   return {
     name,
     connectionProfileId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || locationHint || DEFAULT_LOCATION,
+    location: parsed.location || locationHint,
     displayName: profile.displayName,
     labels: userLabels(profile.labels),
     mysqlProfile: publicMysql(profile.mysqlProfile),
@@ -673,8 +672,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsConnectionProfiles({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       ds.listProjectsLocationsConnectionProfiles.pages({
         parent,
@@ -714,6 +713,7 @@ export const ConnectionProfileProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = kindOf({
         mysqlProfile: olds?.mysqlProfile ?? output?.mysqlProfile,
         postgresqlProfile: olds?.postgresqlProfile ?? output?.postgresqlProfile,
@@ -740,9 +740,13 @@ export const ConnectionProfileProvider = () =>
           news.connectionProfileId ??
           olds?.connectionProfileId ??
           output?.connectionProfileId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousKind !== nextKind ||
@@ -761,7 +765,10 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, connectionProfileId);
@@ -776,8 +783,8 @@ export const ConnectionProfileProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -788,7 +795,10 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, connectionProfileId);
       const desiredLabels = {
         ...toLabels(news.labels),

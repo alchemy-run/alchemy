@@ -73,7 +73,8 @@ export type InsightsConfigProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the config. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -238,9 +239,13 @@ const fromArtifactConfigs = (
     }),
   );
 
-const toAttrs = (item: developerconnect.InsightsConfig, project: string) => {
+const toAttrs = (
+  item: developerconnect.InsightsConfig,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "insightsConfigs");
+  const parsed = parseName(name, "insightsConfigs", region);
   return {
     name,
     insightsConfigId: parsed.id,
@@ -267,8 +272,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsInsightsConfigs({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       developerconnect.listProjectsLocationsInsightsConfigs.pages({
         parent,
@@ -285,15 +290,20 @@ export const InsightsConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.insightsConfigId ?? output?.insightsConfigId,
         nextId:
           news.insightsConfigId ??
           olds?.insightsConfigId ??
           output?.insightsConfigId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -306,12 +316,15 @@ export const InsightsConfigProvider = () =>
         output?.insightsConfigId,
         "insightsconfig",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, insightsConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -320,8 +333,8 @@ export const InsightsConfigProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -332,7 +345,10 @@ export const InsightsConfigProvider = () =>
         output?.insightsConfigId,
         "insightsconfig",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, insightsConfigId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -425,7 +441,7 @@ export const InsightsConfigProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

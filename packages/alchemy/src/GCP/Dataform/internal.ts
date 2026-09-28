@@ -13,7 +13,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 
@@ -49,10 +48,16 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -63,7 +68,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -152,8 +157,8 @@ export const replaceOnIdentity = (input: {
   const locationChanged =
     (input.previousLocation ?? "") !== "" &&
     (input.nextLocation ?? "") !== "" &&
-    normalizeLocation(input.previousLocation) !==
-      normalizeLocation(input.nextLocation);
+    lastSegment(input.previousLocation ?? "").toLowerCase() !==
+      lastSegment(input.nextLocation ?? "").toLowerCase();
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
@@ -453,10 +458,7 @@ const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
     ),
   );
 
-export const listRepositories = (
-  project: string,
-  location = DEFAULT_LOCATION,
-) =>
+export const listRepositories = (project: string, location: string) =>
   emptyOnMissing(
     collectPages(
       dataform.listProjectsLocationsRepositories.pages({
@@ -479,17 +481,14 @@ export const listRepositories = (
     ),
   );
 
-export const listOwnedRepositories = (
-  project: string,
-  location = DEFAULT_LOCATION,
-) =>
+export const listOwnedRepositories = (project: string, location: string) =>
   listRepositories(project, location).pipe(
     Effect.map((repos) =>
       repos.filter((repo) => hasAlchemyLabelMap(repo.labels)),
     ),
   );
 
-export const listTeamFolders = (project: string, location = DEFAULT_LOCATION) =>
+export const listTeamFolders = (project: string, location: string) =>
   emptyOnMissing(
     collectPages(
       dataform.searchProjectsLocationsTeamFolders.pages({
@@ -503,7 +502,7 @@ export const listTeamFolders = (project: string, location = DEFAULT_LOCATION) =>
     ),
   );
 
-export const listFolders = (project: string, location = DEFAULT_LOCATION) =>
+export const listFolders = (project: string, location: string) =>
   Effect.gen(function* () {
     const parent = locationParent(project, location);
     const seen = new Set<string>();

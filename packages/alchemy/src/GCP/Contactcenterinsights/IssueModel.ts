@@ -11,7 +11,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   lastSegment,
@@ -37,7 +36,7 @@ export type IssueModelInputDataConfig = {
 export type IssueModelProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the model.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -204,8 +203,12 @@ export const IssueModelProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = news.location ?? DEFAULT_LOCATION;
-      if (previousLocation !== undefined && previousLocation !== nextLocation) {
+      const nextLocation = news.location;
+      if (
+        previousLocation !== undefined &&
+        nextLocation !== undefined &&
+        previousLocation !== nextLocation
+      ) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -220,7 +223,7 @@ export const IssueModelProvider = () =>
           ? attrs
           : Unowned(attrs);
       }
-      const location = olds?.location ?? DEFAULT_LOCATION;
+      const location = olds?.location ?? env.region;
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, olds?.displayName);
@@ -236,14 +239,14 @@ export const IssueModelProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
           env.project,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);

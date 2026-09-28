@@ -56,7 +56,7 @@ export type DataScanProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * scan.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -219,7 +219,7 @@ const getByName = (name: string) =>
     dataplex.getProjectsLocationsDataScans({ name, view: "FULL" }),
   ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listScans = (project: string) => {
+const listScans = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsDataScans.pages({
@@ -234,7 +234,7 @@ const listScans = (project: string) => {
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
 const dataSourceOf = (data: DataScanDataSource | undefined) => ({
@@ -248,12 +248,17 @@ export const DataScanProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataScanId ?? output?.dataScanId,
         nextId: news.dataScanId ?? olds?.dataScanId ?? output?.dataScanId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           fingerprint(dataSourceOf(news.data)) !==
@@ -271,7 +276,10 @@ export const DataScanProvider = () =>
         output?.dataScanId,
         "datascan",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, dataScanId);
       const existing = yield* getByName(name);
@@ -285,7 +293,7 @@ export const DataScanProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listScans(env.project);
+        const items = yield* listScans(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -297,7 +305,10 @@ export const DataScanProvider = () =>
         output?.dataScanId,
         "datascan",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, dataScanId);
       const desiredLabels = {
         ...toLabels(news.labels),

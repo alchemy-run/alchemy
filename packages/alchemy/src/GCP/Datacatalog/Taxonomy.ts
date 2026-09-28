@@ -10,7 +10,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DatacatalogNotResolved,
-  DEFAULT_LOCATION,
   collectPages,
   emptyOnMissing,
   encodeOwnership,
@@ -41,7 +40,7 @@ export type TaxonomyProps = {
    * Region (`us-central1`, `us`, …). Immutable — changing it replaces
    * the taxonomy. Policy Tag Manager assigns the taxonomy id; it is not
    * chosen by the caller.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -136,9 +135,10 @@ export const Taxonomy = Resource<Taxonomy>("GCP.Datacatalog.Taxonomy");
 const toAttrs = (
   taxonomy: datacatalog.GoogleCloudDatacatalogV1Taxonomy,
   project: string,
+  region: string,
 ) => {
   const name = taxonomy.name ?? "";
-  const parsed = parseName(name, "taxonomies");
+  const parsed = parseName(name, "taxonomies", region);
   const ownership = parseOwnership(taxonomy.description);
   return {
     name,
@@ -173,8 +173,8 @@ const listTaxonomiesAt = (
     ),
   );
 
-const listOwned = (project: string) =>
-  listAtLocation(project, listTaxonomiesAt).pipe(
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, listTaxonomiesAt).pipe(
     Effect.map((items) =>
       items.filter((item) => hasOwnershipMarker(item.description)),
     ),
@@ -203,20 +203,28 @@ export const TaxonomyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const existing = yield* observe(id, output?.name, env.project, location);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -225,14 +233,15 @@ export const TaxonomyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
@@ -293,7 +302,7 @@ export const TaxonomyProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

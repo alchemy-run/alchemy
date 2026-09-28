@@ -10,7 +10,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 /**
@@ -112,7 +111,8 @@ export const parseWorkloadName = (name: string): ParsedWorkloadName => {
   };
   return {
     project: get("projects") ?? "",
-    location: get("locations") ?? DEFAULT_LOCATION,
+    // Environment names are always fully qualified; no regional default.
+    location: get("locations") ?? "",
     environmentId: get("environments") ?? lastSegment(name),
     configMapId: get("userWorkloadsConfigMaps"),
     secretId: get("userWorkloadsSecrets"),
@@ -232,10 +232,10 @@ export const listEnvironmentsAt = (project: string, location: string) =>
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
-export const listAllEnvironments = (project: string) =>
+export const listAllEnvironments = (project: string, region: string) =>
   Effect.gen(function* () {
     const pages = yield* Effect.forEach(
-      LIST_LOCATIONS,
+      Array.from(new Set<string>([...LIST_LOCATIONS, region])),
       (location) => listEnvironmentsAt(project, location),
       { concurrency: 8 },
     );

@@ -14,7 +14,10 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
+/** Locations `list` scans: the pre-`GCP.Region` default plus the stack region. */
+export const listLocations = (region: string): string[] => [
+  ...new Set(["us-central1", region]),
+];
 export const MAX_ID_LENGTH = 63;
 
 export class BiglakeNotResolved extends Data.TaggedError(
@@ -32,8 +35,11 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) => {
-  const raw = lastSegment(location ?? DEFAULT_LOCATION);
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => {
+  const raw = lastSegment(location ?? fallback);
   const upper = raw.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
   return raw.toLowerCase();
@@ -50,9 +56,7 @@ export const parseResourceName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     catalogId:
       catalogsAt >= 0 && parts[catalogsAt + 1] ? parts[catalogsAt + 1]! : "",
     catalog: catalogsAt >= 0 ? parts.slice(0, catalogsAt + 2).join("/") : "",

@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_POLICY_ID_LENGTH = 50;
 export const MAX_WORKLOAD_ID_LENGTH = 63;
@@ -53,8 +52,10 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -62,7 +63,11 @@ export const locationParent = (project: string, location: string) =>
 export const regionParent = (project: string, region: string) =>
   `projects/${project}/regions/${region}`;
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -75,7 +80,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       placeAt >= 0 && parts[placeAt + 1]
         ? parts[placeAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

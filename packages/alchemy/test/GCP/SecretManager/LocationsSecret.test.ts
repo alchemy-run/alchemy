@@ -36,19 +36,18 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider.skipIf(!hasGcpCreds)(
-  "createProjectsLocationsSecrets on the global endpoint fails with BadRequest",
+  "a missing regional secret reaches the regional endpoint and fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      // Distilled routes locations/{region} Secret Manager requests to
+      // secretmanager.{region}.rep.googleapis.com; the global endpoint would
+      // answer BadRequest instead.
       const error = yield* Effect.flip(
-        secretmanager.createProjectsLocationsSecrets({
-          parent: `projects/${project}/locations/us-central1`,
-          secretId: "alchemy-regional-probe",
-          body: { labels: { env: "probe" } },
+        secretmanager.getProjectsLocationsSecrets({
+          name: `projects/${project}/locations/us-central1/secrets/alchemy-missing-regional`,
         }),
       );
-      expect(["BadRequest", "Forbidden", "NotFound"]).toContain(error._tag);
-      yield* stack.destroy();
+      expect(error._tag).toEqual("NotFound");
     }).pipe(logLevel),
   { timeout: 60_000 },
 );

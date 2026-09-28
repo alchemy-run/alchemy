@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   desiredFqdns,
   destGroupNameOf,
   destGroupParent,
@@ -40,7 +39,7 @@ export type IapDestGroupProps = {
    * Region of the destination group (`us-central1`, …). Immutable —
    * changing it replaces the group. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -123,9 +122,13 @@ export class IapDestGroupNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (group: iap.TunnelDestGroup, project: string) => {
+const toAttrs = (
+  group: iap.TunnelDestGroup,
+  project: string,
+  region: string,
+) => {
   const name = group.name ?? "";
-  const parsed = parseDestGroupName(name, project);
+  const parsed = parseDestGroupName(name, project, region);
   return {
     name,
     destGroupId: parsed.destGroupId,
@@ -142,15 +145,17 @@ export const IapDestGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.destGroupId ?? output?.destGroupId,
         nextId: news.destGroupId,
         previousParent: normalizeLocation(
-          olds?.location ?? output?.location ?? DEFAULT_LOCATION,
+          olds?.location ?? output?.location,
+          env.region,
         ),
         nextParent:
           news.location !== undefined
-            ? normalizeLocation(news.location)
+            ? normalizeLocation(news.location, env.region)
             : undefined,
       });
     }),
@@ -158,7 +163,8 @@ export const IapDestGroupProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        olds?.location ?? output?.location ?? DEFAULT_LOCATION,
+        olds?.location ?? output?.location,
+        env.region,
       );
       const destGroupId = yield* toDestGroupId(
         id,
@@ -169,7 +175,7 @@ export const IapDestGroupProvider = () =>
         output?.name ?? destGroupNameOf(env.project, location, destGroupId);
       const existing = yield* getDestGroup(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedDestGroup(id, existing.fqdns))
         ? attrs
         : Unowned(attrs);
@@ -179,13 +185,14 @@ export const IapDestGroupProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const groups = yield* listOwnedDestGroups(env.project);
-        return groups.map((group) => toAttrs(group, env.project));
+        return groups.map((group) => toAttrs(group, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const destGroupId = yield* toDestGroupId(
         id,
@@ -229,7 +236,7 @@ export const IapDestGroupProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

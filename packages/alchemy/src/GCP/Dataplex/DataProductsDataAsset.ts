@@ -219,7 +219,10 @@ export const DataProductsDataAssetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const products = yield* listAlchemyDataProducts(env.project);
+        const products = yield* listAlchemyDataProducts(
+          env.project,
+          env.region,
+        );
         const pages = yield* Effect.forEach(
           products,
           (product) =>

@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworkConnectivityNotResolved,
   changedFields,
   collectPages,
@@ -214,16 +213,17 @@ const configIdOf = (parent: string) => lastSegment(parent);
 const toAttrs = (
   destination: networkconnectivity.Destination,
   project: string,
+  region: string,
 ) => {
   const name = destination.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   const parent = parentOfName(name, COLLECTION);
   return {
     name,
     destinationId: parsed.id,
     parent,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     multicloudDataTransferConfigId: configIdOf(parent),
     ipPrefix: destination.ipPrefix,
     endpoints: (destination.endpoints ?? []).map(toEndpoint),
@@ -300,7 +300,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -337,7 +337,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
         return nested
           .flat()
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -423,7 +423,7 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

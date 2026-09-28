@@ -9,12 +9,12 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import { listAlchemyReasoningEngines } from "./ReasoningEngine.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   encodeDescription,
   hasDescriptionOwnership,
@@ -47,7 +47,7 @@ export type ReasoningEnginesMemoryProps = {
   reasoningEngine: string;
   /**
    * Vertex AI location. Used when `reasoningEngine` is a bare id.
-   * Immutable. @default "us-central1"
+   * Immutable. @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -247,6 +247,7 @@ export const ReasoningEnginesMemoryProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.memoryId ?? output?.memoryId;
       const nextId = news.memoryId ?? previousId;
@@ -256,8 +257,12 @@ export const ReasoningEnginesMemoryProvider = () =>
       const nextParent = lastSegment(news.reasoningEngine);
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const scopeChanged =
         olds !== undefined && !jsonEqual(news.scope, olds.scope);
       const replace =
@@ -280,7 +285,10 @@ export const ReasoningEnginesMemoryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const parent = engineNameOf(
         env.project,
         location,
@@ -304,10 +312,10 @@ export const ReasoningEnginesMemoryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = yield* listAlchemyReasoningEngines(
-          env.project,
-          DEFAULT_LOCATION,
-        );
+        const engines = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listAlchemyReasoningEngines(env.project, location),
+        )).flat();
         const memories = yield* Effect.forEach(
           engines,
           (engine) =>
@@ -324,7 +332,10 @@ export const ReasoningEnginesMemoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = engineNameOf(env.project, location, news.reasoningEngine);
       const memoryId = yield* toPhysicalId(id, news.memoryId, output?.memoryId);
       const name = resourceName(parent, memoryId);

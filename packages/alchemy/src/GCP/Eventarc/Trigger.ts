@@ -21,7 +21,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_CONTENT_TYPE = "application/json";
 const MAX_NAME_LENGTH = 63;
 
@@ -164,7 +163,8 @@ export type TriggerProps = {
    * Eventarc location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the trigger. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -368,8 +368,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -385,7 +387,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, location: string, triggerId: string) =>
   `projects/${project}/locations/${location}/triggers/${triggerId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const triggersAt = parts.lastIndexOf("triggers");
   const locationsAt = parts.lastIndexOf("locations");
@@ -396,7 +398,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     triggerId:
       triggersAt >= 0 && parts[triggersAt + 1]
         ? parts[triggersAt + 1]!
@@ -574,9 +576,13 @@ const isNotFoundStatus = (error: eventarc.GoogleRpcStatus | undefined) =>
   error?.code === 5 ||
   (error?.message ?? "").toLowerCase().includes("not found");
 
-const toAttrs = (trigger: eventarc.Trigger, project: string) => {
+const toAttrs = (
+  trigger: eventarc.Trigger,
+  project: string,
+  region: string,
+) => {
   const name = trigger.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     triggerId: parsed.triggerId,
@@ -827,13 +833,18 @@ export const TriggerProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.triggerId ?? output?.triggerId;
       const nextId = news.triggerId ? rfc1035(news.triggerId) : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const project = output?.project ?? "";
       const previousChannel = olds?.channel ?? output?.channel ?? "";
       const nextChannel = news.channel ?? previousChannel;
@@ -874,12 +885,15 @@ export const TriggerProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const triggerId = yield* toId(id, olds?.triggerId, output?.triggerId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, triggerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -900,7 +914,7 @@ export const TriggerProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((trigger) => toAttrs(trigger, env.project)),
+            Stream.map((trigger) => toAttrs(trigger, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -909,7 +923,10 @@ export const TriggerProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const triggerId = yield* toId(id, news.triggerId, output?.triggerId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, triggerId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -1008,7 +1025,7 @@ export const TriggerProvider = () =>
       }
 
       current = yield* waitUntilHealthy(name);
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

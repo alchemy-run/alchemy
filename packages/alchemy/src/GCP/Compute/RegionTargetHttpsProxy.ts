@@ -16,8 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
-
 export type RegionTargetHttpsProxyProps = {
   /**
    * TargetHttpsProxy name (RFC1035, 1-63 characters). If omitted, a unique
@@ -29,7 +27,7 @@ export type RegionTargetHttpsProxyProps = {
    * Region the proxy lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -177,8 +175,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -265,7 +263,7 @@ const toAttrs = (proxy: compute.TargetHttpsProxy, project: string) => {
   return {
     targetHttpsProxyName: proxy.name ?? proxy.id ?? "",
     project,
-    region: normalizeRegion(proxy.region),
+    region: lastSegment(proxy.region).toLowerCase(),
     description: parsed.description,
     urlMap: proxy.urlMap ?? "",
     sslCertificates: [...(proxy.sslCertificates ?? [])],
@@ -360,11 +358,18 @@ export const RegionTargetHttpsProxyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previous =
         olds?.targetHttpsProxyName ?? output?.targetHttpsProxyName;
       const next = news.targetHttpsProxyName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       if (previousRegion !== nextRegion) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -381,7 +386,10 @@ export const RegionTargetHttpsProxyProvider = () =>
         olds?.targetHttpsProxyName,
         output?.targetHttpsProxyName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -425,7 +433,7 @@ export const RegionTargetHttpsProxyProvider = () =>
         news.targetHttpsProxyName,
         output?.targetHttpsProxyName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredUrlMap = toUrlMapRef(env.project, region, news.urlMap);
@@ -613,7 +621,7 @@ export const RegionTargetHttpsProxyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionTargetHttpsProxies({
           project: env.project,

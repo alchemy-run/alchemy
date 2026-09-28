@@ -63,7 +63,7 @@ export type BackendsDomainProps = {
   backend: string;
   /**
    * Region used when `backend` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -228,8 +228,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBackendsDomains({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "backends/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "backends/-", (parent) =>
     listLabeledPages(
       firebaseapphosting.listProjectsLocationsBackendsDomains.pages({
         parent,
@@ -257,9 +257,11 @@ export const BackendsDomainProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const previousParent =
         (olds?.backend ?? output?.backend)
@@ -289,7 +291,10 @@ export const BackendsDomainProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const domainId = yield* toDomainId(id, olds?.domainId, output?.domainId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const backend =
         output?.backend ??
         (olds?.backend
@@ -309,14 +314,17 @@ export const BackendsDomainProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const domainId = yield* toDomainId(id, news.domainId, output?.domainId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const backend = expandParent(
         news.backend,
         env.project,

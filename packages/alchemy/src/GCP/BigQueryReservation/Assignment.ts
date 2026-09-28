@@ -10,10 +10,9 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
-  DEFAULT_LOCATION,
   hasOwnershipMarker,
   lastSegment,
-  LIST_LOCATIONS,
+  listLocations,
   normalizeLocation,
   ownedByAlchemy,
   parentOf,
@@ -68,7 +67,7 @@ export type AssignmentProps = {
   /**
    * Location of the parent reservation. Used when `reservation` is a
    * bare id. Immutable — changing it replaces the assignment.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -164,7 +163,7 @@ const parseName = (name: string) => {
     return at >= 0 && parts[at + 1] ? parts[at + 1]! : "";
   };
   const reservationId = after("reservations");
-  const location = after("locations") || DEFAULT_LOCATION;
+  const location = after("locations");
   const project = after("projects");
   return {
     project,
@@ -288,15 +287,18 @@ export const AssignmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousReservation = olds?.reservation ?? output?.reservation;
       const previousAssignee = olds?.assignee ?? output?.assignee;
       const previousJobType = jobTypeOf(olds?.jobType ?? output?.jobType);
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const previousId = olds?.assignmentId ?? output?.assignmentId;
       const nextJobType = jobTypeOf(news.jobType ?? previousJobType);
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       if (
         (previousReservation !== undefined &&
           news.reservation !== previousReservation) ||
@@ -316,7 +318,9 @@ export const AssignmentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const parent = reservationParent(
         env.project,
         location,
@@ -348,7 +352,7 @@ export const AssignmentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(["-", ...LIST_LOCATIONS])),
+          listLocations(env.region),
           (location) =>
             listAt(`${parentOf(env.project, location)}/reservations/-`).pipe(
               Effect.map((assignments) =>
@@ -370,7 +374,9 @@ export const AssignmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const parent = reservationParent(env.project, location, news.reservation);
       const assignmentId = yield* toResourceId(
         id,

@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 
 export class RegistryNotResolved extends Data.TaggedError(
@@ -32,10 +31,16 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -46,7 +51,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -364,9 +369,10 @@ export type ArtifactAttrs = {
 export const artifactAttrs = (
   artifact: registry.Artifact,
   project: string,
+  region: string,
 ): ArtifactAttrs => {
   const name = artifact.name ?? "";
-  const parsed = parseResourceName(name, "artifacts");
+  const parsed = parseResourceName(name, "artifacts", region);
   return {
     name,
     artifactId: parsed.id,
@@ -535,9 +541,10 @@ export const ownedArtifact = (
   id: string,
   artifact: registry.Artifact,
   project: string,
+  region: string,
 ) =>
   Effect.gen(function* () {
-    const attrs = artifactAttrs(artifact, project);
+    const attrs = artifactAttrs(artifact, project, region);
     return (yield* hasAlchemyLabels(id, tagRecord(artifact.labels)))
       ? attrs
       : undefined;

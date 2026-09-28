@@ -10,7 +10,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DatacatalogNotResolved,
-  DEFAULT_LOCATION,
   collectPages,
   emptyOnMissing,
   encodeOwnership,
@@ -42,7 +41,7 @@ export type TaxonomiesPolicyTagProps = {
   taxonomy: string;
   /**
    * Location used when `taxonomy` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -120,9 +119,10 @@ const taxonomyOf = (taxonomy: string, project: string, location: string) =>
 const toAttrs = (
   tag: datacatalog.GoogleCloudDatacatalogV1PolicyTag,
   project: string,
+  region: string,
 ) => {
   const name = tag.name ?? "";
-  const parsed = parseName(name, "policyTags");
+  const parsed = parseName(name, "policyTags", region);
   const ownership = parseOwnership(tag.description);
   return {
     name,
@@ -197,11 +197,15 @@ export const TaxonomiesPolicyTagProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousParent: olds?.taxonomy ?? output?.taxonomy,
         nextParent: taxonomyOf(news.taxonomy, env.project, location),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         extra:
           (olds?.parentPolicyTag ?? output?.parentPolicyTag) !== undefined &&
@@ -212,14 +216,17 @@ export const TaxonomiesPolicyTagProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const taxonomy =
         olds?.taxonomy !== undefined
           ? taxonomyOf(olds.taxonomy, env.project, location)
           : (output?.taxonomy ?? "");
       const existing = yield* observe(id, output?.name, taxonomy);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -228,7 +235,11 @@ export const TaxonomiesPolicyTagProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const taxonomies = yield* listAtLocation(env.project, listTaxonomiesAt);
+        const taxonomies = yield* listAtLocation(
+          env.project,
+          env.region,
+          listTaxonomiesAt,
+        );
         const groups = yield* Effect.forEach(
           taxonomies.filter((item) => (item.name ?? "").length > 0),
           (taxonomy) => listPolicyTagsAt(taxonomy.name!),
@@ -237,13 +248,14 @@ export const TaxonomiesPolicyTagProvider = () =>
         return groups
           .flat()
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const taxonomy = taxonomyOf(news.taxonomy, env.project, location);
       const ownership = yield* createInternalLabels(id);
@@ -299,7 +311,7 @@ export const TaxonomiesPolicyTagProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

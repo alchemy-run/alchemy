@@ -56,7 +56,8 @@ export type MessageBusProps = {
    * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
    * — changing it replaces the bus. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -162,9 +163,9 @@ export type MessageBus = Resource<
  */
 export const MessageBus = Resource<MessageBus>("GCP.Eventarc.MessageBus");
 
-const toAttrs = (bus: eventarc.MessageBus, project: string) => {
+const toAttrs = (bus: eventarc.MessageBus, project: string, region: string) => {
   const name = bus.name ?? "";
-  const parsed = parseName(name, COLLECTION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     messageBusId: parsed.id,
@@ -200,15 +201,18 @@ export const MessageBusProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.messageBusId ?? output?.messageBusId;
       const nextId = news.messageBusId
         ? rfc1035(news.messageBusId, "message-bus")
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -229,13 +233,16 @@ export const MessageBusProvider = () =>
         output?.messageBusId,
         "message-bus",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, messageBusId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -253,7 +260,7 @@ export const MessageBusProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -264,7 +271,10 @@ export const MessageBusProvider = () =>
         output?.messageBusId,
         "message-bus",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(
         env.project,
         location,
@@ -356,7 +366,7 @@ export const MessageBusProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

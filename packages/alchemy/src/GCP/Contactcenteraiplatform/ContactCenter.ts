@@ -17,7 +17,6 @@ import type { Providers } from "../Providers.ts";
 import {
   ContactCenterNotResolved,
   DEFAULT_INSTANCE_SIZE,
-  DEFAULT_LOCATION,
   fingerprint,
   isTerminated,
   listOwnedContactCenters,
@@ -51,7 +50,7 @@ export type ContactCenterProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -262,9 +261,13 @@ const channelBody = (news: ContactCenterProps) => {
   };
 };
 
-const toAttrs = (item: ccaip.ContactCenter, project: string) => {
+const toAttrs = (
+  item: ccaip.ContactCenter,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     contactCenterId: parsed.id,
@@ -324,11 +327,14 @@ export const ContactCenterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousSize =
         olds?.instanceConfig?.instanceSize ??
@@ -362,7 +368,10 @@ export const ContactCenterProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const contactCenterId = yield* toPhysicalId(
         id,
         olds?.contactCenterId,
@@ -374,7 +383,7 @@ export const ContactCenterProvider = () =>
       if (existing === undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -385,16 +394,18 @@ export const ContactCenterProvider = () =>
         const env = yield* GcpEnvironment.current;
         const items: ccaip.ContactCenter[] = yield* listOwnedContactCenters(
           env.project,
+          env.region,
         );
         return items
           .filter((item) => !isTerminated(item.state))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const contactCenterId = yield* toPhysicalId(
         id,
@@ -546,7 +557,7 @@ export const ContactCenterProvider = () =>
         live = yield* waitUntilExists(getLive(currentName), currentName);
       }
 
-      return toAttrs(live, env.project);
+      return toAttrs(live, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -19,12 +19,12 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   compact,
-  DEFAULT_LOCATION,
   normalizeLocation,
   parentOf,
   parseName,
   stableJson,
   toPhysicalId,
+  listLocations,
 } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 
@@ -44,7 +44,7 @@ export type ReasoningEngineProps = {
   reasoningEngineId?: string;
   /**
    * Vertex AI location. Immutable — changing it replaces the engine.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -247,6 +247,7 @@ export const ReasoningEngineProvider = () =>
     stables: ["name", "reasoningEngineId", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.reasoningEngineId ?? output?.reasoningEngineId;
       const nextId = news.reasoningEngineId ?? previousId;
@@ -256,8 +257,12 @@ export const ReasoningEngineProvider = () =>
         nextId !== previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const encryptionChanged =
         (news.encryptionSpec?.kmsKeyName ?? "") !==
         (olds?.encryptionSpec?.kmsKeyName ?? "");
@@ -273,7 +278,10 @@ export const ReasoningEngineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         (olds?.reasoningEngineId !== undefined
@@ -292,7 +300,10 @@ export const ReasoningEngineProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = yield* listAt(parentOf(env.project, DEFAULT_LOCATION));
+        const engines = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listAt(parentOf(env.project, location)),
+        )).flat();
         return engines
           .filter((engine) =>
             Object.keys(engine.labels ?? {}).some((key) =>
@@ -304,7 +315,10 @@ export const ReasoningEngineProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = parentOf(env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),

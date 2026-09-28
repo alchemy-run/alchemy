@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "US-CENTRAL1";
 const MAX_DATASET_ID_LENGTH = 1024;
 
 export type DatasetAccess = bigquery.DatasetAccessItem;
@@ -43,7 +42,7 @@ export type DatasetProps = {
   /**
    * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
    * Immutable — changing it replaces the dataset.
-   * @default "US-CENTRAL1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -248,6 +247,7 @@ const toId = (id: string, datasetId: string | undefined, existing?: string) =>
 const toAttrs = (
   dataset: bigquery.Dataset | bigquery.DatasetListDatasetsItem,
   fallbackProject: string,
+  region: string,
 ) => {
   const datasetId = datasetIdOf(dataset);
   const project = projectOf(dataset, fallbackProject);
@@ -257,7 +257,7 @@ const toAttrs = (
     datasetId,
     project,
     id: full.id ?? `${project}:${datasetId}`,
-    location: dataset.location ?? DEFAULT_LOCATION,
+    location: dataset.location ?? region,
     labels: userLabels(dataset.labels),
     description: full.description,
     friendlyName: dataset.friendlyName,
@@ -304,9 +304,10 @@ export const DatasetProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = news.location ?? DEFAULT_LOCATION;
+      const nextLocation = news.location;
       if (
         previousLocation !== undefined &&
+        nextLocation !== undefined &&
         previousLocation.toUpperCase() !== nextLocation.toUpperCase()
       ) {
         const nextId = news.datasetId ?? previousId;
@@ -324,7 +325,7 @@ export const DatasetProvider = () =>
       const project = output?.project ?? env.project;
       const existing = yield* getById(project, datasetId);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, project);
+      const attrs = toAttrs(existing, project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -346,7 +347,7 @@ export const DatasetProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((dataset) => toAttrs(dataset, env.project)),
+            Stream.map((dataset) => toAttrs(dataset, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -356,7 +357,7 @@ export const DatasetProvider = () =>
       const env = yield* GcpEnvironment.current;
       const datasetId = yield* toId(id, news.datasetId, output?.datasetId);
       const project = output?.project ?? env.project;
-      const location = news.location ?? DEFAULT_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -511,7 +512,7 @@ export const DatasetProvider = () =>
         });
       }
 
-      return toAttrs(current, project);
+      return toAttrs(current, project, env.region);
     }),
 
     delete: Effect.fn(function* ({ olds, output, force }) {

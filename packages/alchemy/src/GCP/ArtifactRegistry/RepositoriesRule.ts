@@ -8,7 +8,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   encodeOwnership,
   expandRepository,
@@ -52,7 +51,7 @@ export type RepositoriesRuleProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the repository's location, else the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -204,9 +203,10 @@ const toUserCondition = (
 const toAttrs = (
   rule: artifactregistry.GoogleDevtoolsArtifactregistryV1Rule,
   project: string,
+  region: string,
 ) => {
   const name = rule.name ?? "";
-  const parsed = parseName(name, "rules");
+  const parsed = parseName(name, "rules", region);
   return {
     name,
     ruleId: parsed.id,
@@ -231,14 +231,17 @@ export const RepositoriesRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.ruleId ?? output?.ruleId;
       const nextId = news.ruleId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ??
           locationFromRepository(news.repository, previousLocation),
+        env.region,
       );
       return replaceOnIdentity({
         previousId,
@@ -257,8 +260,9 @@ export const RepositoriesRuleProvider = () =>
           output?.location ??
           locationFromRepository(
             olds?.repository ?? output?.repository,
-            DEFAULT_LOCATION,
+            env.region,
           ),
+        env.region,
       );
       const repository = expandRepository(
         olds?.repository ?? output?.repository ?? "",
@@ -274,7 +278,7 @@ export const RepositoriesRuleProvider = () =>
       const name = output?.name ?? resourceNameOf(repository, ruleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.condition?.title);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -286,7 +290,7 @@ export const RepositoriesRuleProvider = () =>
         const rules = yield* listChildResources(repos, listRules);
         return rules
           .filter((rule) => hasOwnershipMarker(rule.condition?.title))
-          .map((rule) => toAttrs(rule, env.project));
+          .map((rule) => toAttrs(rule, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -294,7 +298,8 @@ export const RepositoriesRuleProvider = () =>
       const location = normalizeLocation(
         news.location ??
           output?.location ??
-          locationFromRepository(news.repository, DEFAULT_LOCATION),
+          locationFromRepository(news.repository, env.region),
+        env.region,
       );
       const repository = expandRepository(
         news.repository,
@@ -364,7 +369,7 @@ export const RepositoriesRuleProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -48,7 +48,7 @@ export type SourcesMigratingVmProps = {
   source: string;
   /**
    * Region used when `source` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -184,9 +184,13 @@ const userDisksTarget = (
   };
 };
 
-const toAttrs = (migrating: vm.MigratingVm, project: string) => {
+const toAttrs = (
+  migrating: vm.MigratingVm,
+  project: string,
+  region: string,
+) => {
   const name = migrating.name ?? "";
-  const parsed = parseName(name, "migratingVms");
+  const parsed = parseName(name, "migratingVms", region);
   return {
     name,
     migratingVmId: parsed.id,
@@ -242,6 +246,7 @@ export const SourcesMigratingVmProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource = olds?.source ?? output?.source;
       const previousVm = olds?.sourceVmId ?? output?.sourceVmId;
       const nextVm = news.sourceVmId ?? previousVm;
@@ -249,9 +254,13 @@ export const SourcesMigratingVmProvider = () =>
         previousId: olds?.migratingVmId ?? output?.migratingVmId,
         nextId:
           news.migratingVmId ?? olds?.migratingVmId ?? output?.migratingVmId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: previousSource,
         nextParent: news.source ?? previousSource,
@@ -261,7 +270,10 @@ export const SourcesMigratingVmProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const migratingVmId = yield* toPhysicalId(
         id,
         olds?.migratingVmId,
@@ -277,7 +289,7 @@ export const SourcesMigratingVmProvider = () =>
         (source.length > 0 ? resourceName(source, migratingVmId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -286,15 +298,22 @@ export const SourcesMigratingVmProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* forEachSource(env.project, listChildren);
+        const items = yield* forEachSource(
+          env.project,
+          listChildren,
+          env.region,
+        );
         return items
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const source = sourceOf(news.source, env.project, location);
       const migratingVmId = yield* toPhysicalId(
         id,
@@ -385,7 +404,7 @@ export const SourcesMigratingVmProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

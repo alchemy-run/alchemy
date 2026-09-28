@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 /** CEL expression used to validate a certificate Subject / SAN. */
@@ -150,7 +149,7 @@ export type CertificateTemplateProps = {
    * Location of the template (`us-central1`, …). Immutable — changing it
    * replaces the template. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -320,8 +319,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const resourceName = (
   project: string,
@@ -342,9 +341,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     certificateTemplateId:
       templatesAt >= 0 && parts[templatesAt + 1]
         ? parts[templatesAt + 1]!
@@ -700,15 +697,16 @@ export const CertificateTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId =
         olds?.certificateTemplateId ?? output?.certificateTemplateId;
       const nextId = news.certificateTemplateId ?? previousId;
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
+        news.location ?? olds?.location ?? output?.location ?? env.region,
       );
 
       const replace =
@@ -728,7 +726,9 @@ export const CertificateTemplateProvider = () =>
         olds?.certificateTemplateId,
         output?.certificateTemplateId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, certificateTemplateId);
@@ -753,7 +753,9 @@ export const CertificateTemplateProvider = () =>
         news.certificateTemplateId,
         output?.certificateTemplateId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, certificateTemplateId);
       const desiredLabels = {
         ...toLabels(news.labels),

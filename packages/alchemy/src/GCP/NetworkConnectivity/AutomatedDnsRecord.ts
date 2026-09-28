@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworkConnectivityNotResolved,
   collectPages,
   hasAlchemyLabelKeys,
@@ -60,7 +59,8 @@ export type AutomatedDnsRecordProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * record. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -251,14 +251,15 @@ const lastNetwork = (network: string | undefined) =>
 const toAttrs = (
   record: networkconnectivity.AutomatedDnsRecord,
   project: string,
+  region: string,
 ) => {
   const name = record.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     automatedDnsRecordId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     serviceClass: record.serviceClass,
     creationMode: record.creationMode,
     recordType: record.recordType,
@@ -296,6 +297,7 @@ export const AutomatedDnsRecordProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.automatedDnsRecordId ?? output?.automatedDnsRecordId;
       const nextId = news.automatedDnsRecordId
@@ -303,11 +305,11 @@ export const AutomatedDnsRecordProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const previousKey = identityKey({
         serviceClass: olds?.serviceClass ?? output?.serviceClass,
@@ -349,14 +351,14 @@ export const AutomatedDnsRecordProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, automatedDnsRecordId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -374,7 +376,7 @@ export const AutomatedDnsRecordProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -387,7 +389,7 @@ export const AutomatedDnsRecordProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(env.project, location, automatedDnsRecordId);
       const desiredLabels = {
@@ -443,7 +445,7 @@ export const AutomatedDnsRecordProvider = () =>
         return yield* new NetworkConnectivityNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {

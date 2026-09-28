@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
-  DEFAULT_LOCATION,
   VmwareengineNotResolved,
   changedFields,
   collectPages,
@@ -59,7 +58,7 @@ export type VmwareEngineNetworkProps = {
    * Location. `STANDARD` networks are global (`global`). `LEGACY`
    * networks are regional (`us-central1`). Immutable — changing it
    * replaces the network. `US-CENTRAL1` is accepted and normalized.
-   * @default "global" (`STANDARD`) or "us-central1" (`LEGACY`)
+   * @default "global" (`STANDARD`) or the stack's GCP region (`LEGACY`)
    */
   location?: string;
   /**
@@ -171,8 +170,8 @@ const resourceName = (project: string, location: string, networkId: string) =>
 const typeOf = (value: string | undefined) =>
   (value ?? DEFAULT_TYPE).toUpperCase();
 
-const fallbackLocation = (type: string) =>
-  type === "LEGACY" ? DEFAULT_LOCATION : DEFAULT_GLOBAL;
+const fallbackLocation = (type: string, region: string) =>
+  type === "LEGACY" ? region : DEFAULT_GLOBAL;
 
 const toId = (
   id: string,
@@ -242,15 +241,16 @@ export const VmwareEngineNetworkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? olds?.type ?? output?.type);
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        fallbackLocation(previousType),
+        fallbackLocation(previousType, env.region),
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        fallbackLocation(nextType),
+        fallbackLocation(nextType, env.region),
       );
       const previousId =
         olds?.vmwareEngineNetworkId ?? output?.vmwareEngineNetworkId;
@@ -273,7 +273,7 @@ export const VmwareEngineNetworkProvider = () =>
       const type = typeOf(olds?.type ?? output?.type);
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        fallbackLocation(type),
+        fallbackLocation(type, env.region),
       );
       const networkId = yield* toId(
         id,
@@ -294,14 +294,17 @@ export const VmwareEngineNetworkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsVmwareEngineNetworks.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.vmwareEngineNetworks,
-          ),
+        const items = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsVmwareEngineNetworks.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.vmwareEngineNetworks,
+            ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
@@ -313,7 +316,7 @@ export const VmwareEngineNetworkProvider = () =>
       const type = typeOf(news.type ?? output?.type);
       const location = normalizeLocation(
         news.location ?? output?.location,
-        fallbackLocation(type),
+        fallbackLocation(type, env.region),
       );
       const networkId = yield* toId(
         id,

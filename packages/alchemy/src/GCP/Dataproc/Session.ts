@@ -38,7 +38,7 @@ export type SessionProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * session. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -168,7 +168,7 @@ const toAttrs = (
   location: string,
 ) => {
   const name = session.name ?? "";
-  const parsed = parseResourceName(name, "sessions");
+  const parsed = parseResourceName(name, "sessions", location);
   return {
     name,
     sessionId: parsed.id,
@@ -259,13 +259,16 @@ export const SessionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.sessionId ?? output?.sessionId;
       const nextId = news.sessionId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -286,7 +289,10 @@ export const SessionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const sessionId = yield* toPhysicalId(
         id,
         olds?.sessionId,
@@ -308,7 +314,7 @@ export const SessionProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          [...new Set([env.region, ...LIST_LOCATIONS])],
           (location) => listLocation(env.project, location),
           { concurrency: 4 },
         );
@@ -317,7 +323,10 @@ export const SessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const sessionId = yield* toPhysicalId(
         id,
         news.sessionId,

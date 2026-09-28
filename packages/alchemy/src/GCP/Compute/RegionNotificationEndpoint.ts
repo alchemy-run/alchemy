@@ -16,8 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
-
 export type RegionNotificationEndpointGrpcSettings = {
   /**
    * gRPCLB DNS name of the notification service
@@ -55,7 +53,7 @@ export type RegionNotificationEndpointProps = {
    * Region the endpoint lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -168,8 +166,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -230,7 +228,7 @@ const toAttrs = (endpoint: compute.NotificationEndpoint, project: string) => {
   return {
     notificationEndpointName: endpoint.name ?? endpoint.id ?? "",
     project,
-    region: normalizeRegion(endpoint.region),
+    region: lastSegment(endpoint.region).toLowerCase(),
     description: parsed.description,
     grpcEndpoint: endpoint.grpcSettings?.endpoint,
     retryDurationSec: endpoint.grpcSettings?.retryDurationSec,
@@ -367,11 +365,18 @@ export const RegionNotificationEndpointProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.notificationEndpointName ?? output?.notificationEndpointName;
       const nextName = news.notificationEndpointName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
       const nameChanged =
         previousName !== undefined &&
@@ -397,7 +402,10 @@ export const RegionNotificationEndpointProvider = () =>
         olds?.notificationEndpointName,
         output?.notificationEndpointName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -435,7 +443,7 @@ export const RegionNotificationEndpointProvider = () =>
         news.notificationEndpointName,
         output?.notificationEndpointName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -501,7 +509,7 @@ export const RegionNotificationEndpointProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionNotificationEndpoints({
           project: env.project,

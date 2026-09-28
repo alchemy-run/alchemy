@@ -13,7 +13,6 @@ import {
   toLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const VMWARE_NAME_LENGTH = 40;
 
@@ -87,11 +86,13 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
-export const parentOf = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const parentOf = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const toPhysicalId = (
   id: string,
@@ -114,7 +115,11 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -125,7 +130,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -506,25 +511,27 @@ export const collectPages = <
 
 export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
       (error) => error._tag === "NotFound" || error._tag === "Forbidden",
-      () => list(`projects/${project}/locations/${DEFAULT_LOCATION}`),
+      () => list(`projects/${project}/locations/${region}`),
     ),
     Effect.orElseSucceed(() => [] as A[]),
   );
 
 export const listAtNested = <A, E extends { readonly _tag: string }, R>(
   project: string,
+  region: string,
   nested: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-/${nested}`).pipe(
     Effect.catchIf(
       (error) => error._tag === "NotFound" || error._tag === "Forbidden",
-      () => list(`projects/${project}/locations/${DEFAULT_LOCATION}/${nested}`),
+      () => list(`projects/${project}/locations/${region}/${nested}`),
     ),
     Effect.orElseSucceed(() => [] as A[]),
   );

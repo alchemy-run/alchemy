@@ -126,7 +126,7 @@ export type CustomTargetTypeProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the type. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -305,8 +305,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsCustomTargetTypes({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       clouddeploy.listProjectsLocationsCustomTargetTypes.pages({
         parent,
@@ -330,15 +330,18 @@ export const CustomTargetTypeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.customTargetTypeId ?? output?.customTargetTypeId,
         nextId:
           news.customTargetTypeId ??
           olds?.customTargetTypeId ??
           output?.customTargetTypeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
       });
     }),
@@ -351,7 +354,9 @@ export const CustomTargetTypeProvider = () =>
         output?.customTargetTypeId,
         "customtargettype",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, customTargetTypeId);
       const existing = yield* getByName(name);
@@ -365,7 +370,7 @@ export const CustomTargetTypeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -377,7 +382,9 @@ export const CustomTargetTypeProvider = () =>
         output?.customTargetTypeId,
         "customtargettype",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, customTargetTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),

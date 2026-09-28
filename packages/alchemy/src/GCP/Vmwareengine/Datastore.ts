@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   VmwareengineNotResolved,
   changedFields,
   collectPages,
@@ -69,7 +68,8 @@ export type DatastoreProps = {
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the datastore. `US-CENTRAL1` is accepted and normalized.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -186,9 +186,13 @@ const nfsOf = (
   };
 };
 
-const toAttrs = (item: vmwareengine.Datastore, project: string) => {
+const toAttrs = (
+  item: vmwareengine.Datastore,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_LOCATION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -224,6 +228,7 @@ export const DatastoreProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.datastoreId ?? output?.datastoreId,
         nextId: news.datastoreId
@@ -231,11 +236,11 @@ export const DatastoreProvider = () =>
           : (olds?.datastoreId ?? output?.datastoreId),
         previousLocation: normalizeLocation(
           olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         extra: !sameJson(news.nfsDatastore, olds?.nfsDatastore),
       });
@@ -251,13 +256,13 @@ export const DatastoreProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, datastoreId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -265,18 +270,21 @@ export const DatastoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsDatastores.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.datastores,
-          ),
+        const items = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsDatastores.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.datastores,
+            ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -289,7 +297,7 @@ export const DatastoreProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name = resourceName(env.project, location, datastoreId);
       const ownership = yield* createInternalLabels(id);
@@ -361,7 +369,7 @@ export const DatastoreProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

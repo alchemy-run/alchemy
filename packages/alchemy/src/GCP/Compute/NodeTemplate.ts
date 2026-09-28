@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type NodeTemplateCpuOvercommitType =
@@ -40,7 +39,7 @@ export type NodeTemplateProps = {
   /**
    * Region the template lives in. Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -191,8 +190,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -263,7 +262,7 @@ const toAttrs = (
   return {
     nodeTemplateName: template.name ?? "",
     project,
-    region: normalizeRegion(template.region),
+    region: lastSegment(template.region).toLowerCase(),
     description: parsed.description,
     nodeType: template.nodeType,
     nodeTypeFlexibility: template.nodeTypeFlexibility,
@@ -420,14 +419,21 @@ export const NodeTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.nodeTemplateName ?? output?.nodeTemplateName;
       const nextName = news.nodeTemplateName ?? previousName;
       const nameChanged =
         previousName !== undefined &&
         nextName !== undefined &&
         previousName !== nextName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
 
       const previousType = olds?.nodeType ?? output?.nodeType ?? "";
       const nextType = news.nodeType ?? previousType;
@@ -476,7 +482,10 @@ export const NodeTemplateProvider = () =>
         olds?.nodeTemplateName,
         output?.nodeTemplateName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, nodeTemplateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -510,7 +519,7 @@ export const NodeTemplateProvider = () =>
         news.nodeTemplateName,
         output?.nodeTemplateName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -555,7 +564,7 @@ export const NodeTemplateProvider = () =>
       if (!output.nodeTemplateName) return;
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteNodeTemplates({
           project,

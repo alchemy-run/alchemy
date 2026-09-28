@@ -17,7 +17,6 @@ import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ADMIN,
   DEFAULT_NETWORK,
-  DEFAULT_REGION,
   domainNameOf,
   fieldMask,
   globalParent,
@@ -57,7 +56,8 @@ export type DomainProps = {
    * Regions where domain controllers are provisioned (`us-central1`,
    * `us-east4`, …). Up to 4. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default ["us-central1"]
+   * @default [the stack's GCP region] (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   locations?: string[];
   /**
@@ -172,8 +172,10 @@ export const Domain = Resource<Domain>("GCP.Managedidentities.Domain");
 const resourceName = (project: string, domainName: string) =>
   `${globalParent(project)}/domains/${domainName}`;
 
-const locationsOf = (values: readonly string[] | undefined) =>
-  (values ?? [DEFAULT_REGION]).map(normalizeLocation);
+const locationsOf = (
+  values: readonly string[] | undefined,
+  defaultLocation: string,
+) => (values ?? [defaultLocation]).map(normalizeLocation);
 
 const networksOf = (values: readonly string[] | undefined, project: string) =>
   (values ?? [DEFAULT_NETWORK]).map((value) => networkOf(value, project));
@@ -269,7 +271,10 @@ export const DomainProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const locations = locationsOf(news.locations ?? output?.locations);
+      const locations = locationsOf(
+        news.locations ?? output?.locations,
+        env.region,
+      );
       const authorizedNetworks = networksOf(
         news.authorizedNetworks ?? output?.authorizedNetworks,
         env.project,

@@ -21,7 +21,6 @@ import type {
   TargetTcpProxyProxyHeader,
 } from "./TargetTcpProxy.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_PROXY_HEADER: TargetTcpProxyProxyHeader = "NONE";
 
 export type RegionTargetTcpProxyProps = {
@@ -35,7 +34,7 @@ export type RegionTargetTcpProxyProps = {
    * Region the proxy lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -169,8 +168,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -230,7 +229,7 @@ const toAttrs = (proxy: compute.TargetTcpProxy, project: string) => {
   return {
     targetTcpProxyName: proxy.name ?? proxy.id ?? "",
     project,
-    region: normalizeRegion(proxy.region),
+    region: lastSegment(proxy.region).toLowerCase(),
     description: parsed.description,
     service: proxy.service ?? "",
     proxyHeader: proxy.proxyHeader,
@@ -374,10 +373,17 @@ export const RegionTargetTcpProxyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previous = olds?.targetTcpProxyName ?? output?.targetTcpProxyName;
       const next = news.targetTcpProxyName ?? previous;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
       const nameChanged =
         previous !== undefined && next !== undefined && previous !== next;
@@ -401,7 +407,10 @@ export const RegionTargetTcpProxyProvider = () =>
         olds?.targetTcpProxyName,
         output?.targetTcpProxyName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -445,7 +454,7 @@ export const RegionTargetTcpProxyProvider = () =>
         news.targetTcpProxyName,
         output?.targetTcpProxyName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredService = toBackendServiceRef(
@@ -543,7 +552,7 @@ export const RegionTargetTcpProxyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionTargetTcpProxies({
           project: env.project,

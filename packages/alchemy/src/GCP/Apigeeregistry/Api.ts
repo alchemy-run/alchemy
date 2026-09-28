@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   annotationsOf,
   hasAlchemyLabelMap,
   ignoreGone,
@@ -42,7 +41,7 @@ export type ApiProps = {
   apiId?: string;
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the API.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -145,9 +144,9 @@ export const Api = Resource<Api>("GCP.Apigeeregistry.Api");
 const resourceName = (project: string, location: string, apiId: string) =>
   `${locationParent(project, location)}/apis/${apiId}`;
 
-const toAttrs = (api: registry.Api, project: string) => {
+const toAttrs = (api: registry.Api, project: string, region: string) => {
   const name = api.name ?? "";
-  const parsed = parseResourceName(name, "apis");
+  const parsed = parseResourceName(name, "apis", region);
   return {
     name,
     apiId: parsed.id,
@@ -173,24 +172,32 @@ export const ApiProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.apiId ?? output?.apiId,
         nextId: news.apiId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const apiId = yield* toPhysicalId(id, olds?.apiId, output?.apiId);
       const name = output?.name ?? resourceName(env.project, location, apiId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -199,17 +206,18 @@ export const ApiProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listApis(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const items = yield* listApis(locationParent(env.project, env.region));
         return items
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const apiId = yield* toPhysicalId(id, news.apiId, output?.apiId);
       const name = output?.name ?? resourceName(env.project, location, apiId);
@@ -300,7 +308,7 @@ export const ApiProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

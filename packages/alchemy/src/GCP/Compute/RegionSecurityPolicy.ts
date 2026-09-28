@@ -31,7 +31,6 @@ import type {
 } from "./SecurityPolicy.ts";
 
 const DEFAULT_TYPE = "CLOUD_ARMOR";
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_RULE_PRIORITY = 2147483647;
 const MAX_NAME_LENGTH = 63;
 
@@ -46,7 +45,7 @@ export type RegionSecurityPolicyProps = {
    * Region the policy lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -212,8 +211,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -363,7 +362,7 @@ const desiredRules = (
 const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
   securityPolicyName: policy.name ?? policy.id ?? "",
   project,
-  region: normalizeRegion(policy.region),
+  region: lastSegment(policy.region).toLowerCase(),
   type: typeOf(policy.type),
   description: policy.description,
   labels: userLabels(policy.labels),
@@ -657,6 +656,7 @@ export const RegionSecurityPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName =
         olds?.securityPolicyName ?? output?.securityPolicyName;
@@ -666,8 +666,14 @@ export const RegionSecurityPolicyProvider = () =>
         nextName !== undefined &&
         previousName !== nextName;
 
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const previousType = typeOf(olds?.type ?? output?.type);
@@ -690,7 +696,10 @@ export const RegionSecurityPolicyProvider = () =>
         olds?.securityPolicyName,
         output?.securityPolicyName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -735,7 +744,7 @@ export const RegionSecurityPolicyProvider = () =>
         news.securityPolicyName,
         output?.securityPolicyName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -889,7 +898,7 @@ export const RegionSecurityPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteRegionSecurityPolicies({
           project,

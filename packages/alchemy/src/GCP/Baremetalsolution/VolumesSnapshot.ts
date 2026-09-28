@@ -33,7 +33,7 @@ export type VolumesSnapshotProps = {
    * Region used when `volume` is a bare id. Immutable — changing it
    * replaces the snapshot. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -119,9 +119,10 @@ const resourceName = (volume: string, snapshotId: string) =>
 const toAttrs = (
   snapshot: baremetalsolution.VolumeSnapshot,
   project: string,
+  region: string,
 ) => {
   const name = snapshot.name ?? "";
-  const parsed = parseName(name, "snapshots");
+  const parsed = parseName(name, "snapshots", region);
   const ownership = parseOwnership(snapshot.description);
   return {
     name,
@@ -163,9 +164,11 @@ export const VolumesSnapshotProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousVolume = volumeOf(
         olds?.volume ?? output?.volume ?? "",
@@ -189,7 +192,10 @@ export const VolumesSnapshotProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const volumeHint = olds?.volume ?? output?.volume ?? "";
       if (!output?.name && volumeHint.length === 0) return undefined;
       const volume = volumeOf(volumeHint, env.project, location);
@@ -200,7 +206,7 @@ export const VolumesSnapshotProvider = () =>
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -208,15 +214,18 @@ export const VolumesSnapshotProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listVolumeSnapshots(env.project);
+        const items = yield* listVolumeSnapshots(env.project, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const locationHint = normalizeLocation(news.location ?? output?.location);
+      const locationHint = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const volume = volumeOf(news.volume, env.project, locationHint);
       const snapshotId = news.snapshotId ?? output?.snapshotId;
       const name =
@@ -246,7 +255,7 @@ export const VolumesSnapshotProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

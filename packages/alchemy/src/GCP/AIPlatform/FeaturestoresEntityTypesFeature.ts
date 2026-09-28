@@ -15,7 +15,7 @@ import {
   createInternalLabels,
   hasAlchemyPrefix,
   labelsDiffer,
-  LIST_LOCATIONS,
+  listLocations,
   locationOf,
   lastSegment,
   projectOf,
@@ -319,7 +319,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const stores = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          listLocations(env.region),
           (location) =>
             listFeaturestores(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },

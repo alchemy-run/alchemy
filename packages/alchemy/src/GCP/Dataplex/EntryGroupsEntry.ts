@@ -76,7 +76,7 @@ export type EntryGroupsEntryProps = {
   /**
    * Region used when `entryGroup` is a bare id. Immutable — changing it
    * replaces the entry.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -190,11 +190,12 @@ const resolveParent = (
   project: string,
   entryGroup: string,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   const parent = expandParent(
     entryGroup,
     project,
-    normalizeLocation(location),
+    normalizeLocation(location, defaultLocation),
     "entryGroups",
   );
   const parsed = parseName(`${parent}/entries/_`, "entries");
@@ -316,6 +317,7 @@ export const EntryGroupsEntryProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.entryType ?? output?.entryType ?? "";
       const nextType = news.entryType ?? previousType;
       const previousParentEntry =
@@ -324,9 +326,13 @@ export const EntryGroupsEntryProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.entryId ?? output?.entryId,
         nextId: news.entryId ?? olds?.entryId ?? output?.entryId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.entryGroup ?? output?.entryGroup,
         nextParent: news.entryGroup ?? olds?.entryGroup ?? output?.entryGroup,
@@ -341,6 +347,7 @@ export const EntryGroupsEntryProvider = () =>
         env.project,
         olds?.entryGroup ?? output?.entryGroup ?? "",
         olds?.location ?? output?.location,
+        env.region,
       );
       const entryId = yield* toEntryId(id, olds?.entryId, output?.entryId);
       const name = output?.name ?? resourceName(resolved.parent, entryId);
@@ -358,18 +365,21 @@ export const EntryGroupsEntryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* listAtLocation(env.project, (parent) =>
-          collectPages(
-            dataplex.listProjectsLocationsEntryGroups.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.entryGroups,
-          ).pipe(
-            Effect.map((items) =>
-              items.filter((item) => hasAlchemyLabelMap(item.labels)),
+        const groups = yield* listAtLocation(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              dataplex.listProjectsLocationsEntryGroups.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.entryGroups,
+            ).pipe(
+              Effect.map((items) =>
+                items.filter((item) => hasAlchemyLabelMap(item.labels)),
+              ),
             ),
-          ),
         );
         const nested = yield* Effect.forEach(
           groups,
@@ -388,6 +398,7 @@ export const EntryGroupsEntryProvider = () =>
         env.project,
         news.entryGroup,
         news.location ?? output?.location,
+        env.region,
       );
       const entryId = yield* toEntryId(id, news.entryId, output?.entryId);
       const name = resourceName(resolved.parent, entryId);

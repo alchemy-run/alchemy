@@ -20,7 +20,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_TYPE = "PARTNER";
 const DEFAULT_ENCRYPTION = "NONE";
 const DEFAULT_STACK = "IPV4_ONLY";
@@ -56,7 +55,7 @@ export type InterconnectAttachmentProps = {
   /**
    * Region the attachment lives in. Immutable — changing it replaces the
    * attachment. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -283,8 +282,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -340,7 +339,7 @@ const toAttrs = (
 ): InterconnectAttachment["Attributes"] => ({
   interconnectAttachmentName: attachment.name ?? "",
   project,
-  region: normalizeRegion(attachment.region),
+  region: lastSegment(attachment.region).toLowerCase(),
   router: attachment.router,
   type: attachment.type,
   interconnect: attachment.interconnect,
@@ -554,6 +553,7 @@ export const InterconnectAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.interconnectAttachmentName ?? output?.interconnectAttachmentName;
       const nextName = news.interconnectAttachmentName ?? previousName;
@@ -561,8 +561,14 @@ export const InterconnectAttachmentProvider = () =>
         previousName !== undefined &&
         nextName !== undefined &&
         previousName !== nextName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       const previousRouter = lastSegment(olds?.router ?? output?.router);
       const nextRouter = lastSegment(news.router);
       const previousType = typeOf(olds?.type ?? output?.type);
@@ -603,7 +609,10 @@ export const InterconnectAttachmentProvider = () =>
         olds?.interconnectAttachmentName,
         output?.interconnectAttachmentName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -647,7 +656,7 @@ export const InterconnectAttachmentProvider = () =>
         news.interconnectAttachmentName,
         output?.interconnectAttachmentName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -797,7 +806,7 @@ export const InterconnectAttachmentProvider = () =>
       if (!output.interconnectAttachmentName) return;
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteInterconnectAttachments({
           project,

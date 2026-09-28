@@ -28,7 +28,6 @@ type InspectJobConfig = dlp.GooglePrivacyDlpV2InspectJobConfig;
 type JobTriggerStatus = dlp.GooglePrivacyDlpV2JobTriggerStatusEnum;
 type JobTriggerTrigger = dlp.GooglePrivacyDlpV2Trigger;
 
-const LOCATION = "us-central1";
 const DEFAULT_STATUS: JobTriggerStatus = "PAUSED";
 const DEFAULT_TRIGGERS: JobTriggerTrigger[] = [{ manual: {} }];
 const DEFAULT_INSPECT_JOB: InspectJobConfig = {
@@ -48,7 +47,7 @@ export type LocationsJobTriggerProps = {
   /**
    * Processing location (`us-central1`, `global`, …). Immutable —
    * changing it replaces the trigger.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -166,13 +165,14 @@ const resourceName = (project: string, location: string, triggerId: string) =>
 const toAttrs = (
   trigger: dlp.GooglePrivacyDlpV2JobTrigger,
   project: string,
+  region: string,
 ) => {
   const name = trigger.name ?? "";
   const parsed = parseOwnership(trigger.description);
   return {
     name,
     triggerId: lastSegment(name),
-    location: locationOf(name, LOCATION),
+    location: locationOf(name, region),
     project,
     displayName: trigger.displayName,
     description: parsed.text,
@@ -198,6 +198,7 @@ export const LocationsJobTriggerProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.triggerId ?? output?.triggerId;
       const idChanged =
         previousId !== undefined &&
@@ -206,8 +207,8 @@ export const LocationsJobTriggerProvider = () =>
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
-        normalizeLocation(news.location, LOCATION) !==
-          normalizeLocation(previousLocation, LOCATION);
+        normalizeLocation(news.location ?? previousLocation, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
 
@@ -215,7 +216,7 @@ export const LocationsJobTriggerProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        LOCATION,
+        env.region,
       );
       const triggerId = yield* toResourceId(
         id,
@@ -226,7 +227,7 @@ export const LocationsJobTriggerProvider = () =>
         output?.name ?? resourceName(env.project, location, triggerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -237,7 +238,7 @@ export const LocationsJobTriggerProvider = () =>
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
           dlp.listProjectsLocationsJobTriggers.pages({
-            parent: locationParent(env.project, LOCATION),
+            parent: locationParent(env.project, env.region),
             pageSize: 100,
           }),
           (page) => page.jobTriggers,
@@ -248,14 +249,14 @@ export const LocationsJobTriggerProvider = () =>
         );
         return items
           .filter((trigger) => hasOwnershipMarker(trigger.description))
-          .map((trigger) => toAttrs(trigger, env.project));
+          .map((trigger) => toAttrs(trigger, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? output?.location,
-        LOCATION,
+        env.region,
       );
       const triggerId = yield* toResourceId(
         id,
@@ -323,7 +324,7 @@ export const LocationsJobTriggerProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

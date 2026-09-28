@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   connectionProfileOf,
-  DEFAULT_LOCATION,
   fieldMask,
   fingerprint,
   hasAlchemyLabelMap,
@@ -66,7 +65,7 @@ export type MigrationJobProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -376,7 +375,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsMigrationJobs({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   dm.listProjectsLocationsMigrationJobs
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -390,7 +389,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         dm.listProjectsLocationsMigrationJobs
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -426,6 +425,7 @@ export const MigrationJobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.type ?? output?.type;
       const nextType = news.type ?? previousType;
       const previousCmek = olds?.cmekKeyName ?? output?.cmekKeyName;
@@ -440,9 +440,13 @@ export const MigrationJobProvider = () =>
         previousId: olds?.migrationJobId ?? output?.migrationJobId,
         nextId:
           news.migrationJobId ?? olds?.migrationJobId ?? output?.migrationJobId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousType !== nextType ||
@@ -464,7 +468,10 @@ export const MigrationJobProvider = () =>
         output?.migrationJobId,
         "job",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, migrationJobId);
       const existing = yield* getByName(name);
@@ -478,7 +485,7 @@ export const MigrationJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -490,7 +497,10 @@ export const MigrationJobProvider = () =>
         output?.migrationJobId,
         "job",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, migrationJobId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   lastSegment,
@@ -48,7 +47,7 @@ export type DashboardProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * dashboard.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -224,8 +223,12 @@ export const DashboardProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = news.location ?? DEFAULT_LOCATION;
-      if (previousLocation !== undefined && previousLocation !== nextLocation) {
+      const nextLocation = news.location;
+      if (
+        previousLocation !== undefined &&
+        nextLocation !== undefined &&
+        previousLocation !== nextLocation
+      ) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.dashboardId ?? output?.dashboardId;
@@ -246,7 +249,7 @@ export const DashboardProvider = () =>
         olds?.dashboardId,
         output?.dashboardId,
       );
-      const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = olds?.location ?? output?.location ?? env.region;
       const name =
         output?.name ??
         resourceName(locationParent(env.project, location), dashboardId);
@@ -262,14 +265,14 @@ export const DashboardProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
           env.project,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
       const dashboardId = yield* toResourceId(
         id,

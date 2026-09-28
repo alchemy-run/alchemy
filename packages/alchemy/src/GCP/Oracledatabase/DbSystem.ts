@@ -104,7 +104,7 @@ export type DbSystemProps = {
   dbSystemId?: string;
   /**
    * Region. Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -307,7 +307,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listSystems = (project: string) => {
+const listSystems = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       oracle.listProjectsLocationsDbSystems.pages({
@@ -320,7 +320,7 @@ const listSystems = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect).pipe(
+  return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
@@ -339,6 +339,7 @@ export const DbSystemProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousOdb = olds?.odbSubnet ?? output?.odbSubnet ?? "";
       const nextOdb = news.odbSubnet ?? previousOdb;
       const previousShape =
@@ -347,9 +348,11 @@ export const DbSystemProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dbSystemId ?? output?.dbSystemId,
         nextId: news.dbSystemId ?? olds?.dbSystemId ?? output?.dbSystemId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra: nextOdb !== previousOdb || nextShape !== previousShape,
       });
@@ -363,7 +366,9 @@ export const DbSystemProvider = () =>
         output?.dbSystemId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceNameOf(env.project, location, COLLECTION, dbSystemId);
@@ -378,7 +383,7 @@ export const DbSystemProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listSystems(env.project);
+        const items = yield* listSystems(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -390,7 +395,9 @@ export const DbSystemProvider = () =>
         output?.dbSystemId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceNameOf(
         env.project,
         location,

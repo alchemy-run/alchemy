@@ -20,7 +20,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_GATEWAY_IP_VERSION = "IPV4";
 const DEFAULT_STACK_TYPE = "IPV4_ONLY";
 const MAX_NAME_LENGTH = 63;
@@ -60,7 +59,7 @@ export type VpnGatewayProps = {
    * Region the HA VPN gateway lives in. Immutable — changing it
    * replaces the gateway. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -210,8 +209,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const resourceRefOf = (value: string | undefined) => {
   if (!value) return "";
@@ -272,7 +271,7 @@ const attachmentKey = (
 const toAttrs = (gateway: compute.VpnGateway, project: string) => ({
   vpnGatewayName: gateway.name ?? "",
   project,
-  region: normalizeRegion(gateway.region),
+  region: lastSegment(gateway.region ?? "").toLowerCase(),
   network: gateway.network,
   vpnGatewayId: gateway.id,
   selfLink: gateway.selfLink,
@@ -437,6 +436,7 @@ export const VpnGatewayProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds.vpnGatewayName ?? output?.vpnGatewayName;
       const nextName = news.vpnGatewayName ?? previousName;
       const nameChanged =
@@ -444,8 +444,14 @@ export const VpnGatewayProvider = () =>
         nextName !== undefined &&
         nextName !== previousName;
 
-      const previousRegion = normalizeRegion(olds.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const previousNetwork = resourceRefOf(olds.network ?? output?.network);
@@ -486,7 +492,10 @@ export const VpnGatewayProvider = () =>
         olds?.vpnGatewayName,
         output?.vpnGatewayName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, vpnGatewayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -526,7 +535,7 @@ export const VpnGatewayProvider = () =>
         news.vpnGatewayName,
         output?.vpnGatewayName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -622,7 +631,7 @@ export const VpnGatewayProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       if (!output.vpnGatewayName) return;
       yield* compute
         .deleteVpnGateways({

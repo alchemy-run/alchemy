@@ -42,7 +42,7 @@ export type AppsGuardrailProps = {
   app: string;
   /**
    * Region used when `app` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -186,10 +186,11 @@ const defaultFilter = (news: AppsGuardrailProps) => {
 const toAttrs = (
   guardrail: ces.Guardrail,
   project: string,
+  region: string,
   appHint?: string,
 ) => {
   const name = guardrail.name ?? "";
-  const parsed = parseResourceName(name, "guardrails");
+  const parsed = parseResourceName(name, "guardrails", region);
   return {
     name,
     guardrailId: parsed.id,
@@ -220,7 +221,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsAppsGuardrails({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   collectPages(
     ces.listProjectsLocationsAppsGuardrails.pages({ parent, pageSize: 100 }),
     (page) => page.guardrails,
@@ -228,7 +229,7 @@ const listAt = (parent: string, project: string) =>
     Effect.map((guardrails) =>
       guardrails
         .filter((guardrail) => hasOwnershipMarker(guardrail.description))
-        .map((guardrail) => toAttrs(guardrail, project, parent)),
+        .map((guardrail) => toAttrs(guardrail, project, region, parent)),
     ),
   );
 
@@ -255,7 +256,10 @@ export const AppsGuardrailProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const app = olds?.app
         ? expandApp(olds.app, env.project, location)
         : output?.app;
@@ -269,7 +273,7 @@ export const AppsGuardrailProvider = () =>
         (app !== undefined ? resourceName(app, guardrailId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, app);
+      const attrs = toAttrs(existing, env.project, env.region, app);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -278,15 +282,18 @@ export const AppsGuardrailProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* forEachApp(env.project, (parent) =>
-          listAt(parent, env.project),
+        return yield* forEachApp(
+          env.project,
+          (parent) => listAt(parent, env.project, env.region),
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? "us-central1",
+        news.location ?? output?.location,
+        env.region,
       );
       const app = expandApp(news.app, env.project, location);
       const guardrailId = yield* toPhysicalId(
@@ -385,7 +392,7 @@ export const AppsGuardrailProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project, app);
+      return toAttrs(current, env.project, env.region, app);
     }),
 
     delete: Effect.fn(function* ({ output }) {

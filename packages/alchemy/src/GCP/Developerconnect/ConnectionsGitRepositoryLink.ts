@@ -10,7 +10,6 @@ import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   fingerprint,
   listAtNested,
@@ -40,7 +39,8 @@ export type ConnectionsGitRepositoryLinkProps = {
    * Region used when `connection` is a bare id. Immutable — changing
    * it replaces the link. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -167,9 +167,9 @@ export const ConnectionsGitRepositoryLink =
     "GCP.Developerconnect.ConnectionsGitRepositoryLink",
   );
 
-const parseLinkName = (name: string) => {
-  const parsed = parseName(name, "gitRepositoryLinks");
-  const connectionParsed = parseName(parsed.parent, "connections");
+const parseLinkName = (name: string, region: string) => {
+  const parsed = parseName(name, "gitRepositoryLinks", region);
+  const connectionParsed = parseName(parsed.parent, "connections", region);
   return {
     project: parsed.project,
     location: parsed.location,
@@ -183,12 +183,14 @@ const resolveParent = (
   project: string,
   connection: string,
   location: string | undefined,
+  region: string,
 ) => {
   if (connection.includes("/")) {
     const parsed = parseLinkName(
       connection.includes("/gitRepositoryLinks/")
         ? connection
         : `${connection.replace(/\/+$/, "")}/gitRepositoryLinks/_`,
+      region,
     );
     return {
       parent: parsed.connection,
@@ -197,7 +199,7 @@ const resolveParent = (
       connectionId: parsed.connectionId,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   return {
     parent: expandParent(connection, project, loc, "connections"),
     location: loc,
@@ -209,18 +211,23 @@ const resolveParent = (
 const parentKey = (
   connection: string | undefined,
   location: string | undefined,
+  region: string,
 ) => {
   if (connection === undefined || connection === "") return undefined;
-  const parsed = resolveParent("", connection, location);
+  const parsed = resolveParent("", connection, location, region);
   return `${parsed.location}/${parsed.connectionId}`;
 };
 
 const resourceName = (parent: string, gitRepositoryLinkId: string) =>
   `${parent}/gitRepositoryLinks/${gitRepositoryLinkId}`;
 
-const toAttrs = (item: developerconnect.GitRepositoryLink, project: string) => {
+const toAttrs = (
+  item: developerconnect.GitRepositoryLink,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseLinkName(name);
+  const parsed = parseLinkName(name, region);
   return {
     name,
     gitRepositoryLinkId: parsed.gitRepositoryLinkId,
@@ -256,10 +263,13 @@ const listLinksAt = (parent: string) =>
     (item) => item.labels,
   );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const wildcard = yield* listAtNested(project, "connections/-", (parent) =>
-      listLinksAt(parent),
+    const wildcard = yield* listAtNested(
+      project,
+      "connections/-",
+      region,
+      (parent) => listLinksAt(parent),
     );
     if (wildcard.length > 0) return wildcard;
     const connections = yield* Effect.firstSuccessOf([
@@ -272,7 +282,7 @@ const listOwned = (project: string) =>
       ),
       collectPages(
         developerconnect.listProjectsLocationsConnections.pages({
-          parent: `projects/${project}/locations/${DEFAULT_LOCATION}`,
+          parent: `projects/${project}/locations/${region}`,
           pageSize: 1000,
         }),
         (page) => page.connections,
@@ -305,6 +315,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       if (output === undefined && olds === undefined) return undefined;
       const previousUri = olds?.cloneUri ?? output?.cloneUri ?? "";
       const nextUri = news.cloneUri ?? previousUri;
@@ -314,23 +325,30 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
           news.gitRepositoryLinkId ??
           olds?.gitRepositoryLinkId ??
           output?.gitRepositoryLinkId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: parentKey(
           olds?.connection ?? output?.connection,
           olds?.location ?? output?.location,
+          env.region,
         ),
         nextParent:
           news.connection !== undefined
             ? parentKey(
                 news.connection,
                 news.location ?? olds?.location ?? output?.location,
+                env.region,
               )
             : parentKey(
                 olds?.connection ?? output?.connection,
                 news.location ?? olds?.location ?? output?.location,
+                env.region,
               ),
         extra:
           (previousUri !== "" && nextUri !== previousUri) ||
@@ -359,12 +377,13 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
           env.project,
           connectionRef,
           olds?.location ?? output?.location,
+          env.region,
         );
         name = resourceName(parent.parent, gitRepositoryLinkId);
       }
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -373,8 +392,8 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -389,6 +408,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
         env.project,
         news.connection ?? output?.connection ?? "",
         news.location ?? output?.location,
+        env.region,
       );
       const name = resourceName(parent.parent, gitRepositoryLinkId);
       const desiredLabels = {
@@ -422,7 +442,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

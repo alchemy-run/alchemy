@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_DATABASE_VERSION = "MYSQL_8_0";
 const DEFAULT_TIER = "db-f1-micro";
 const DEFAULT_EDITION = "ENTERPRISE";
@@ -59,7 +58,7 @@ export type InstanceProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -281,8 +280,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const normalizeVersion = (version: string | undefined) =>
   (version ?? DEFAULT_DATABASE_VERSION).toUpperCase();
@@ -377,12 +376,16 @@ const isNotFoundOp = (operation: sqladmin.Operation) =>
     return code.includes("NOT_FOUND") || message.includes("not found");
   });
 
-const toAttrs = (instance: sqladmin.DatabaseInstance, project: string) => {
+const toAttrs = (
+  instance: sqladmin.DatabaseInstance,
+  project: string,
+  defaultRegion: string,
+) => {
   const settings = instance.settings;
   return {
     instanceName: instance.name ?? "",
     project: instance.project ?? project,
-    region: normalizeRegion(instance.region),
+    region: normalizeRegion(instance.region, defaultRegion),
     databaseVersion: instance.databaseVersion,
     databaseInstalledVersion: instance.databaseInstalledVersion,
     tier: settings?.tier,
@@ -642,11 +645,18 @@ export const InstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName = olds?.instanceName ?? output?.instanceName;
       const nextName = news.instanceName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const previousVersion = normalizeVersion(
         olds?.databaseVersion ?? output?.databaseVersion,
       );
@@ -679,7 +689,7 @@ export const InstanceProvider = () =>
       );
       const existing = yield* getByName(env.project, instanceName);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(
         id,
         tagRecord(existing.settings?.userLabels),
@@ -702,7 +712,9 @@ export const InstanceProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((instance) => toAttrs(instance, env.project)),
+            Stream.map((instance) =>
+              toAttrs(instance, env.project, env.region),
+            ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -717,7 +729,7 @@ export const InstanceProvider = () =>
         news.instanceName,
         output?.instanceName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const version = normalizeVersion(
         news.databaseVersion ?? output?.databaseVersion,
       );
@@ -882,7 +894,7 @@ export const InstanceProvider = () =>
         current = yield* waitUntilRunnable(env.project, instanceName);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

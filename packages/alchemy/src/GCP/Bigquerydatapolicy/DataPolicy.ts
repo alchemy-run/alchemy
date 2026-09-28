@@ -78,7 +78,7 @@ export type DataPolicyProps = {
    * changing it replaces the policy. Multi-regions `US` and `EU` stay
    * uppercase; regional ids are lowercased (`US-CENTRAL1` becomes
    * `us-central1`).
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -203,9 +203,9 @@ const toGovernanceTag = (
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
-const toAttrs = (policy: bqdp.DataPolicy, project: string) => {
+const toAttrs = (policy: bqdp.DataPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
-  const parsed = parseName(name, project);
+  const parsed = parseName(name, project, region);
   return {
     name,
     dataPolicyId: policy.dataPolicyId ?? parsed.dataPolicyId,
@@ -314,12 +314,17 @@ export const DataPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.dataPolicyId ?? output?.dataPolicyId;
       const nextId = yield* toDataPolicyId(id, news.dataPolicyId, previousId);
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       if (
         (previousId === undefined || nextId === previousId) &&
         previousLocation === nextLocation
@@ -339,12 +344,15 @@ export const DataPolicyProvider = () =>
         olds?.dataPolicyId,
         output?.dataPolicyId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
       const existing = yield* observe(id, name, env.project, location);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const resourceId =
         existing.dataPolicyId ?? lastSegment(existing.name ?? "");
       return (yield* ownedByAlchemy(id, resourceId)) ? attrs : Unowned(attrs);
@@ -354,7 +362,7 @@ export const DataPolicyProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(LIST_LOCATIONS)),
+          Array.from(new Set<string>([...LIST_LOCATIONS, env.region])),
           (location) => listAt(env.project, location),
           { concurrency: 4 },
         );
@@ -362,7 +370,7 @@ export const DataPolicyProvider = () =>
         for (const item of pages.flat()) {
           const resourceId = item.dataPolicyId ?? lastSegment(item.name ?? "");
           if (!hasOwnershipMarker(resourceId)) continue;
-          const attrs = toAttrs(item, env.project);
+          const attrs = toAttrs(item, env.project, env.region);
           if (attrs.name.length > 0) byName.set(attrs.name, attrs);
         }
         return Array.from(byName.values());
@@ -375,7 +383,10 @@ export const DataPolicyProvider = () =>
         news.dataPolicyId,
         output?.dataPolicyId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = parentOf(env.project, location);
       const name =
         output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
@@ -447,7 +458,7 @@ export const DataPolicyProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

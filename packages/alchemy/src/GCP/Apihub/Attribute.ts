@@ -8,7 +8,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   createOwnership,
   encodeOwnership,
   hasOwnershipMarker,
@@ -47,7 +46,7 @@ export type AttributeProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * attribute.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -190,9 +189,10 @@ const toAllowed = (
 const toAttrs = (
   attribute: apihub.GoogleCloudApihubV1Attribute,
   project: string,
+  region: string,
 ) => {
   const name = attribute.name ?? "";
-  const parsed = parseResourceName(name, "attributes");
+  const parsed = parseResourceName(name, "attributes", region);
   return {
     name,
     attributeId: parsed.id,
@@ -232,12 +232,17 @@ export const AttributeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.attributeId ?? output?.attributeId,
         nextId: news.attributeId ?? olds?.attributeId ?? output?.attributeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (news.dataType ?? olds?.dataType) !==
@@ -248,7 +253,10 @@ export const AttributeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const attributeId = yield* toPhysicalId(
         id,
         olds?.attributeId,
@@ -258,7 +266,7 @@ export const AttributeProvider = () =>
         output?.name ?? resourceName(env.project, location, attributeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -268,16 +276,19 @@ export const AttributeProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listAttributes(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const attributeId = yield* toPhysicalId(
         id,
@@ -349,7 +360,7 @@ export const AttributeProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

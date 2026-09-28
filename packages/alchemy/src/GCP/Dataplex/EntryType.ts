@@ -59,7 +59,7 @@ export type EntryTypeProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the entry type. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -216,7 +216,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listTypes = (project: string) => {
+const listTypes = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsEntryTypes.pages({
@@ -229,7 +229,7 @@ const listTypes = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
 export const EntryTypeProvider = () =>
@@ -245,6 +245,7 @@ export const EntryTypeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousAuth =
         olds?.authorization?.alternateUsePermission ??
         output?.alternateUsePermission ??
@@ -254,9 +255,13 @@ export const EntryTypeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.entryTypeId ?? output?.entryTypeId,
         nextId: news.entryTypeId ?? olds?.entryTypeId ?? output?.entryTypeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: nextAuth !== previousAuth,
       });
@@ -270,7 +275,10 @@ export const EntryTypeProvider = () =>
         output?.entryTypeId,
         "entrytype",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, entryTypeId);
       const existing = yield* getByName(name);
@@ -284,7 +292,7 @@ export const EntryTypeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listTypes(env.project);
+        const items = yield* listTypes(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -296,7 +304,10 @@ export const EntryTypeProvider = () =>
         output?.entryTypeId,
         "entrytype",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, entryTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),

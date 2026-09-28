@@ -95,7 +95,7 @@ export type CloudVmClusterProps = {
   cloudVmClusterId?: string;
   /**
    * Region. Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -364,7 +364,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listClusters = (project: string) => {
+const listClusters = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       oracle.listProjectsLocationsCloudVmClusters.pages({
@@ -377,7 +377,7 @@ const listClusters = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect).pipe(
+  return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
@@ -396,6 +396,7 @@ export const CloudVmClusterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousInfra =
         olds?.exadataInfrastructure ?? output?.exadataInfrastructure ?? "";
       const nextInfra = news.exadataInfrastructure ?? previousInfra;
@@ -409,9 +410,11 @@ export const CloudVmClusterProvider = () =>
           news.cloudVmClusterId ??
           olds?.cloudVmClusterId ??
           output?.cloudVmClusterId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           nextInfra !== previousInfra ||
@@ -428,7 +431,9 @@ export const CloudVmClusterProvider = () =>
         output?.cloudVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceNameOf(env.project, location, COLLECTION, cloudVmClusterId);
@@ -443,7 +448,7 @@ export const CloudVmClusterProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listClusters(env.project);
+        const items = yield* listClusters(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -455,7 +460,9 @@ export const CloudVmClusterProvider = () =>
         output?.cloudVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceNameOf(
         env.project,
         location,

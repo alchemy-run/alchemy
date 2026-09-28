@@ -81,7 +81,7 @@ export type BackendProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the backend. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -279,8 +279,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBackends({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       firebaseapphosting.listProjectsLocationsBackends.pages({
         parent,
@@ -305,6 +305,7 @@ export const BackendProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousServing = normalizeServingLocality(
         olds?.servingLocality ?? output?.servingLocality,
       );
@@ -316,9 +317,13 @@ export const BackendProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.backendId ?? output?.backendId,
         nextId: news.backendId ?? olds?.backendId ?? output?.backendId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (olds?.servingLocality ?? output?.servingLocality) !== undefined &&
@@ -335,7 +340,10 @@ export const BackendProvider = () =>
         "backend",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, backendId);
       const existing = yield* getByName(name);
@@ -349,7 +357,7 @@ export const BackendProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -362,7 +370,10 @@ export const BackendProvider = () =>
         "backend",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, backendId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -47,7 +47,7 @@ export type CustomerProps = {
    * Partner-operated Google Cloud location (`us-central1`, …).
    * Immutable — changing it replaces the customer. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -185,11 +185,12 @@ export const CustomerProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
+        news.location ?? olds?.location ?? output?.location ?? env.region,
       );
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg = news.organization;
@@ -214,7 +215,9 @@ export const CustomerProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const customerId = yield* toCustomerResourceId(
         id,
         olds?.customerId ?? output?.customerId,
@@ -242,7 +245,7 @@ export const CustomerProvider = () =>
         const organization = yield* tryResolveOrganization();
         if (organization === undefined) return [];
         const pages = yield* Effect.forEach(
-          listLocationParents(organization),
+          listLocationParents(organization, env.region),
           (parent) => listCustomers(parent),
           { concurrency: 3 },
         );
@@ -261,7 +264,9 @@ export const CustomerProvider = () =>
         news.organization,
         output?.organization,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const customerId = yield* toCustomerResourceId(
         id,
         news.customerId,

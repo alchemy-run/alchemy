@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   MAX_DISPLAY_NAME_LENGTH,
   encodeOwnership,
   hasOwnershipMarker,
@@ -62,7 +61,7 @@ export type BindingProps = {
    * Location of the binding (`us-central1`, `global`, …). Multi-region
    * `us` and `eu` are not supported. Immutable — changing it replaces
    * the binding.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -219,7 +218,7 @@ const authKey = (
         scopes: [...(binding.scopes ?? [])].slice().sort(),
       };
 
-const toAttrs = (item: registry.Binding, project: string) => {
+const toAttrs = (item: registry.Binding, project: string, location: string) => {
   const name = item.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const owned = parseOwnership(item.description);
@@ -227,7 +226,7 @@ const toAttrs = (item: registry.Binding, project: string) => {
     name,
     bindingId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || location,
     sourceIdentifier: item.source?.identifier,
     targetIdentifier: item.target?.identifier,
     displayName: item.displayName,
@@ -254,14 +253,19 @@ export const BindingProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource = olds?.sourceIdentifier ?? output?.sourceIdentifier;
       const previousTarget = olds?.targetIdentifier ?? output?.targetIdentifier;
       return replaceOnIdentity({
         previousId: olds?.bindingId ?? output?.bindingId,
         nextId: news.bindingId ?? olds?.bindingId ?? output?.bindingId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousSource !== undefined &&
@@ -273,7 +277,10 @@ export const BindingProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const bindingId = yield* toPhysicalId(
         id,
         olds?.bindingId,
@@ -284,7 +291,7 @@ export const BindingProvider = () =>
         resourceName(env.project, location, COLLECTION, bindingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, location);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -293,16 +300,17 @@ export const BindingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listBindings(env.project);
+        const items = yield* listBindings(env.project, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const bindingId = yield* toPhysicalId(
         id,
@@ -387,7 +395,7 @@ export const BindingProvider = () =>
         current = (yield* waitForVisible(getByName(currentName))) ?? current;
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, location);
     }),
 
     delete: Effect.fn(function* ({ output }) {

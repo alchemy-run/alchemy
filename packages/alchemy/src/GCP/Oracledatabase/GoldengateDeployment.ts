@@ -89,7 +89,7 @@ export type GoldengateDeploymentProps = {
   /**
    * Region (`us-central1`, `us-east4`, …). Immutable — changing it
    * replaces the deployment.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -347,8 +347,8 @@ const getByName = (name: string) =>
         .getProjectsLocationsGoldengateDeployments({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     oracle.listProjectsLocationsGoldengateDeployments
       .pages({ parent, pageSize: 1000 })
       .pipe(
@@ -412,6 +412,7 @@ export const GoldengateDeploymentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = desiredType(
         olds?.deploymentType ?? output?.deploymentType,
       );
@@ -432,9 +433,11 @@ export const GoldengateDeploymentProvider = () =>
           news.goldengateDeploymentId ??
           olds?.goldengateDeploymentId ??
           output?.goldengateDeploymentId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         previousParent: olds?.odbNetwork ?? output?.odbNetwork,
         nextParent: news.odbNetwork ?? olds?.odbNetwork ?? output?.odbNetwork,
@@ -454,7 +457,9 @@ export const GoldengateDeploymentProvider = () =>
         output?.goldengateDeploymentId,
         "goldengate",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, goldengateDeploymentId);
@@ -469,7 +474,7 @@ export const GoldengateDeploymentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -481,7 +486,9 @@ export const GoldengateDeploymentProvider = () =>
         output?.goldengateDeploymentId,
         "goldengate",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, goldengateDeploymentId);
       const odbNetwork = networkOf(news.odbNetwork, env.project, location);
       const odbSubnet = subnetOf(

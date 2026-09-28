@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   DEFAULT_PRODUCT,
   encodeOwnership,
   hasOwnershipMarker,
@@ -42,7 +41,8 @@ export type ProductsAuthConfigProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -165,13 +165,14 @@ const resourceName = (
 const toAttrs = (
   config: integrations.GoogleCloudIntegrationsV1alphaAuthConfig,
   project: string,
+  region: string,
 ) => {
   const name = config.name ?? "";
   const parsed = parseOwnership(config.description);
   return {
     name,
     authConfigId: lastSegment(name),
-    location: locationOf(name),
+    location: locationOf(name, region),
     product: productOf(name),
     project,
     displayName: config.displayName,
@@ -196,13 +197,13 @@ const getByName = (name: string) =>
           ),
         );
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsAuthConfigs
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.authConfigs ?? [])),
       Stream.filter((config) => hasOwnershipMarker(config.description)),
-      Stream.map((config) => toAttrs(config, project)),
+      Stream.map((config) => toAttrs(config, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -236,11 +237,15 @@ export const ProductsAuthConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
+      const nextLocation = normalizeLocation(
+        news.location,
+        previousLocation ?? env.region,
+      );
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        normalizeLocation(previousLocation, env.region) !== nextLocation
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -270,7 +275,10 @@ export const ProductsAuthConfigProvider = () =>
         olds?.authConfigId,
         output?.authConfigId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const product = normalizeProduct(olds?.product ?? output?.product);
       const name =
         output?.name ??
@@ -283,7 +291,7 @@ export const ProductsAuthConfigProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -293,15 +301,17 @@ export const ProductsAuthConfigProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          productParent(env.project, DEFAULT_LOCATION, DEFAULT_PRODUCT),
+          productParent(env.project, env.region, DEFAULT_PRODUCT),
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const product = normalizeProduct(
         news.product ?? output?.product ?? DEFAULT_PRODUCT,
@@ -391,7 +401,7 @@ export const ProductsAuthConfigProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

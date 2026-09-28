@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandRepository,
   forEachOwnedRepository,
   hasAlchemyLabelMap,
@@ -32,7 +31,7 @@ export type RepositoriesWorkspaceProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -114,9 +113,13 @@ export class RepositoriesWorkspaceNotResolved extends Data.TaggedError(
 const resourceName = (repository: string, workspaceId: string) =>
   `${repository}/workspaces/${workspaceId}`;
 
-const toAttrs = (workspace: dataform.Workspace, project: string) => {
+const toAttrs = (
+  workspace: dataform.Workspace,
+  project: string,
+  region: string,
+) => {
   const name = workspace.name ?? "";
-  const parsed = parseResourceName(name, "workspaces");
+  const parsed = parseResourceName(name, "workspaces", region);
   return {
     name,
     workspaceId: parsed.id,
@@ -152,6 +155,7 @@ export const RepositoriesWorkspaceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousRepo = olds?.repository ?? output?.repository;
       const nextRepo = expandRepository(news.repository, env.project, location);
@@ -172,11 +176,15 @@ export const RepositoriesWorkspaceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "workspaces").parent,
+          parseResourceName(output?.name ?? "", "workspaces", env.region)
+            .parent,
         env.project,
         location,
       );
@@ -188,7 +196,7 @@ export const RepositoriesWorkspaceProvider = () =>
       const name = output?.name ?? resourceName(repository, workspaceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
         .pipe(
@@ -204,15 +212,18 @@ export const RepositoriesWorkspaceProvider = () =>
         const env = yield* GcpEnvironment.current;
         const workspaces = yield* forEachOwnedRepository(
           env.project,
-          DEFAULT_LOCATION,
+          env.region,
           (repo) => listWorkspaces(repo.name ?? ""),
         );
-        return workspaces.map((item) => toAttrs(item, env.project));
+        return workspaces.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         news.repository,
         env.project,
@@ -247,7 +258,7 @@ export const RepositoriesWorkspaceProvider = () =>
         return yield* new RepositoriesWorkspaceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

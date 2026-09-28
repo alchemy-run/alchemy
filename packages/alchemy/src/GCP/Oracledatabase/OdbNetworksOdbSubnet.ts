@@ -38,7 +38,7 @@ export type OdbNetworksOdbSubnetProps = {
   odbNetwork: string;
   /**
    * Region used when `odbNetwork` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -175,7 +175,7 @@ const listSubnets = (parent: string) =>
       ),
     );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
     const wildcard = yield* listSubnets(
       `projects/${project}/locations/-/odbNetworks/-`,
@@ -185,7 +185,7 @@ const listOwned = (project: string) =>
     );
     if (labeledWildcard.length > 0) return labeledWildcard;
 
-    const networks = yield* listAtLocation(project, (parent) =>
+    const networks = yield* listAtLocation(project, region, (parent) =>
       oracle.listProjectsLocationsOdbNetworks
         .pages({ parent, pageSize: 1000 })
         .pipe(
@@ -221,6 +221,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousPurpose = desiredPurpose(olds?.purpose ?? output?.purpose);
       const nextPurpose = desiredPurpose(news.purpose ?? previousPurpose);
       const previousCidr = olds?.cidrRange ?? output?.cidrRange ?? "";
@@ -228,9 +229,11 @@ export const OdbNetworksOdbSubnetProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.odbSubnetId ?? output?.odbSubnetId,
         nextId: news.odbSubnetId ?? olds?.odbSubnetId ?? output?.odbSubnetId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         previousParent: olds?.odbNetwork ?? output?.odbNetwork,
         nextParent: news.odbNetwork ?? olds?.odbNetwork ?? output?.odbNetwork,
@@ -240,7 +243,9 @@ export const OdbNetworksOdbSubnetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const odbNetwork = networkOf(
         olds?.odbNetwork ?? output?.odbNetwork ?? "",
         env.project,
@@ -264,13 +269,15 @@ export const OdbNetworksOdbSubnetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const odbNetwork = networkOf(news.odbNetwork, env.project, location);
       const odbSubnetId = yield* toPhysicalId(
         id,

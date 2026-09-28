@@ -8,8 +8,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { deterministicKmsId } from "./internal.ts";
 
-const DEFAULT_LOCATION = "us-central1";
-
 export type KeyRingProps = {
   /**
    * Key ring id (the `{keyRing}` segment of
@@ -24,7 +22,7 @@ export type KeyRingProps = {
    * Cloud KMS location (`us-central1`, `global`, `us`, …). Immutable —
    * changing it replaces the key ring. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
 };
@@ -91,13 +89,13 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const resourceName = (project: string, location: string, keyRingId: string) =>
   `projects/${project}/locations/${location}/keyRings/${keyRingId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const keyRingsAt = parts.lastIndexOf("keyRings");
   const locationsAt = parts.lastIndexOf("locations");
@@ -108,7 +106,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     keyRingId:
       keyRingsAt >= 0 && parts[keyRingsAt + 1]
         ? parts[keyRingsAt + 1]!
@@ -121,9 +119,9 @@ const toId = (id: string, keyRingId: string | undefined, existing?: string) =>
     return keyRingId ?? existing ?? (yield* deterministicKmsId(id));
   });
 
-const toAttrs = (keyRing: kms.KeyRing, project: string) => {
+const toAttrs = (keyRing: kms.KeyRing, project: string, region: string) => {
   const name = keyRing.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     keyRingId: parsed.keyRingId,
@@ -167,6 +165,7 @@ export const KeyRingProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.keyRingId ?? output?.keyRingId;
       const nextId = news.keyRingId ?? previousId;
       const idChanged =
@@ -176,8 +175,12 @@ export const KeyRingProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -190,7 +193,10 @@ export const KeyRingProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const keyRingId = yield* toId(id, olds?.keyRingId, output?.keyRingId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, keyRingId);
       const existing = yield* getByName(name);
@@ -200,7 +206,7 @@ export const KeyRingProvider = () =>
       // earlier deploy of this same logical resource (rings are never
       // deleted, so destroy leaves it behind); adopt it. A ring is an empty
       // namespace — the keys inside carry their own ownership labels.
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
@@ -224,7 +230,7 @@ export const KeyRingProvider = () =>
           );
           for (const keyRings of pages) {
             for (const keyRing of keyRings) {
-              found.push(toAttrs(keyRing, env.project));
+              found.push(toAttrs(keyRing, env.project, env.region));
             }
           }
           pageToken = response.nextPageToken;
@@ -236,7 +242,10 @@ export const KeyRingProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const keyRingId = yield* toId(id, news.keyRingId, output?.keyRingId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, keyRingId);
 
       // A ring already at this name is adopted as ours (see `read`).
@@ -257,7 +266,7 @@ export const KeyRingProvider = () =>
         return yield* new KeyRingNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

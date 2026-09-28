@@ -18,7 +18,6 @@ import {
   waitForOperation,
 } from "./operations.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_ID_LENGTH = 32;
 
 export type EndpointAttachmentProps = {
@@ -42,7 +41,7 @@ export type EndpointAttachmentProps = {
    * Location of the endpoint attachment. Immutable — changing it replaces
    * the attachment. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -108,8 +107,10 @@ export class EndpointAttachmentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const normalizeLocation = (location: string | undefined) =>
-  (location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => (location ?? defaultLocation).toLowerCase();
 
 const toId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -131,13 +132,14 @@ const resourceName = (organization: string, endpointAttachmentId: string) =>
 const toAttrs = (
   attachment: apigee.GoogleCloudApigeeV1EndpointAttachment,
   organization: string,
+  region: string,
 ) => {
   const name = attachment.name ?? "";
   return {
     name,
     endpointAttachmentId: lastSegment(name),
     organization: orgIdOf(organization),
-    location: attachment.location ?? DEFAULT_LOCATION,
+    location: attachment.location ?? region,
     serviceAttachment: attachment.serviceAttachment,
     host: attachment.host,
     state: attachment.state,
@@ -165,6 +167,7 @@ export const EndpointAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.endpointAttachmentId ?? output?.endpointAttachmentId;
       const previousOrg = olds?.organization ?? output?.organization;
@@ -180,8 +183,8 @@ export const EndpointAttachmentProvider = () =>
         orgIdOf(news.organization) !== orgIdOf(previousOrg);
       const locationChanged =
         previousLocation !== undefined &&
-        normalizeLocation(news.location) !==
-          normalizeLocation(previousLocation);
+        normalizeLocation(news.location ?? previousLocation, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       const saChanged =
         previousSa !== undefined && news.serviceAttachment !== previousSa;
       if (idChanged || orgChanged || locationChanged || saChanged) {
@@ -208,12 +211,13 @@ export const EndpointAttachmentProvider = () =>
         output?.name ?? resourceName(organization, endpointAttachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, organization);
+      const attrs = toAttrs(existing, organization, env.region);
       return isAlchemyId(attrs.endpointAttachmentId) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
+        const env = yield* GcpEnvironment.current;
         const orgs = yield* listOrgNames();
         const rows: EndpointAttachment["Attributes"][] = [];
         for (const organization of orgs) {
@@ -231,7 +235,7 @@ export const EndpointAttachmentProvider = () =>
             ),
           );
           for (const attachment of attachments) {
-            const attrs = toAttrs(attachment, organization);
+            const attrs = toAttrs(attachment, organization, env.region);
             if (isAlchemyId(attrs.endpointAttachmentId)) {
               rows.push(attrs);
             }
@@ -249,7 +253,10 @@ export const EndpointAttachmentProvider = () =>
         output?.endpointAttachmentId,
       );
       const name = resourceName(organization, endpointAttachmentId);
-      const location = normalizeLocation(news.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -274,7 +281,7 @@ export const EndpointAttachmentProvider = () =>
         return yield* new EndpointAttachmentNotResolved({ name });
       }
 
-      return toAttrs(current, organization);
+      return toAttrs(current, organization, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

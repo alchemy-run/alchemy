@@ -10,7 +10,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   encodeOwnership,
   expandParent,
   hasOwnershipMarker,
@@ -42,7 +41,7 @@ export type DatasetsConsentStoresAttributeDefinitionProps = {
   dataset?: string;
   /**
    * Region used when `consentStore` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -159,9 +158,10 @@ const resourceName = (consentStore: string, attributeDefinitionId: string) =>
 const toAttrs = (
   definition: healthcare.AttributeDefinition,
   project: string,
+  region: string,
 ) => {
   const name = definition.name ?? "";
-  const parsed = parseResourceName(name, "attributeDefinitions");
+  const parsed = parseResourceName(name, "attributeDefinitions", region);
   const ownership = parseOwnership(definition.description);
   return {
     name,
@@ -211,7 +211,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
         nextParent: storeOf(
           news.consentStore,
           env.project,
-          normalizeLocation(news.location ?? output?.location),
+          normalizeLocation(news.location ?? output?.location, env.region),
           news.dataset,
         ),
         extra,
@@ -220,7 +220,10 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const attributeDefinitionId = yield* toPhysicalSnake(
         id,
         olds?.attributeDefinitionId,
@@ -237,7 +240,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
           : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -246,7 +249,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* listAlchemyConsentStores(env.project);
+        const stores = yield* listAlchemyConsentStores(env.project, env.region);
         const definitions = yield* Effect.forEach(
           stores,
           (store) =>
@@ -264,13 +267,14 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
         return definitions
           .flat()
           .filter((definition) => hasOwnershipMarker(definition.description))
-          .map((definition) => toAttrs(definition, env.project));
+          .map((definition) => toAttrs(definition, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const consentStore = storeOf(
         news.consentStore,
@@ -357,7 +361,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

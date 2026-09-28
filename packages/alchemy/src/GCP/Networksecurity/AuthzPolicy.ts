@@ -130,7 +130,7 @@ export type AuthzPolicyProps = {
   /**
    * Location (`us-central1`, `global`, …). Must match the targeted
    * forwarding rules. Immutable — changing it replaces the policy.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -247,8 +247,6 @@ export const AuthzPolicy = Resource<AuthzPolicy>(
   "GCP.Networksecurity.AuthzPolicy",
 );
 
-const DEFAULT_LOCATION = "us-central1";
-
 const resourceName = (
   project: string,
   location: string,
@@ -261,8 +259,8 @@ const actionOf = (value: string | undefined) =>
 const profileOf = (value: string | undefined) =>
   (value ?? DEFAULT_PROFILE).toUpperCase();
 
-const locationOf = (value: string | undefined) =>
-  (value ?? DEFAULT_LOCATION).toLowerCase();
+const locationOf = (value: string | undefined, fallback: string) =>
+  (value ?? fallback).toLowerCase();
 
 const toCustomProvider = (
   provider: networksecurity.AuthzPolicyCustomProvider | undefined,
@@ -343,11 +341,16 @@ export const AuthzPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.authzPolicyId ?? output?.authzPolicyId;
       const nextId = news.authzPolicyId ?? previousId;
-      const previousLocation = locationOf(olds?.location ?? output?.location);
+      const previousLocation = locationOf(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const nextLocation = locationOf(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousProfile = profileOf(
         olds?.policyProfile ?? output?.policyProfile,
@@ -379,7 +382,10 @@ export const AuthzPolicyProvider = () =>
         output?.authzPolicyId,
         "authzpolicy",
       );
-      const location = locationOf(olds?.location ?? output?.location);
+      const location = locationOf(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, authzPolicyId);
       const existing = yield* getByName(name);
@@ -404,7 +410,10 @@ export const AuthzPolicyProvider = () =>
         output?.authzPolicyId,
         "authzpolicy",
       );
-      const location = locationOf(news.location ?? output?.location);
+      const location = locationOf(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, authzPolicyId);
       const action = actionOf(news.action);
       const policyProfile = profileOf(news.policyProfile);

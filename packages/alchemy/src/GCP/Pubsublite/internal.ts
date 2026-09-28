@@ -11,7 +11,7 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_REGION = "us-central1";
+// Zonal default is left fixed: zones are not derivable from `GcpEnvironment.region` without assuming a suffix.
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_ID_LENGTH = 255;
 export const DEFAULT_THROUGHPUT_CAPACITY = "4";
@@ -391,8 +391,10 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
     ),
   );
 
-const listParents = (project: string) =>
-  LIST_LOCATIONS.map((location) => parentOf(project, location));
+const listParents = (project: string, region: string) =>
+  [...new Set<string>([region, ...LIST_LOCATIONS])].map((location) =>
+    parentOf(project, location),
+  );
 
 const listAcross = <Item, E, R>(
   listAt: (parent: string) => Effect.Effect<readonly Item[], E, R>,
@@ -400,7 +402,7 @@ const listAcross = <Item, E, R>(
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
     const pages = yield* Effect.forEach(
-      listParents(env.project),
+      listParents(env.project, env.region),
       (parent) => listAt(parent),
       { concurrency: 4 },
     );

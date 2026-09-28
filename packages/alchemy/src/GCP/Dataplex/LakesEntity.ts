@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   createOwnership,
   encodeDescription,
   fingerprint,
@@ -263,9 +262,9 @@ const getByName = (name: string) =>
     .getProjectsLocationsLakesZonesEntities({ name, view: "FULL" })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwnedEntities = (project: string) =>
+const listOwnedEntities = (project: string, region: string) =>
   Effect.gen(function* () {
-    const lakes = yield* listLakes(project, DEFAULT_LOCATION);
+    const lakes = yield* listLakes(project, region);
     const zones = yield* listChildResources(lakes, listZones);
     const named = zones.filter((zone) => (zone.name ?? "").length > 0);
     const tables = yield* Effect.forEach(
@@ -356,7 +355,7 @@ export const LakesEntityProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const entities = yield* listOwnedEntities(env.project);
+        const entities = yield* listOwnedEntities(env.project, env.region);
         const owned = entities.filter((entity) =>
           hasOwnershipMarker(entity.description),
         );

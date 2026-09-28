@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "US-CENTRAL1";
 const MAX_JOB_ID_LENGTH = 1024;
 
 export type JobQuery = bigquery.JobConfigurationQuery;
@@ -38,7 +37,7 @@ export type JobProps = {
   /**
    * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
    * Immutable — changing it replaces the job.
-   * @default "US-CENTRAL1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -180,8 +179,8 @@ const userLabels = (
 const resourceName = (project: string, jobId: string) =>
   `projects/${project}/jobs/${jobId}`;
 
-const normalizeLocation = (location: string | undefined) =>
-  (location ?? DEFAULT_LOCATION).toUpperCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  (location ?? fallback).toUpperCase();
 
 const toId = (id: string, jobId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -204,8 +203,10 @@ const projectOf = (
   fallback: string,
 ) => job.jobReference?.projectId ?? fallback;
 
-const locationOf = (job: bigquery.Job | bigquery.JobListJobsItem) =>
-  job.jobReference?.location ?? DEFAULT_LOCATION;
+const locationOf = (
+  job: bigquery.Job | bigquery.JobListJobsItem,
+  fallback: string,
+) => job.jobReference?.location ?? fallback;
 
 const stateOf = (job: bigquery.Job | bigquery.JobListJobsItem) => {
   const full = job as bigquery.Job;
@@ -215,6 +216,7 @@ const stateOf = (job: bigquery.Job | bigquery.JobListJobsItem) => {
 const toAttrs = (
   job: bigquery.Job | bigquery.JobListJobsItem,
   fallbackProject: string,
+  region: string,
 ) => {
   const jobId = jobIdOf(job, "");
   const project = projectOf(job, fallbackProject);
@@ -224,7 +226,7 @@ const toAttrs = (
     id: full.id ?? `${project}:${jobId}`,
     jobId,
     project,
-    location: locationOf(job),
+    location: locationOf(job, region),
     labels: userLabels(job.configuration?.labels),
     jobType: job.configuration?.jobType,
     state: stateOf(job),
@@ -332,6 +334,7 @@ export const JobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobId ?? output?.jobId;
       const jobIdChanged =
         news.jobId !== undefined &&
@@ -340,9 +343,11 @@ export const JobProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const locationChanged =
         output !== undefined && previousLocation !== nextLocation;
@@ -395,11 +400,11 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = olds?.location ?? output?.location ?? env.region;
       const project = output?.project ?? env.project;
       const existing = yield* getByRef(project, jobId, location);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, project);
+      const attrs = toAttrs(existing, project, env.region);
       return (yield* hasAlchemyLabels(
         id,
         tagRecord(existing.configuration?.labels),
@@ -425,7 +430,7 @@ export const JobProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((job) => toAttrs(job, env.project)),
+            Stream.map((job) => toAttrs(job, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("Forbidden", () =>
@@ -444,7 +449,7 @@ export const JobProvider = () =>
                       key.startsWith("alchemy-"),
                     ),
                   ),
-                  Stream.map((job) => toAttrs(job, env.project)),
+                  Stream.map((job) => toAttrs(job, env.project, env.region)),
                   Stream.runCollect,
                   Effect.map((chunk) => Array.from(chunk)),
                 ),
@@ -458,7 +463,7 @@ export const JobProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const project = output?.project ?? env.project;
       const name = resourceName(project, jobId);
       const desiredLabels = {
@@ -491,7 +496,7 @@ export const JobProvider = () =>
         current = (yield* waitUntilDone(project, jobId, location)) ?? current;
       }
 
-      return toAttrs(current, project);
+      return toAttrs(current, project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

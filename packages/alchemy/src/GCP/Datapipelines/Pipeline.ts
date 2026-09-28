@@ -65,7 +65,7 @@ export type PipelineProps = {
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * pipeline. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * Data Pipelines is only available in App Engine regions.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -218,9 +218,10 @@ export class PipelineNotResolved extends Data.TaggedError(
 const toAttrs = (
   pipeline: datapipelines.GoogleCloudDatapipelinesV1Pipeline,
   project: string,
+  region: string,
 ) => {
   const name = pipeline.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     pipelineId: parsed.pipelineId,
@@ -297,11 +298,14 @@ export const PipelineProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousType = olds?.type ?? output?.type;
       const nextType = news.type ?? previousType;
@@ -322,12 +326,20 @@ export const PipelineProvider = () =>
         olds?.pipelineId,
         output?.pipelineId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, pipelineId);
-      const existing = yield* findOwnedPipeline(id, env.project, name);
+      const existing = yield* findOwnedPipeline(
+        id,
+        env.project,
+        env.region,
+        name,
+      );
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.pipelineSources))
         ? attrs
         : Unowned(attrs);
@@ -336,8 +348,8 @@ export const PipelineProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const rows = yield* listOwnedPipelines(env.project);
-        return rows.map((row) => toAttrs(row, env.project));
+        const rows = yield* listOwnedPipelines(env.project, env.region);
+        return rows.map((row) => toAttrs(row, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -347,7 +359,10 @@ export const PipelineProvider = () =>
         news.pipelineId,
         output?.pipelineId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, pipelineId);
       const displayName = toDisplayName(news.displayName, pipelineId);
@@ -365,6 +380,7 @@ export const PipelineProvider = () =>
       let current = yield* findOwnedPipeline(
         id,
         env.project,
+        env.region,
         output?.name ?? name,
       );
 
@@ -444,7 +460,7 @@ export const PipelineProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

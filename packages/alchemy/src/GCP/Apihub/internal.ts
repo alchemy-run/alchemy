@@ -16,7 +16,6 @@ export type AttributeValues = apihub.GoogleCloudApihubV1AttributeValues;
 export type AttributeValuesMap = apihub.GoogleCloudApihubV1AttributeValuesMap;
 export type Documentation = apihub.GoogleCloudApihubV1Documentation;
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_INSTANCE_ID_LENGTH = 40;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
@@ -52,7 +51,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const locationOf = (name: string, fallback = DEFAULT_LOCATION) => {
+export const locationOf = (name: string, fallback: string) => {
   const parts = name.split("/");
   const index = parts.indexOf("locations");
   return index >= 0 ? (parts[index + 1] ?? fallback) : fallback;
@@ -66,10 +65,16 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseResourceName = (name: string, collection: string) => {
+export const parseResourceName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -81,7 +86,7 @@ export const parseResourceName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   artifactAttrs,
   contentsOf,
   hasAlchemyLabelMap,
@@ -42,7 +41,7 @@ export type ApisVersionsArtifactProps = {
   artifactId?: string;
   /**
    * Location used when parsing parent names.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -168,7 +167,7 @@ export const ApisVersionsArtifactProvider = () =>
         output?.name ?? (parent ? resourceName(parent, artifactId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = artifactAttrs(existing, env.project);
+      const attrs = artifactAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -177,9 +176,7 @@ export const ApisVersionsArtifactProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const apis = yield* listApis(locationParent(env.project, env.region));
         const versions = yield* listChildResources(namedOf(apis), listVersions);
         const items = yield* listChildResources(
           namedOf(versions),
@@ -187,7 +184,7 @@ export const ApisVersionsArtifactProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => artifactAttrs(item, env.project));
+          .map((item) => artifactAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -235,7 +232,7 @@ export const ApisVersionsArtifactProvider = () =>
           getContents,
         },
       });
-      return artifactAttrs(current, env.project);
+      return artifactAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

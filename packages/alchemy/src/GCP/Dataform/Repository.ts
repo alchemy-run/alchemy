@@ -82,7 +82,7 @@ export type RepositoryProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * repository. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -226,9 +226,13 @@ const gitOf = (
   };
 };
 
-const toAttrs = (repo: dataform.Repository, project: string) => {
+const toAttrs = (
+  repo: dataform.Repository,
+  project: string,
+  region: string,
+) => {
   const name = repo.name ?? "";
-  const parsed = parseResourceName(name, "repositories");
+  const parsed = parseResourceName(name, "repositories", region);
   return {
     name,
     repositoryId: parsed.id,
@@ -283,7 +287,10 @@ export const RepositoryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const repositoryId = yield* toPhysicalId(
         id,
         olds?.repositoryId,
@@ -293,7 +300,7 @@ export const RepositoryProvider = () =>
         output?.name ?? resourceName(env.project, location, repositoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -302,15 +309,18 @@ export const RepositoryProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const repos = yield* listRepositories(env.project);
+        const repos = yield* listRepositories(env.project, env.region);
         return repos
           .filter((repo) => hasAlchemyLabelMap(repo.labels))
-          .map((repo) => toAttrs(repo, env.project));
+          .map((repo) => toAttrs(repo, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repositoryId = yield* toPhysicalId(
         id,
         news.repositoryId,
@@ -445,7 +455,7 @@ export const RepositoryProvider = () =>
         current = (yield* getByName(currentName)) ?? current;
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -24,7 +24,6 @@ import type {
 } from "./FirewallPolicy.ts";
 
 const DEFAULT_POLICY_TYPE = "VPC_POLICY";
-const DEFAULT_REGION = "us-central1";
 const RESERVED_PRIORITY_MIN = 2147483548;
 const RESERVED_PRIORITY_MAX = 2147483647;
 const MAX_NAME_LENGTH = 63;
@@ -45,7 +44,7 @@ export type RegionNetworkFirewallPolicyProps = {
    * Region the policy lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -178,8 +177,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -334,7 +333,7 @@ const toAttrs = (
   return {
     firewallPolicyName: policy.name ?? policy.id ?? "",
     project,
-    region: normalizeRegion(policy.region),
+    region: lastSegment(policy.region).toLowerCase(),
     description: parsed.description,
     policyType: typeOf(policy.policyType),
     rules: policy.rules ?? [],
@@ -622,6 +621,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       // Name is immutable on GCP. Resolve the desired name the same way
       // create does — do not fall back to previousName when news omits
@@ -632,8 +632,14 @@ export const RegionNetworkFirewallPolicyProvider = () =>
       const nameChanged =
         previousName !== undefined && previousName !== nextName;
 
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const previousType = typeOf(olds?.policyType ?? output?.policyType);
@@ -656,7 +662,10 @@ export const RegionNetworkFirewallPolicyProvider = () =>
         olds?.firewallPolicyName,
         output?.firewallPolicyName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -695,7 +704,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
         news.firewallPolicyName,
         output?.firewallPolicyName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -777,7 +786,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteRegionNetworkFirewallPolicies({
           project,

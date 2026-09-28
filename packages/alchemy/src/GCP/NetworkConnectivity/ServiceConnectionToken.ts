@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworkConnectivityNotResolved,
   canonicalizeLink,
   collectPages,
@@ -40,7 +39,8 @@ export type ServiceConnectionTokenProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * token. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -132,14 +132,15 @@ const resourceName = (
 const toAttrs = (
   token: networkconnectivity.ServiceConnectionToken,
   project: string,
+  region: string,
 ) => {
   const name = token.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     serviceConnectionTokenId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     network: token.network,
     token: token.token,
     expireTime: token.expireTime,
@@ -169,6 +170,7 @@ export const ServiceConnectionTokenProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.serviceConnectionTokenId ?? output?.serviceConnectionTokenId;
       const nextId = news.serviceConnectionTokenId
@@ -176,11 +178,11 @@ export const ServiceConnectionTokenProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const previousNetwork = lastSegment(
         canonicalizeLink(olds?.network ?? output?.network),
@@ -208,14 +210,14 @@ export const ServiceConnectionTokenProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, serviceConnectionTokenId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -235,7 +237,7 @@ export const ServiceConnectionTokenProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -248,7 +250,7 @@ export const ServiceConnectionTokenProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(
         env.project,
@@ -292,7 +294,7 @@ export const ServiceConnectionTokenProvider = () =>
         return yield* new NetworkConnectivityNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

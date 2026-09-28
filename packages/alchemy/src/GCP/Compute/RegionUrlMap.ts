@@ -16,8 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
-
 export type RegionUrlMapProps = {
   /**
    * UrlMap name (RFC1035, 1-63 characters). If omitted, a unique name is
@@ -29,7 +27,7 @@ export type RegionUrlMapProps = {
    * Region the URL map lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -196,8 +194,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -269,7 +267,7 @@ const toAttrs = (urlMap: compute.UrlMap, project: string) => {
   return {
     urlMapName: urlMap.name ?? urlMap.id ?? "",
     project,
-    region: normalizeRegion(urlMap.region),
+    region: lastSegment(urlMap.region ?? "").toLowerCase(),
     description: parsed.description,
     defaultService: urlMap.defaultService,
     defaultUrlRedirect: urlMap.defaultUrlRedirect,
@@ -400,14 +398,21 @@ export const RegionUrlMapProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.urlMapName ?? output?.urlMapName;
       const nextName = news.urlMapName ?? previousName;
       const nameChanged =
         previousName !== undefined &&
         nextName !== undefined &&
         previousName !== nextName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
       if (nameChanged || regionChanged) {
         return { action: "replace" as const, deleteFirst: true };
@@ -422,7 +427,10 @@ export const RegionUrlMapProvider = () =>
         olds?.urlMapName,
         output?.urlMapName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, urlMapName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -453,7 +461,7 @@ export const RegionUrlMapProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const urlMapName = yield* toName(id, news.urlMapName, output?.urlMapName);
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(urlMapName, news, ownership);
 
@@ -503,7 +511,7 @@ export const RegionUrlMapProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionUrlMaps({
           project: env.project,

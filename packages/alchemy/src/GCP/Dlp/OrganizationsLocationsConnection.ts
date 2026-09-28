@@ -39,7 +39,7 @@ export type OrganizationsLocationsConnectionProps = {
    * Location of the Cloud SQL instance (`us-central1`, …). Must match the
    * region of `cloudSql.connectionName`. Immutable — changing it replaces
    * the connection.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -185,11 +185,14 @@ export const OrganizationsLocationsConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousInstance =
         olds?.cloudSql?.connectionName ?? output?.cloudSql?.connectionName;
@@ -216,7 +219,7 @@ export const OrganizationsLocationsConnectionProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        "us-central1",
+        env.region,
       );
       const parent = organizationLocationParent(organization, location);
       let existing = yield* getByName(output?.name ?? "");
@@ -243,7 +246,7 @@ export const OrganizationsLocationsConnectionProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        "us-central1",
+        env.region,
       );
       const parent = organizationLocationParent(organization, location);
       const state = stateOf(news.state);

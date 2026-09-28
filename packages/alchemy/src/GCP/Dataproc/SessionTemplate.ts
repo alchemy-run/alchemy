@@ -39,7 +39,7 @@ export type SessionTemplateProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -150,7 +150,7 @@ const toAttrs = (
   location: string,
 ) => {
   const name = template.name ?? "";
-  const parsed = parseResourceName(name, "sessionTemplates");
+  const parsed = parseResourceName(name, "sessionTemplates", location);
   return {
     name,
     templateId: parsed.id,
@@ -225,13 +225,16 @@ export const SessionTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const nextId = news.templateId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -252,7 +255,10 @@ export const SessionTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const templateId = yield* toPhysicalId(
         id,
         olds?.templateId,
@@ -274,7 +280,7 @@ export const SessionTemplateProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          [...new Set([env.region, ...LIST_LOCATIONS])],
           (location) => listLocation(env.project, location),
           { concurrency: 4 },
         );
@@ -283,7 +289,10 @@ export const SessionTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const templateId = yield* toPhysicalId(
         id,
         news.templateId,

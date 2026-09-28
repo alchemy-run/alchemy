@@ -20,7 +20,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_CLUSTER_TYPE = "PRIMARY";
 const DEFAULT_NETWORK = "default";
 const MAX_NAME_LENGTH = 63;
@@ -166,7 +165,7 @@ export type ClusterProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the cluster. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -388,8 +387,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeClusterType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_CLUSTER_TYPE).toUpperCase();
@@ -441,9 +440,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     clusterId:
       clustersAt >= 0 && parts[clustersAt + 1]
         ? parts[clustersAt + 1]!
@@ -796,13 +793,16 @@ export const ClusterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.clusterId ?? output?.clusterId;
       const nextId = news.clusterId ?? previousId;
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousType = normalizeClusterType(
         olds?.clusterType ?? output?.clusterType,
       );
@@ -876,7 +876,9 @@ export const ClusterProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, olds?.clusterId, output?.clusterId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, clusterId);
       const existing = yield* getByName(name);
@@ -915,7 +917,9 @@ export const ClusterProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, news.clusterId, output?.clusterId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, clusterId);
       const clusterType = normalizeClusterType(news.clusterType);
       const pscEnabled = news.pscConfig?.pscEnabled === true;

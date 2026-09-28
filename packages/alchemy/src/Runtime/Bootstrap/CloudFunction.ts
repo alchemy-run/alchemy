@@ -20,9 +20,9 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
-import { GcpHttpClient } from "../../GCP/HttpClient.ts";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -126,7 +126,7 @@ export const makeHandler = (entrypoint: unknown) => {
     const dispatch = Deferred.makeUnsafe<Dispatch>();
     const platform = Layer.mergeAll(
       NodeServices.layer,
-      GcpHttpClient,
+      FetchHttpClient.layer,
       Logger.layer([Logger.consolePretty()]),
     );
     const program = resolveProgram("program", { telemetry: true }).pipe(

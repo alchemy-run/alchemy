@@ -11,7 +11,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
-  LIST_LOCATIONS,
+  listLocations,
   hasOwnershipMarker,
   lastSegment,
   normalizeLocation,
@@ -51,7 +51,7 @@ export type CapacityCommitmentProps = {
    * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
    * changing it replaces the commitment. Multi-regions `US` and `EU`
    * stay uppercase; regional ids are lowercased.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -286,6 +286,7 @@ export const CapacityCommitmentProvider = () =>
 
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId =
         olds?.capacityCommitmentId ?? output?.capacityCommitmentId;
@@ -295,9 +296,11 @@ export const CapacityCommitmentProvider = () =>
         previousId,
       );
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousEdition = normalizeEdition(
         olds?.edition ?? output?.edition,
       );
@@ -334,7 +337,9 @@ export const CapacityCommitmentProvider = () =>
         olds?.capacityCommitmentId,
         output?.capacityCommitmentId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, capacityCommitmentId);
@@ -350,7 +355,7 @@ export const CapacityCommitmentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(LIST_LOCATIONS)),
+          listLocations(env.region),
           (location) => listOwnedAt(env.project, location),
           { concurrency: 4 },
         );
@@ -368,7 +373,9 @@ export const CapacityCommitmentProvider = () =>
         news.capacityCommitmentId,
         output?.capacityCommitmentId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, capacityCommitmentId);
       const parent = parentOf(env.project, location);
       const edition = normalizeEdition(news.edition ?? output?.edition);

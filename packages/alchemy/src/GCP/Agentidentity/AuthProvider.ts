@@ -56,7 +56,7 @@ export type AuthProviderProps = {
   /**
    * Location of the auth provider. Immutable — changing it replaces the
    * auth provider.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -190,9 +190,13 @@ export const AuthProvider = Resource<AuthProvider>(
 
 export { AuthProviderNotResolved };
 
-const toAttrs = (item: agentidentity.AuthProvider, project: string) => {
+const toAttrs = (
+  item: agentidentity.AuthProvider,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const state = item.state;
   return {
     name,
@@ -240,13 +244,18 @@ export const AuthProviderProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.authProviderId ?? output?.authProviderId,
         nextId:
           news.authProviderId ?? olds?.authProviderId ?? output?.authProviderId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -258,14 +267,17 @@ export const AuthProviderProvider = () =>
         olds?.authProviderId,
         output?.authProviderId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, authProviderId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleted === true) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -274,8 +286,8 @@ export const AuthProviderProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -285,7 +297,10 @@ export const AuthProviderProvider = () =>
         news.authProviderId,
         output?.authProviderId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, authProviderId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -412,7 +427,7 @@ export const AuthProviderProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -24,13 +24,15 @@ export const CreateJobHttp = Layer.effect(
         iam: [{ role: "roles/transcoder.editor" }],
       });
       const name = yield* template.name;
+      const location = yield* template.location;
       return Effect.fn(`GCP.Transcoder.CreateJob(${template.LogicalId})`)(
         function* (request?: CreateJobRequest) {
           const templateName = yield* name;
+          const templateLocation = yield* location;
           const templateId = lastSegment(templateName);
           const config = request?.body?.config;
           return yield* createProjectsLocationsJobs({
-            parent: parentOfName(templateName),
+            parent: parentOfName(templateName, templateLocation),
             body: {
               ...request?.body,
               templateId:

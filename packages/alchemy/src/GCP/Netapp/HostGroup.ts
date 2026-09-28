@@ -47,7 +47,7 @@ export type HostGroupProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -153,9 +153,9 @@ export const HostGroup = Resource<HostGroup>("GCP.Netapp.HostGroup");
 const resourceName = (project: string, location: string, hostGroupId: string) =>
   `projects/${project}/locations/${location}/hostGroups/${hostGroupId}`;
 
-const toAttrs = (item: netapp.HostGroup, project: string) => {
+const toAttrs = (item: netapp.HostGroup, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "hostGroups");
+  const parsed = parseName(name, "hostGroups", region);
   return {
     name,
     hostGroupId: parsed.id,
@@ -176,8 +176,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsHostGroups({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       netapp.listProjectsLocationsHostGroups.pages({
         parent,
@@ -194,6 +194,7 @@ export const HostGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.type ?? output?.type;
       const previousOs = olds?.osType ?? output?.osType;
       const nextType = news.type ?? DEFAULT_TYPE;
@@ -201,9 +202,13 @@ export const HostGroupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.hostGroupId ?? output?.hostGroupId,
         nextId: news.hostGroupId ?? olds?.hostGroupId ?? output?.hostGroupId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousType !== undefined && nextType !== previousType) ||
@@ -219,12 +224,15 @@ export const HostGroupProvider = () =>
         output?.hostGroupId,
         "hostgroup",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, hostGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -233,8 +241,8 @@ export const HostGroupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -245,7 +253,10 @@ export const HostGroupProvider = () =>
         output?.hostGroupId,
         "hostgroup",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, hostGroupId);
       const type = news.type ?? DEFAULT_TYPE;
       const osType = news.osType ?? DEFAULT_OS;
@@ -314,7 +325,7 @@ export const HostGroupProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

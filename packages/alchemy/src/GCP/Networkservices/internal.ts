@@ -8,7 +8,8 @@ import { tagRecord } from "../../Tags.ts";
 import { alchemyLabelKeys, stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_GLOBAL = "global";
-export const DEFAULT_REGION = "us-central1";
+// Multicast resources are zonal; a zone cannot be derived from the stack
+// region (not every region has an `-a` zone), so this default stays fixed.
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_MULTICAST_NAME_LENGTH = 48;

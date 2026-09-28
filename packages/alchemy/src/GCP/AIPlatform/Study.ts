@@ -9,8 +9,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   lastSegment,
@@ -75,7 +75,7 @@ export type StudySpec = {
 export type StudyProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the Study.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -230,7 +230,7 @@ export const StudyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = news.location ?? DEFAULT_LOCATION;
+      const nextLocation = news.location ?? previousLocation;
       if (previousLocation !== undefined && previousLocation !== nextLocation) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -251,7 +251,7 @@ export const StudyProvider = () =>
           ? attrs
           : Unowned(attrs);
       }
-      const location = olds?.location ?? DEFAULT_LOCATION;
+      const location = olds?.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, olds?.displayName);
@@ -266,15 +266,14 @@ export const StudyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
-          env.project,
-        );
+        return (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listAt(locationParent(env.project, location), env.project),
+        )).flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);

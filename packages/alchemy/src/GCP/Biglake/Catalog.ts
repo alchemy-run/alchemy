@@ -8,7 +8,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   BiglakeNotResolved,
-  DEFAULT_LOCATION,
+  listLocations,
   MAX_ID_LENGTH,
   createInternalLabels,
   hasAlchemyLabels,
@@ -43,7 +43,7 @@ export type CatalogProps = {
    * Location (`us-central1`, `US`, …). Immutable — changing it replaces
    * the catalog. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
 };
@@ -254,20 +254,28 @@ export const CatalogProvider = () =>
     stables: ["name", "catalogId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       return replaceOnIdentity({
         previousId: olds?.catalogId ?? output?.catalogId,
         nextId: news.catalogId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const catalogId = yield* toCatalogId(
         id,
         olds?.catalogId,
@@ -288,9 +296,10 @@ export const CatalogProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listCatalogs(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const catalogs = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listCatalogs(locationParent(env.project, location)),
+        )).flat();
         const owned = yield* Effect.forEach(
           namedOf(catalogs),
           (catalog) =>
@@ -308,7 +317,8 @@ export const CatalogProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const catalogId = yield* toCatalogId(
         id,

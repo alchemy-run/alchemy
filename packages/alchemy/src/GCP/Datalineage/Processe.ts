@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
-  DEFAULT_LOCATION,
   desiredAttributes,
   findOwnedProcess,
   listOwnedProcesses,
@@ -54,7 +53,7 @@ export type ProcesseProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * process. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -154,9 +153,10 @@ const defaultOrigin = (
 const toAttrs = (
   process: datalineage.GoogleCloudDatacatalogLineageV1Process,
   project: string,
+  region: string,
 ) => {
   const name = process.name ?? "";
-  const parsed = parseName(name, "processes");
+  const parsed = parseName(name, "processes", region);
   return {
     name,
     processId: parsed.id,
@@ -186,11 +186,14 @@ export const ProcesseProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.processId ?? output?.processId,
@@ -201,7 +204,10 @@ export const ProcesseProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const processId = yield* toPhysicalId(
         id,
         olds?.processId,
@@ -213,7 +219,7 @@ export const ProcesseProvider = () =>
         (yield* getByName(name)) ??
         (yield* findOwnedProcess(id, env.project, location));
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.attributes))
         ? attrs
         : Unowned(attrs);
@@ -222,13 +228,16 @@ export const ProcesseProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const rows = yield* listOwnedProcesses(env.project, DEFAULT_LOCATION);
-        return rows.map((row) => toAttrs(row, env.project));
+        const rows = yield* listOwnedProcesses(env.project, env.region);
+        return rows.map((row) => toAttrs(row, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const processId = yield* toPhysicalId(
         id,
         news.processId,
@@ -291,7 +300,7 @@ export const ProcesseProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

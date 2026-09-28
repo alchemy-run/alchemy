@@ -46,7 +46,7 @@ export type DataDomainProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * domain.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -168,7 +168,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listDomains = (project: string) => {
+const listDomains = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsDataDomains.pages({
@@ -183,10 +183,11 @@ const listDomains = (project: string) => {
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
-export const listAlchemyDataDomains = (project: string) => listDomains(project);
+export const listAlchemyDataDomains = (project: string, region: string) =>
+  listDomains(project, region);
 
 export const DataDomainProvider = () =>
   Provider.succeed(DataDomain, {
@@ -202,12 +203,17 @@ export const DataDomainProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataDomainId ?? output?.dataDomainId,
         nextId: news.dataDomainId ?? olds?.dataDomainId ?? output?.dataDomainId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.parentDataDomain ?? output?.parentDataDomain,
         nextParent: news.parentDataDomain ?? olds?.parentDataDomain,
@@ -222,7 +228,10 @@ export const DataDomainProvider = () =>
         output?.dataDomainId,
         "datadomain",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, dataDomainId);
       const existing = yield* getByName(name);
@@ -236,7 +245,7 @@ export const DataDomainProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listDomains(env.project);
+        const items = yield* listDomains(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -248,7 +257,10 @@ export const DataDomainProvider = () =>
         output?.dataDomainId,
         "datadomain",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, dataDomainId);
       const desiredLabels = {
         ...toLabels(news.labels),

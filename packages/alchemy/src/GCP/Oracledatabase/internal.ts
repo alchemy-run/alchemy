@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_NETWORK = "default";
 export const MAX_NAME_LENGTH = 63;
 
@@ -93,10 +92,10 @@ export const alphanumericId = (name: string, maxLength = 32): string => {
   return next;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
-export const parentOf = (project: string, location: string | undefined) =>
+export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
 
 export const toPhysicalId = (
@@ -127,9 +126,7 @@ export const parseName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts.slice(collectionAt + 1).join("/")
@@ -441,6 +438,7 @@ export const waitUntilReady = <A, E extends { _tag: string }, R>(
 
 export const listAtLocation = <A, E extends { _tag: string }, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
@@ -449,7 +447,7 @@ export const listAtLocation = <A, E extends { _tag: string }, R>(
         error._tag === "NotFound" ||
         error._tag === "BadRequest" ||
         error._tag === "Forbidden",
-      () => list(`projects/${project}/locations/${DEFAULT_LOCATION}`),
+      () => list(`projects/${project}/locations/${region}`),
     ),
   );
 

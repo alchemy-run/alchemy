@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type NetworkEdgeSecurityServiceProps = {
@@ -30,7 +29,7 @@ export type NetworkEdgeSecurityServiceProps = {
   /**
    * Region the service lives in. Immutable — changing it replaces the
    * service. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -140,8 +139,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -209,7 +208,7 @@ const toAttrs = (
   return {
     networkEdgeSecurityServiceName: service.name ?? "",
     project,
-    region: normalizeRegion(service.region),
+    region: lastSegment(service.region).toLowerCase(),
     description: parsed.description,
     securityPolicy: service.securityPolicy,
     fingerprint: service.fingerprint,
@@ -404,6 +403,7 @@ export const NetworkEdgeSecurityServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.networkEdgeSecurityServiceName ??
         output?.networkEdgeSecurityServiceName;
@@ -412,8 +412,14 @@ export const NetworkEdgeSecurityServiceProvider = () =>
         previousName !== undefined &&
         nextName !== undefined &&
         previousName !== nextName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -430,7 +436,10 @@ export const NetworkEdgeSecurityServiceProvider = () =>
         olds?.networkEdgeSecurityServiceName,
         output?.networkEdgeSecurityServiceName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -468,7 +477,7 @@ export const NetworkEdgeSecurityServiceProvider = () =>
         news.networkEdgeSecurityServiceName,
         output?.networkEdgeSecurityServiceName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -551,7 +560,7 @@ export const NetworkEdgeSecurityServiceProvider = () =>
       if (!output.networkEdgeSecurityServiceName) return;
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteNetworkEdgeSecurityServices({
           project,

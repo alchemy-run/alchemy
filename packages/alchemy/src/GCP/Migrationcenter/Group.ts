@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   fieldMask,
   hasAlchemyLabelMap,
   locationParent,
@@ -42,7 +41,8 @@ export type GroupProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * group. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -118,9 +118,9 @@ export const Group = Resource<Group>("GCP.Migrationcenter.Group");
 const resourceName = (project: string, location: string, groupId: string) =>
   `${locationParent(project, location)}/groups/${groupId}`;
 
-const toAttrs = (group: mc.Group, project: string) => {
+const toAttrs = (group: mc.Group, project: string, region: string) => {
   const name = group.name ?? "";
-  const parsed = parseName(name, "groups");
+  const parsed = parseName(name, "groups", region);
   return {
     name,
     groupId: parsed.id,
@@ -141,7 +141,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsGroups({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsGroups
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -155,7 +155,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsGroups
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -176,12 +176,17 @@ export const GroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.groupId ?? output?.groupId,
         nextId: news.groupId ?? olds?.groupId ?? output?.groupId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -194,11 +199,14 @@ export const GroupProvider = () =>
         output?.groupId,
         "group",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, groupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -207,8 +215,8 @@ export const GroupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -219,7 +227,10 @@ export const GroupProvider = () =>
         output?.groupId,
         "group",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, groupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -281,7 +292,7 @@ export const GroupProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

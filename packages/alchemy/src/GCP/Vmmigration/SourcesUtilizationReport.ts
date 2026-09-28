@@ -45,7 +45,7 @@ export type SourcesUtilizationReportProps = {
   source: string;
   /**
    * Region used when `source` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -135,9 +135,13 @@ const DEFAULT_TIME_FRAME: UtilizationReportTimeFrame = "WEEK";
 const resourceName = (source: string, utilizationReportId: string) =>
   `${source}/utilizationReports/${utilizationReportId}`;
 
-const toAttrs = (report: vm.UtilizationReport, project: string) => {
+const toAttrs = (
+  report: vm.UtilizationReport,
+  project: string,
+  region: string,
+) => {
   const name = report.name ?? "";
-  const parsed = parseName(name, "utilizationReports");
+  const parsed = parseName(name, "utilizationReports", region);
   const ownership = parseOwnership(report.displayName);
   return {
     name,
@@ -189,6 +193,7 @@ export const SourcesUtilizationReportProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource = olds?.source ?? output?.source;
       const previousFrame =
         olds?.timeFrame ?? output?.timeFrame ?? DEFAULT_TIME_FRAME;
@@ -203,9 +208,13 @@ export const SourcesUtilizationReportProvider = () =>
           news.utilizationReportId ??
           olds?.utilizationReportId ??
           output?.utilizationReportId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: previousSource,
         nextParent: news.source ?? previousSource,
@@ -215,7 +224,10 @@ export const SourcesUtilizationReportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const utilizationReportId = yield* toPhysicalId(
         id,
         olds?.utilizationReportId,
@@ -231,7 +243,7 @@ export const SourcesUtilizationReportProvider = () =>
         (source.length > 0 ? resourceName(source, utilizationReportId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.displayName))
         ? attrs
         : Unowned(attrs);
@@ -240,15 +252,22 @@ export const SourcesUtilizationReportProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* forEachSource(env.project, listChildren);
+        const items = yield* forEachSource(
+          env.project,
+          listChildren,
+          env.region,
+        );
         return items
           .filter((item) => hasOwnershipMarker(item.displayName))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const source = sourceOf(news.source, env.project, location);
       const utilizationReportId = yield* toPhysicalId(
         id,
@@ -288,7 +307,7 @@ export const SourcesUtilizationReportProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

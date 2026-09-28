@@ -61,7 +61,7 @@ export type EntryGroupsEntryLinkProps = {
   /**
    * Region used when `entryGroup` is a bare id. Immutable — changing it
    * replaces the link.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -144,11 +144,12 @@ const resolveParent = (
   project: string,
   entryGroup: string,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   const parent = expandParent(
     entryGroup,
     project,
-    normalizeLocation(location),
+    normalizeLocation(location, defaultLocation),
     "entryGroups",
   );
   const parsed = parseName(`${parent}/entryLinks/_`, "entryLinks");
@@ -256,6 +257,7 @@ export const EntryGroupsEntryLinkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = linkTypeOf(
         olds?.entryLinkType ?? output?.entryLinkType,
       );
@@ -267,9 +269,13 @@ export const EntryGroupsEntryLinkProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.entryLinkId ?? output?.entryLinkId,
         nextId: news.entryLinkId ?? olds?.entryLinkId ?? output?.entryLinkId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.entryGroup ?? output?.entryGroup,
         nextParent: news.entryGroup ?? olds?.entryGroup ?? output?.entryGroup,
@@ -283,6 +289,7 @@ export const EntryGroupsEntryLinkProvider = () =>
         env.project,
         olds?.entryGroup ?? output?.entryGroup ?? "",
         olds?.location ?? output?.location,
+        env.region,
       );
       const entryLinkId = yield* toPhysicalId(
         id,
@@ -302,18 +309,21 @@ export const EntryGroupsEntryLinkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* listAtLocation(env.project, (parent) =>
-          collectPages(
-            dataplex.listProjectsLocationsEntryGroups.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.entryGroups,
-          ).pipe(
-            Effect.map((items) =>
-              items.filter((item) => hasAlchemyLabelMap(item.labels)),
+        const groups = yield* listAtLocation(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              dataplex.listProjectsLocationsEntryGroups.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.entryGroups,
+            ).pipe(
+              Effect.map((items) =>
+                items.filter((item) => hasAlchemyLabelMap(item.labels)),
+              ),
             ),
-          ),
         );
         const seen = new Set<string>();
         const found: ReturnType<typeof toAttrs>[] = [];
@@ -358,6 +368,7 @@ export const EntryGroupsEntryLinkProvider = () =>
         env.project,
         news.entryGroup,
         news.location ?? output?.location,
+        env.region,
       );
       const entryLinkId = yield* toPhysicalId(
         id,

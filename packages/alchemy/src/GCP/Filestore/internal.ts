@@ -8,7 +8,6 @@ import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_ZONE = "us-central1-a";
-export const DEFAULT_REGION = "us-central1";
 export const DEFAULT_SHARE_NAME = "share1";
 export const MAX_NAME_LENGTH = 63;
 
@@ -73,7 +72,7 @@ export const rfc1035 = (name: string, fallback = "filestore"): string => {
 
 export const normalizeLocation = (
   location: string | undefined,
-  fallback = DEFAULT_REGION,
+  fallback: string,
 ) => lastSegment(location ?? fallback).toLowerCase();
 
 export const regionOf = (location: string) => {
@@ -104,7 +103,11 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -115,7 +118,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_REGION,
+        : fallbackLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

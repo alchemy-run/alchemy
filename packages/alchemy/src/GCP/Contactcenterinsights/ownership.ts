@@ -6,7 +6,6 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_VIEW_DISPLAY_NAME_LENGTH = 64;
@@ -18,7 +17,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const locationOf = (name: string, fallback = DEFAULT_LOCATION) => {
+export const locationOf = (name: string, fallback = "") => {
   const parts = name.split("/");
   const index = parts.indexOf("locations");
   return index >= 0 ? (parts[index + 1] ?? fallback) : fallback;
@@ -32,8 +31,8 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");

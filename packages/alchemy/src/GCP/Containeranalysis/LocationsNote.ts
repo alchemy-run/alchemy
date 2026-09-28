@@ -9,7 +9,6 @@ import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { NoteProps } from "./Note.ts";
 import {
-  DEFAULT_LOCATION,
   expandNoteName,
   hasOwnershipMarker,
   ignoreGone,
@@ -31,7 +30,7 @@ export type LocationsNoteProps = NoteProps & {
    * Location (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the note. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
 };
@@ -132,13 +131,14 @@ const getByName = missingGet(containeranalysis.getProjectsLocationsNotes);
 const toPublicAttrs = (
   note: containeranalysis.Note,
   project: string,
+  region: string,
 ): LocationsNote["Attributes"] => {
   const attrs = noteAttrs(note, project);
   return {
     name: attrs.name,
     noteId: attrs.noteId,
     project: attrs.project,
-    location: attrs.location ?? DEFAULT_LOCATION,
+    location: attrs.location ?? region,
     shortDescription: attrs.shortDescription,
     longDescription: attrs.longDescription,
     kind: attrs.kind,
@@ -170,6 +170,7 @@ export const LocationsNoteProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = noteKind(olds ?? {}) ?? output?.kind;
       const nextKind = noteKind(news) ?? previousKind;
       return replaceOnIdentity({
@@ -177,12 +178,13 @@ export const LocationsNoteProvider = () =>
         nextId: news.noteId,
         previousParent: locationParent(
           "x",
-          normalizeLocation(olds?.location ?? output?.location),
+          normalizeLocation(olds?.location ?? output?.location, env.region),
         ),
         nextParent: locationParent(
           "x",
           normalizeLocation(
             news.location ?? olds?.location ?? output?.location,
+            env.region,
           ),
         ),
         extra:
@@ -194,12 +196,15 @@ export const LocationsNoteProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const noteId = yield* toPhysicalId(id, olds?.noteId, output?.noteId);
       const name = output?.name ?? resourceName(env.project, location, noteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toPublicAttrs(existing, env.project);
+      const attrs = toPublicAttrs(existing, env.project, env.region);
       const { labels } = parseDescription(existing.longDescription);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -207,15 +212,18 @@ export const LocationsNoteProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listLocationNotes(env.project, DEFAULT_LOCATION);
+        const items = yield* listLocationNotes(env.project, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.longDescription))
-          .map((item) => toPublicAttrs(item, env.project));
+          .map((item) => toPublicAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const noteId = yield* toPhysicalId(id, news.noteId, output?.noteId);
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, noteId);
@@ -249,7 +257,7 @@ export const LocationsNoteProvider = () =>
             ),
         },
       });
-      return toPublicAttrs(current, env.project);
+      return toPublicAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

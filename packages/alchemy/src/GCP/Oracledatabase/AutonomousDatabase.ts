@@ -125,7 +125,7 @@ export type AutonomousDatabaseProps = {
    * Region (`us-central1`, `us-east4`, …). Immutable — changing it
    * replaces the database. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -467,7 +467,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listDatabases = (project: string) => {
+const listDatabases = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       oracle.listProjectsLocationsAutonomousDatabases.pages({
@@ -480,7 +480,7 @@ const listDatabases = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect).pipe(
+  return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
@@ -546,15 +546,18 @@ export const AutonomousDatabaseProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.autonomousDatabaseId ?? output?.autonomousDatabaseId,
         nextId:
           news.autonomousDatabaseId ??
           olds?.autonomousDatabaseId ??
           output?.autonomousDatabaseId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra: identityChanged(news, olds, output),
       });
@@ -568,7 +571,9 @@ export const AutonomousDatabaseProvider = () =>
         output?.autonomousDatabaseId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceNameOf(env.project, location, COLLECTION, autonomousDatabaseId);
@@ -583,7 +588,7 @@ export const AutonomousDatabaseProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listDatabases(env.project);
+        const items = yield* listDatabases(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -595,7 +600,9 @@ export const AutonomousDatabaseProvider = () =>
         output?.autonomousDatabaseId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceNameOf(
         env.project,
         location,

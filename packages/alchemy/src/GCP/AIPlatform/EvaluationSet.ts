@@ -29,7 +29,7 @@ export type EvaluationSetProps = {
   evaluationSetId?: string;
   /**
    * Region. Immutable — changing it replaces the set.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -240,13 +240,18 @@ export const EvaluationSetProvider = () =>
     stables: ["name", "evaluationSetId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationSetId ?? output?.evaluationSetId;
       const nextId = news.evaluationSetId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const replace =
         (previousId !== undefined &&
           nextId !== undefined &&
@@ -258,7 +263,10 @@ export const EvaluationSetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const setId = olds?.evaluationSetId ?? output?.evaluationSetId;
       const name =
         output?.name ??
@@ -282,7 +290,10 @@ export const EvaluationSetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const setId = news.evaluationSetId ?? output?.evaluationSetId;
       const name =
         output?.name ??

@@ -28,14 +28,26 @@ export const GOOGLE_PROJECT_ID_ENV = "GOOGLE_PROJECT_ID";
 export const GOOGLE_CLOUD_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT";
 export const GOOGLE_APPLICATION_CREDENTIALS_ENV =
   "GOOGLE_APPLICATION_CREDENTIALS";
+export const GOOGLE_CLOUD_REGION_ENV = "GOOGLE_CLOUD_REGION";
+/** The region `gcloud config set compute/region` exports. */
+export const CLOUDSDK_COMPUTE_REGION_ENV = "CLOUDSDK_COMPUTE_REGION";
+/** Region when neither the environment nor the profile names one. */
+export const DEFAULT_GCP_REGION = "us-central1";
+
+/**
+ * Default region for regional resources created without an explicit
+ * location. Like the project, it is part of the profile.
+ */
+const region = Schema.optionalKey(Schema.String);
 
 export const GcpAuthConfigSchema = Schema.Union([
-  Schema.Struct({ method: Schema.Literal("env") }),
+  Schema.Struct({ method: Schema.Literal("env"), region }),
   Schema.Struct({
     method: Schema.Literal("serviceAccount"),
     credentialsFile: Schema.optionalKey(Schema.String),
+    region,
   }),
-  Schema.Struct({ method: Schema.Literal("stored") }),
+  Schema.Struct({ method: Schema.Literal("stored"), region }),
 ]);
 export type GcpAuthConfig = typeof GcpAuthConfigSchema.Type;
 
@@ -57,6 +69,8 @@ export type GcpResolvedCredentials = {
   type: "token";
   accessToken: Redacted.Redacted<string>;
   project: string;
+  /** Default region: env override, else the profile, else `us-central1`. */
+  region: string;
   source: { type: GcpAuthConfig["method"] | "env"; details?: string };
 };
 
@@ -114,7 +128,7 @@ export const GcpAuth = AuthProviderLayer<
     const mintCached = (
       sa: ServiceAccountKey,
       project: string,
-    ): Effect.Effect<GcpResolvedCredentials, AuthError> =>
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
       Effect.gen(function* () {
         const now = yield* Effect.sync(() => Date.now());
         const cached = yield* Ref.get(tokenCache);
@@ -153,7 +167,7 @@ export const GcpAuth = AuthProviderLayer<
     const resolveFromServiceAccount = (
       sa: ServiceAccountKey,
       explicitProject?: string,
-    ): Effect.Effect<GcpResolvedCredentials, AuthError> => {
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> => {
       const project = explicitProject ?? sa.project_id;
       if (!project) {
         return Effect.fail(
@@ -270,8 +284,21 @@ export const GcpAuth = AuthProviderLayer<
           ),
         );
 
+    const promptRegion = interaction.prompt
+      .text({
+        message: "Default GCP region",
+        placeholder: DEFAULT_GCP_REGION,
+      })
+      .pipe(
+        mapPromptCancellation,
+        Effect.map((value) => (value ?? "").trim() || DEFAULT_GCP_REGION),
+      );
+
     const configureCredentials = (_profileName: string) =>
       configureInteractive(_profileName).pipe(
+        Effect.flatMap((config) =>
+          promptRegion.pipe(Effect.map((region) => ({ ...config, region }))),
+        ),
         Effect.mapError(
           (e) =>
             new AuthError({
@@ -281,18 +308,31 @@ export const GcpAuth = AuthProviderLayer<
         ),
       );
 
+    const regionField: ConfigureField = {
+      name: "region",
+      label: "Default GCP region",
+      placeholder: DEFAULT_GCP_REGION,
+      optional: true,
+    };
+
     const serviceAccountFields: ReadonlyArray<ConfigureField> = [
       {
         name: "credentialsFile",
         label: "Path to service-account JSON",
         optional: true,
       },
+      regionField,
     ];
 
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
-      { method: "env", fields: [] },
+      { method: "env", fields: [regionField] },
       { method: "serviceAccount", fields: serviceAccountFields },
     ];
+
+    const regionOf = (values: Record<string, string>) => {
+      const value = (values.region ?? "").trim();
+      return value.length > 0 ? { region: value } : {};
+    };
 
     const configureWith = (
       _profileName: string,
@@ -302,13 +342,17 @@ export const GcpAuth = AuthProviderLayer<
       },
     ): Effect.Effect<GcpAuthConfig, AuthError> => {
       if (input.method === "env") {
-        return Effect.succeed({ method: "env" as const });
+        return Effect.succeed({
+          method: "env" as const,
+          ...regionOf(input.values),
+        });
       }
       if (input.method === "serviceAccount") {
         const trimmed = (input.values.credentialsFile ?? "").trim();
         return Effect.succeed({
           method: "serviceAccount" as const,
           ...(trimmed.length > 0 ? { credentialsFile: trimmed } : {}),
+          ...regionOf(input.values),
         });
       }
       return Effect.fail(
@@ -319,7 +363,7 @@ export const GcpAuth = AuthProviderLayer<
     };
 
     const resolveFromEnv = (): Effect.Effect<
-      GcpResolvedCredentials,
+      Omit<GcpResolvedCredentials, "region">,
       AuthError
     > =>
       Effect.gen(function* () {
@@ -352,7 +396,7 @@ export const GcpAuth = AuthProviderLayer<
 
     const resolveFromServiceAccountFile = (
       credentialsFile: string | undefined,
-    ): Effect.Effect<GcpResolvedCredentials, AuthError> =>
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
       Effect.gen(function* () {
         const fromEnv = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
         const path = credentialsFile ?? fromEnv;
@@ -370,7 +414,10 @@ export const GcpAuth = AuthProviderLayer<
 
     const resolveFromStored = (
       profileName: string,
-    ): Effect.Effect<GcpResolvedCredentials, AuthError | NeedsReauth> =>
+    ): Effect.Effect<
+      Omit<GcpResolvedCredentials, "region">,
+      AuthError | NeedsReauth
+    > =>
       Effect.gen(function* () {
         const creds = yield* store.read(
           profileName,
@@ -396,10 +443,13 @@ export const GcpAuth = AuthProviderLayer<
         return yield* resolveFromServiceAccount(sa, creds.project);
       });
 
-    const resolveCredentials = (
+    const resolveToken = (
       profileName: string,
       config: GcpAuthConfig,
-    ): Effect.Effect<GcpResolvedCredentials, AuthError | NeedsReauth> => {
+    ): Effect.Effect<
+      Omit<GcpResolvedCredentials, "region">,
+      AuthError | NeedsReauth
+    > => {
       switch (config.method) {
         case "env":
           return resolveFromEnv();
@@ -409,6 +459,22 @@ export const GcpAuth = AuthProviderLayer<
           return resolveFromStored(profileName);
       }
     };
+
+    // An explicitly-set region env var wins over the profile's region,
+    // matching AWS_REGION over an AWS profile's region.
+    const resolveCredentials = (
+      profileName: string,
+      config: GcpAuthConfig,
+    ): Effect.Effect<GcpResolvedCredentials, AuthError | NeedsReauth> =>
+      Effect.gen(function* () {
+        const token = yield* resolveToken(profileName, config);
+        const region =
+          (yield* getEnv(GOOGLE_CLOUD_REGION_ENV)) ??
+          (yield* getEnv(CLOUDSDK_COMPUTE_REGION_ENV)) ??
+          config.region ??
+          DEFAULT_GCP_REGION;
+        return { ...token, region };
+      });
 
     const logout = (profileName: string, config: GcpAuthConfig) =>
       Match.value(config).pipe(
@@ -447,7 +513,9 @@ export const GcpAuth = AuthProviderLayer<
               .pipe(
                 Effect.flatMap((creds) =>
                   creds == null
-                    ? loginStored(profileName)
+                    ? loginStored(profileName).pipe(
+                        Effect.map((stored) => ({ ...config, ...stored })),
+                      )
                     : Effect.succeed(config),
                 ),
               ),
@@ -472,6 +540,7 @@ export const GcpAuth = AuthProviderLayer<
           return {
             lines: [
               { key: "project", value: creds.project },
+              { key: "region", value: creds.region },
               {
                 key: "accessToken",
                 value: displayRedacted(creds.accessToken, 8),
@@ -482,7 +551,14 @@ export const GcpAuth = AuthProviderLayer<
         }),
       );
 
-    const readEnvironment = resolveFromEnv();
+    const readEnvironment = Effect.gen(function* () {
+      const token = yield* resolveFromEnv();
+      const region =
+        (yield* getEnv(GOOGLE_CLOUD_REGION_ENV)) ??
+        (yield* getEnv(CLOUDSDK_COMPUTE_REGION_ENV)) ??
+        DEFAULT_GCP_REGION;
+      return { ...token, region };
+    });
 
     return {
       configSchema: GcpAuthConfigSchema,

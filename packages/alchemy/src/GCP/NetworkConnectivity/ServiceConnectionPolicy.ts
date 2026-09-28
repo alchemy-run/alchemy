@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworkConnectivityNotResolved,
   canonicalizeLink,
   changedFields,
@@ -96,7 +95,8 @@ export type ServiceConnectionPolicyProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -269,10 +269,11 @@ const toAutoCreated = (
 const toAttrs = (
   policy: networkconnectivity.ServiceConnectionPolicy,
   project: string,
+  region: string,
 ) => {
   const name = policy.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
-  const location = parsed.location || DEFAULT_REGION;
+  const parsed = parseName(name, COLLECTION, region);
+  const location = parsed.location || region;
   return {
     name,
     serviceConnectionPolicyId: parsed.id,
@@ -313,6 +314,7 @@ export const ServiceConnectionPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.serviceConnectionPolicyId ?? output?.serviceConnectionPolicyId;
       const nextId = news.serviceConnectionPolicyId
@@ -320,11 +322,11 @@ export const ServiceConnectionPolicyProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const previousNetwork = lastSegment(
         canonicalizeLink(olds?.network ?? output?.network),
@@ -352,14 +354,14 @@ export const ServiceConnectionPolicyProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, serviceConnectionPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -379,7 +381,7 @@ export const ServiceConnectionPolicyProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -392,7 +394,7 @@ export const ServiceConnectionPolicyProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(
         env.project,
@@ -508,7 +510,7 @@ export const ServiceConnectionPolicyProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

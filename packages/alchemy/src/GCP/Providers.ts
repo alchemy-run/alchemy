@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { GcpHttpClient } from "./HttpClient.ts";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { DockerLive } from "../Docker/Docker.ts";
@@ -3830,7 +3830,7 @@ const gcpLive = Layer.mergeAll(
   GcpAuth,
   ProfileStoreLive,
   CredentialsStoreLive,
-  GcpHttpClient,
+  FetchHttpClient.layer,
 );
 
 export const providers = () =>

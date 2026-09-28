@@ -13,7 +13,6 @@ import {
   listSfdcInstances,
 } from "./internal.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   isDeleted,
@@ -41,7 +40,8 @@ export type SfdcInstanceProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -154,12 +154,13 @@ const resourceName = (
 const toAttrs = (
   instance: integrations.GoogleCloudIntegrationsV1alphaSfdcInstance,
   project: string,
+  region: string,
 ) => {
   const name = instance.name ?? "";
   return {
     name,
     sfdcInstanceId: lastSegment(name),
-    location: locationOf(name),
+    location: locationOf(name, region),
     project: projectOf(name) || project,
     displayName: instance.displayName,
     description: parseOwnership(instance.description).text,
@@ -185,6 +186,7 @@ export const SfdcInstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.sfdcInstanceId ?? output?.sfdcInstanceId;
       const idChanged =
         previousId !== undefined &&
@@ -194,8 +196,8 @@ export const SfdcInstanceProvider = () =>
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
-        normalizeLocation(news.location) !==
-          normalizeLocation(previousLocation);
+        normalizeLocation(news.location, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
 
@@ -206,7 +208,10 @@ export const SfdcInstanceProvider = () =>
         olds?.sfdcInstanceId,
         output?.sfdcInstanceId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, sfdcInstanceId);
       let existing = yield* getByName(name);
@@ -218,7 +223,7 @@ export const SfdcInstanceProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -228,17 +233,18 @@ export const SfdcInstanceProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listSfdcInstances(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         return items
           .filter((instance) => hasOwnershipMarker(instance.description))
-          .map((instance) => toAttrs(instance, env.project));
+          .map((instance) => toAttrs(instance, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const parent = locationParent(env.project, location);
       const sfdcInstanceId = yield* toResourceId(
@@ -313,7 +319,7 @@ export const SfdcInstanceProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

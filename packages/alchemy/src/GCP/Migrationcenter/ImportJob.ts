@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandParent,
   fieldMask,
   hasAlchemyLabelMap,
@@ -45,7 +44,8 @@ export type ImportJobProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -125,9 +125,9 @@ const resourceName = (project: string, location: string, importJobId: string) =>
 const sourceOf = (value: string, project: string, location: string) =>
   expandParent(value, project, location, "sources");
 
-const toAttrs = (item: mc.ImportJob, project: string) => {
+const toAttrs = (item: mc.ImportJob, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "importJobs");
+  const parsed = parseName(name, "importJobs", region);
   return {
     name,
     importJobId: parsed.id,
@@ -153,7 +153,7 @@ const getByName = (name: string) =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsImportJobs
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -168,7 +168,7 @@ const listOwned = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsImportJobs
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
             view: "IMPORT_JOB_VIEW_BASIC",
           })
@@ -192,6 +192,7 @@ export const ImportJobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource = olds?.assetSource ?? output?.assetSource;
       const nextSource = news.assetSource;
       const sourceChanged =
@@ -203,9 +204,13 @@ export const ImportJobProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.importJobId ?? output?.importJobId,
         nextId: news.importJobId ?? olds?.importJobId ?? output?.importJobId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: sourceChanged,
       });
@@ -219,12 +224,15 @@ export const ImportJobProvider = () =>
         output?.importJobId,
         "importjob",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, importJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -233,8 +241,8 @@ export const ImportJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -245,7 +253,10 @@ export const ImportJobProvider = () =>
         output?.importJobId,
         "importjob",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, importJobId);
       const assetSource = sourceOf(news.assetSource, env.project, location);
       const desiredLabels = {
@@ -304,7 +315,7 @@ export const ImportJobProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

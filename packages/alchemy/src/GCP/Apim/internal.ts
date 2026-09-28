@@ -5,7 +5,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const MIN_NAME_LENGTH = 4;
 export const ALCHEMY_ID_PREFIX = "alch-";
@@ -82,10 +81,10 @@ export const rfc1035 = (name: string, fallback = "apim"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
-export const parentOf = (project: string, location: string | undefined) =>
+export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
 
 export const resourceName = (
@@ -127,9 +126,7 @@ export const parseName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -434,11 +431,12 @@ export const collectPages = <Page, A, E, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catch(() =>
-      list(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+      list(`projects/${project}/locations/${region}`).pipe(
         Effect.orElseSucceed((): A[] => []),
       ),
     ),

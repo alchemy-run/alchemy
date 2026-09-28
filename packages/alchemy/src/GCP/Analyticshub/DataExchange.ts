@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AnalyticshubNotResolved,
-  DEFAULT_LOCATION,
   deleteRetry,
   displayNameOf,
   encodeDescription,
@@ -50,7 +49,7 @@ export type DataExchangeProps = {
   /**
    * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
    * changing it replaces the exchange.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -218,6 +217,7 @@ export const DataExchangeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = sharingKind(
         olds?.sharingEnvironmentConfig ?? output?.sharingEnvironmentConfig,
       );
@@ -228,9 +228,13 @@ export const DataExchangeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dataExchangeId ?? output?.dataExchangeId,
         nextId: news.dataExchangeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           news.sharingEnvironmentConfig !== undefined &&
@@ -240,7 +244,10 @@ export const DataExchangeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const dataExchangeId = yield* toPhysicalId(
         id,
         olds?.dataExchangeId,
@@ -259,7 +266,7 @@ export const DataExchangeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listExchangesInProject(env.project);
+        const items = yield* listExchangesInProject(env.project, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project));
@@ -268,7 +275,8 @@ export const DataExchangeProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const parent = locationParent(env.project, location);
       const dataExchangeId = yield* toPhysicalId(

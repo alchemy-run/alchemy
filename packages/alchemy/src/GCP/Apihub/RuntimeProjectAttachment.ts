@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   locationParent,
   normalizeLocation,
   parseName,
@@ -34,7 +33,7 @@ export type RuntimeProjectAttachmentProps = {
   /**
    * Location of the API Hub host (`us-central1`, …). Immutable —
    * changing it replaces the attachment.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
 };
@@ -106,9 +105,10 @@ const resourceName = (
 const toAttrs = (
   attachment: apihub.GoogleCloudApihubV1RuntimeProjectAttachment,
   project: string,
+  region: string,
 ) => {
   const name = attachment.name ?? "";
-  const parsed = parseName(name, "runtimeProjectAttachments");
+  const parsed = parseName(name, "runtimeProjectAttachments", region);
   return {
     name,
     runtimeProjectAttachmentId: parsed.id,
@@ -139,6 +139,7 @@ export const RuntimeProjectAttachmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousProject = projectIdOf(
         olds?.runtimeProject ?? output?.runtimeProject,
         "",
@@ -155,9 +156,13 @@ export const RuntimeProjectAttachmentProvider = () =>
           news.runtimeProjectAttachmentId ??
           olds?.runtimeProjectAttachmentId ??
           output?.runtimeProjectAttachmentId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           previousProject.length > 0 &&
@@ -176,12 +181,15 @@ export const RuntimeProjectAttachmentProvider = () =>
         olds?.runtimeProjectAttachmentId ??
         output?.runtimeProjectAttachmentId ??
         runtimeProjectId;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, attachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       // Attachments cannot carry ownership metadata. Adopt only when the
       // observed id matches the deterministic runtime project id we would
       // have created; anything else is foreign.
@@ -197,7 +205,7 @@ export const RuntimeProjectAttachmentProvider = () =>
         // delete foreign attachments.
         return yield* apihub.listProjectsLocationsRuntimeProjectAttachments
           .pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
+            parent: locationParent(env.project, env.region),
             pageSize: 1000,
           })
           .pipe(
@@ -207,10 +215,13 @@ export const RuntimeProjectAttachmentProvider = () =>
             Stream.filter(
               (item) =>
                 projectIdOf(item.runtimeProject, "") === env.project ||
-                parseName(item.name ?? "", "runtimeProjectAttachments").id ===
-                  env.project,
+                parseName(
+                  item.name ?? "",
+                  "runtimeProjectAttachments",
+                  env.region,
+                ).id === env.project,
             ),
-            Stream.map((item) => toAttrs(item, env.project)),
+            Stream.map((item) => toAttrs(item, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -220,7 +231,10 @@ export const RuntimeProjectAttachmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const runtimeProject = projectNameOf(news.runtimeProject, env.project);
       const attachmentId =
         news.runtimeProjectAttachmentId ??
@@ -248,7 +262,7 @@ export const RuntimeProjectAttachmentProvider = () =>
         return yield* new ApihubNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

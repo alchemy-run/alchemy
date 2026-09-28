@@ -11,7 +11,6 @@ import type { Providers } from "../Providers.ts";
 import type { AnnotatorSelector } from "./AnalysisRule.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   lastSegment,
   locationOf,
   locationParent,
@@ -236,7 +235,7 @@ export const ConversationsAnalysesProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const parent = locationParent(env.project, DEFAULT_LOCATION);
+        const parent = locationParent(env.project, env.region);
         const conversations = yield* listConversations(parent);
         const pages = yield* Effect.forEach(
           conversations,

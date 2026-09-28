@@ -1,6 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import {
-  DEFAULT_REGION,
   encodeDescription,
   hasOwnershipMarker,
   lastSegment,
@@ -38,7 +37,7 @@ export type RegionInstanceGroupManagerResizeRequestProps = {
   /**
    * Region of the parent managed instance group. Immutable. `US-CENTRAL1`
    * is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -169,7 +168,7 @@ const toAttrs = (
   return {
     requestName: request.name ?? lastSegment(request.selfLink),
     project,
-    region: normalizeRegion(request.region),
+    region: lastSegment(request.region).toLowerCase(),
     instanceGroupManager: managerNameOf(instanceGroupManager),
     resizeBy: request.resizeBy ?? 0,
     description: parsed.description,
@@ -251,11 +250,16 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.requestName ?? output?.requestName;
       const nextName = news.requestName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       const previousManager = managerNameOf(
         olds?.instanceGroupManager ?? output?.instanceGroupManager ?? "",
@@ -290,7 +294,10 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
         output?.requestName,
         "resize",
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const instanceGroupManager = managerNameOf(
         olds?.instanceGroupManager ?? output?.instanceGroupManager ?? "",
       );
@@ -332,7 +339,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
               .filter((manager) => lastSegment(manager.region).length > 0)
               .map((manager) => ({
                 name: manager.name ?? lastSegment(manager.selfLink),
-                region: normalizeRegion(manager.region),
+                region: lastSegment(manager.region).toLowerCase(),
               }));
           }),
         );
@@ -372,7 +379,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
         output?.requestName,
         "resize",
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const instanceGroupManager = managerNameOf(news.instanceGroupManager);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -423,7 +430,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const instanceGroupManager = managerNameOf(output.instanceGroupManager);
       const current = yield* getByName(
         env.project,

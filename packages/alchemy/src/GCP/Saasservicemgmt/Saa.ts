@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   collectPages,
   fieldMask,
@@ -59,7 +58,7 @@ export type SaaProps = {
    * Region of the SaaS resource (`us-central1`, …). Immutable —
    * changing it replaces the SaaS. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -168,7 +167,7 @@ const toAttrs = (item: saasservicemgmt.Saas, project: string) => {
     name,
     saasId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location,
     locations: (item.locations ?? []).map((entry) => ({ name: entry.name })),
     labels: userLabels(item.labels),
     annotations: userAnnotations(item.annotations),
@@ -232,12 +231,15 @@ export const SaaProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.saasId ?? output?.saasId,
         nextId: news.saasId ?? olds?.saasId ?? output?.saasId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
       });
     }),
@@ -250,7 +252,9 @@ export const SaaProvider = () =>
         output?.saasId,
         "saa",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, COLLECTION, saasId);
       const existing = yield* getByName(name);
@@ -264,7 +268,7 @@ export const SaaProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, DEFAULT_LOCATION);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -276,7 +280,9 @@ export const SaaProvider = () =>
         output?.saasId,
         "saa",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, COLLECTION, saasId);
       const desiredLabels = {
         ...toLabels(news.labels),

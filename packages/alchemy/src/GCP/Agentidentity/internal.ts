@@ -6,7 +6,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { ALCHEMY_LABEL_PREFIX, stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 256;
 export const COLLECTION = "authProviders";
@@ -36,11 +35,13 @@ export const rfc1035 = (name: string, fallback = "auth"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
-export const parentOf = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const parentOf = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const resourceName = (
   project: string,
@@ -66,7 +67,7 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(COLLECTION);
   const locationsAt = parts.lastIndexOf("locations");
@@ -77,7 +78,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     authProviderId:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -298,7 +299,7 @@ const listPages = (parent: string) =>
       ),
     );
 
-const listLocationIds = (project: string) =>
+const listLocationIds = (project: string, region: string) =>
   agentidentity.listProjectsLocations
     .pages({
       name: `projects/${project}`,
@@ -313,19 +314,19 @@ const listLocationIds = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => {
         const ids = new Set(Array.from(chunk));
-        ids.add(DEFAULT_LOCATION);
+        ids.add(region);
         return [...ids];
       }),
       Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([DEFAULT_LOCATION]),
+        Effect.succeed([region]),
       ),
     );
 
-export const listOwned = (project: string) =>
+export const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
     const wildcard = yield* listPages(`projects/${project}/locations/-`);
     if (wildcard.length > 0) return wildcard;
-    const locations = yield* listLocationIds(project);
+    const locations = yield* listLocationIds(project, region);
     const pages = yield* Effect.forEach(
       locations,
       (location) => listPages(parentOf(project, location)),

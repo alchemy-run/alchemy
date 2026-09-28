@@ -12,7 +12,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 const OWNERSHIP_PREFIX = "alch-";
 const UUID_RE =
@@ -40,7 +39,7 @@ export type InstancesBackupProps = {
    * Ignored when `instance` is a full resource name. Immutable —
    * changing it replaces the backup. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -171,8 +170,8 @@ const rfc1035 = (name: string): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const instanceNameOf = (
   project: string,
@@ -183,7 +182,7 @@ const instanceNameOf = (
 const resourceName = (instance: string, backupId: string) =>
   `${instance}/backups/${backupId}`;
 
-const parseBackupName = (name: string) => {
+const parseBackupName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const backupsAt = parts.lastIndexOf("backups");
   const instancesAt = parts.lastIndexOf("instances");
@@ -196,7 +195,7 @@ const parseBackupName = (name: string) => {
   const location =
     locationsAt >= 0 && parts[locationsAt + 1]
       ? parts[locationsAt + 1]!
-      : DEFAULT_LOCATION;
+      : fallbackLocation;
   return {
     project,
     location,
@@ -216,12 +215,13 @@ const parseInstanceRef = (
   instance: string,
   fallbackProject: string,
   fallbackLocation: string | undefined,
+  region: string,
 ) => {
   const trimmed = instance.trim();
   if (trimmed.length === 0) {
     return {
       project: fallbackProject,
-      location: normalizeLocation(fallbackLocation),
+      location: normalizeLocation(fallbackLocation, region),
       instanceId: "",
       instanceName: "",
     };
@@ -229,8 +229,12 @@ const parseInstanceRef = (
   if (trimmed.includes("/instances/") || trimmed.includes("projects/")) {
     const parsed = parseBackupName(
       trimmed.includes("/backups/") ? trimmed : `${trimmed}/backups/-`,
+      "",
     );
-    const location = normalizeLocation(parsed.location || fallbackLocation);
+    const location = normalizeLocation(
+      parsed.location || fallbackLocation,
+      region,
+    );
     const project = parsed.project || fallbackProject;
     return {
       project,
@@ -239,7 +243,7 @@ const parseInstanceRef = (
       instanceName: instanceNameOf(project, location, parsed.instanceId),
     };
   }
-  const location = normalizeLocation(fallbackLocation);
+  const location = normalizeLocation(fallbackLocation, region);
   const instanceId = lastSegment(trimmed);
   return {
     project: fallbackProject,
@@ -288,9 +292,13 @@ const isAvailable = (state: string | undefined) =>
 const isFailed = (state: string | undefined) =>
   (state ?? "").toUpperCase() === "FAILED";
 
-const toAttrs = (backup: looker.InstanceBackup, project: string) => {
+const toAttrs = (
+  backup: looker.InstanceBackup,
+  project: string,
+  region: string,
+) => {
   const name = backup.name ?? "";
-  const parsed = parseBackupName(name);
+  const parsed = parseBackupName(name, region);
   return {
     name,
     backupId: parsed.backupId,
@@ -392,7 +400,7 @@ const listInstanceBackups = (parent: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
     );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   looker.listProjectsLocationsInstances
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -411,7 +419,7 @@ const listOwned = (project: string) =>
           ? Effect.succeed(instances)
           : looker
               .listProjectsLocationsInstances({
-                parent: `projects/${project}/locations/${DEFAULT_LOCATION}`,
+                parent: `projects/${project}/locations/${region}`,
                 pageSize: 1000,
               })
               .pipe(
@@ -434,7 +442,9 @@ const listOwned = (project: string) =>
           .filter(
             (backup) =>
               !isPlaceholder(backup) &&
-              isOwnedBackupId(parseBackupName(backup.name ?? "").backupId),
+              isOwnedBackupId(
+                parseBackupName(backup.name ?? "", region).backupId,
+              ),
           ),
       ),
     );
@@ -453,6 +463,7 @@ export const InstancesBackupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.backupId ?? output?.backupId;
       const nextId = news.backupId ?? previousId;
@@ -462,8 +473,12 @@ export const InstancesBackupProvider = () =>
       const nextInstance = lastSegment(news.instance ?? previousInstance);
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
 
       const replace =
         (previousId !== undefined &&
@@ -490,7 +505,7 @@ export const InstancesBackupProvider = () =>
       if (output?.name) {
         const existing = yield* getByName(output.name);
         if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, env.project);
+        const attrs = toAttrs(existing, env.project, env.region);
         const owned =
           isOwnedBackupId(attrs.backupId) ||
           attrs.name === output.name ||
@@ -502,12 +517,13 @@ export const InstancesBackupProvider = () =>
         olds?.instance ?? output?.instance ?? output?.instanceId ?? "",
         env.project,
         olds?.location ?? output?.location,
+        env.region,
       );
       if (ref.instanceId.length === 0) return undefined;
       const name = resourceName(ref.instanceName, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return isOwnedBackupId(attrs.backupId) || attrs.backupId === backupId
         ? attrs
         : Unowned(attrs);
@@ -516,8 +532,8 @@ export const InstancesBackupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -527,6 +543,7 @@ export const InstancesBackupProvider = () =>
         news.instance,
         env.project,
         news.location ?? output?.location,
+        env.region,
       );
       if (ref.instanceId.length === 0) {
         return yield* new InstancesBackupInstanceMissing({
@@ -563,7 +580,7 @@ export const InstancesBackupProvider = () =>
         current = yield* waitUntilReady(currentName);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

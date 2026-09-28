@@ -17,8 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
-
 export type RegionInstantSnapshotGroupProps = {
   /**
    * Instant snapshot group name (RFC1035, 1-63 characters). If omitted, a
@@ -30,7 +28,7 @@ export type RegionInstantSnapshotGroupProps = {
    * Region the group lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -152,8 +150,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -225,7 +223,7 @@ const toAttrs = (group: compute.InstantSnapshotGroup, project: string) => {
     instantSnapshotGroupName: group.name ?? group.id ?? "",
     instantSnapshotGroupId: group.id,
     project,
-    region: normalizeRegion(group.region),
+    region: lastSegment(group.region).toLowerCase(),
     sourceConsistencyGroup: group.sourceConsistencyGroup,
     description: parsed.description,
     status: group.status,
@@ -397,12 +395,19 @@ export const RegionInstantSnapshotGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName =
         olds?.instantSnapshotGroupName ?? output?.instantSnapshotGroupName;
       const nextName = news.instantSnapshotGroupName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const previousSource = canonicalizePolicy(
         olds?.sourceConsistencyGroup ?? output?.sourceConsistencyGroup,
       );
@@ -439,7 +444,10 @@ export const RegionInstantSnapshotGroupProvider = () =>
         olds?.instantSnapshotGroupName,
         output?.instantSnapshotGroupName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -457,7 +465,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
         return yield* compute.listRegionInstantSnapshotGroups
           .items({
             project: env.project,
-            region: DEFAULT_REGION,
+            region: env.region,
             maxResults: 500,
             returnPartialSuccess: true,
           })
@@ -476,7 +484,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
         news.instantSnapshotGroupName,
         output?.instantSnapshotGroupName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredSource = toPolicyRef(
@@ -548,7 +556,8 @@ export const RegionInstantSnapshotGroupProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const region = normalizeRegion(output.region);
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(output.region, env.region);
       const deleted = yield* compute
         .deleteRegionInstantSnapshotGroups({
           project: output.project,

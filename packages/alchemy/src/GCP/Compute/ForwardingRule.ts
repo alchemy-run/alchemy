@@ -20,7 +20,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_SCHEME = "EXTERNAL";
 const DEFAULT_NETWORK_TIER = "PREMIUM";
 const MAX_NAME_LENGTH = 63;
@@ -38,7 +37,7 @@ export type ForwardingRuleProps = {
   /**
    * Region the rule lives in. Immutable — changing it replaces the rule.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -325,8 +324,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const resourceRefOf = (value: string | undefined) => {
   if (!value) return "";
@@ -390,7 +389,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 const toAttrs = (rule: compute.ForwardingRule, project: string) => ({
   forwardingRuleName: rule.name ?? "",
   project,
-  region: normalizeRegion(rule.region),
+  region: lastSegment(rule.region ?? "").toLowerCase(),
   forwardingRuleId: rule.id,
   selfLink: rule.selfLink,
   ipAddress: rule.IPAddress,
@@ -754,6 +753,7 @@ export const ForwardingRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds.forwardingRuleName ?? output?.forwardingRuleName;
       const nextName = news.forwardingRuleName ?? previousName;
@@ -762,8 +762,14 @@ export const ForwardingRuleProvider = () =>
         nextName !== undefined &&
         nextName !== previousName;
 
-      const previousRegion = normalizeRegion(olds.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const previous = {
@@ -815,7 +821,10 @@ export const ForwardingRuleProvider = () =>
         olds?.forwardingRuleName,
         output?.forwardingRuleName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -860,7 +869,7 @@ export const ForwardingRuleProvider = () =>
         news.forwardingRuleName,
         output?.forwardingRuleName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -1035,7 +1044,7 @@ export const ForwardingRuleProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteForwardingRules({
           project,

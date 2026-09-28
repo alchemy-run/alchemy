@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   DataplexNotResolved,
   fingerprint,
   hasAlchemyLabelMap,
@@ -87,7 +86,7 @@ export type LakesAssetProps = {
   /**
    * Region used when constructing names. Taken from `zone` when it is a
    * full resource name.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -280,9 +279,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listOwnedAssets = (project: string) =>
+const listOwnedAssets = (project: string, region: string) =>
   Effect.gen(function* () {
-    const lakes = yield* listLakes(project, DEFAULT_LOCATION);
+    const lakes = yield* listLakes(project, region);
     const zones = yield* listChildResources(lakes, listZones);
     const assets = yield* Effect.forEach(
       zones.filter((zone) => (zone.name ?? "").length > 0),
@@ -307,15 +306,18 @@ export const LakesAssetProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.assetId ?? output?.assetId;
       const nextId = news.assetId ?? previousId;
       const previousZone = olds?.zone ?? output?.zone;
       const nextZone = news.zone ?? previousZone;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousType = (
         olds?.resourceSpec?.type ??
@@ -365,7 +367,7 @@ export const LakesAssetProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const assets = yield* listOwnedAssets(env.project);
+        const assets = yield* listOwnedAssets(env.project, env.region);
         return assets
           .filter((asset) => hasAlchemyLabelMap(asset.labels))
           .map((asset) => toAttrs(asset, env.project));

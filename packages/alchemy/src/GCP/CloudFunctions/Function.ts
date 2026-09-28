@@ -44,7 +44,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_ENVIRONMENT = "GEN_2";
 const DEFAULT_RUNTIME = "nodejs20";
 const MAX_NAME_LENGTH = 63;
@@ -258,7 +257,7 @@ export type FunctionProps = PlatformProps & {
    * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the function. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -537,8 +536,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const normalizeEnvironment = (environment: string | undefined) => {
   const value = (environment ?? DEFAULT_ENVIRONMENT).toUpperCase();
@@ -548,7 +547,7 @@ const normalizeEnvironment = (environment: string | undefined) => {
 const resourceName = (project: string, location: string, functionId: string) =>
   `projects/${project}/locations/${location}/functions/${functionId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const functionsAt = parts.lastIndexOf("functions");
   const locationsAt = parts.lastIndexOf("locations");
@@ -559,7 +558,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     functionId:
       functionsAt >= 0 && parts[functionsAt + 1]
         ? parts[functionsAt + 1]!
@@ -638,10 +637,11 @@ const HOST_TYPE = "GCP.CloudFunctions.Function";
 const toAttrs = (
   fn: cloudfunctions.Cloudfunctions_Function,
   project: string,
+  region: string,
   extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     functionId: parsed.functionId,
@@ -900,13 +900,18 @@ export const FunctionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.functionId ?? output?.functionId;
       const nextId = news.functionId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousEnvironment = normalizeEnvironment(
         olds?.environment ?? output?.environment,
       );
@@ -947,12 +952,15 @@ export const FunctionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const functionId = yield* toId(id, olds?.functionId, output?.functionId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, functionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, {
+      const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
@@ -976,7 +984,7 @@ export const FunctionProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             ),
-            Stream.map((fn) => toAttrs(fn, env.project)),
+            Stream.map((fn) => toAttrs(fn, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -985,7 +993,10 @@ export const FunctionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const functionId = yield* toId(id, news.functionId, output?.functionId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const environment = normalizeEnvironment(
         news.environment ?? output?.environment,
       );
@@ -1221,7 +1232,7 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, {
+      return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
       });

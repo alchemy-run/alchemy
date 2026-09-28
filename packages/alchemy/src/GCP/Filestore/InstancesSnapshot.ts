@@ -161,7 +161,7 @@ const parseInstanceRef = (
 ) => {
   const trimmed = value.trim();
   if (trimmed.includes("/")) {
-    const parsed = parseName(trimmed, "instances");
+    const parsed = parseName(trimmed, "instances", DEFAULT_ZONE);
     const location = normalizeLocation(parsed.location, DEFAULT_ZONE);
     return {
       project: parsed.project || fallbackProject,
@@ -192,7 +192,7 @@ const parseInstanceRef = (
 
 const toAttrs = (snapshot: file.Snapshot, project: string) => {
   const name = snapshot.name ?? "";
-  const parsed = parseName(name, "snapshots");
+  const parsed = parseName(name, "snapshots", DEFAULT_ZONE);
   return {
     name,
     snapshotId: parsed.id,

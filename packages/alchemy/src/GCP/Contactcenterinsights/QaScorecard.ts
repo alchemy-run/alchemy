@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   lastSegment,
@@ -35,7 +34,7 @@ export type QaScorecardProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * scorecard. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -167,10 +166,10 @@ export const QaScorecardProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        news.location !== undefined &&
+        normalizeLocation(previousLocation) !== normalizeLocation(news.location)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -192,7 +191,9 @@ export const QaScorecardProvider = () =>
         olds?.qaScorecardId,
         output?.qaScorecardId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, qaScorecardId);
       const existing = yield* getByName(name);
@@ -207,7 +208,7 @@ export const QaScorecardProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
           env.project,
         );
       }),
@@ -215,7 +216,7 @@ export const QaScorecardProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location ?? env.region,
       );
       const parent = locationParent(env.project, location);
       const qaScorecardId = yield* toResourceId(

@@ -159,7 +159,8 @@ export type BlockchainNodeProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the node. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -431,9 +432,9 @@ const toConnection = (
   };
 };
 
-const toAttrs = (node: bne.BlockchainNode, project: string) => {
+const toAttrs = (node: bne.BlockchainNode, project: string, region: string) => {
   const name = node.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     blockchainNodeId: parsed.id,
@@ -471,8 +472,8 @@ const getByName = (name: string) =>
           ),
         );
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       bne.listProjectsLocationsBlockchainNodes.pages({
         parent,
@@ -496,6 +497,7 @@ export const BlockchainNodeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.blockchainType ?? output?.blockchainType;
       const nextType = news.blockchainType ?? previousType;
       const previousPsc =
@@ -515,9 +517,13 @@ export const BlockchainNodeProvider = () =>
           news.blockchainNodeId ??
           olds?.blockchainNodeId ??
           output?.blockchainNodeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousType !== undefined &&
@@ -538,12 +544,15 @@ export const BlockchainNodeProvider = () =>
         output?.blockchainNodeId,
         "node",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, blockchainNodeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -552,10 +561,10 @@ export const BlockchainNodeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items
           .filter((item) => !isPlaceholder(item))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -566,7 +575,10 @@ export const BlockchainNodeProvider = () =>
         output?.blockchainNodeId,
         "node",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, blockchainNodeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -665,7 +677,7 @@ export const BlockchainNodeProvider = () =>
         );
       }
 
-      return toAttrs(latest, env.project);
+      return toAttrs(latest, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -27,7 +27,6 @@ import {
   sameStringList,
 } from "./ownership.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const COLLECTION = "tlsInspectionPolicies";
 
 export type TlsFeatureProfile =
@@ -57,7 +56,7 @@ export type TlsInspectionPolicyProps = {
    * Location (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -225,6 +224,7 @@ const trustConfigName = (
 const toAttrs = (
   policy: networksecurity.TlsInspectionPolicy,
   project: string,
+  region: string,
 ) => {
   const name = policy.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
@@ -233,7 +233,7 @@ const toAttrs = (
     name,
     tlsInspectionPolicyId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || region,
     caPool: policy.caPool,
     description: owned.description,
     tlsFeatureProfile: policy.tlsFeatureProfile,
@@ -281,7 +281,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   networksecurity.listProjectsLocationsTlsInspectionPolicies
     .pages({
       parent: parentOf(project, "-"),
@@ -292,7 +292,7 @@ const listOwned = (project: string) =>
         Stream.fromIterable(page.tlsInspectionPolicies ?? []),
       ),
       Stream.filter((policy) => hasOwnershipMarker(policy.description)),
-      Stream.map((policy) => toAttrs(policy, project)),
+      Stream.map((policy) => toAttrs(policy, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -311,16 +311,17 @@ export const TlsInspectionPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.tlsInspectionPolicyId ?? output?.tlsInspectionPolicyId;
       const nextId = news.tlsInspectionPolicyId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -343,14 +344,14 @@ export const TlsInspectionPolicyProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -358,7 +359,7 @@ export const TlsInspectionPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listOwned(env.project);
+        return yield* listOwned(env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -371,7 +372,7 @@ export const TlsInspectionPolicyProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name = resourceName(
         env.project,
@@ -484,7 +485,7 @@ export const TlsInspectionPolicyProvider = () =>
         current = yield* waitUntilExists(current.name ?? name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

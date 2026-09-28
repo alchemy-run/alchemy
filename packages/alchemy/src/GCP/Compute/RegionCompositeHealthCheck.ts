@@ -1,6 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import {
-  DEFAULT_REGION,
   encodeDescription,
   hasOwnershipMarker,
   lastSegment,
@@ -33,7 +32,7 @@ export type RegionCompositeHealthCheckProps = {
    * Region the composite health check lives in. Immutable — changing it
    * replaces the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -146,7 +145,7 @@ const toAttrs = (
   return {
     healthCheckName: check.name ?? lastSegment(check.selfLink),
     project,
-    region: normalizeRegion(check.region),
+    region: lastSegment(check.region).toLowerCase(),
     description: parsed.description,
     healthDestination: check.healthDestination,
     healthSources: check.healthSources ?? [],
@@ -212,11 +211,16 @@ export const RegionCompositeHealthCheckProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.healthCheckName ?? output?.healthCheckName;
       const nextName = news.healthCheckName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       const nameChanged =
         previousName !== undefined &&
@@ -242,7 +246,10 @@ export const RegionCompositeHealthCheckProvider = () =>
         output?.healthCheckName,
         "healthcheck",
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, healthCheckName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -285,7 +292,7 @@ export const RegionCompositeHealthCheckProvider = () =>
         output?.healthCheckName,
         "healthcheck",
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -358,7 +365,7 @@ export const RegionCompositeHealthCheckProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* runRegionOp(
         env.project,
         region,

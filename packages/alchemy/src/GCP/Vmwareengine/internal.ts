@@ -11,7 +11,8 @@ import {
 } from "../Labels.ts";
 
 export const DEFAULT_GLOBAL = "global";
-export const DEFAULT_LOCATION = "us-central1";
+// Zonal default for private clouds: a zone can't be derived from the stack
+// region (not every region has an `-a` zone), so this stays fixed.
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_NAME_LENGTH = 63;
 
@@ -394,12 +395,13 @@ export const collectPages = <Page, Item, E, R>(
 
 export const listAcrossLocations = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], never, R> =>
   Effect.firstSuccessOf([
     list(parentOf(project, "-")),
     Effect.forEach(
-      [DEFAULT_GLOBAL, DEFAULT_LOCATION, DEFAULT_ZONE] as const,
+      [...new Set<string>([DEFAULT_GLOBAL, region, DEFAULT_ZONE])],
       (location) =>
         list(parentOf(project, location)).pipe(
           Effect.orElseSucceed((): A[] => []),

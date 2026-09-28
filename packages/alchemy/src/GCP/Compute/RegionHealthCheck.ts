@@ -29,7 +29,6 @@ import type {
   TcpHealthCheck,
 } from "./HealthCheck.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_CHECK_INTERVAL = 5;
 const DEFAULT_TIMEOUT = 5;
 const DEFAULT_HEALTHY = 2;
@@ -47,7 +46,7 @@ export type RegionHealthCheckProps = {
    * Region the health check lives in. Immutable — changing it replaces
    * the resource. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -217,8 +216,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -456,7 +455,7 @@ const toAttrs = (
   return {
     healthCheckName: check.name ?? check.id ?? "",
     project,
-    region: normalizeRegion(check.region),
+    region: lastSegment(check.region).toLowerCase(),
     type: asType(check.type),
     description: parsed.description,
     checkIntervalSec: check.checkIntervalSec ?? DEFAULT_CHECK_INTERVAL,
@@ -660,11 +659,16 @@ export const RegionHealthCheckProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.healthCheckName ?? output?.healthCheckName;
       const nextName = news.healthCheckName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || DEFAULT_REGION),
+        news.region ?? (previousRegion || env.region),
+        env.region,
       );
       const nameChanged =
         previousName !== undefined &&
@@ -700,7 +704,10 @@ export const RegionHealthCheckProvider = () =>
         olds?.healthCheckName,
         output?.healthCheckName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, healthCheckName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -738,7 +745,7 @@ export const RegionHealthCheckProvider = () =>
         news.healthCheckName,
         output?.healthCheckName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(healthCheckName, news, ownership);
 
@@ -794,7 +801,7 @@ export const RegionHealthCheckProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deleteRegionHealthChecks({
           project: env.project,

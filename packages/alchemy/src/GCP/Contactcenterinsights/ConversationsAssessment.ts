@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   lastSegment,
@@ -282,7 +281,7 @@ export const ConversationsAssessmentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAtParent(
-          `${locationParent(env.project, DEFAULT_LOCATION)}/conversations/-`,
+          `${locationParent(env.project, env.region)}/conversations/-`,
           env.project,
         );
       }),

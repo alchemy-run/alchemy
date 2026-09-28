@@ -18,11 +18,11 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   compact,
-  DEFAULT_LOCATION,
   normalizeLocation,
   parentOf,
   parseName,
   toPhysicalId,
+  listLocations,
 } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 
@@ -45,7 +45,7 @@ export type TrainingPipelineProps = {
    * Vertex AI location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the pipeline. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -305,6 +305,7 @@ export const TrainingPipelineProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.trainingPipelineId ?? output?.trainingPipelineId;
       const nextId = news.trainingPipelineId ?? previousId;
@@ -314,8 +315,12 @@ export const TrainingPipelineProvider = () =>
         nextId !== previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const definitionChanged =
         (olds?.trainingTaskDefinition ?? output?.trainingTaskDefinition) !==
           undefined &&
@@ -329,7 +334,10 @@ export const TrainingPipelineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const trainingPipelineId = yield* toPhysicalId(
         id,
         olds?.trainingPipelineId,
@@ -350,9 +358,10 @@ export const TrainingPipelineProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pipelines = yield* listAt(
-          parentOf(env.project, DEFAULT_LOCATION),
-        );
+        const pipelines = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listAt(parentOf(env.project, location)),
+        )).flat();
         return pipelines
           .filter((pipeline) =>
             Object.keys(pipeline.labels ?? {}).some((key) =>
@@ -364,7 +373,10 @@ export const TrainingPipelineProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = parentOf(env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_NETWORK = "default";
 const DEFAULT_MACHINE_TYPE = "e2-micro";
 const MAX_NAME_LENGTH = 25;
@@ -40,7 +39,7 @@ export type ConnectorProps = {
    * Region of the connector (`us-central1`, …). Immutable — changing it
    * replaces the connector. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -229,8 +228,10 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
@@ -246,7 +247,7 @@ const resourceName = (project: string, location: string, connectorId: string) =>
 const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const connectorsAt = parts.lastIndexOf("connectors");
   const locationsAt = parts.lastIndexOf("locations");
@@ -257,7 +258,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     connectorId:
       connectorsAt >= 0 && parts[connectorsAt + 1]
         ? parts[connectorsAt + 1]!
@@ -304,9 +305,13 @@ const toId = (id: string, connectorId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (connector: vpcaccess.Connector, project: string) => {
+const toAttrs = (
+  connector: vpcaccess.Connector,
+  project: string,
+  region: string,
+) => {
   const name = connector.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const network = connector.network
     ? lastSegment(connector.network)
     : undefined;
@@ -554,13 +559,18 @@ export const ConnectorProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.connectorId ?? output?.connectorId;
       const nextId = news.connectorId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const idChanged =
         previousId !== undefined &&
         nextId !== undefined &&
@@ -605,14 +615,17 @@ export const ConnectorProvider = () =>
         olds?.connectorId,
         output?.connectorId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, connectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       // Connectors have no labels or description. Existence at the computed
       // name is ownership — the same approach Cloud KMS KeyRing uses.
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
@@ -620,7 +633,7 @@ export const ConnectorProvider = () =>
         const env = yield* GcpEnvironment.current;
         const parents = yield* listLocations(env.project);
         if (parents.length === 0) {
-          parents.push(parentOf(env.project, DEFAULT_LOCATION));
+          parents.push(parentOf(env.project, env.region));
         }
         const pages = yield* Effect.forEach(
           parents,
@@ -629,7 +642,9 @@ export const ConnectorProvider = () =>
             concurrency: 4,
           },
         );
-        return pages.flat().map((connector) => toAttrs(connector, env.project));
+        return pages
+          .flat()
+          .map((connector) => toAttrs(connector, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -639,7 +654,10 @@ export const ConnectorProvider = () =>
         news.connectorId,
         output?.connectorId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, connectorId);
 
       if (news.subnet === undefined && news.ipCidrRange === undefined) {
@@ -747,7 +765,7 @@ export const ConnectorProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

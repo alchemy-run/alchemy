@@ -44,7 +44,7 @@ export type SubnetworkProps = {
   /**
    * Region of the subnetwork. Immutable — changing it replaces the
    * subnetwork. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -221,7 +221,6 @@ export class SubnetworkOperationFailed extends Data.TaggedError(
   errors: ReadonlyArray<{ code?: string; message?: string }>;
 }> {}
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_STACK_TYPE = "IPV4_ONLY";
 const DEFAULT_PRIVATE_GOOGLE_ACCESS = false;
 
@@ -237,8 +236,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
@@ -382,7 +381,7 @@ const toAttrs = (
   const parsed = parseDescription(subnetwork.description);
   return {
     subnetworkName: subnetwork.name ?? "",
-    region: normalizeRegion(subnetwork.region),
+    region: lastSegment(subnetwork.region ?? "").toLowerCase(),
     project,
     network: subnetwork.network ?? "",
     ipCidrRange: subnetwork.ipCidrRange ?? "",
@@ -539,10 +538,17 @@ export const SubnetworkProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.subnetworkName ?? output?.subnetworkName;
       const nextName = news.subnetworkName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       const identityChanged =
         previousRegion !== nextRegion ||
         (previousName !== undefined &&
@@ -577,7 +583,10 @@ export const SubnetworkProvider = () =>
         olds?.subnetworkName,
         output?.subnetworkName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, subnetworkName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -618,7 +627,7 @@ export const SubnetworkProvider = () =>
         news.subnetworkName,
         output?.subnetworkName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const network = networkRef(env.project, news.network);
       const privateIpGoogleAccess =
         news.privateIpGoogleAccess ?? DEFAULT_PRIVATE_GOOGLE_ACCESS;
@@ -740,7 +749,7 @@ export const SubnetworkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const subnetworkName = output.subnetworkName;
       if (!subnetworkName) return;
       yield* compute

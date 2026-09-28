@@ -17,9 +17,9 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   lastSegment,
   locationOf,
   locationParent,
@@ -268,7 +268,10 @@ export const ReasoningEnginesSessionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = yield* listEngines(env.project, DEFAULT_LOCATION);
+        const engines = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listEngines(env.project, location),
+        )).flat();
         const pages = yield* Effect.forEach(
           engines,
           (parent) => listAtParent(parent, env.project),

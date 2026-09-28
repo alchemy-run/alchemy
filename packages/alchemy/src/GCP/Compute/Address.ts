@@ -20,7 +20,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_ADDRESS_TYPE = "EXTERNAL";
 const DEFAULT_IP_VERSION = "IPV4";
 const DEFAULT_NETWORK_TIER = "PREMIUM";
@@ -36,7 +35,7 @@ export type AddressProps = {
   /**
    * Region to reserve the address in. Immutable — changing it replaces
    * the address. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -227,8 +226,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const resourceRefOf = (value: string | undefined) => {
   if (!value) return "";
@@ -261,7 +260,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 const toAttrs = (address: compute.Address, project: string) => ({
   addressName: address.name ?? "",
   project,
-  region: normalizeRegion(address.region),
+  region: lastSegment(address.region ?? "").toLowerCase(),
   address: address.address,
   addressId: address.id,
   selfLink: address.selfLink,
@@ -445,6 +444,7 @@ export const AddressProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds.addressName ?? output?.addressName;
       const nextName = news.addressName ?? previousName;
       const nameChanged =
@@ -452,8 +452,14 @@ export const AddressProvider = () =>
         nextName !== undefined &&
         nextName !== previousName;
 
-      const previousRegion = normalizeRegion(olds.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const previousType = addressTypeOf(
@@ -517,7 +523,10 @@ export const AddressProvider = () =>
         olds?.addressName,
         output?.addressName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, addressName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -558,7 +567,7 @@ export const AddressProvider = () =>
         news.addressName,
         output?.addressName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -653,7 +662,7 @@ export const AddressProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteAddresses({
           project,

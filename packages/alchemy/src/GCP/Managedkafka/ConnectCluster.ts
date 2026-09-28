@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   asCountString,
-  DEFAULT_LOCATION,
   DEFAULT_MEMORY_BYTES,
   DEFAULT_VCPU_COUNT,
   defaultSubnet,
@@ -85,7 +84,7 @@ export type ConnectClusterProps = {
   connectClusterId?: string;
   /**
    * Region (`us-central1`, …). Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -264,7 +263,10 @@ export const ConnectClusterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousKafka = olds?.kafkaCluster ?? output?.kafkaCluster ?? "";
       const nextKafka = kafkaClusterOf(
         news.kafkaCluster,
@@ -278,7 +280,10 @@ export const ConnectClusterProvider = () =>
         nextId: news.connectClusterId
           ? rfc1035(news.connectClusterId, "connect")
           : (olds?.connectClusterId ?? output?.connectClusterId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         extra: previousKafka !== nextKafka || previousSubnet !== nextSubnet,
       });
@@ -292,7 +297,10 @@ export const ConnectClusterProvider = () =>
         output?.connectClusterId,
         "connect",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, connectClusterId);
       const existing = yield* getConnectCluster(name);
@@ -306,7 +314,10 @@ export const ConnectClusterProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyConnectClusters(env.project);
+        const clusters = yield* listAlchemyConnectClusters(
+          env.project,
+          env.region,
+        );
         return clusters.map((cluster) => toAttrs(cluster, env.project));
       }),
 
@@ -319,7 +330,8 @@ export const ConnectClusterProvider = () =>
         "connect",
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, connectClusterId);

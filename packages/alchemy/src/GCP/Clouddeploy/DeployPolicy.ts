@@ -154,7 +154,7 @@ export type DeployPolicyProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -361,8 +361,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsDeployPolicies({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       clouddeploy.listProjectsLocationsDeployPolicies.pages({
         parent,
@@ -386,13 +386,16 @@ export const DeployPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deployPolicyId ?? output?.deployPolicyId,
         nextId:
           news.deployPolicyId ?? olds?.deployPolicyId ?? output?.deployPolicyId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
       });
     }),
@@ -405,7 +408,9 @@ export const DeployPolicyProvider = () =>
         output?.deployPolicyId,
         "deploypolicy",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, deployPolicyId);
       const existing = yield* getByName(name);
@@ -419,7 +424,7 @@ export const DeployPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -431,7 +436,9 @@ export const DeployPolicyProvider = () =>
         output?.deployPolicyId,
         "deploypolicy",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, deployPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),

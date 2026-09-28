@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandRepository,
   forEachOwnedRepository,
   hasAlchemyLabelMap,
@@ -66,7 +65,7 @@ export type RepositoriesWorkflowConfigProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -225,9 +224,13 @@ const invocationOf = (
   };
 };
 
-const toAttrs = (config: dataform.WorkflowConfig, project: string) => {
+const toAttrs = (
+  config: dataform.WorkflowConfig,
+  project: string,
+  region: string,
+) => {
   const name = config.name ?? "";
-  const parsed = parseResourceName(name, "workflowConfigs");
+  const parsed = parseResourceName(name, "workflowConfigs", region);
   return {
     name,
     workflowConfigId: parsed.id,
@@ -267,6 +270,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.workflowConfigId ?? output?.workflowConfigId,
@@ -287,11 +291,15 @@ export const RepositoriesWorkflowConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "workflowConfigs").parent,
+          parseResourceName(output?.name ?? "", "workflowConfigs", env.region)
+            .parent,
         env.project,
         location,
       );
@@ -303,7 +311,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       const name = output?.name ?? resourceName(repository, workflowConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       if (isOwnedTags(existing.invocationConfig?.includedTags)) {
         return attrs;
       }
@@ -322,15 +330,18 @@ export const RepositoriesWorkflowConfigProvider = () =>
         const env = yield* GcpEnvironment.current;
         const configs = yield* forEachOwnedRepository(
           env.project,
-          DEFAULT_LOCATION,
+          env.region,
           (repo) => listWorkflowConfigs(repo.name ?? ""),
         );
-        return configs.map((item) => toAttrs(item, env.project));
+        return configs.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         news.repository,
         env.project,
@@ -401,7 +412,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

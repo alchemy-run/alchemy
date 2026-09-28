@@ -11,7 +11,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   jsonEqual,
@@ -346,7 +345,7 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const revisions = yield* listRevisions(
-          `${locationParent(env.project, DEFAULT_LOCATION)}/qaScorecards/-`,
+          `${locationParent(env.project, env.region)}/qaScorecards/-`,
         );
         const pages = yield* Effect.forEach(
           revisions,

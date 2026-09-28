@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   forEachDataset,
   hasAlchemyLabelMap,
@@ -41,7 +40,7 @@ export type DatasetsConsentStoreProps = {
   dataset: string;
   /**
    * Region used when `dataset` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -135,9 +134,13 @@ const datasetOf = (dataset: string, project: string, location: string) =>
 const resourceName = (dataset: string, consentStoreId: string) =>
   `${dataset}/consentStores/${consentStoreId}`;
 
-const toAttrs = (store: healthcare.ConsentStore, project: string) => {
+const toAttrs = (
+  store: healthcare.ConsentStore,
+  project: string,
+  region: string,
+) => {
   const name = store.name ?? "";
-  const parsed = parseResourceName(name, "consentStores");
+  const parsed = parseResourceName(name, "consentStores", region);
   return {
     name,
     consentStoreId: parsed.id,
@@ -168,7 +171,7 @@ export const DatasetsConsentStoreProvider = () =>
       const nextParent = datasetOf(
         news.dataset,
         env.project,
-        normalizeLocation(news.location ?? output?.location),
+        normalizeLocation(news.location ?? output?.location, env.region),
       );
       return replaceOnIdentity({
         previousId: olds?.consentStoreId ?? output?.consentStoreId,
@@ -180,7 +183,10 @@ export const DatasetsConsentStoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const consentStoreId = yield* toPhysicalId(
         id,
         olds?.consentStoreId,
@@ -195,7 +201,7 @@ export const DatasetsConsentStoreProvider = () =>
         (dataset.length > 0 ? resourceName(dataset, consentStoreId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -204,24 +210,28 @@ export const DatasetsConsentStoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* forEachDataset(env.project, (parent) =>
-          collectPages(
-            healthcare.listProjectsLocationsDatasetsConsentStores.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.consentStores,
-          ),
+        const stores = yield* forEachDataset(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              healthcare.listProjectsLocationsDatasetsConsentStores.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.consentStores,
+            ),
         );
         return stores
           .filter((store) => hasAlchemyLabelMap(store.labels))
-          .map((store) => toAttrs(store, env.project));
+          .map((store) => toAttrs(store, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const dataset = datasetOf(news.dataset, env.project, location);
       const consentStoreId = yield* toPhysicalId(
@@ -286,7 +296,7 @@ export const DatasetsConsentStoreProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

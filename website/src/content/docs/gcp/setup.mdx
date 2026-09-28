@@ -39,6 +39,9 @@ In CI (`CI=true`), Alchemy skips profiles and reads the environment:
   as an alias).
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to the key file.
 
+- `GOOGLE_CLOUD_REGION` — default region (`CLOUDSDK_COMPUTE_REGION`,
+  which `gcloud config set compute/region` writes, is also read).
+
 Or `GOOGLE_ACCESS_TOKEN` plus `GOOGLE_PROJECT_ID` for a short-lived
 token. On GKE with Workload Identity, neither is needed — the metadata
 server is the last link in the chain.
@@ -65,6 +68,41 @@ export default Alchemy.Stack(
 
 `GCP.providers()` merges next to any other cloud's providers, so a
 single stack can span GCP and Cloudflare or AWS.
+
+## Choose a region
+
+Regional resources created without a `location` / `region` prop land in
+the stack's region. It comes from `GCP.Region.of(...)` on the providers
+layer, then the environment (`GOOGLE_CLOUD_REGION`), then the profile's
+region, then `us-central1`:
+
+```typescript
+export default Alchemy.Stack(
+  "App",
+  {
+    providers: GCP.providers().pipe(
+      Layer.provideMerge(GCP.Region.of("europe-west1")),
+    ),
+    state: Alchemy.localState(),
+  },
+  program,
+);
+```
+
+A resource that should live elsewhere takes an explicit `location`.
+Changing the stack region never moves a deployed resource: its recorded
+location wins.
+
+Requests for regional resources that Google only serves from a regional
+endpoint (Secret Manager, Parameter Manager) go to
+`{service}.{region}.rep.googleapis.com` automatically. For data
+residency, send every regional request to its regional endpoint:
+
+```typescript
+GCP.providers().pipe(
+  Layer.provideMerge(GCP.Region.regionalEndpoints("prefer")),
+);
+```
 
 ## Cleaning up
 

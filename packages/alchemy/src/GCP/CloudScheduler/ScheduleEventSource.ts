@@ -26,7 +26,7 @@ export interface ScheduleEventSourceProps {
   body?: string;
   /**
    * Cloud Scheduler location of the backing job.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**

@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_CONFIG_ID = "regional-us-central1";
 const DEFAULT_PROCESSING_UNITS = 100;
 const DEFAULT_INSTANCE_TYPE = "PROVISIONED";
 const DEFAULT_EDITION = "STANDARD";
@@ -83,7 +82,7 @@ export type InstanceProps = {
    * Instance configuration id (`regional-us-central1`) or full name
    * (`projects/{project}/instanceConfigs/{config}`). Immutable —
    * changing it replaces the instance.
-   * @default "regional-us-central1"
+   * @default `regional-{region}` for the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   config?: string;
   /**
@@ -260,11 +259,17 @@ const normalizeEdition = (value: string | undefined) =>
 const normalizeBackupSchedule = (value: string | undefined) =>
   normalizeEnum(value, DEFAULT_BACKUP_SCHEDULE);
 
-const configIdOf = (config: string | undefined) =>
-  lastSegment(config ?? DEFAULT_CONFIG_ID).toLowerCase();
+const defaultConfigId = (region: string) => `regional-${region}`;
 
-const configNameOf = (project: string, config: string | undefined) => {
-  const raw = (config ?? DEFAULT_CONFIG_ID).trim();
+const configIdOf = (config: string | undefined, region: string) =>
+  lastSegment(config ?? defaultConfigId(region)).toLowerCase();
+
+const configNameOf = (
+  project: string,
+  config: string | undefined,
+  region: string,
+) => {
+  const raw = (config ?? defaultConfigId(region)).trim();
   if (raw.includes("/")) return raw;
   return `projects/${project}/instanceConfigs/${raw}`;
 };
@@ -553,6 +558,7 @@ const toCreateInstance = (
   name: string,
   news: InstanceProps,
   project: string,
+  region: string,
   desiredLabels: Record<string, string>,
   instanceType: string,
   displayName: string,
@@ -561,7 +567,7 @@ const toCreateInstance = (
   const autoscaling = news.autoscalingConfig;
   const body: spanner.Instance = {
     name,
-    config: configNameOf(project, news.config),
+    config: configNameOf(project, news.config, region),
     displayName,
     labels: desiredLabels,
     instanceType,
@@ -592,11 +598,15 @@ export const InstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
-      const previousConfig = configIdOf(olds?.config ?? output?.config);
-      const nextConfig = configIdOf(news.config ?? output?.config);
+      const previousConfig = configIdOf(
+        olds?.config ?? output?.config,
+        env.region,
+      );
+      const nextConfig = configIdOf(news.config ?? output?.config, env.region);
       const previousType = normalizeInstanceType(
         olds?.instanceType ?? output?.instanceType,
       );
@@ -679,6 +689,7 @@ export const InstanceProvider = () =>
                 name,
                 news,
                 env.project,
+                env.region,
                 desiredLabels,
                 instanceType,
                 displayName,

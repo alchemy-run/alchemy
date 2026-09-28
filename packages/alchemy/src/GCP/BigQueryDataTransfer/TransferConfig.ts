@@ -16,8 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
-
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(300), 1.5),
   Schedule.spaced(Duration.seconds(2)),
@@ -121,7 +119,7 @@ export type TransferConfigProps = {
    * match the destination dataset location. Immutable — changing it
    * replaces the config. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -342,8 +340,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -357,9 +355,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     transferConfigId:
       configsAt >= 0 && parts[configsAt + 1]
         ? parts[configsAt + 1]!
@@ -504,7 +500,11 @@ const toMetadataDestination = (
   return { dataplexConfiguration: { entryGroup } };
 };
 
-const toAttrs = (config: bqdt.TransferConfig, project: string) => {
+const toAttrs = (
+  config: bqdt.TransferConfig,
+  project: string,
+  location: string,
+) => {
   const name = config.name ?? "";
   const parsed = parseName(name);
   const { displayName } = parseDisplayName(config.displayName);
@@ -512,7 +512,7 @@ const toAttrs = (config: bqdt.TransferConfig, project: string) => {
     name,
     transferConfigId: parsed.transferConfigId,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || location,
     displayName,
     dataSourceId: config.dataSourceId,
     destinationDatasetId: config.destinationDatasetId,
@@ -612,7 +612,7 @@ const retryTransient = <A, E extends { _tag: string }, R>(
     }),
   );
 
-const listLocationParents = (project: string) =>
+const listLocationParents = (project: string, region: string) =>
   bqdt.listProjectsLocations
     .pages({
       name: `projects/${project}`,
@@ -626,7 +626,7 @@ const listLocationParents = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([parentOf(project, DEFAULT_LOCATION)]),
+        Effect.succeed([parentOf(project, region)]),
       ),
     );
 
@@ -668,14 +668,16 @@ export const TransferConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const parent = parentOf(env.project, location);
       const existing =
         output?.name !== undefined
           ? yield* getByName(output.name)
           : yield* findOwned(parent, id, olds?.dataSourceId);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, location);
       return (yield* hasAlchemyLabels(
         id,
         parseDisplayName(existing.displayName).labels,
@@ -687,11 +689,11 @@ export const TransferConfigProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const parents = yield* listLocationParents(env.project);
+        const parents = yield* listLocationParents(env.project, env.region);
         const unique =
           parents.length > 0
             ? [...new Set(parents)]
-            : [parentOf(env.project, DEFAULT_LOCATION)];
+            : [parentOf(env.project, env.region)];
         const pages = yield* Effect.forEach(
           unique,
           (parent) => listAt(parent),
@@ -700,12 +702,14 @@ export const TransferConfigProvider = () =>
         return pages
           .flat()
           .filter((config) => hasOwnershipMarker(config.displayName))
-          .map((config) => toAttrs(config, env.project));
+          .map((config) => toAttrs(config, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output, olds }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const parent = parentOf(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const desiredDisplayName = encodeDisplayName(ownership, news.displayName);
@@ -846,7 +850,7 @@ export const TransferConfigProvider = () =>
         current = (yield* getByName(name)) ?? current;
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, location);
     }),
 
     delete: Effect.fn(function* ({ output }) {

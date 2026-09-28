@@ -10,7 +10,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   collectPages,
   encodeOwnershipLine,
@@ -99,7 +98,8 @@ export type SecurityGatewayProps = {
   displayName?: string;
   /**
    * Regional hubs keyed by GCP region. Defaults to an internet-gateway
-   * hub in `us-central1`.
+   * hub in the stack's GCP region (`GCP.Region`, else the profile region,
+   * else `us-central1`); once created, an unset value keeps the current hubs.
    */
   hubs?: Record<string, SecurityGatewayHub>;
   /**
@@ -179,10 +179,6 @@ export type SecurityGateway = Resource<
 export const SecurityGateway = Resource<SecurityGateway>(
   "GCP.Beyondcorp.SecurityGateway",
 );
-
-const DEFAULT_HUBS: Record<string, SecurityGatewayHub> = {
-  [DEFAULT_LOCATION]: { internetGateway: {} },
-};
 
 const resourceName = (
   project: string,
@@ -344,10 +340,10 @@ const listOwned = (project: string) =>
   );
 
 const desiredHubs = (
-  hubs: Record<string, SecurityGatewayHub> | undefined,
+  hubs: Record<string, SecurityGatewayHub>,
 ): beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1HubMap =>
   Object.fromEntries(
-    Object.entries(hubs ?? DEFAULT_HUBS).map(([region, hub]) => [
+    Object.entries(hubs).map(([region, hub]) => [
       region,
       { internetGateway: hub.internetGateway ? {} : undefined },
     ]),
@@ -404,7 +400,7 @@ export const SecurityGatewayProvider = () =>
         return items.map((item) => toAttrs(item, env.project));
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const securityGatewayId = yield* toPhysicalId(
         id,
@@ -422,7 +418,13 @@ export const SecurityGatewayProvider = () =>
         ownership,
         news.displayName,
       );
-      const hubs = desiredHubs(news.hubs);
+      // An unset `hubs` keeps the existing hubs (a previous default or an
+      // adopted gateway's) so a changed stack region never moves them.
+      const hubSpec: Record<string, SecurityGatewayHub> = news.hubs ??
+        (olds?.hubs === undefined ? output?.hubs : undefined) ?? {
+          [env.region]: { internetGateway: {} },
+        };
+      const hubs = desiredHubs(hubSpec);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -454,7 +456,7 @@ export const SecurityGatewayProvider = () =>
       const mask = fieldMask([
         (current.displayName ?? "") !== desiredDisplayName && "display_name",
         fingerprint(hubKeys(toHubs(current.hubs))) !==
-          fingerprint(hubKeys(news.hubs ?? DEFAULT_HUBS)) && "hubs",
+          fingerprint(hubKeys(hubSpec)) && "hubs",
       ]);
 
       if (mask.length > 0) {

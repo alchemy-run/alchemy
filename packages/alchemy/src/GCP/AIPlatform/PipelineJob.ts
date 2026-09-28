@@ -10,10 +10,10 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 import {
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   MAX_PIPELINE_JOB_ID_LENGTH,
   collectPages,
   jsonEqual,
@@ -47,7 +47,7 @@ export type PipelineJobProps = {
   pipelineJobId?: string;
   /**
    * Vertex AI location. Immutable — changing it replaces the job.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -206,13 +206,18 @@ export const PipelineJobProvider = () =>
     stables: ["name", "pipelineJobId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.pipelineJobId ?? output?.pipelineJobId;
       const nextId = news.pipelineJobId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const specChanged =
         olds !== undefined &&
         (!jsonEqual(news.pipelineSpec, olds.pipelineSpec) ||
@@ -241,7 +246,10 @@ export const PipelineJobProvider = () =>
         output?.pipelineJobId,
         MAX_PIPELINE_JOB_ID_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -254,15 +262,19 @@ export const PipelineJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = yield* collectPages(
-          aiplatform.listProjectsLocationsPipelineJobs.pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
-            pageSize: 100,
-          }),
-        ).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        const pages = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) =>
+            collectPages(
+              aiplatform.listProjectsLocationsPipelineJobs.pages({
+                parent: locationParent(env.project, location),
+                pageSize: 100,
+              }),
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        )).flat();
         return pages.flatMap((page) =>
           (page.pipelineJobs ?? [])
             .filter((job) =>
@@ -282,7 +294,10 @@ export const PipelineJobProvider = () =>
         output?.pipelineJobId,
         MAX_PIPELINE_JOB_ID_LENGTH,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),

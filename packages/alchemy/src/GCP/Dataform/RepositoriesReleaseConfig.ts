@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   expandRepository,
   forEachOwnedRepository,
   hasAlchemyLabelMap,
@@ -72,7 +71,7 @@ export type RepositoriesReleaseConfigProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -202,9 +201,13 @@ const compilationOf = (
   defaultDatabase: config?.defaultDatabase,
 });
 
-const toAttrs = (config: dataform.ReleaseConfig, project: string) => {
+const toAttrs = (
+  config: dataform.ReleaseConfig,
+  project: string,
+  region: string,
+) => {
   const name = config.name ?? "";
-  const parsed = parseResourceName(name, "releaseConfigs");
+  const parsed = parseResourceName(name, "releaseConfigs", region);
   return {
     name,
     releaseConfigId: parsed.id,
@@ -239,6 +242,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.releaseConfigId ?? output?.releaseConfigId,
@@ -255,11 +259,15 @@ export const RepositoriesReleaseConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "releaseConfigs").parent,
+          parseResourceName(output?.name ?? "", "releaseConfigs", env.region)
+            .parent,
         env.project,
         location,
       );
@@ -271,7 +279,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       const name = output?.name ?? resourceName(repository, releaseConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const labeled = yield* hasAlchemyLabels(
         id,
         existing.codeCompilationConfig?.vars,
@@ -284,15 +292,18 @@ export const RepositoriesReleaseConfigProvider = () =>
         const env = yield* GcpEnvironment.current;
         const configs = yield* forEachOwnedRepository(
           env.project,
-          DEFAULT_LOCATION,
+          env.region,
           (repo) => listReleaseConfigs(repo.name ?? ""),
         );
-        return configs.map((item) => toAttrs(item, env.project));
+        return configs.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repository = expandRepository(
         news.repository,
         env.project,
@@ -389,7 +400,7 @@ export const RepositoriesReleaseConfigProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

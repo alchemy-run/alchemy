@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   fieldMask,
   fingerprint,
@@ -48,7 +47,7 @@ export type ConnectClustersConnectorProps = {
   connectCluster: string;
   /**
    * Region used when `connectCluster` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -168,7 +167,10 @@ export const ConnectClustersConnectorProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       return replaceOnIdentity({
         previousId: olds?.connectorId ?? output?.connectorId,
         nextId: news.connectorId
@@ -185,7 +187,10 @@ export const ConnectClustersConnectorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const connectorId = yield* toPhysicalId(
         id,
         olds?.connectorId,
@@ -212,7 +217,10 @@ export const ConnectClustersConnectorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyConnectClusters(env.project);
+        const clusters = yield* listAlchemyConnectClusters(
+          env.project,
+          env.region,
+        );
         const connectors = yield* Effect.forEach(
           clusters.filter((cluster) => (cluster.name ?? "").length > 0),
           (cluster: kafka.ConnectCluster) =>
@@ -240,7 +248,8 @@ export const ConnectClustersConnectorProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const connectCluster = connectClusterOf(
         news.connectCluster,

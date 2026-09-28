@@ -8,7 +8,6 @@ import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
 export const GLOBAL_LOCATION = "global";
-export const DEFAULT_REGION = "us-central1";
 export const DEFAULT_NETWORK = "default";
 export const DEFAULT_ADMIN = "setupadmin";
 export const DOMAIN_SUFFIX = ".alch.test";
@@ -81,8 +80,8 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_REGION).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 export const globalParent = (project: string) =>
   `projects/${project}/locations/${GLOBAL_LOCATION}`;

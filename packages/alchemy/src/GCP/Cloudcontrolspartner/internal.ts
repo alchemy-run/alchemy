@@ -12,8 +12,7 @@ import {
 } from "../Labels.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 128;
-export const DEFAULT_LOCATION = "us-central1";
-export const LIST_LOCATIONS = ["us-central1", "global", "-"] as const;
+export const LIST_LOCATIONS = ["global", "-"] as const;
 
 export class OrganizationNotResolved extends Data.TaggedError(
   "GCP.Cloudcontrolspartner.OrganizationNotResolved",
@@ -43,10 +42,8 @@ export const organizationParent = (value: string) =>
 export const organizationIdOf = (value: string) =>
   lastSegment(organizationParent(value));
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback = DEFAULT_LOCATION,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 export const locationParent = (organization: string, location: string) =>
   `${organizationParent(organization)}/locations/${normalizeLocation(location)}`;
@@ -68,9 +65,7 @@ export const parseName = (name: string) => {
         ? `organizations/${parts[orgsAt + 1]}`
         : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     customerId:
       customersAt >= 0 && parts[customersAt + 1]
         ? parts[customersAt + 1]!
@@ -281,12 +276,12 @@ export const resolveOrganization = (
     return resolved;
   });
 
-export const listLocationParents = (organization: string) => {
+export const listLocationParents = (organization: string, region: string) => {
   const extra = (process.env.GOOGLE_CLOUDCONTROLSPARTNER_LOCATION ?? "").trim();
   const locations =
     extra.length > 0
-      ? [normalizeLocation(extra), ...LIST_LOCATIONS]
-      : [...LIST_LOCATIONS];
+      ? [normalizeLocation(extra), region, ...LIST_LOCATIONS]
+      : [region, ...LIST_LOCATIONS];
   return [...new Set(locations)].map((location) =>
     locationParent(organization, location),
   );

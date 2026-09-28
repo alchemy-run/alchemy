@@ -18,7 +18,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_EDITION = "ENTERPRISE";
 const DEFAULT_SLOT_CAPACITY = "0";
 const MAX_NAME_LENGTH = 64;
@@ -65,7 +64,7 @@ export type ReservationProps = {
    * changing it replaces the reservation. Multi-regions `US` and `EU`
    * stay uppercase; regional ids are lowercased (`US-CENTRAL1` becomes
    * `us-central1`).
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -242,8 +241,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) => {
-  const value = lastSegment(location ?? DEFAULT_LOCATION);
+const normalizeLocation = (location: string) => {
+  const value = lastSegment(location);
   const upper = value.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
   return value.toLowerCase();
@@ -278,9 +277,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     reservationId:
       reservationsAt >= 0 && parts[reservationsAt + 1]
         ? parts[reservationsAt + 1]!
@@ -423,13 +420,16 @@ export const ReservationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.reservationId ?? output?.reservationId;
       const nextId = news.reservationId ?? previousId;
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousEdition = normalizeEdition(
         olds?.edition ?? output?.edition,
       );
@@ -464,7 +464,9 @@ export const ReservationProvider = () =>
         olds?.reservationId,
         output?.reservationId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, reservationId);
       const existing = yield* getByName(name);
@@ -479,7 +481,7 @@ export const ReservationProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(["-", DEFAULT_LOCATION, "US", "EU"])),
+          Array.from(new Set(["-", env.region, "US", "EU"])),
           (location) => listOwnedAt(env.project, location),
           { concurrency: 4 },
         );
@@ -497,7 +499,9 @@ export const ReservationProvider = () =>
         news.reservationId,
         output?.reservationId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, reservationId);
       const parent = parentOf(env.project, location);
       const desiredLabels = {

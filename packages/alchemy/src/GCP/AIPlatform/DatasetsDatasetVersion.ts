@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasAlchemyLabelKeys,
   hasOwnershipMarker,
@@ -172,10 +172,15 @@ const listVersions = (dataset: string) =>
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
-const listDatasets = (project: string) =>
+const listDatasets = (project: string, region: string) =>
+  Effect.forEach(listLocations(region), (location) =>
+    listDatasetsAt(`projects/${project}/locations/${location}`),
+  ).pipe(Effect.map((pages) => pages.flat()));
+
+const listDatasetsAt = (parent: string) =>
   aiplatform.listProjectsLocationsDatasets
     .pages({
-      parent: `projects/${project}/locations/${DEFAULT_LOCATION}`,
+      parent,
       pageSize: 100,
     })
     .pipe(
@@ -271,7 +276,7 @@ export const DatasetsDatasetVersionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const datasets = yield* listDatasets(env.project);
+        const datasets = yield* listDatasets(env.project, env.region);
         const versions: ReturnType<typeof toAttrs>[] = [];
         for (const dataset of datasets) {
           if (dataset.name === undefined) continue;

@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
-  DEFAULT_LOCATION,
   VmwareengineNotResolved,
   canonicalizeLink,
   changedFields,
@@ -57,7 +56,8 @@ export type PrivateConnectionProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * connection. `US-CENTRAL1` is accepted and normalized.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -210,9 +210,10 @@ const routingOf = (value: string | undefined) =>
 const toAttrs = (
   connection: vmwareengine.PrivateConnection,
   project: string,
+  region: string,
 ) => {
   const name = connection.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_LOCATION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(connection.description);
   return {
     name,
@@ -255,6 +256,7 @@ export const PrivateConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousVen = canonicalizeLink(
         olds?.vmwareEngineNetwork ?? output?.vmwareEngineNetwork,
       );
@@ -272,11 +274,11 @@ export const PrivateConnectionProvider = () =>
           : (olds?.privateConnectionId ?? output?.privateConnectionId),
         previousLocation: normalizeLocation(
           olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         extra:
           (previousType.length > 0 && previousType !== nextType) ||
@@ -289,7 +291,7 @@ export const PrivateConnectionProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const connectionId = yield* toPhysicalId(
         id,
@@ -301,7 +303,7 @@ export const PrivateConnectionProvider = () =>
         output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -309,25 +311,28 @@ export const PrivateConnectionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsPrivateConnections.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.privateConnections,
-          ),
+        const items = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsPrivateConnections.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.privateConnections,
+            ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const connectionId = yield* toPhysicalId(
         id,
@@ -408,7 +413,7 @@ export const PrivateConnectionProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

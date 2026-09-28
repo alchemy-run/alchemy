@@ -11,7 +11,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const PAGE_SIZE = 1000;
 
@@ -61,10 +60,16 @@ export const rfc1035 = (name: string, fallback = "artifact"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -75,7 +80,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -105,7 +110,7 @@ export const locationFromRepository = (
   if (repository === undefined || !repository.includes("/locations/")) {
     return fallback;
   }
-  return parseName(repository, "repositories").location;
+  return parseName(repository, "repositories", fallback).location;
 };
 
 export const toPhysicalId = (

@@ -8,7 +8,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AnalyticshubNotResolved,
-  DEFAULT_LOCATION,
   displayNameOf,
   encodeDescription,
   expandParent,
@@ -54,7 +53,7 @@ export type DataExchangesQueryTemplateProps = {
   queryTemplateId?: string;
   /**
    * Location used when `dataExchange` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -233,6 +232,7 @@ export const DataExchangesQueryTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousDisplay = olds?.displayName ?? output?.displayName;
       const nextDisplay = news.displayName;
@@ -241,7 +241,10 @@ export const DataExchangesQueryTemplateProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.queryTemplateId ?? output?.queryTemplateId,
         nextId: news.queryTemplateId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.dataExchange ?? output?.dataExchange,
         nextParent: parentExchange(news.dataExchange, env.project, location),
@@ -257,7 +260,10 @@ export const DataExchangesQueryTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const queryTemplateId = yield* toPhysicalId(
         id,
         olds?.queryTemplateId,
@@ -281,7 +287,10 @@ export const DataExchangesQueryTemplateProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const exchanges = yield* listExchangesInProject(env.project);
+        const exchanges = yield* listExchangesInProject(
+          env.project,
+          env.region,
+        );
         const templates = yield* listChildResources(
           namedOf(exchanges),
           listQueryTemplates,
@@ -294,7 +303,8 @@ export const DataExchangesQueryTemplateProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const dataExchange = parentExchange(
         news.dataExchange,

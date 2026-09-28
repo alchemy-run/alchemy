@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworksecurityNotResolved,
   canonicalizeLink,
   changedFields,
@@ -53,7 +52,7 @@ export type GatewaySecurityPoliciesRuleProps = {
    * Region of the parent policy. Inferred from
    * `gatewaySecurityPolicy` when that value is a full resource name.
    * Immutable — changing it replaces the rule.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -198,9 +197,10 @@ const locationFromParent = (
 const toAttrs = (
   rule: networksecurity.GatewaySecurityPolicyRule,
   project: string,
+  region: string,
 ) => {
   const name = rule.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(rule.description);
   const parent = parentFromRuleName(name);
   return {
@@ -208,7 +208,7 @@ const toAttrs = (
     gatewaySecurityPolicyRuleId: parsed.id,
     gatewaySecurityPolicy: parent,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     basicProfile: rule.basicProfile,
     priority: rule.priority,
     enabled: rule.enabled !== false,
@@ -239,6 +239,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.gatewaySecurityPolicyRuleId ??
         output?.gatewaySecurityPolicyRuleId;
@@ -247,12 +248,12 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ??
           locationFromParent(news.gatewaySecurityPolicy, previousLocation),
-        DEFAULT_REGION,
+        env.region,
       );
       const previousParent = linkKey(
         olds?.gatewaySecurityPolicy ?? output?.gatewaySecurityPolicy,
@@ -276,9 +277,9 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
         olds?.location ??
           output?.location ??
           (olds?.gatewaySecurityPolicy
-            ? locationFromParent(olds.gatewaySecurityPolicy, DEFAULT_REGION)
+            ? locationFromParent(olds.gatewaySecurityPolicy, env.region)
             : undefined),
-        DEFAULT_REGION,
+        env.region,
       );
       const parent = parentPolicyName(
         env.project,
@@ -294,7 +295,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       const name = output?.name ?? resourceNameOf(parent, ruleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -326,7 +327,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
         return nested
           .flat()
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -334,8 +335,8 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       const location = normalizeLocation(
         news.location ??
           output?.location ??
-          locationFromParent(news.gatewaySecurityPolicy, DEFAULT_REGION),
-        DEFAULT_REGION,
+          locationFromParent(news.gatewaySecurityPolicy, env.region),
+        env.region,
       );
       const parent = parentPolicyName(
         env.project,
@@ -435,7 +436,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

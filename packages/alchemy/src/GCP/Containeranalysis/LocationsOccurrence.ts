@@ -9,7 +9,6 @@ import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { OccurrenceProps } from "./Occurrence.ts";
 import {
-  DEFAULT_LOCATION,
   findOwnedOccurrence,
   hasOwnershipMarker,
   ignoreGone,
@@ -30,7 +29,7 @@ export type LocationsOccurrenceProps = OccurrenceProps & {
    * Location (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the occurrence. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
 };
@@ -138,13 +137,14 @@ const getByName = missingGet(containeranalysis.getProjectsLocationsOccurrences);
 const toPublicAttrs = (
   occurrence: containeranalysis.Occurrence,
   project: string,
+  region: string,
 ): LocationsOccurrence["Attributes"] => {
   const attrs = occurrenceAttrs(occurrence, project);
   return {
     name: attrs.name,
     occurrenceId: attrs.occurrenceId,
     project: attrs.project,
-    location: attrs.location ?? DEFAULT_LOCATION,
+    location: attrs.location ?? region,
     noteName: attrs.noteName,
     resourceUri: attrs.resourceUri,
     remediation: attrs.remediation,
@@ -183,6 +183,7 @@ export const LocationsOccurrenceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind =
         occurrenceKind(olds ?? { noteName: "", resourceUri: "" }) ??
         output?.kind;
@@ -190,12 +191,13 @@ export const LocationsOccurrenceProvider = () =>
       return replaceOnIdentity({
         previousParent: locationParent(
           "x",
-          normalizeLocation(olds?.location ?? output?.location),
+          normalizeLocation(olds?.location ?? output?.location, env.region),
         ),
         nextParent: locationParent(
           "x",
           normalizeLocation(
             news.location ?? olds?.location ?? output?.location,
+            env.region,
           ),
         ),
         extra:
@@ -215,11 +217,14 @@ export const LocationsOccurrenceProvider = () =>
       if (name !== undefined && name.length > 0) {
         const existing = yield* getByName(name);
         if (existing === undefined) return undefined;
-        const attrs = toPublicAttrs(existing, env.project);
+        const attrs = toPublicAttrs(existing, env.project, env.region);
         const { labels } = parseDescription(existing.remediation);
         return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
       }
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const items = yield* listLocationOccurrences(env.project, location);
       const owned = yield* findOwnedOccurrence(id, items, env.project);
       if (owned === undefined) return undefined;
@@ -254,18 +259,18 @@ export const LocationsOccurrenceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listLocationOccurrences(
-          env.project,
-          DEFAULT_LOCATION,
-        );
+        const items = yield* listLocationOccurrences(env.project, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.remediation))
-          .map((item) => toPublicAttrs(item, env.project));
+          .map((item) => toPublicAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const current = yield* reconcileOccurrence({
         id,
@@ -293,7 +298,7 @@ export const LocationsOccurrenceProvider = () =>
             ),
         },
       });
-      return toPublicAttrs(current, env.project);
+      return toPublicAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

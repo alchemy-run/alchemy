@@ -11,7 +11,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_ENTITY_ID_LENGTH = 256;
 
@@ -33,8 +32,10 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -47,10 +48,9 @@ export const parseResourceName = (name: string, collection: string) => {
   return {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    // API resource names always carry a `locations/{location}` segment.
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -249,25 +249,41 @@ const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
     ),
   );
 
-export const listLakes = (project: string, location: string) =>
-  emptyOnMissing(
-    collectPages(
-      dataplex.listProjectsLocationsLakes.pages({
-        parent: locationParent(project, location),
-        pageSize: 1000,
-      }),
-      (page) => page.lakes,
+// `us-central1` was the fixed default before `GCP.Region`; list paths keep
+// it alongside the stack region so resources created under it are found.
+const listLocations = (region: string) => [...new Set([region, "us-central1"])];
+
+const acrossLocations = <A, E, R>(
+  region: string,
+  list: (location: string) => Effect.Effect<A[], E, R>,
+) =>
+  Effect.forEach(listLocations(region), list).pipe(
+    Effect.map((groups) => groups.flat()),
+  );
+
+export const listLakes = (project: string, region: string) =>
+  acrossLocations(region, (location) =>
+    emptyOnMissing(
+      collectPages(
+        dataplex.listProjectsLocationsLakes.pages({
+          parent: locationParent(project, location),
+          pageSize: 1000,
+        }),
+        (page) => page.lakes,
+      ),
     ),
   );
 
-export const listGlossaries = (project: string, location: string) =>
-  emptyOnMissing(
-    collectPages(
-      dataplex.listProjectsLocationsGlossaries.pages({
-        parent: locationParent(project, location),
-        pageSize: 1000,
-      }),
-      (page) => page.glossaries,
+export const listGlossaries = (project: string, region: string) =>
+  acrossLocations(region, (location) =>
+    emptyOnMissing(
+      collectPages(
+        dataplex.listProjectsLocationsGlossaries.pages({
+          parent: locationParent(project, location),
+          pageSize: 1000,
+        }),
+        (page) => page.glossaries,
+      ),
     ),
   );
 
@@ -341,14 +357,16 @@ export const listPartitions = (entity: string) =>
     ),
   );
 
-export const listMetadataFeeds = (project: string, location: string) =>
-  emptyOnMissing(
-    collectPages(
-      dataplex.listProjectsLocationsMetadataFeeds.pages({
-        parent: locationParent(project, location),
-        pageSize: 1000,
-      }),
-      (page) => page.metadataFeeds,
+export const listMetadataFeeds = (project: string, region: string) =>
+  acrossLocations(region, (location) =>
+    emptyOnMissing(
+      collectPages(
+        dataplex.listProjectsLocationsMetadataFeeds.pages({
+          parent: locationParent(project, location),
+          pageSize: 1000,
+        }),
+        (page) => page.metadataFeeds,
+      ),
     ),
   );
 

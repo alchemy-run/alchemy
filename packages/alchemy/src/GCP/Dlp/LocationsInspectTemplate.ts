@@ -27,8 +27,6 @@ import {
 
 type InspectConfig = dlp.GooglePrivacyDlpV2InspectConfig;
 
-const LOCATION = "us-central1";
-
 export type LocationsInspectTemplateProps = {
   /**
    * Template id (the `{inspectTemplate}` segment of
@@ -41,7 +39,7 @@ export type LocationsInspectTemplateProps = {
   /**
    * Processing location (`us-central1`, `global`, …). Immutable —
    * changing it replaces the template.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -148,13 +146,14 @@ const resourceName = (project: string, location: string, templateId: string) =>
 const toAttrs = (
   template: dlp.GooglePrivacyDlpV2InspectTemplate,
   project: string,
+  region: string,
 ) => {
   const name = template.name ?? "";
   const parsed = parseOwnership(template.description);
   return {
     name,
     templateId: lastSegment(name),
-    location: locationOf(name, LOCATION),
+    location: locationOf(name, region),
     project,
     displayName: template.displayName,
     description: parsed.text,
@@ -179,6 +178,7 @@ export const LocationsInspectTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const idChanged =
         previousId !== undefined &&
@@ -187,8 +187,8 @@ export const LocationsInspectTemplateProvider = () =>
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
-        normalizeLocation(news.location, LOCATION) !==
-          normalizeLocation(previousLocation, LOCATION);
+        normalizeLocation(news.location ?? previousLocation, env.region) !==
+          normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
 
@@ -196,7 +196,7 @@ export const LocationsInspectTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        LOCATION,
+        env.region,
       );
       const templateId = yield* toResourceId(
         id,
@@ -207,7 +207,7 @@ export const LocationsInspectTemplateProvider = () =>
         output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -218,7 +218,7 @@ export const LocationsInspectTemplateProvider = () =>
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
           dlp.listProjectsLocationsInspectTemplates.pages({
-            parent: locationParent(env.project, LOCATION),
+            parent: locationParent(env.project, env.region),
             pageSize: 100,
           }),
           (page) => page.inspectTemplates,
@@ -229,14 +229,14 @@ export const LocationsInspectTemplateProvider = () =>
         );
         return items
           .filter((template) => hasOwnershipMarker(template.description))
-          .map((template) => toAttrs(template, env.project));
+          .map((template) => toAttrs(template, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? output?.location,
-        LOCATION,
+        env.region,
       );
       const templateId = yield* toResourceId(
         id,
@@ -325,7 +325,7 @@ export const LocationsInspectTemplateProvider = () =>
           );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_STATE = "RUNNING" as const;
 const MAX_QUEUE_ID_LENGTH = 100;
 
@@ -60,7 +59,7 @@ export type QueueProps = {
    * Location of the queue (e.g. `us-central1`). Immutable — changing it
    * replaces the queue. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -191,8 +190,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const parseName = (name: string) => {
   const parts = name.split("/");
@@ -451,6 +450,7 @@ export const QueueProvider = () =>
     stables: ["name", "queueId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.queueId ?? output?.queueId;
       const nextId = news.queueId ?? previousId;
@@ -461,8 +461,12 @@ export const QueueProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       if (idChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
       }
@@ -472,7 +476,10 @@ export const QueueProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, olds?.queueId, output?.queueId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, queueId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -486,7 +493,11 @@ export const QueueProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const fallback = [locationParent(env.project, DEFAULT_LOCATION)];
+        // Scan the stack region plus the pre-`GCP.Region` default.
+        const fallbackLocations = [...new Set(["us-central1", env.region])];
+        const fallback = fallbackLocations.map((location) =>
+          locationParent(env.project, location),
+        );
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
         for (let page = 0; page < 10; page++) {
@@ -499,12 +510,13 @@ export const QueueProvider = () =>
             .pipe(
               Effect.catchTag(["NotFound", "Forbidden"], () =>
                 Effect.succeed({
-                  locations: [
-                    {
-                      name: fallback[0],
-                      locationId: DEFAULT_LOCATION,
-                    } satisfies cloudtasks.Location,
-                  ],
+                  locations: fallbackLocations.map(
+                    (location, index) =>
+                      ({
+                        name: fallback[index],
+                        locationId: location,
+                      }) satisfies cloudtasks.Location,
+                  ),
                   nextPageToken: undefined,
                 }),
               ),
@@ -529,7 +541,10 @@ export const QueueProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, news.queueId, output?.queueId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, queueId);
       const parent = locationParent(env.project, location);
       const internal = yield* createInternalLabels(id);

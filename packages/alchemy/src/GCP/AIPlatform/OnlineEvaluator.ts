@@ -9,11 +9,11 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   encodeDisplayName,
   hasDisplayNameOwnership,
@@ -56,7 +56,7 @@ export type CloudObservability = {
 export type OnlineEvaluatorProps = {
   /**
    * Vertex AI location. Immutable — changing it replaces the evaluator.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -238,11 +238,16 @@ export const OnlineEvaluatorProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const agentChanged =
         news.agentResource !==
         (olds?.agentResource ?? output?.agentResource ?? news.agentResource);
@@ -258,7 +263,10 @@ export const OnlineEvaluatorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const existing =
         output?.name !== undefined
@@ -276,15 +284,19 @@ export const OnlineEvaluatorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = yield* collectPages(
-          aiplatform.listProjectsLocationsOnlineEvaluators.pages({
-            parent: locationParent(env.project, DEFAULT_LOCATION),
-            pageSize: 100,
-          }),
-        ).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        const pages = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) =>
+            collectPages(
+              aiplatform.listProjectsLocationsOnlineEvaluators.pages({
+                parent: locationParent(env.project, location),
+                pageSize: 100,
+              }),
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        )).flat();
         return pages.flatMap((page) =>
           (page.onlineEvaluators ?? [])
             .filter((evaluator) =>
@@ -296,7 +308,10 @@ export const OnlineEvaluatorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const internal = yield* createInternalLabels(id);
       const displayName = encodeDisplayName(internal, news.displayName);

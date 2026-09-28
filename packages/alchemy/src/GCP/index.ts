@@ -1,9 +1,9 @@
 export * from "./AuthProvider.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
-export * from "./HttpClient.ts";
 export * from "./Labels.ts";
 export * from "./Providers.ts";
+export * as Region from "./Region.ts";
 export * as AIPlatform from "./AIPlatform/index.ts";
 export * as Analyticsadmin from "./Analyticsadmin/index.ts";
 export * as Analyticshub from "./Analyticshub/index.ts";

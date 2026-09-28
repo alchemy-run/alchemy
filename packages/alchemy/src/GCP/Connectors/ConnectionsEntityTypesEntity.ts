@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   entityNameOf,
   findOwnedEntity,
   getEntity,
@@ -139,7 +138,7 @@ const toAttrs = (
     entityId: parsed.entityId,
     parent: parsed.parent || parent,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location,
     connection: parsed.connection,
     entityType: parsed.entityType,
     fields: userFields(entity.fields),
@@ -201,7 +200,7 @@ export const ConnectionsEntityTypesEntityProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const entities = yield* listOwnedEntities(env.project);
+        const entities = yield* listOwnedEntities(env.project, env.region);
         return entities.map((entity) =>
           toAttrs(entity, env.project, parentOf(entity.name ?? "")),
         );

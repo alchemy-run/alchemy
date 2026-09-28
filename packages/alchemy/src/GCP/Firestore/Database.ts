@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_TYPE = "FIRESTORE_NATIVE";
 const DEFAULT_EDITION = "STANDARD";
 const DEFAULT_DELETE_PROTECTION = "DELETE_PROTECTION_DISABLED";
@@ -72,7 +71,7 @@ export type DatabaseProps = {
    * Location of the database (`us-central1`, `nam5`, `eur3`, …).
    * Immutable — changing it replaces the database. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -259,8 +258,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const normalizeEnum = (value: string | undefined, fallback: string) => {
   const next = (value ?? fallback).toUpperCase();
@@ -325,7 +324,7 @@ const toAttrs = (
     name,
     databaseId: parsed.databaseId,
     project: parsed.project || project,
-    location: normalizeLocation(database.locationId),
+    location: normalizeLocation(database.locationId, ""),
     type: normalizeType(database.type),
     databaseEdition: database.databaseEdition,
     concurrencyMode: database.concurrencyMode,
@@ -582,14 +581,19 @@ export const DatabaseProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.databaseId ?? output?.databaseId;
       const nextId = news.databaseId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousEdition = normalizeEdition(
         olds?.databaseEdition ?? output?.databaseEdition,
       );
@@ -683,7 +687,10 @@ export const DatabaseProvider = () =>
         news.databaseId,
         output?.databaseId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const type = normalizeType(news.type);
       const name = resourceName(env.project, databaseId);
       const desiredProtection =

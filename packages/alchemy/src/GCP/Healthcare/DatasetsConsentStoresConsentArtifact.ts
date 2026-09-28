@@ -11,7 +11,6 @@ import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  DEFAULT_LOCATION,
   expandParent,
   hasAlchemyLabelMap,
   listAlchemyConsentStores,
@@ -46,7 +45,7 @@ export type DatasetsConsentStoresConsentArtifactProps = {
   dataset?: string;
   /**
    * Region used when `consentStore` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -150,9 +149,13 @@ const storeOf = (
   return `${datasetName}/consentStores/${consentStore}`;
 };
 
-const toAttrs = (artifact: healthcare.ConsentArtifact, project: string) => {
+const toAttrs = (
+  artifact: healthcare.ConsentArtifact,
+  project: string,
+  region: string,
+) => {
   const name = artifact.name ?? "";
-  const parsed = parseResourceName(name, "consentArtifacts");
+  const parsed = parseResourceName(name, "consentArtifacts", region);
   return {
     name,
     consentArtifactId: parsed.id,
@@ -189,7 +192,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
       const nextParent = storeOf(
         news.consentStore,
         env.project,
-        normalizeLocation(news.location ?? output?.location),
+        normalizeLocation(news.location ?? output?.location, env.region),
         news.dataset,
       );
       const parentChanged =
@@ -214,7 +217,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
       const env = yield* GcpEnvironment.current;
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.metadata)))
         ? attrs
         : Unowned(attrs);
@@ -223,7 +226,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* listAlchemyConsentStores(env.project);
+        const stores = yield* listAlchemyConsentStores(env.project, env.region);
         const artifacts = yield* Effect.forEach(
           stores,
           (store) =>
@@ -241,13 +244,14 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
         return artifacts
           .flat()
           .filter((artifact) => hasAlchemyLabelMap(artifact.metadata))
-          .map((artifact) => toAttrs(artifact, env.project));
+          .map((artifact) => toAttrs(artifact, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const consentStore = storeOf(
         news.consentStore,
@@ -284,7 +288,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

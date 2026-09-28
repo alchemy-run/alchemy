@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   DEFAULT_PRODUCT,
   encodeOwnership,
   hasOwnershipMarker,
@@ -36,7 +35,8 @@ export type ProductsSfdcInstanceProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -146,13 +146,14 @@ const resourceName = (
 const toAttrs = (
   instance: integrations.GoogleCloudIntegrationsV1alphaSfdcInstance,
   project: string,
+  region: string,
 ) => {
   const name = instance.name ?? "";
   const parsed = parseOwnership(instance.description);
   return {
     name,
     sfdcInstanceId: lastSegment(name),
-    location: locationOf(name),
+    location: locationOf(name, region),
     product: productOf(name),
     project,
     displayName: instance.displayName,
@@ -176,13 +177,13 @@ const getByName = (name: string) =>
           ),
         );
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsSfdcInstances
     .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.sfdcInstances ?? [])),
       Stream.filter((instance) => hasOwnershipMarker(instance.description)),
-      Stream.map((instance) => toAttrs(instance, project)),
+      Stream.map((instance) => toAttrs(instance, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -218,11 +219,15 @@ export const ProductsSfdcInstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
+      const nextLocation = normalizeLocation(
+        news.location,
+        previousLocation ?? env.region,
+      );
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        normalizeLocation(previousLocation, env.region) !== nextLocation
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -252,7 +257,10 @@ export const ProductsSfdcInstanceProvider = () =>
         olds?.sfdcInstanceId,
         output?.sfdcInstanceId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const product = normalizeProduct(olds?.product ?? output?.product);
       const name =
         output?.name ??
@@ -265,7 +273,7 @@ export const ProductsSfdcInstanceProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -275,15 +283,17 @@ export const ProductsSfdcInstanceProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          productParent(env.project, DEFAULT_LOCATION, DEFAULT_PRODUCT),
+          productParent(env.project, env.region, DEFAULT_PRODUCT),
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const product = normalizeProduct(
         news.product ?? output?.product ?? DEFAULT_PRODUCT,
@@ -366,7 +376,7 @@ export const ProductsSfdcInstanceProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

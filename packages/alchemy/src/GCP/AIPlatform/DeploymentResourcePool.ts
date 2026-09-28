@@ -10,8 +10,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   lastSegment,
   normalizeLocation,
   parentOf,
@@ -77,7 +77,7 @@ export type DeploymentResourcePoolProps = {
   deploymentResourcePoolId?: string;
   /**
    * Region. Immutable — changing it replaces the pool.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -272,7 +272,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsDeploymentResourcePools({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listPools = (project: string) => {
+const listPools = (project: string, region: string) => {
   const collect = (parent: string) =>
     aiplatform.listProjectsLocationsDeploymentResourcePools
       .pages({ parent, pageSize: 1000 })
@@ -283,12 +283,13 @@ const listPools = (project: string) => {
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
       );
+  const fallback = Effect.forEach(listLocations(region), (location) =>
+    collect(`projects/${project}/locations/${location}`),
+  ).pipe(Effect.map((pages) => pages.flat()));
   return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () =>
-      collect(`projects/${project}/locations/${DEFAULT_LOCATION}`),
-    ),
+    Effect.catchTag("NotFound", () => fallback),
     Effect.catchTag("Forbidden", () =>
-      collect(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+      fallback.pipe(
         Effect.catchTag("NotFound", () => Effect.succeed([])),
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       ),
@@ -346,15 +347,18 @@ export const DeploymentResourcePoolProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId =
         olds?.deploymentResourcePoolId ?? output?.deploymentResourcePoolId;
       const nextId = news.deploymentResourcePoolId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousMachine = machineKey(
         olds?.dedicatedResources?.machineSpec ??
@@ -392,7 +396,10 @@ export const DeploymentResourcePoolProvider = () =>
         olds?.deploymentResourcePoolId,
         output?.deploymentResourcePoolId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name = output?.name ?? resourceName(env.project, location, poolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -406,7 +413,7 @@ export const DeploymentResourcePoolProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pools = yield* listPools(env.project);
+        const pools = yield* listPools(env.project, env.region);
         return pools
           .filter((pool) => isOwnedId(lastSegment(pool.name ?? "")))
           .map((pool) => toAttrs(pool, env.project));
@@ -414,7 +421,10 @@ export const DeploymentResourcePoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const poolId = yield* toId(
         id,
         news.deploymentResourcePoolId,

@@ -53,7 +53,7 @@ export type BareMetalClustersBareMetalNodePoolProps = {
   bareMetalCluster: string;
   /**
    * Region used when `bareMetalCluster` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -189,9 +189,13 @@ export const BareMetalClustersBareMetalNodePool =
 const resourceName = (cluster: string, bareMetalNodePoolId: string) =>
   `${cluster}/${COLLECTION}/${bareMetalNodePoolId}`;
 
-const toAttrs = (item: gkeonprem.BareMetalNodePool, project: string) => {
+const toAttrs = (
+  item: gkeonprem.BareMetalNodePool,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.displayName);
   const annotations = userLabels(item.annotations);
   return {
@@ -235,13 +239,13 @@ const listChildren = (parent: string) =>
       page.bareMetalNodePools,
   );
 
-const listOwned = (project: string) =>
-  listAtNested(project, `${PARENT_COLLECTION}/-`, listChildren).pipe(
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, `${PARENT_COLLECTION}/-`, listChildren).pipe(
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
         : listChildrenOf(
-            listAtLocation(project, (parent) =>
+            listAtLocation(project, region, (parent) =>
               collectPages(
                 gkeonprem.listProjectsLocationsBareMetalClusters.pages({
                   parent,
@@ -277,14 +281,19 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.bareMetalNodePoolId ?? output?.bareMetalNodePoolId,
         nextId: news.bareMetalNodePoolId
           ? rfc1035(news.bareMetalNodePoolId, "baremetalnodepool")
           : (olds?.bareMetalNodePoolId ?? output?.bareMetalNodePoolId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.bareMetalCluster ?? output?.bareMetalCluster,
         nextParent: news.bareMetalCluster,
@@ -299,7 +308,10 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
         output?.bareMetalNodePoolId,
         "baremetalnodepool",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const cluster = expandParent(
         olds?.bareMetalCluster ?? output?.bareMetalCluster ?? "",
         env.project,
@@ -309,7 +321,7 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
       const name = output?.name ?? resourceName(cluster, bareMetalNodePoolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const fromName = parseOwnership(existing.displayName).labels;
       const owned =
         (yield* hasAlchemyLabels(id, tagRecord(existing.annotations))) ||
@@ -320,9 +332,9 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item: gkeonprem.BareMetalNodePool) =>
-          toAttrs(item, env.project),
+          toAttrs(item, env.project, env.region),
         );
       }),
 
@@ -334,7 +346,10 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
         output?.bareMetalNodePoolId,
         "baremetalnodepool",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const cluster = expandParent(
         news.bareMetalCluster,
         env.project,
@@ -407,7 +422,7 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
       if (current === undefined) {
         return yield* new ResourceNotResolved({ name });
       }
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

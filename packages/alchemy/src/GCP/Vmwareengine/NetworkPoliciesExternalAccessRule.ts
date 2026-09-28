@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   VmwareengineNotResolved,
   changedFields,
   collectPages,
@@ -67,7 +66,8 @@ export type NetworkPoliciesExternalAccessRuleProps = {
   /**
    * Region of the parent policy. Inferred from `networkPolicy` when that
    * value is a full resource name. Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -208,9 +208,13 @@ const ipRangesOf = (
     externalAddress: range.externalAddress,
   }));
 
-const toAttrs = (item: vmwareengine.ExternalAccessRule, project: string) => {
+const toAttrs = (
+  item: vmwareengine.ExternalAccessRule,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_LOCATION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -252,9 +256,10 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.externalAccessRuleId ?? output?.externalAccessRuleId,
@@ -265,7 +270,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         nextLocation: normalizeLocation(
           news.location ??
             locationFromName(news.networkPolicy, previousLocation),
-          DEFAULT_LOCATION,
+          env.region,
         ),
         previousParent: olds?.networkPolicy ?? output?.networkPolicy,
         nextParent: news.networkPolicy,
@@ -278,9 +283,9 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         olds?.location ??
           output?.location ??
           (olds?.networkPolicy
-            ? locationFromName(olds.networkPolicy, DEFAULT_LOCATION)
+            ? locationFromName(olds.networkPolicy, env.region)
             : undefined),
-        DEFAULT_LOCATION,
+        env.region,
       );
       const parent = parentPolicyName(
         env.project,
@@ -296,7 +301,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       const name = output?.name ?? resourceNameOf(parent, ruleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -304,14 +309,17 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const policies = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsNetworkPolicies.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.networkPolicies,
-          ),
+        const policies = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsNetworkPolicies.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.networkPolicies,
+            ),
         );
         const nested = yield* Effect.forEach(
           policies.filter((policy) => (policy.name ?? "").length > 0),
@@ -330,7 +338,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         return nested
           .flat()
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -338,8 +346,8 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       const location = normalizeLocation(
         news.location ??
           output?.location ??
-          locationFromName(news.networkPolicy, DEFAULT_LOCATION),
-        DEFAULT_LOCATION,
+          locationFromName(news.networkPolicy, env.region),
+        env.region,
       );
       const parent = parentPolicyName(
         env.project,
@@ -465,7 +473,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

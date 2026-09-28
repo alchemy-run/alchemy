@@ -47,7 +47,8 @@ export type ChannelConnectionProps = {
    * Eventarc location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the connection. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -127,9 +128,13 @@ export const ChannelConnection = Resource<ChannelConnection>(
   "GCP.Eventarc.ChannelConnection",
 );
 
-const toAttrs = (connection: eventarc.ChannelConnection, project: string) => {
+const toAttrs = (
+  connection: eventarc.ChannelConnection,
+  project: string,
+  region: string,
+) => {
   const name = connection.name ?? "";
-  const parsed = parseName(name, COLLECTION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     channelConnectionId: parsed.id,
@@ -162,6 +167,7 @@ export const ChannelConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.channelConnectionId ?? output?.channelConnectionId;
       const nextId = news.channelConnectionId
@@ -169,9 +175,11 @@ export const ChannelConnectionProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousChannel = olds?.channel ?? output?.channel ?? "";
       const nextChannel = news.channel;
@@ -205,13 +213,16 @@ export const ChannelConnectionProvider = () =>
         output?.channelConnectionId,
         "channel-connection",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, channelConnectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -229,7 +240,7 @@ export const ChannelConnectionProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -240,7 +251,10 @@ export const ChannelConnectionProvider = () =>
         output?.channelConnectionId,
         "channel-connection",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(
         env.project,
         location,
@@ -286,7 +300,7 @@ export const ChannelConnectionProvider = () =>
         current = yield* waitUntilPresent(getByName(name), name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -10,7 +10,6 @@ import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
   DEFAULT_DEPLOYMENT_TYPE,
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   locationParent,
@@ -44,7 +43,7 @@ export type DeploymentProps = {
    * Location of the API Hub instance (`us-central1`, …). Immutable —
    * changing it replaces the deployment. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -212,9 +211,10 @@ const resourceName = (
 const toAttrs = (
   deployment: apihub.GoogleCloudApihubV1Deployment,
   project: string,
+  region: string,
 ) => {
   const name = deployment.name ?? "";
-  const parsed = parseName(name, "deployments");
+  const parsed = parseName(name, "deployments", region);
   const { text } = parseOwnership(deployment.description);
   return {
     name,
@@ -248,13 +248,13 @@ const getByName = (name: string) =>
         .getProjectsLocationsDeployments({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsDeployments
     .pages({ parent, pageSize: 1000 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.deployments ?? [])),
       Stream.filter((item) => hasOwnershipMarker(item.description)),
-      Stream.map((item) => toAttrs(item, project)),
+      Stream.map((item) => toAttrs(item, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -287,12 +287,17 @@ export const DeploymentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deploymentId ?? output?.deploymentId,
         nextId: news.deploymentId ?? olds?.deploymentId ?? output?.deploymentId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -305,12 +310,15 @@ export const DeploymentProvider = () =>
         output?.deploymentId,
         MAX_LONG_ID_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, deploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -320,14 +328,18 @@ export const DeploymentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const deploymentId = yield* toPhysicalId(
         id,
         news.deploymentId,
@@ -421,7 +433,7 @@ export const DeploymentProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

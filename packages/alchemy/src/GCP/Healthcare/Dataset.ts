@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   locationParent,
   normalizeLocation,
   parseResourceName,
@@ -32,7 +31,7 @@ export type DatasetProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * dataset. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -104,9 +103,13 @@ export class DatasetNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, datasetId: string) =>
   `${locationParent(project, location)}/datasets/${datasetId}`;
 
-const toAttrs = (dataset: healthcare.Dataset, project: string) => {
+const toAttrs = (
+  dataset: healthcare.Dataset,
+  project: string,
+  region: string,
+) => {
   const name = dataset.name ?? "";
-  const parsed = parseResourceName(name, "datasets");
+  const parsed = parseResourceName(name, "datasets", region);
   return {
     name,
     datasetId: parsed.id,
@@ -131,11 +134,13 @@ export const DatasetProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        news.location !== undefined &&
+        normalizeLocation(previousLocation, env.region) !==
+          normalizeLocation(news.location, env.region)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -147,11 +152,16 @@ export const DatasetProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const datasetId =
         olds?.datasetId ??
         output?.datasetId ??
-        (output?.name ? parseResourceName(output.name, "datasets").id : "");
+        (output?.name
+          ? parseResourceName(output.name, "datasets", env.region).id
+          : "");
       const name =
         output?.name ??
         (datasetId.length > 0
@@ -159,7 +169,7 @@ export const DatasetProvider = () =>
           : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       // Datasets have no labels. The physical name is unique per
       // instance id, so a hit at our computed name is treated as owned.
       return output?.name !== undefined && output.name !== attrs.name
@@ -172,7 +182,8 @@ export const DatasetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const datasetId = yield* toPhysicalId(
         id,
@@ -218,7 +229,7 @@ export const DatasetProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

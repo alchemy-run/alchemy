@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { DataplexOperationFailed, waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   DataplexNotResolved,
   DataplexStillExists,
   hasAlchemyLabelMap,
@@ -49,7 +48,7 @@ export type LakeProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the lake.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -237,13 +236,16 @@ export const LakeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.lakeId ?? output?.lakeId;
       const nextId = news.lakeId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -262,7 +264,10 @@ export const LakeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const lakeId = yield* toPhysicalRfc1035(id, olds?.lakeId, output?.lakeId);
       const name = output?.name ?? resourceName(env.project, location, lakeId);
       const existing = yield* getByName(name);
@@ -276,7 +281,7 @@ export const LakeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const lakes = yield* listLakes(env.project, DEFAULT_LOCATION);
+        const lakes = yield* listLakes(env.project, env.region);
         return lakes
           .filter((lake) => hasAlchemyLabelMap(lake.labels))
           .map((lake) => toAttrs(lake, env.project));
@@ -284,7 +289,10 @@ export const LakeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const lakeId = yield* toPhysicalRfc1035(id, news.lakeId, output?.lakeId);
       const name = output?.name ?? resourceName(env.project, location, lakeId);
       const desiredLabels = {

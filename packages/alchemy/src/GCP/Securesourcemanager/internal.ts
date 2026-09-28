@@ -11,7 +11,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const PAGE_SIZE = 100;
 
@@ -61,10 +60,16 @@ export const rfc1035 = (name: string, fallback = "ssm"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -75,7 +80,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -473,8 +478,9 @@ const listInstancePages = (parent: string) =>
 
 export const listInstances = (
   project: string,
+  region: string,
 ): Effect.Effect<ssm.Instance[], never, ssm.GcpOpContext> =>
-  listInstancePages(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+  listInstancePages(`projects/${project}/locations/${region}`).pipe(
     Effect.catchIf(
       () => true,
       () => listInstancePages(`projects/${project}/locations/-`),
@@ -484,13 +490,14 @@ export const listInstances = (
 
 export const listRepositories = (
   project: string,
+  region: string,
 ): Effect.Effect<
   Array<ssm.Repository & { name: string }>,
   never,
   ssm.GcpOpContext
 > =>
   Effect.gen(function* () {
-    const instances = yield* listInstances(project);
+    const instances = yield* listInstances(project, region);
     const named = instances.filter(
       (instance): instance is ssm.Instance & { name: string } =>
         (instance.name ?? "").length > 0,
@@ -498,7 +505,7 @@ export const listRepositories = (
     const pages = yield* Effect.forEach(
       named,
       (instance) => {
-        const location = parseName(instance.name, "instances").location;
+        const location = parseName(instance.name, "instances", region).location;
         return collectPages(
           ssm.listProjectsLocationsRepositories.pages({
             parent: `projects/${project}/locations/${location}`,
@@ -520,10 +527,11 @@ export const listRepositories = (
 
 export const forEachRepository = <A, E, R>(
   project: string,
+  region: string,
   fn: (repository: string) => Effect.Effect<readonly A[], E, R>,
 ): Effect.Effect<A[], E, R | ssm.GcpOpContext> =>
   Effect.gen(function* () {
-    const repos = yield* listRepositories(project);
+    const repos = yield* listRepositories(project, region);
     const pages = yield* Effect.forEach(repos, (repo) => fn(repo.name), {
       concurrency: 4,
     });

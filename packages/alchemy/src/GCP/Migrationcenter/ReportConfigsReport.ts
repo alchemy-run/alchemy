@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   expandParent,
   fingerprint,
@@ -41,7 +40,8 @@ export type ReportConfigsReportProps = {
   reportConfig: string;
   /**
    * Region used when `reportConfig` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -132,9 +132,9 @@ const configNameOf = (value: string, project: string, location: string) =>
 const resourceName = (reportConfig: string, reportId: string) =>
   `${reportConfig}/reports/${reportId}`;
 
-const toAttrs = (item: mc.Report, project: string) => {
+const toAttrs = (item: mc.Report, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "reports");
+  const parsed = parseName(name, "reports", region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -177,7 +177,7 @@ const listReports = (parent: string) =>
       ),
     );
 
-const listConfigs = (project: string) =>
+const listConfigs = (project: string, region: string) =>
   mc.listProjectsLocationsReportConfigs
     .pages({
       parent: `projects/${project}/locations/-`,
@@ -190,7 +190,7 @@ const listConfigs = (project: string) =>
       Effect.catchTag(["NotFound", "Forbidden"], () =>
         mc.listProjectsLocationsReportConfigs
           .pages({
-            parent: locationParent(project, DEFAULT_LOCATION),
+            parent: locationParent(project, region),
             pageSize: 1000,
           })
           .pipe(
@@ -206,9 +206,9 @@ const listConfigs = (project: string) =>
       ),
     );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const configs = yield* listConfigs(project);
+    const configs = yield* listConfigs(project, region);
     const reports: mc.Report[] = [];
     for (const config of configs) {
       if (config.name === undefined) continue;
@@ -233,6 +233,7 @@ export const ReportConfigsReportProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const payloadChanged =
         fingerprint({
           type: news.type ?? DEFAULT_TYPE,
@@ -247,9 +248,13 @@ export const ReportConfigsReportProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.reportId ?? output?.reportId,
         nextId: news.reportId ?? olds?.reportId ?? output?.reportId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.reportConfig ?? output?.reportConfig,
         nextParent: news.reportConfig,
@@ -259,7 +264,10 @@ export const ReportConfigsReportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const reportConfig = configNameOf(
         olds?.reportConfig ?? output?.reportConfig ?? "",
         env.project,
@@ -276,7 +284,7 @@ export const ReportConfigsReportProvider = () =>
         (reportConfig.length > 0 ? resourceName(reportConfig, reportId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -285,13 +293,16 @@ export const ReportConfigsReportProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const reportConfig = configNameOf(
         news.reportConfig,
         env.project,
@@ -336,7 +347,7 @@ export const ReportConfigsReportProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

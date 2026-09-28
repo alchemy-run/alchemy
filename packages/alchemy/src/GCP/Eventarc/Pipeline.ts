@@ -185,7 +185,8 @@ export type PipelineProps = {
    * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
    * — changing it replaces the pipeline. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -450,9 +451,13 @@ const toDestinations = (
     toDestination(destination, project, location),
   );
 
-const toAttrs = (pipeline: eventarc.Pipeline, project: string) => {
+const toAttrs = (
+  pipeline: eventarc.Pipeline,
+  project: string,
+  region: string,
+) => {
   const name = pipeline.name ?? "";
-  const parsed = parseName(name, COLLECTION);
+  const parsed = parseName(name, COLLECTION, region);
   const location = parsed.location;
   const resolvedProject = parsed.project || project;
   return {
@@ -492,15 +497,18 @@ export const PipelineProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.pipelineId ?? output?.pipelineId;
       const nextId = news.pipelineId
         ? rfc1035(news.pipelineId, "pipeline")
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -521,13 +529,16 @@ export const PipelineProvider = () =>
         output?.pipelineId,
         "pipeline",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, pipelineId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -545,7 +556,7 @@ export const PipelineProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -556,7 +567,10 @@ export const PipelineProvider = () =>
         output?.pipelineId,
         "pipeline",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, COLLECTION, pipelineId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -613,7 +627,7 @@ export const PipelineProvider = () =>
         current = yield* waitUntilPresent(getByName(name), name);
       }
 
-      const observed = toAttrs(current, env.project);
+      const observed = toAttrs(current, env.project, env.region);
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const updateMask = changedFields([
@@ -667,7 +681,7 @@ export const PipelineProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

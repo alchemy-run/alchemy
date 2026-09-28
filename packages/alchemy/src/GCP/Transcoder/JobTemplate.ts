@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   configKey,
-  DEFAULT_LOCATION,
   desiredLabelsOf,
   getJobTemplate,
   JobTemplateNotResolved,
@@ -45,7 +44,8 @@ export type JobTemplateProps = {
    * Transcoder location (`us-central1`, `us-east1`, …). Immutable —
    * changing it replaces the template. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -173,9 +173,13 @@ export const JobTemplate = Resource<JobTemplate>("GCP.Transcoder.JobTemplate");
 
 export { JobTemplateNotResolved, JobTemplateStillExists };
 
-const toAttrs = (template: transcoder.JobTemplate, project: string) => {
+const toAttrs = (
+  template: transcoder.JobTemplate,
+  project: string,
+  region: string,
+) => {
   const name = template.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     jobTemplateId: parsed.jobTemplateId,
@@ -193,6 +197,7 @@ export const JobTemplateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobTemplateId ?? output?.jobTemplateId;
       const nextId = news.jobTemplateId ?? previousId;
       const idChanged =
@@ -201,9 +206,11 @@ export const JobTemplateProvider = () =>
         previousId !== nextId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const locationChanged = previousLocation !== nextLocation;
       const configChanged =
@@ -226,12 +233,15 @@ export const JobTemplateProvider = () =>
         olds?.jobTemplateId,
         output?.jobTemplateId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, jobTemplateId);
       const existing = yield* getJobTemplate(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.labels))
         ? attrs
         : Unowned(attrs);
@@ -240,8 +250,8 @@ export const JobTemplateProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const rows = yield* listOwnedJobTemplates(env.project);
-        return rows.map((row) => toAttrs(row, env.project));
+        const rows = yield* listOwnedJobTemplates(env.project, env.region);
+        return rows.map((row) => toAttrs(row, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -252,7 +262,8 @@ export const JobTemplateProvider = () =>
         output?.jobTemplateId,
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, jobTemplateId);
@@ -281,7 +292,7 @@ export const JobTemplateProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

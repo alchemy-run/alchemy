@@ -11,12 +11,12 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import { listAlchemyReasoningEngines } from "./ReasoningEngine.ts";
 import {
   AiPlatformNotResolved,
   AiPlatformStillExists,
-  DEFAULT_LOCATION,
   collectPages,
   encodeDisplayName,
   hasDisplayNameOwnership,
@@ -47,7 +47,7 @@ export type ReasoningEnginesSandboxEnvironmentProps = {
   reasoningEngine: string;
   /**
    * Vertex AI location. Used when `reasoningEngine` is a bare id.
-   * Immutable. @default "us-central1"
+   * Immutable. @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -268,6 +268,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousParent = lastSegment(
         olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
@@ -275,8 +276,12 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
       const nextParent = lastSegment(news.reasoningEngine);
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const templateChanged =
         (news.sandboxEnvironmentTemplate ?? "") !==
         (olds?.sandboxEnvironmentTemplate ?? "");
@@ -294,7 +299,10 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const parent = engineNameOf(
         env.project,
         location,
@@ -313,10 +321,10 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = yield* listAlchemyReasoningEngines(
-          env.project,
-          DEFAULT_LOCATION,
-        );
+        const engines = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listAlchemyReasoningEngines(env.project, location),
+        )).flat();
         const sandboxes = yield* Effect.forEach(
           engines,
           (engine) =>
@@ -335,7 +343,10 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = engineNameOf(env.project, location, news.reasoningEngine);
       const internal = yield* createInternalLabels(id);
       const displayName = encodeDisplayName(

@@ -14,7 +14,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   annotationsOf,
   expandParent,
   hasAlchemyLabelMap,
@@ -53,7 +52,7 @@ export type ApisDeploymentProps = {
   deploymentId?: string;
   /**
    * Location used when `api` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -183,9 +182,13 @@ const parentApi = (api: string, project: string, location: string) =>
 const resourceName = (api: string, deploymentId: string) =>
   `${api}/deployments/${deploymentId}`;
 
-const toAttrs = (deployment: registry.ApiDeployment, project: string) => {
+const toAttrs = (
+  deployment: registry.ApiDeployment,
+  project: string,
+  region: string,
+) => {
   const name = deployment.name ?? "";
-  const parsed = parseResourceName(name, "deployments");
+  const parsed = parseResourceName(name, "deployments", region);
   return {
     name,
     deploymentId: parsed.id,
@@ -226,11 +229,15 @@ export const ApisDeploymentProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.deploymentId ?? output?.deploymentId,
         nextId: news.deploymentId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.api ?? output?.api,
         nextParent: parentApi(news.api, env.project, location),
@@ -239,7 +246,10 @@ export const ApisDeploymentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const deploymentId = yield* toPhysicalId(
         id,
         olds?.deploymentId,
@@ -252,7 +262,7 @@ export const ApisDeploymentProvider = () =>
       const name = output?.name ?? (api ? resourceName(api, deploymentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -261,21 +271,22 @@ export const ApisDeploymentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const apis = yield* listApis(
-          locationParent(env.project, DEFAULT_LOCATION),
-        );
+        const apis = yield* listApis(locationParent(env.project, env.region));
         const deployments = yield* listChildResources(
           namedOf(apis),
           listDeployments,
         );
         return deployments
           .filter((item) => hasAlchemyLabelMap(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const api = parentApi(news.api, env.project, location);
       const deploymentId = yield* toPhysicalId(
         id,
@@ -379,7 +390,7 @@ export const ApisDeploymentProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

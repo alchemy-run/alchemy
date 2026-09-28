@@ -30,7 +30,7 @@ export type ProjectsLocationsFolderProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * folder. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -113,9 +113,9 @@ export class ProjectsLocationsFolderNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (folder: dataform.Folder, project: string) => {
+const toAttrs = (folder: dataform.Folder, project: string, region: string) => {
   const name = folder.name ?? "";
-  const parsed = parseResourceName(name, "folders");
+  const parsed = parseResourceName(name, "folders", region);
   return {
     name,
     folderId: parsed.id,
@@ -171,12 +171,15 @@ export const ProjectsLocationsFolderProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const existing = output?.name
         ? yield* getByName(output.name)
         : yield* findOwned(env.project, location, id, olds?.displayName);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.displayName))
         ? attrs
         : Unowned(attrs);
@@ -185,15 +188,18 @@ export const ProjectsLocationsFolderProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const folders = yield* listFolders(env.project);
+        const folders = yield* listFolders(env.project, env.region);
         return folders
           .filter((folder) => hasOwnershipMarker(folder.displayName))
-          .map((folder) => toAttrs(folder, env.project));
+          .map((folder) => toAttrs(folder, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const ownership = yield* createInternalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const containingFolder =
@@ -262,7 +268,7 @@ export const ProjectsLocationsFolderProvider = () =>
         current = (yield* getByName(currentName)) ?? current;
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

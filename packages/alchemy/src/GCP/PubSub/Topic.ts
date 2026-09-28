@@ -116,6 +116,10 @@ export type Topic = Resource<
  */
 export const Topic = Resource<Topic>("GCP.PubSub.Topic");
 
+export class TopicStillExists extends Data.TaggedError(
+  "GCP.PubSub.TopicStillExists",
+)<{ name: string }> {}
+
 export class TopicNotResolved extends Data.TaggedError(
   "GCP.PubSub.TopicNotResolved",
 )<{
@@ -269,5 +273,17 @@ export const TopicProvider = () =>
       yield* pubsub
         .deleteProjectsTopics({ topic: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      // Pub/Sub reads lag deletes; block until it stops serving it.
+      yield* getByName(output.name).pipe(
+        Effect.filterOrFail(
+          (existing) => existing === undefined,
+          () => new TopicStillExists({ name: output.name }),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "GCP.PubSub.TopicStillExists",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 30,
+        }),
+      );
     }),
   });

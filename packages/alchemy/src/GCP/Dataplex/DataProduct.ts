@@ -48,7 +48,7 @@ export type DataProductProps = {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * product.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -184,7 +184,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listProducts = (project: string) => {
+const listProducts = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       dataplex.listProjectsLocationsDataProducts.pages({
@@ -199,11 +199,11 @@ const listProducts = (project: string) => {
       Effect.catchTag("NotFound", () => Effect.succeed([])),
       Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
-  return listAtLocation(project, collect);
+  return listAtLocation(project, region, collect);
 };
 
-export const listAlchemyDataProducts = (project: string) =>
-  listProducts(project);
+export const listAlchemyDataProducts = (project: string, region: string) =>
+  listProducts(project, region);
 
 export const DataProductProvider = () =>
   Provider.succeed(DataProduct, {
@@ -218,13 +218,18 @@ export const DataProductProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataProductId ?? output?.dataProductId,
         nextId:
           news.dataProductId ?? olds?.dataProductId ?? output?.dataProductId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
       });
     }),
@@ -237,7 +242,10 @@ export const DataProductProvider = () =>
         output?.dataProductId,
         "dataproduct",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, dataProductId);
       const existing = yield* getByName(name);
@@ -251,7 +259,7 @@ export const DataProductProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listProducts(env.project);
+        const items = yield* listProducts(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -263,7 +271,10 @@ export const DataProductProvider = () =>
         output?.dataProductId,
         "dataproduct",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, dataProductId);
       const desiredLabels = {
         ...toLabels(news.labels),

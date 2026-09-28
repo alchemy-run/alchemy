@@ -67,7 +67,7 @@ export type DataTaxonomiesAttributeProps = {
   /**
    * Region used when `dataTaxonomy` is a bare id. Immutable — changing
    * it replaces the attribute.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -179,11 +179,12 @@ const resolveParent = (
   project: string,
   dataTaxonomy: string,
   location: string | undefined,
+  defaultLocation: string,
 ) => {
   const parent = expandParent(
     dataTaxonomy,
     project,
-    normalizeLocation(location),
+    normalizeLocation(location, defaultLocation),
     "dataTaxonomies",
   );
   const parsed = parseName(`${parent}/attributes/_`, "attributes");
@@ -262,15 +263,20 @@ export const DataTaxonomiesAttributeProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataAttributeId ?? output?.dataAttributeId,
         nextId:
           news.dataAttributeId ??
           olds?.dataAttributeId ??
           output?.dataAttributeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.dataTaxonomy ?? output?.dataTaxonomy,
         nextParent:
@@ -284,6 +290,7 @@ export const DataTaxonomiesAttributeProvider = () =>
         env.project,
         olds?.dataTaxonomy ?? output?.dataTaxonomy ?? "",
         olds?.location ?? output?.location,
+        env.region,
       );
       const dataAttributeId = yield* toPhysicalId(
         id,
@@ -304,18 +311,21 @@ export const DataTaxonomiesAttributeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const taxonomies = yield* listAtLocation(env.project, (parent) =>
-          collectPages(
-            dataplex.listProjectsLocationsDataTaxonomies.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.dataTaxonomies,
-          ).pipe(
-            Effect.map((items) =>
-              items.filter((item) => hasAlchemyLabelMap(item.labels)),
+        const taxonomies = yield* listAtLocation(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              dataplex.listProjectsLocationsDataTaxonomies.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.dataTaxonomies,
+            ).pipe(
+              Effect.map((items) =>
+                items.filter((item) => hasAlchemyLabelMap(item.labels)),
+              ),
             ),
-          ),
         );
         const nested = yield* Effect.forEach(
           taxonomies,
@@ -334,6 +344,7 @@ export const DataTaxonomiesAttributeProvider = () =>
         env.project,
         news.dataTaxonomy,
         news.location ?? output?.location,
+        env.region,
       );
       const dataAttributeId = yield* toPhysicalId(
         id,

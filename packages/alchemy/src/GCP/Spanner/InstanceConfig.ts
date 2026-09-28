@@ -20,7 +20,6 @@ import type { Providers } from "../Providers.ts";
 import {
   configIdOf,
   configNameOf,
-  DEFAULT_CONFIG_ID,
   instanceConfigName,
   parseResourceName,
   retryConcurrentChanges,
@@ -53,7 +52,7 @@ export type InstanceConfigProps = {
   /**
    * Google-managed base config id (`regional-us-central1`) or full name.
    * Immutable — changing it replaces the config.
-   * @default "regional-us-central1"
+   * @default `regional-{region}` for the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   baseConfig?: string;
   /**
@@ -289,6 +288,7 @@ const waitUntilGone = (name: string) =>
 
 const desiredReplicas = (
   project: string,
+  region: string,
   news: InstanceConfigProps,
 ): Effect.Effect<
   ReplicaInfo[],
@@ -299,7 +299,7 @@ const desiredReplicas = (
     if (news.replicas !== undefined && news.replicas.length > 0) {
       return news.replicas;
     }
-    const baseName = configNameOf(project, news.baseConfig);
+    const baseName = configNameOf(project, news.baseConfig, region);
     const base = yield* spanner.getProjectsInstanceConfigs({ name: baseName });
     const extra = (base.optionalReplicas ?? [])[0];
     if (extra === undefined) {
@@ -322,12 +322,17 @@ export const InstanceConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.instanceConfigId ?? output?.instanceConfigId;
       const nextId = news.instanceConfigId ?? previousId;
-      const previousBase = configIdOf(olds?.baseConfig ?? output?.baseConfig);
+      const previousBase = configIdOf(
+        olds?.baseConfig ?? output?.baseConfig,
+        env.region,
+      );
       const nextBase = configIdOf(
-        news.baseConfig ?? output?.baseConfig ?? DEFAULT_CONFIG_ID,
+        news.baseConfig ?? output?.baseConfig,
+        env.region,
       );
       const replicasChanged =
         news.replicas !== undefined &&
@@ -403,7 +408,7 @@ export const InstanceConfigProvider = () =>
       );
       const name = instanceConfigName(env.project, instanceConfigId);
       const displayName = news.displayName?.trim() || instanceConfigId;
-      const baseConfig = configNameOf(env.project, news.baseConfig);
+      const baseConfig = configNameOf(env.project, news.baseConfig, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -412,7 +417,7 @@ export const InstanceConfigProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const replicas = yield* desiredReplicas(env.project, news);
+        const replicas = yield* desiredReplicas(env.project, env.region, news);
         const created = yield* spanner
           .createProjectsInstanceConfigs({
             parent: `projects/${env.project}`,

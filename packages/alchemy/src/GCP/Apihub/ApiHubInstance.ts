@@ -10,7 +10,6 @@ import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   MAX_INSTANCE_ID_LENGTH,
   encodeOwnership,
   hasAlchemyLabelMap,
@@ -64,7 +63,7 @@ export type ApiHubInstanceProps = {
   /**
    * Location (`us-central1`, …). Only one ApiHub instance is allowed per
    * project. Immutable — changing it replaces the instance.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -163,9 +162,10 @@ const resourceName = (
 const toAttrs = (
   instance: apihub.GoogleCloudApihubV1ApiHubInstance,
   project: string,
+  region: string,
 ) => {
   const name = instance.name ?? "";
-  const parsed = parseResourceName(name, "apiHubInstances");
+  const parsed = parseResourceName(name, "apiHubInstances", region);
   const description = parseOwnership(instance.description).text;
   return {
     name,
@@ -220,15 +220,20 @@ export const ApiHubInstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.apiHubInstanceId ?? output?.apiHubInstanceId,
         nextId:
           news.apiHubInstanceId ??
           olds?.apiHubInstanceId ??
           output?.apiHubInstanceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (news.config?.cmekKeyName ?? olds?.config?.cmekKeyName) !==
@@ -240,7 +245,10 @@ export const ApiHubInstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const apiHubInstanceId = yield* toPhysicalId(
         id,
         olds?.apiHubInstanceId,
@@ -254,7 +262,7 @@ export const ApiHubInstanceProvider = () =>
         existing = yield* lookupAt(locationParent(env.project, location));
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const labeled = yield* hasAlchemyLabels(id, tagRecord(existing.labels));
       const described = yield* ownedByLabelsOrDescription(
         id,
@@ -268,7 +276,7 @@ export const ApiHubInstanceProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const existing = yield* lookupAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         if (existing === undefined) return [];
         if (
@@ -277,12 +285,15 @@ export const ApiHubInstanceProvider = () =>
         ) {
           return [];
         }
-        return [toAttrs(existing, env.project)];
+        return [toAttrs(existing, env.project, env.region)];
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const apiHubInstanceId = yield* toPhysicalId(
         id,
@@ -361,7 +372,7 @@ export const ApiHubInstanceProvider = () =>
         return yield* new ApihubNotResolved({ name: currentName });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

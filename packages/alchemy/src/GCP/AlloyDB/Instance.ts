@@ -20,7 +20,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_INSTANCE_TYPE = "PRIMARY";
 const DEFAULT_CPU_COUNT = 2;
 const DEFAULT_READ_POOL_NODES = 1;
@@ -67,7 +66,7 @@ export type InstanceProps = {
    * `cluster` is a full resource name. Immutable — changing it replaces
    * the instance. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -296,8 +295,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 const normalizeInstanceType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_INSTANCE_TYPE).toUpperCase();
@@ -338,9 +337,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     clusterId:
       clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
     instanceId:
@@ -353,7 +350,7 @@ const parseName = (name: string) => {
 const parseClusterRef = (
   cluster: string,
   fallbackProject: string,
-  fallbackLocation: string | undefined,
+  fallbackLocation: string,
 ) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
@@ -659,15 +656,18 @@ export const InstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
       const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId);
       const nextCluster = lastSegment(news.cluster ?? previousCluster);
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const previousType = normalizeInstanceType(
         olds?.instanceType ?? output?.instanceType,
       );
@@ -710,7 +710,7 @@ export const InstanceProvider = () =>
       const ref = parseClusterRef(
         olds?.cluster ?? output?.clusterName ?? output?.clusterId ?? "",
         env.project,
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) return undefined;
       const name = resourceName(
@@ -758,7 +758,7 @@ export const InstanceProvider = () =>
       const ref = parseClusterRef(
         news.cluster,
         env.project,
-        news.location ?? output?.location,
+        news.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) {
         return yield* new InstanceClusterMissing({

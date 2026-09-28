@@ -11,7 +11,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { DateRangeConfig } from "./Dashboard.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   lastSegment,
@@ -285,7 +284,7 @@ export const DashboardsChartProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const dashboards = yield* listDashboards(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         const pages = yield* Effect.forEach(
           dashboards,

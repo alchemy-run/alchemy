@@ -15,7 +15,7 @@ import {
   createInternalLabels,
   hasAlchemyPrefix,
   labelsDiffer,
-  LIST_LOCATIONS,
+  listLocations,
   locationOf,
   lastSegment,
   projectOf,
@@ -273,7 +273,7 @@ export const MetadataStoresContextProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const stores = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          listLocations(env.region),
           (location) =>
             listStores(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },

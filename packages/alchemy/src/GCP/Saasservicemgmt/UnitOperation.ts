@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   ResourceNotResolved,
   collectPages,
   expandName,
@@ -80,7 +79,7 @@ export type UnitOperationProps = {
    * Region of the operation (`us-central1`, …). Immutable — changing it
    * replaces the operation. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -271,7 +270,7 @@ const toAttrs = (item: saasservicemgmt.UnitOperation, project: string) => {
     name,
     unitOperationId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location,
     unit: item.unit,
     unitId: item.unit ? lastSegment(item.unit) : undefined,
     provision: item.provision,
@@ -354,6 +353,7 @@ export const UnitOperationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousKind = operationKind({
         provision: olds?.provision ?? output?.provision,
         upgrade: olds?.upgrade ?? output?.upgrade,
@@ -367,9 +367,11 @@ export const UnitOperationProvider = () =>
           news.unitOperationId ??
           olds?.unitOperationId ??
           output?.unitOperationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           !sameRef(olds?.unit ?? output?.unit, news.unit) ||
@@ -387,7 +389,9 @@ export const UnitOperationProvider = () =>
         output?.unitOperationId,
         "uop",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, unitOperationId);
@@ -402,7 +406,7 @@ export const UnitOperationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, DEFAULT_LOCATION);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -414,7 +418,9 @@ export const UnitOperationProvider = () =>
         output?.unitOperationId,
         "uop",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(
         env.project,
         location,

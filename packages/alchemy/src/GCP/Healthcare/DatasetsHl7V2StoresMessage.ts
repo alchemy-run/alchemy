@@ -16,15 +16,13 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   decodeHl7,
   encodeHl7,
   hasAlchemyLabelMap,
   lastSegment,
-  listDatasets,
+  listRegionDatasets,
   listHl7V2Stores,
   listMessages,
-  locationParent,
   parentOf,
   retryTransient,
   sameText,
@@ -149,10 +147,10 @@ const userLabels = (
 const resourceNameOf = (parent: string, messageId: string) =>
   `${parent}/messages/${messageId}`;
 
-const locationOf = (name: string) => {
+const locationOf = (name: string, fallback: string) => {
   const parts = name.split("/");
   const index = parts.indexOf("locations");
-  return index >= 0 ? (parts[index + 1] ?? DEFAULT_LOCATION) : DEFAULT_LOCATION;
+  return index >= 0 ? (parts[index + 1] ?? fallback) : fallback;
 };
 
 const projectOf = (name: string, fallback: string) => {
@@ -165,6 +163,7 @@ const toAttrs = (
   message: healthcare.Message,
   project: string,
   data: string,
+  region: string,
 ) => {
   const name = message.name ?? "";
   return {
@@ -172,7 +171,7 @@ const toAttrs = (
     messageId: lastSegment(name),
     parent: parentOf(name),
     project: projectOf(name, project),
-    location: locationOf(name),
+    location: locationOf(name, region),
     data,
     labels: userLabels(message.labels),
     messageType: message.messageType,
@@ -207,11 +206,9 @@ const findOwned = (parent: string, id: string) =>
     return undefined;
   });
 
-const listOwnedMessages = (project: string) =>
+const listOwnedMessages = (project: string, region: string) =>
   Effect.gen(function* () {
-    const datasets = yield* listDatasets(
-      locationParent(project, DEFAULT_LOCATION),
-    );
+    const datasets = yield* listRegionDatasets(project, region);
     const named = datasets.filter((dataset) => (dataset.name ?? "").length > 0);
     const stores = yield* Effect.forEach(
       named,
@@ -275,7 +272,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       }
       if (existing === undefined) return undefined;
       const data = yield* decodeHl7(existing.data);
-      const attrs = toAttrs(existing, env.project, data);
+      const attrs = toAttrs(existing, env.project, data, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -284,11 +281,11 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const messages = yield* listOwnedMessages(env.project);
+        const messages = yield* listOwnedMessages(env.project, env.region);
         return yield* Effect.forEach(messages, (message) =>
           Effect.gen(function* () {
             const data = yield* decodeHl7(message.data);
-            return toAttrs(message, env.project, data);
+            return toAttrs(message, env.project, data, env.region);
           }),
         );
       }),
@@ -354,7 +351,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       const data = sameText(current.data, encoded)
         ? news.data
         : yield* decodeHl7(current.data);
-      return toAttrs(current, env.project, data);
+      return toAttrs(current, env.project, data, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

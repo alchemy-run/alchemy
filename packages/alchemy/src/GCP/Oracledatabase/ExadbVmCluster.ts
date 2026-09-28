@@ -95,7 +95,7 @@ export type ExadbVmClusterProps = {
   exadbVmClusterId?: string;
   /**
    * Region. Immutable.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -309,7 +309,7 @@ const getByName = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const listClusters = (project: string) => {
+const listClusters = (project: string, region: string) => {
   const collect = (parent: string) =>
     collectPages(
       oracle.listProjectsLocationsExadbVmClusters.pages({
@@ -322,7 +322,7 @@ const listClusters = (project: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
     );
-  return listAtLocation(project, collect).pipe(
+  return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
@@ -334,6 +334,7 @@ export const ExadbVmClusterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousOdb = olds?.odbSubnet ?? output?.odbSubnet ?? "";
       const nextOdb = news.odbSubnet ?? previousOdb;
       const previousBackup =
@@ -353,9 +354,11 @@ export const ExadbVmClusterProvider = () =>
           news.exadbVmClusterId ??
           olds?.exadbVmClusterId ??
           output?.exadbVmClusterId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
+          news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           nextOdb !== previousOdb ||
@@ -372,7 +375,9 @@ export const ExadbVmClusterProvider = () =>
         output?.exadbVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceNameOf(env.project, location, COLLECTION, exadbVmClusterId);
@@ -387,7 +392,7 @@ export const ExadbVmClusterProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listClusters(env.project);
+        const items = yield* listClusters(env.project, env.region);
         return items.map((item) => toAttrs(item, env.project));
       }),
 
@@ -399,7 +404,9 @@ export const ExadbVmClusterProvider = () =>
         output?.exadbVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceNameOf(
         env.project,
         location,

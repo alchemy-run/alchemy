@@ -18,7 +18,6 @@ export type ServiceProperties = apphub.ServiceProperties;
 export type WorkloadReference = apphub.WorkloadReference;
 export type WorkloadProperties = apphub.WorkloadProperties;
 
-export const DEFAULT_LOCATION = "us-central1";
 export const GLOBAL_LOCATION = "global";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
@@ -82,11 +81,13 @@ export const rfc1035 = (name: string, fallback = "apphub"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const locationParent = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const locationParent = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const toPhysicalId = (
   id: string,
@@ -107,7 +108,11 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  defaultLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -119,7 +124,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     applicationId:
       applicationsAt >= 0 && parts[applicationsAt + 1]
         ? parts[applicationsAt + 1]!
@@ -535,11 +540,12 @@ export const listOwnedPages = <Page, A, E, R>(
 
 export const listAtLocations = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], E, R> => {
   const fallback: Effect.Effect<A[], never, R> = Effect.all(
     [
-      list(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+      list(`projects/${project}/locations/${region}`).pipe(
         Effect.orElseSucceed((): A[] => []),
       ),
       list(`projects/${project}/locations/${GLOBAL_LOCATION}`).pipe(
@@ -554,8 +560,8 @@ export const listAtLocations = <A, E, R>(
   ]);
 };
 
-export const listAllApplications = (project: string) =>
-  listAtLocations(project, (parent) =>
+export const listAllApplications = (project: string, region: string) =>
+  listAtLocations(project, region, (parent) =>
     collectPages(
       apphub.listProjectsLocationsApplications.pages({
         parent,
@@ -567,10 +573,11 @@ export const listAllApplications = (project: string) =>
 
 export const listNestedOwned = <A, E, R>(
   project: string,
+  region: string,
   listChildren: (applicationName: string) => Effect.Effect<A[], E, R>,
 ) =>
   Effect.gen(function* () {
-    const apps = yield* listAllApplications(project);
+    const apps = yield* listAllApplications(project, region);
     const groups = yield* Effect.forEach(
       apps,
       (app) => {

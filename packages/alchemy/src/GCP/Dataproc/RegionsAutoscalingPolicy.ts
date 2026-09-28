@@ -39,7 +39,7 @@ export type RegionsAutoscalingPolicyProps = Omit<
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   region?: string;
 };
@@ -115,7 +115,7 @@ const toAttrs = (
   region: string,
 ) => {
   const name = policy.name ?? "";
-  const parsed = parseResourceName(name, "autoscalingPolicies");
+  const parsed = parseResourceName(name, "autoscalingPolicies", region);
   return {
     name,
     policyId: policy.id ?? parsed.id,
@@ -184,11 +184,16 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.policyId ?? output?.policyId;
       const nextId = news.policyId ?? previousId;
-      const previousRegion = normalizeLocation(olds?.region ?? output?.region);
+      const previousRegion = normalizeLocation(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const nextRegion = normalizeLocation(
         news.region ?? olds?.region ?? output?.region,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -209,7 +214,10 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(olds?.region ?? output?.region);
+      const region = normalizeLocation(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const policyId = yield* toPhysicalId(
         id,
         olds?.policyId,
@@ -230,7 +238,7 @@ export const RegionsAutoscalingPolicyProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          [...new Set([env.region, ...LIST_LOCATIONS])],
           (region) => listRegion(env.project, region),
           { concurrency: 4 },
         );
@@ -239,7 +247,10 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(news.region ?? output?.region);
+      const region = normalizeLocation(
+        news.region ?? output?.region,
+        env.region,
+      );
       const policyId = yield* toPhysicalId(
         id,
         news.policyId,

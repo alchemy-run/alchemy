@@ -43,7 +43,7 @@ export type RepositoriesIssuesIssueCommentProps = {
   repository?: string;
   /**
    * Region used when `issue` or `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -139,9 +139,9 @@ const expandIssue = (
   return repo.length > 0 ? `${repo}/issues/${next}` : next;
 };
 
-const toAttrs = (item: ssm.IssueComment, project: string) => {
+const toAttrs = (item: ssm.IssueComment, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "issueComments");
+  const parsed = parseName(name, "issueComments", region);
   const body = parseOwnership(item.body);
   return {
     name,
@@ -200,8 +200,8 @@ const findOwned = (issue: string, id: string) =>
     return undefined;
   });
 
-const listOwned = (project: string) =>
-  forEachRepository(project, (repository) =>
+const listOwned = (project: string, region: string) =>
+  forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
       Effect.map((items) =>
         items.filter((item) => hasOwnershipMarker(item.body)),
@@ -225,11 +225,15 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.commentId ?? output?.commentId,
         nextId: news.commentId ?? olds?.commentId ?? output?.commentId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.issue ?? output?.issue,
         nextParent: expandIssue(
@@ -243,13 +247,16 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const issue = expandIssue(
         olds?.issue ?? output?.issue ?? "",
         olds?.repository ??
           (output === undefined
             ? undefined
-            : parseName(output.issue, "issues").parent),
+            : parseName(output.issue, "issues", env.region).parent),
         env.project,
         location,
       );
@@ -264,7 +271,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         existing = yield* findOwned(issue, id);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.body);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -272,15 +279,18 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
+        const items = yield* listOwned(env.project, env.region);
         return items.map((item: ssm.IssueComment) =>
-          toAttrs(item, env.project),
+          toAttrs(item, env.project, env.region),
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const issue = expandIssue(
         news.issue,
         news.repository,
@@ -339,7 +349,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         current = yield* waitUntilExists(getByName(currentName), currentName);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

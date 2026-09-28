@@ -48,7 +48,7 @@ export type BackupPlanAssociationProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the association. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -169,9 +169,13 @@ const toRules = (
       rule.lastSuccessfulBackupConsistencyTime,
   }));
 
-const toAttrs = (item: backupdr.BackupPlanAssociation, project: string) => {
+const toAttrs = (
+  item: backupdr.BackupPlanAssociation,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "backupPlanAssociations");
+  const parsed = parseName(name, "backupPlanAssociations", region);
   return {
     name,
     backupPlanAssociationId: parsed.id,
@@ -212,9 +216,9 @@ const getPlan = (name: string | undefined) =>
           ),
         );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const items = yield* listAtLocation(project, (parent) =>
+    const items = yield* listAtLocation(project, region, (parent) =>
       collectPages(
         backupdr.listProjectsLocationsBackupPlanAssociations.pages({
           parent,
@@ -264,6 +268,7 @@ export const BackupPlanAssociationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousResource = olds?.resource ?? output?.resource;
       const previousType = olds?.resourceType ?? output?.resourceType;
       return replaceOnIdentity({
@@ -273,9 +278,13 @@ export const BackupPlanAssociationProvider = () =>
           news.backupPlanAssociationId ??
           olds?.backupPlanAssociationId ??
           output?.backupPlanAssociationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousType !== undefined &&
@@ -296,13 +305,16 @@ export const BackupPlanAssociationProvider = () =>
         output?.backupPlanAssociationId,
         "backupplanassoc",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, backupPlanAssociationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       if (output !== undefined) return attrs;
       const plan = yield* getPlan(existing.backupPlan);
       return plan !== undefined && hasAlchemyLabelMap(plan.labels)
@@ -313,8 +325,8 @@ export const BackupPlanAssociationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -325,7 +337,10 @@ export const BackupPlanAssociationProvider = () =>
         output?.backupPlanAssociationId,
         "backupplanassoc",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, backupPlanAssociationId);
       const backupPlan = backupPlanOf(news.backupPlan, env.project, location);
 
@@ -374,7 +389,7 @@ export const BackupPlanAssociationProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

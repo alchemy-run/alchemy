@@ -322,11 +322,12 @@ const toCreatePartition = (
   name: string,
   news: InstancesInstancePartitionProps,
   project: string,
+  region: string,
   displayName: string,
 ): spanner.InstancePartition => {
   const body: spanner.InstancePartition = {
     name,
-    config: configNameOf(project, news.config),
+    config: configNameOf(project, news.config, region),
     displayName,
   };
   if (news.autoscalingConfig !== undefined) {
@@ -353,6 +354,7 @@ export const InstancesInstancePartitionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId =
         olds?.instancePartitionId ?? output?.instancePartitionId;
@@ -361,8 +363,14 @@ export const InstancesInstancePartitionProvider = () =>
         olds?.instance ?? output?.instanceId ?? "",
       );
       const nextInstance = instanceIdOf(news.instance);
-      const previousConfig = configIdOf(olds?.config ?? output?.config);
-      const nextConfig = configIdOf(news.config);
+      const previousConfig = configIdOf(
+        olds?.config ?? output?.config,
+        env.region,
+      );
+      const nextConfig = configIdOf(
+        news.config ?? olds?.config ?? output?.config,
+        env.region,
+      );
 
       const replace =
         (previousId !== undefined &&
@@ -466,6 +474,7 @@ export const InstancesInstancePartitionProvider = () =>
                 name,
                 news,
                 env.project,
+                env.region,
                 displayName,
               ),
             },

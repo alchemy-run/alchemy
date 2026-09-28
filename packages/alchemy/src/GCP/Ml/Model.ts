@@ -52,9 +52,8 @@ export type ModelProps = {
   labels?: Record<string, string>;
   /**
    * Regions where the model is deployed. Only one region is supported.
-   * Defaults to `us-central1`. Immutable — changing it replaces the
-   * model.
-   * @default ["us-central1"]
+   * Immutable — changing it replaces the model.
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   regions?: string[];
   /**
@@ -162,7 +161,7 @@ const toAttrs = (model: ml.GoogleCloudMlV1__Model, project: string) => {
     project: parsed.project || project,
     description: parseOwnership(model.description).text,
     labels: userLabels(model.labels),
-    regions: normalizeRegions(model.regions),
+    regions: normalizeRegions(model.regions, []),
     onlinePredictionLogging: model.onlinePredictionLogging === true,
     onlinePredictionConsoleLogging:
       model.onlinePredictionConsoleLogging === true,
@@ -202,11 +201,14 @@ export const ModelProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousRegions = normalizeRegions(
         olds?.regions ?? output?.regions,
+        [env.region],
       );
       const nextRegions = normalizeRegions(
         news.regions ?? olds?.regions ?? output?.regions,
+        [env.region],
       );
       const previousLogging =
         olds?.onlinePredictionLogging ??
@@ -268,7 +270,9 @@ export const ModelProvider = () =>
         ...toLabels(news.labels),
         ...ownership,
       };
-      const regions = normalizeRegions(news.regions ?? output?.regions);
+      const regions = normalizeRegions(news.regions ?? output?.regions, [
+        env.region,
+      ]);
       const onlinePredictionLogging = news.onlinePredictionLogging === true;
       const onlinePredictionConsoleLogging =
         news.onlinePredictionConsoleLogging === true;

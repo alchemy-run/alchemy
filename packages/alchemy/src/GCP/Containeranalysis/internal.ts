@@ -11,7 +11,6 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 
 export class ResourceNotResolved extends Data.TaggedError(
@@ -58,8 +57,10 @@ export const toPhysicalId = (
     );
   });
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
 export const projectParent = (project: string) => `projects/${project}`;
 

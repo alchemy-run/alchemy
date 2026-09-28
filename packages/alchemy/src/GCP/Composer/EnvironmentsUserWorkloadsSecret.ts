@@ -263,7 +263,10 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const environments = yield* listAllEnvironments(env.project);
+        const environments = yield* listAllEnvironments(
+          env.project,
+          env.region,
+        );
         const pages = yield* Effect.forEach(
           environments,
           (environment) =>

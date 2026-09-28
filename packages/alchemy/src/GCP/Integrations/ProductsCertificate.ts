@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   DEFAULT_PRODUCT,
   encodeOwnership,
   hasOwnershipMarker,
@@ -38,7 +37,8 @@ export type ProductsCertificateProps = {
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * certificate. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -144,13 +144,14 @@ const resourceName = (
 const toAttrs = (
   certificate: integrations.GoogleCloudIntegrationsV1alphaCertificate,
   project: string,
+  region: string,
 ) => {
   const name = certificate.name ?? "";
   const parsed = parseOwnership(certificate.description);
   return {
     name,
     certificateId: lastSegment(name),
-    location: locationOf(name),
+    location: locationOf(name, region),
     product: productOf(name),
     project,
     displayName: certificate.displayName,
@@ -173,7 +174,7 @@ const getByName = (name: string) =>
           ),
         );
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsCertificates
     .pages({ parent, pageSize: 100 })
     .pipe(
@@ -181,7 +182,7 @@ const listAt = (parent: string, project: string) =>
       Stream.filter((certificate) =>
         hasOwnershipMarker(certificate.description),
       ),
-      Stream.map((certificate) => toAttrs(certificate, project)),
+      Stream.map((certificate) => toAttrs(certificate, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -217,11 +218,15 @@ export const ProductsCertificateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(news.location);
+      const nextLocation = normalizeLocation(
+        news.location,
+        previousLocation ?? env.region,
+      );
       if (
         previousLocation !== undefined &&
-        normalizeLocation(previousLocation) !== nextLocation
+        normalizeLocation(previousLocation, env.region) !== nextLocation
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -251,7 +256,10 @@ export const ProductsCertificateProvider = () =>
         olds?.certificateId,
         output?.certificateId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const product = normalizeProduct(olds?.product ?? output?.product);
       const name =
         output?.name ??
@@ -264,7 +272,7 @@ export const ProductsCertificateProvider = () =>
         );
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -274,15 +282,17 @@ export const ProductsCertificateProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          productParent(env.project, DEFAULT_LOCATION, DEFAULT_PRODUCT),
+          productParent(env.project, env.region, DEFAULT_PRODUCT),
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const product = normalizeProduct(
         news.product ?? output?.product ?? DEFAULT_PRODUCT,
@@ -347,7 +357,7 @@ export const ProductsCertificateProvider = () =>
           });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

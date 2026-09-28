@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   fingerprint,
   hasAlchemyAttributeMap,
   listLineageEvents,
@@ -69,7 +68,7 @@ export type ProcessesRunsLineageEventProps = {
   lineageEventId?: string;
   /**
    * Region used when `run` / `process` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -217,10 +216,11 @@ const linksFrom = (
 const toAttrs = (
   event: datalineage.GoogleCloudDatacatalogLineageV1LineageEvent,
   project: string,
+  region: string,
 ) => {
   const name = event.name ?? "";
-  const parsed = parseName(name, "lineageEvents");
-  const process = parseName(parsed.parent, "runs").parent;
+  const parsed = parseName(name, "lineageEvents", region);
+  const process = parseName(parsed.parent, "runs", region).parent;
   return {
     name,
     lineageEventId: parsed.id,
@@ -272,11 +272,14 @@ export const ProcessesRunsLineageEventProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previous = identityFingerprint({
         startTime: olds?.startTime ?? output?.startTime,
@@ -301,7 +304,10 @@ export const ProcessesRunsLineageEventProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const run = runOf(
         olds?.run ?? output?.run ?? "",
         olds?.process ?? output?.process,
@@ -316,7 +322,7 @@ export const ProcessesRunsLineageEventProvider = () =>
       const name = output?.name ?? resourceName(run, lineageEventId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* getProcess(attrs.process);
       return parent === undefined || hasAlchemyAttributeMap(parent.attributes)
         ? attrs
@@ -326,10 +332,7 @@ export const ProcessesRunsLineageEventProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const processes = yield* listOwnedProcesses(
-          env.project,
-          DEFAULT_LOCATION,
-        );
+        const processes = yield* listOwnedProcesses(env.project, env.region);
         const runs = (yield* Effect.forEach(
           processes,
           (process) => listRuns(process.name ?? ""),
@@ -340,12 +343,15 @@ export const ProcessesRunsLineageEventProvider = () =>
           (run) => listLineageEvents(run.name ?? ""),
           { concurrency: 4 },
         )).flat();
-        return events.map((event) => toAttrs(event, env.project));
+        return events.map((event) => toAttrs(event, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const run = runOf(news.run, news.process, env.project, location);
       const lineageEventId = yield* toPhysicalId(
         id,
@@ -376,7 +382,7 @@ export const ProcessesRunsLineageEventProvider = () =>
         return yield* new ProcessesRunsLineageEventNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

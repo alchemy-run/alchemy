@@ -16,7 +16,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   asCountString,
-  DEFAULT_LOCATION,
   DEFAULT_MEMORY_BYTES,
   DEFAULT_VCPU_COUNT,
   defaultSubnet,
@@ -111,7 +110,7 @@ export type ClusterProps = {
   /**
    * Region (`us-central1`, …). Immutable. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -299,7 +298,10 @@ export const ClusterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousSubnets = fingerprint(
         [...(olds?.subnets ?? output?.subnets ?? [])].sort(),
       );
@@ -311,7 +313,10 @@ export const ClusterProvider = () =>
         nextId: news.clusterId
           ? rfc1035(news.clusterId)
           : (olds?.clusterId ?? output?.clusterId),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         extra:
           previousSubnets !== nextSubnets ||
@@ -326,7 +331,10 @@ export const ClusterProvider = () =>
         olds?.clusterId,
         output?.clusterId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, clusterId);
       const existing = yield* getCluster(name);
@@ -340,7 +348,7 @@ export const ClusterProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clusters = yield* listAlchemyClusters(env.project);
+        const clusters = yield* listAlchemyClusters(env.project, env.region);
         return clusters.map((cluster) => toAttrs(cluster, env.project));
       }),
 
@@ -352,7 +360,8 @@ export const ClusterProvider = () =>
         output?.clusterId,
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, clusterId);

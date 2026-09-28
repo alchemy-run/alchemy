@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type SnapshotSchedulePolicy =
@@ -40,7 +39,7 @@ export type ResourcePolicyProps = {
    * Region the policy lives in (e.g. `us-central1`). Immutable — changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -234,8 +233,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -321,7 +320,7 @@ const toAttrs = (policy: compute.ResourcePolicy, project: string) => {
     resourcePolicyName: policy.name ?? policy.id ?? "",
     resourcePolicyId: policy.id,
     project,
-    region: normalizeRegion(policy.region),
+    region: lastSegment(policy.region).toLowerCase(),
     description: parsed.description,
     status: policy.status,
     snapshotSchedulePolicy: policy.snapshotSchedulePolicy,
@@ -636,6 +635,7 @@ export const ResourcePolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousName =
         olds?.resourcePolicyName ?? output?.resourcePolicyName;
@@ -645,8 +645,14 @@ export const ResourcePolicyProvider = () =>
         nextName !== undefined &&
         previousName !== nextName;
 
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       if (nameChanged || regionChanged) {
@@ -665,7 +671,10 @@ export const ResourcePolicyProvider = () =>
         olds?.resourcePolicyName,
         output?.resourcePolicyName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -703,7 +712,7 @@ export const ResourcePolicyProvider = () =>
         news.resourcePolicyName,
         output?.resourcePolicyName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(resourcePolicyName, news, ownership);
 
@@ -800,7 +809,7 @@ export const ResourcePolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const deleted = yield* compute
         .deleteResourcePolicies({
           project,

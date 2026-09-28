@@ -73,7 +73,7 @@ export type EndpointProps = {
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the endpoint.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -423,6 +423,7 @@ export const EndpointProvider = () =>
     stables: ["name", "endpointId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.endpointId ?? output?.endpointId;
       const nextId = news.endpointId
@@ -430,8 +431,12 @@ export const EndpointProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousNetwork = olds?.network ?? output?.network ?? "";
       const nextNetwork = news.network ?? previousNetwork;
       const previousKey =
@@ -474,7 +479,10 @@ export const EndpointProvider = () =>
         output?.endpointId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, endpointId);
       const existing = yield* getByName(name);
@@ -512,7 +520,10 @@ export const EndpointProvider = () =>
         output?.endpointId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, endpointId);
       const desiredLabels = {
         ...toLabels(news.labels),

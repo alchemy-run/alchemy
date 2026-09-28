@@ -34,6 +34,7 @@ import {
   workloadPoolOf,
 } from "./KubernetesAdapter.ts";
 
+// A zone, not a region: `GCP.Region` has no zone and a regional default would triple node count.
 const DEFAULT_LOCATION = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-medium";
 const DEFAULT_DISK_TYPE = "pd-standard";

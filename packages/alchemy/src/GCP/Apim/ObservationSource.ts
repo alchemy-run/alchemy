@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
   type GclbObservationSource,
   ResourceNotResolved,
   expandGclb,
@@ -45,7 +44,7 @@ export type ObservationSourceProps = {
   /**
    * Region of the source (`us-central1`, …). Immutable — changing it
    * replaces the source. The API currently allows one source per region.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -129,14 +128,18 @@ const toGclb = (
   };
 };
 
-const toAttrs = (item: apim.ObservationSource, project: string) => {
+const toAttrs = (
+  location: string,
+  item: apim.ObservationSource,
+  project: string,
+) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION);
   return {
     name,
     observationSourceId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || location,
     gclbObservationSource: toGclb(item.gclbObservationSource),
     state: item.state,
     createTime: item.createTime,
@@ -155,8 +158,8 @@ const getByName = (name: string) =>
           ),
         );
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     collectPages(
       apim.listProjectsLocationsObservationSources.pages({
         parent,
@@ -186,7 +189,7 @@ export const ObservationSourceProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
+        news.location ?? olds?.location ?? output?.location ?? env.region,
       );
       const previous = expandGclb(
         olds?.gclbObservationSource ?? output?.gclbObservationSource,
@@ -204,7 +207,9 @@ export const ObservationSourceProvider = () =>
           news.observationSourceId ??
           olds?.observationSourceId ??
           output?.observationSourceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location ?? env.region,
+        ),
         nextLocation: location,
         extra: previous !== undefined && !sameJson(previous, desired),
         // MVP: one source per region, so replace must delete first.
@@ -220,13 +225,15 @@ export const ObservationSourceProvider = () =>
         output?.observationSourceId,
         "src",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ??
         resourceName(env.project, location, COLLECTION, observationSourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(location, existing, env.project);
       // No labels/description. Generated `alch-` ids are owned; an
       // explicit id that already exists is Unowned unless we persisted it.
       if (output !== undefined || hasAlchemyId(attrs.observationSourceId)) {
@@ -238,8 +245,8 @@ export const ObservationSourceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(env.region, item, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -250,7 +257,9 @@ export const ObservationSourceProvider = () =>
         output?.observationSourceId,
         "src",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(
         env.project,
         location,
@@ -292,7 +301,7 @@ export const ObservationSourceProvider = () =>
         READY,
       );
 
-      return toAttrs(current, env.project);
+      return toAttrs(location, current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {

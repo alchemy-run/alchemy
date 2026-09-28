@@ -36,7 +36,7 @@ export type PrivateConnectionsRouteProps = {
   privateConnection: string;
   /**
    * Region used when `privateConnection` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -134,9 +134,9 @@ export const PrivateConnectionsRoute = Resource<PrivateConnectionsRoute>(
 const resourceName = (privateConnection: string, routeId: string) =>
   `${privateConnection}/routes/${routeId}`;
 
-const toAttrs = (item: ds.Route, project: string) => {
+const toAttrs = (item: ds.Route, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "routes");
+  const parsed = parseName(name, "routes", region);
   return {
     name,
     routeId: parsed.id,
@@ -172,9 +172,9 @@ const listRoutes = (parent: string) =>
     ),
   );
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const connections = yield* listPrivateConnections(project);
+    const connections = yield* listPrivateConnections(project, region);
     const pages = yield* Effect.forEach(
       connections.filter((item) => (item.name ?? "").length > 0),
       (item) => listRoutes(item.name!),
@@ -189,6 +189,7 @@ export const PrivateConnectionsRouteProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousAddress =
         olds?.destinationAddress ?? output?.destinationAddress;
       const nextAddress = news.destinationAddress ?? previousAddress;
@@ -206,9 +207,13 @@ export const PrivateConnectionsRouteProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.routeId ?? output?.routeId,
         nextId: news.routeId ?? olds?.routeId ?? output?.routeId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent,
         nextParent,
@@ -223,7 +228,10 @@ export const PrivateConnectionsRouteProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const parent = privateConnectionOf(
         olds?.privateConnection ?? output?.privateConnection ?? "",
         env.project,
@@ -238,7 +246,7 @@ export const PrivateConnectionsRouteProvider = () =>
       const name = output?.name ?? resourceName(parent, routeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -247,13 +255,16 @@ export const PrivateConnectionsRouteProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = privateConnectionOf(
         news.privateConnection,
         env.project,
@@ -295,7 +306,7 @@ export const PrivateConnectionsRouteProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

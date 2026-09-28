@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   DataplexNotResolved,
   expandParent,
   fingerprint,
@@ -81,7 +80,7 @@ export type LakesZoneProps = {
   lake: string;
   /**
    * Region used when `lake` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -307,15 +306,18 @@ export const LakesZoneProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.zoneId ?? output?.zoneId;
       const nextId = news.zoneId ?? previousId;
       const previousLake = olds?.lake ?? output?.lake;
       const nextLake = news.lake ?? previousLake;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousType = desiredType(olds?.type ?? output?.type);
       const nextType = desiredType(news.type ?? previousType);
@@ -346,7 +348,10 @@ export const LakesZoneProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const lake = lakeOf(
         olds?.lake ?? output?.lake ?? "",
         env.project,
@@ -365,7 +370,7 @@ export const LakesZoneProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const lakes = yield* listLakes(env.project, DEFAULT_LOCATION);
+        const lakes = yield* listLakes(env.project, env.region);
         const zones = yield* listChildResources(lakes, listZones);
         return zones
           .filter((zone) => hasAlchemyLabelMap(zone.labels))
@@ -374,7 +379,10 @@ export const LakesZoneProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const lake = lakeOf(news.lake, env.project, location);
       const zoneId = yield* toPhysicalRfc1035(id, news.zoneId, output?.zoneId);
       const name = output?.name ?? resourceName(lake, zoneId);

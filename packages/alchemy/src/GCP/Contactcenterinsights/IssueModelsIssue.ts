@@ -11,7 +11,6 @@ import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   encodeOwnershipLine,
   hasOwnershipMarker,
@@ -227,7 +226,7 @@ export const IssueModelsIssueProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const models = yield* listModels(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         const pages = yield* Effect.forEach(
           models,

@@ -45,7 +45,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
 
@@ -179,7 +178,7 @@ export type ServiceProps = PlatformProps & {
    * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the service. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -471,13 +470,15 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, serviceId: string) =>
   `projects/${project}/locations/${location}/services/${serviceId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const servicesAt = parts.lastIndexOf("services");
   const locationsAt = parts.lastIndexOf("locations");
@@ -488,7 +489,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     serviceId:
       servicesAt >= 0 && parts[servicesAt + 1]
         ? parts[servicesAt + 1]!
@@ -787,10 +788,11 @@ const HOST_TYPE = "GCP.Run.Service";
 const toAttrs = (
   service: cloudrun.GoogleCloudRunV2Service,
   project: string,
+  region: string,
   extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
 ): Service["Attributes"] => {
   const name = service.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     serviceId: parsed.serviceId,
@@ -991,12 +993,17 @@ export const ServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.serviceId ?? output?.serviceId;
       const nextId = news.serviceId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const idChanged =
         previousId !== undefined &&
         nextId !== undefined &&
@@ -1025,14 +1032,17 @@ export const ServiceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, olds?.serviceId, output?.serviceId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      const attrs = toAttrs(existing, env.project, {
+      const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
@@ -1058,7 +1068,7 @@ export const ServiceProvider = () =>
                   key.startsWith("alchemy-"),
                 ),
             ),
-            Stream.map((service) => toAttrs(service, env.project)),
+            Stream.map((service) => toAttrs(service, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           );
@@ -1067,7 +1077,10 @@ export const ServiceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, serviceId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -1259,7 +1272,7 @@ export const ServiceProvider = () =>
         return yield* new ServiceNotResolved({ name });
       }
 
-      return toAttrs(current, env.project, {
+      return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
       });

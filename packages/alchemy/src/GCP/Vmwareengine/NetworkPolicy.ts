@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
-  DEFAULT_LOCATION,
   VmwareengineNotResolved,
   canonicalizeLink,
   changedFields,
@@ -52,7 +51,8 @@ export type NetworkPolicyProps = {
   networkPolicyId?: string;
   /**
    * Region. Immutable — changing it replaces the policy.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -163,9 +163,13 @@ const serviceOf = (
   };
 };
 
-const toAttrs = (item: vmwareengine.NetworkPolicy, project: string) => {
+const toAttrs = (
+  item: vmwareengine.NetworkPolicy,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_LOCATION);
+  const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
   return {
     name,
@@ -202,6 +206,7 @@ export const NetworkPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousVen = canonicalizeLink(
         olds?.vmwareEngineNetwork ?? output?.vmwareEngineNetwork,
       );
@@ -213,11 +218,11 @@ export const NetworkPolicyProvider = () =>
           : (olds?.networkPolicyId ?? output?.networkPolicyId),
         previousLocation: normalizeLocation(
           olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
-          DEFAULT_LOCATION,
+          env.region,
         ),
         extra:
           previousVen.length > 0 &&
@@ -236,13 +241,13 @@ export const NetworkPolicyProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, networkPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -250,18 +255,21 @@ export const NetworkPolicyProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsNetworkPolicies.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.networkPolicies,
-          ),
+        const items = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsNetworkPolicies.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.networkPolicies,
+            ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -274,7 +282,7 @@ export const NetworkPolicyProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_LOCATION,
+        env.region,
       );
       const name = resourceName(env.project, location, networkPolicyId);
       const ownership = yield* createInternalLabels(id);
@@ -358,7 +366,7 @@ export const NetworkPolicyProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -22,7 +22,6 @@ import type { Providers } from "../Providers.ts";
 const DEFAULT_PROTOCOL = "HTTP";
 const DEFAULT_SCHEME = "INTERNAL_MANAGED";
 const DEFAULT_TIMEOUT_SEC = 30;
-const DEFAULT_REGION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 
 export type RegionBackendServiceBackend = {
@@ -69,7 +68,7 @@ export type RegionBackendServiceProps = {
    * Region the backend service lives in (e.g. `us-central1`). Immutable —
    * changing it replaces the resource. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -303,8 +302,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -402,7 +401,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
   return {
     name: service.name ?? "",
     project,
-    region: normalizeRegion(service.region),
+    region: lastSegment(service.region).toLowerCase(),
     backendServiceId: service.id,
     selfLink: service.selfLink,
     creationTimestamp: service.creationTimestamp,
@@ -609,10 +608,17 @@ export const RegionBackendServiceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       const nameChanged =
         news.name !== undefined &&
         previousName !== undefined &&
@@ -648,7 +654,10 @@ export const RegionBackendServiceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const name = yield* toName(id, olds?.name, output?.name);
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -684,7 +693,7 @@ export const RegionBackendServiceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const name = yield* toName(id, news.name, output?.name);
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

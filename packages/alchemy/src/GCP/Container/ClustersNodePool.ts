@@ -18,6 +18,7 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
+// A zone, not a region: `GCP.Region` has no zone and a regional default would triple node count.
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_MACHINE_TYPE = "e2-medium";
 const DEFAULT_DISK_TYPE = "pd-standard";

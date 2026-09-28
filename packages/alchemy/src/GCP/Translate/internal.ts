@@ -11,6 +11,7 @@ import {
 } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
+// Translation Advanced glossaries, AutoML models, and Adaptive MT live only in us-central1 (or global).
 export const DEFAULT_LOCATION = "us-central1";
 /** Adaptive MT and AutoML models are regional; glossaries also allow `global`. */
 export const LIST_LOCATIONS = ["us-central1", "global"] as const;

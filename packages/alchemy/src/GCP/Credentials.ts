@@ -55,6 +55,7 @@ export const fromAuthProvider = () =>
         Effect.map((creds) => ({
           accessToken: creds.accessToken,
           project: creds.project,
+          region: creds.region,
         })),
         Effect.mapError(
           (e) =>

@@ -442,14 +442,17 @@ export const PrivateCloudProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsPrivateClouds.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.privateClouds,
-          ),
+        const items = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsPrivateClouds.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.privateClouds,
+            ),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))

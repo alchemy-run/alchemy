@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   DataplexNotResolved,
   expandParent,
   fingerprint,
@@ -127,7 +126,7 @@ export type LakesTaskProps = {
   lake: string;
   /**
    * Region used when `lake` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -348,15 +347,18 @@ export const LakesTaskProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.taskId ?? output?.taskId;
       const nextId = news.taskId ?? previousId;
       const previousLake = olds?.lake ?? output?.lake;
       const nextLake = news.lake ?? previousLake;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousTrigger = (
         olds?.triggerSpec?.type ??
@@ -386,7 +388,10 @@ export const LakesTaskProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const lake = lakeOf(
         olds?.lake ?? output?.lake ?? "",
         env.project,
@@ -405,7 +410,7 @@ export const LakesTaskProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const lakes = yield* listLakes(env.project, DEFAULT_LOCATION);
+        const lakes = yield* listLakes(env.project, env.region);
         const tasks = yield* listChildResources(lakes, listTasks);
         return tasks
           .filter((task) => hasAlchemyLabelMap(task.labels))
@@ -414,7 +419,10 @@ export const LakesTaskProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const lake = lakeOf(news.lake, env.project, location);
       const taskId = yield* toPhysicalRfc1035(id, news.taskId, output?.taskId);
       const name = output?.name ?? resourceName(lake, taskId);

@@ -75,7 +75,7 @@ export type WorkstationClustersWorkstationConfigsWorkstationProps = {
   workstationId?: string;
   /**
    * Region used when parent names are bare ids.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -216,7 +216,7 @@ const resourceName = (config: string, workstationId: string) =>
   `${config}/workstations/${workstationId}`;
 
 const clusterOfConfig = (config: string) => {
-  const parsed = parseName(config, "workstationConfigs");
+  const parsed = parseName(config, "workstationConfigs", "");
   return parsed.parent;
 };
 
@@ -260,9 +260,13 @@ const toRuntimeHost = (
           : undefined,
       };
 
-const toAttrs = (item: workstations.Workstation, project: string) => {
+const toAttrs = (
+  item: workstations.Workstation,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "workstations");
+  const parsed = parseName(name, "workstations", region);
   const workstationConfig = parsed.parent;
   return {
     name,
@@ -296,9 +300,10 @@ const getByName = (name: string) =>
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
+const listOwned = (project: string, region: string) =>
   listAtNested(
     project,
+    region,
     "workstationClusters/-/workstationConfigs/-",
     (parent) =>
       listLabeledPages(
@@ -328,15 +333,20 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousSource =
         olds?.sourceWorkstation ?? output?.sourceWorkstation;
       return replaceOnIdentity({
         previousId: olds?.workstationId ?? output?.workstationId,
         nextId:
           news.workstationId ?? olds?.workstationId ?? output?.workstationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.workstationConfig ?? output?.workstationConfig,
         nextParent: news.workstationConfig,
@@ -355,7 +365,10 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
         output?.workstationId,
         "station",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const config = expandConfig(
         olds?.workstationConfig ?? output?.workstationConfig ?? "",
         env.project,
@@ -365,7 +378,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
       const name = output?.name ?? resourceName(config, workstationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -374,8 +387,8 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -386,7 +399,10 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
         output?.workstationId,
         "station",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const config = expandConfig(
         news.workstationConfig,
         env.project,
@@ -475,7 +491,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

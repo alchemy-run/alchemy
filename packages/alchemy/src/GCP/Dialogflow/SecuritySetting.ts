@@ -15,7 +15,7 @@ import {
   hasOwnershipMarker,
   internalLabels,
   lastSegment,
-  LIST_LOCATIONS,
+  listLocations,
   locationOf,
   locationParent,
   normalizeLocation,
@@ -340,7 +340,7 @@ export const SecuritySettingProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          LIST_LOCATIONS,
+          listLocations(env.region),
           (location) =>
             listAt(locationParent(env.project, location), env.project),
           { concurrency: 2 },

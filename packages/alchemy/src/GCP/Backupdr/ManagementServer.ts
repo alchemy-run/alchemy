@@ -72,7 +72,7 @@ export type ManagementServerProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the server. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -206,9 +206,13 @@ const fromNetworks = (
     peeringMode: network.peeringMode,
   }));
 
-const toAttrs = (item: backupdr.ManagementServer, project: string) => {
+const toAttrs = (
+  item: backupdr.ManagementServer,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "managementServers");
+  const parsed = parseName(name, "managementServers", region);
   return {
     name,
     managementServerId: parsed.id,
@@ -238,8 +242,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsManagementServers({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       backupdr.listProjectsLocationsManagementServers.pages({
         parent,
@@ -262,6 +266,7 @@ export const ManagementServerProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.type ?? output?.type;
       const previousNetworks = fingerprint(olds?.networks ?? output?.networks);
       const nextNetworks =
@@ -274,9 +279,13 @@ export const ManagementServerProvider = () =>
           news.managementServerId ??
           olds?.managementServerId ??
           output?.managementServerId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousType !== undefined &&
@@ -294,12 +303,15 @@ export const ManagementServerProvider = () =>
         output?.managementServerId,
         "mgmtserver",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, managementServerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -308,8 +320,8 @@ export const ManagementServerProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -320,7 +332,10 @@ export const ManagementServerProvider = () =>
         output?.managementServerId,
         "mgmtserver",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, managementServerId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -359,7 +374,7 @@ export const ManagementServerProvider = () =>
         (item) => item.state,
       );
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

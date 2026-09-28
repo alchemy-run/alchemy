@@ -24,8 +24,6 @@ import type {
   SecretTopic,
 } from "./Secret.ts";
 
-const DEFAULT_LOCATION = "us-central1";
-
 export type LocationsSecretProps = {
   /**
    * Secret id (the `{secret}` segment of
@@ -40,7 +38,7 @@ export type LocationsSecretProps = {
    * changing it replaces the secret. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. Regional secrets live only in this
    * location (use {@link Secret} for automatic/user-managed replication).
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -175,13 +173,15 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 const resourceName = (project: string, location: string, secretId: string) =>
   `projects/${project}/locations/${location}/secrets/${secretId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const secretsAt = parts.lastIndexOf("secrets");
   const locationsAt = parts.lastIndexOf("locations");
@@ -192,7 +192,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     secretId:
       secretsAt >= 0 && parts[secretsAt + 1]
         ? parts[secretsAt + 1]!
@@ -285,9 +285,13 @@ const cmekEqual = (
   right: CustomerManagedEncryption | undefined,
 ) => (left?.kmsKeyName ?? "") === (right?.kmsKeyName ?? "");
 
-const toAttrs = (secret: secretmanager.Secret, project: string) => {
+const toAttrs = (
+  secret: secretmanager.Secret,
+  project: string,
+  region: string,
+) => {
   const name = secret.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     secretId: parsed.secretId,
@@ -353,13 +357,16 @@ export const LocationsSecretProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId = olds?.secretId ?? output?.secretId;
       const nextId = news.secretId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const idChanged =
         previousId !== undefined &&
@@ -373,12 +380,15 @@ export const LocationsSecretProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, olds?.secretId, output?.secretId);
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, secretId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -394,7 +404,7 @@ export const LocationsSecretProvider = () =>
           aggregated.length > 0
             ? aggregated
             : yield* collectSecretPages(
-                `projects/${env.project}/locations/${DEFAULT_LOCATION}`,
+                `projects/${env.project}/locations/${env.region}`,
               );
         return secrets
           .filter(
@@ -402,13 +412,16 @@ export const LocationsSecretProvider = () =>
               (secret.name ?? "").includes("/locations/") &&
               hasAlchemyLabelMap(secret.labels),
           )
-          .map((secret) => toAttrs(secret, env.project));
+          .map((secret) => toAttrs(secret, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, news.secretId, output?.secretId);
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, secretId);
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
@@ -513,7 +526,7 @@ export const LocationsSecretProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

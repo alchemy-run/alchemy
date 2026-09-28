@@ -288,14 +288,17 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const clouds = yield* listAcrossLocations(env.project, (parent) =>
-          collectPages(
-            vmwareengine.listProjectsLocationsPrivateClouds.pages({
-              parent,
-              pageSize: 1000,
-            }),
-            (page) => page.privateClouds,
-          ),
+        const clouds = yield* listAcrossLocations(
+          env.project,
+          env.region,
+          (parent) =>
+            collectPages(
+              vmwareengine.listProjectsLocationsPrivateClouds.pages({
+                parent,
+                pageSize: 1000,
+              }),
+              (page) => page.privateClouds,
+            ),
         );
         const nested = yield* Effect.forEach(
           clouds.filter((cloud) => (cloud.name ?? "").length > 0),

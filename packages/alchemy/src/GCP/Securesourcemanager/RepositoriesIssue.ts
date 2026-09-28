@@ -40,7 +40,7 @@ export type RepositoriesIssueProps = {
   repository: string;
   /**
    * Region used when `repository` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -131,9 +131,9 @@ export const RepositoriesIssue = Resource<RepositoriesIssue>(
 const resourceName = (repository: string, issueId: string) =>
   `${repository}/issues/${issueId}`;
 
-const toAttrs = (item: ssm.Issue, project: string) => {
+const toAttrs = (item: ssm.Issue, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "issues");
+  const parsed = parseName(name, "issues", region);
   const body = parseOwnership(item.body);
   return {
     name,
@@ -177,8 +177,8 @@ const findOwned = (repository: string, id: string) =>
     return undefined;
   });
 
-const listOwned = (project: string) =>
-  forEachRepository(project, (repository) =>
+const listOwned = (project: string, region: string) =>
+  forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
       Effect.map((items) =>
         items.filter((item) => hasOwnershipMarker(item.body)),
@@ -202,11 +202,15 @@ export const RepositoriesIssueProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.issueId ?? output?.issueId,
         nextId: news.issueId ?? olds?.issueId ?? output?.issueId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.repository ?? output?.repository,
         nextParent: expandName(
@@ -220,7 +224,10 @@ export const RepositoriesIssueProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const repository = expandName(
         olds?.repository ?? output?.repository ?? "",
         env.project,
@@ -238,7 +245,7 @@ export const RepositoriesIssueProvider = () =>
         existing = yield* findOwned(repository, id);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.body);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -246,13 +253,18 @@ export const RepositoriesIssueProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item: ssm.Issue) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item: ssm.Issue) =>
+          toAttrs(item, env.project, env.region),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const repository = expandName(
         news.repository,
         env.project,
@@ -324,7 +336,7 @@ export const RepositoriesIssueProvider = () =>
         current = yield* waitUntilExists(getByName(currentName), currentName);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -138,6 +138,17 @@ export const fetchMetadataProject = (http: HttpClient.HttpClient) =>
   );
 
 /**
+ * Region of the instance (`projects/{n}/regions/{region}` on Cloud Run and
+ * Cloud Functions), from the metadata server.
+ */
+export const fetchMetadataRegion = (http: HttpClient.HttpClient) =>
+  metadataGet(http, "/instance/region").pipe(
+    Effect.flatMap((response) => response.text),
+    Effect.map((text) => text.trim().split("/").pop() || undefined),
+    Effect.orElseSucceed(() => undefined),
+  );
+
+/**
  * `Credentials` for code running on Cloud Run (or any GCE-backed runtime):
  * the attached service account's token from the metadata server, cached
  * until shortly before expiry. The project comes from
@@ -165,6 +176,20 @@ export const fromMetadataServer = (): Layer.Layer<
         yield* Ref.set(projectCache, resolved);
         return resolved;
       });
+      // The runtime's default region is the region it runs in.
+      const regionCache = yield* Ref.make<string | undefined>(undefined);
+      const region = Effect.gen(function* () {
+        const cached = yield* Ref.get(regionCache);
+        if (cached !== undefined) return cached;
+        const fromEnv = yield* Config.option(
+          Config.String("GOOGLE_CLOUD_REGION"),
+        );
+        const resolved = Option.isSome(fromEnv)
+          ? fromEnv.value
+          : yield* fetchMetadataRegion(http);
+        if (resolved !== undefined) yield* Ref.set(regionCache, resolved);
+        return resolved;
+      });
       const cached = yield* cacheCredentials(
         Effect.gen(function* () {
           const token = yield* fetchMetadataToken(http);
@@ -172,6 +197,7 @@ export const fromMetadataServer = (): Layer.Layer<
             config: {
               accessToken: token.accessToken,
               project: yield* project,
+              region: yield* region,
             },
             expiresAt: token.expiresAt,
           };

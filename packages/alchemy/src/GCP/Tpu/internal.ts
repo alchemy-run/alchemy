@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { alchemyLabelKeys, stripInternalLabels } from "../Labels.ts";
 
+// A zone, not a region: TPUs (and the v2-8 default) exist only in a few zones.
 export const DEFAULT_LOCATION = "us-central1-c";
 export const DEFAULT_ACCELERATOR = "v2-8";
 export const DEFAULT_RUNTIME = "tpu-ubuntu2204-base";

@@ -10,8 +10,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import {
-  DEFAULT_LOCATION,
   encodeOwnership,
   hasOwnershipMarker,
   normalizeLocation,
@@ -39,7 +39,7 @@ export type CachedContentMessage = {
 export type CachedContentProps = {
   /**
    * Region. Immutable — changing it replaces the cache.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -192,7 +192,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsCachedContents({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listCaches = (project: string) => {
+const listCaches = (project: string, region: string) => {
   const collect = (parent: string) =>
     aiplatform.listProjectsLocationsCachedContents
       .pages({ parent, pageSize: 1000 })
@@ -203,12 +203,13 @@ const listCaches = (project: string) => {
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
       );
+  const fallback = Effect.forEach(listLocations(region), (location) =>
+    collect(`projects/${project}/locations/${location}`),
+  ).pipe(Effect.map((pages) => pages.flat()));
   return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () =>
-      collect(`projects/${project}/locations/${DEFAULT_LOCATION}`),
-    ),
+    Effect.catchTag("NotFound", () => fallback),
     Effect.catchTag("Forbidden", () =>
-      collect(`projects/${project}/locations/${DEFAULT_LOCATION}`).pipe(
+      fallback.pipe(
         Effect.catchTag("NotFound", () => Effect.succeed([])),
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       ),
@@ -216,13 +217,18 @@ const listCaches = (project: string) => {
   );
 };
 
-const findOwned = (id: string, project: string, hinted?: string) =>
+const findOwned = (
+  id: string,
+  project: string,
+  region: string,
+  hinted?: string,
+) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
       if (existing !== undefined) return existing;
     }
-    const caches = yield* listCaches(project);
+    const caches = yield* listCaches(project, region);
     for (const cache of caches) {
       const { labels } = parseOwnership(cache.displayName);
       if (yield* hasAlchemyLabels(id, labels)) return cache;
@@ -255,12 +261,15 @@ export const CachedContentProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       const previousModel = olds?.model ?? output?.model ?? "";
       const previousKey =
@@ -276,7 +285,12 @@ export const CachedContentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(id, env.project, output?.name);
+      const existing = yield* findOwned(
+        id,
+        env.project,
+        env.region,
+        output?.name,
+      );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseOwnership(existing.displayName);
@@ -286,7 +300,7 @@ export const CachedContentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const caches = yield* listCaches(env.project);
+        const caches = yield* listCaches(env.project, env.region);
         return caches
           .filter((cache) => hasOwnershipMarker(cache.displayName))
           .map((cache) => toAttrs(cache, env.project));
@@ -294,7 +308,10 @@ export const CachedContentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const internal = yield* createInternalLabels(id);
       const desiredDisplayName = encodeOwnership(
         internal,
@@ -302,7 +319,7 @@ export const CachedContentProvider = () =>
         " ",
       );
 
-      let current = yield* findOwned(id, env.project, output?.name);
+      let current = yield* findOwned(id, env.project, env.region, output?.name);
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -320,7 +337,11 @@ export const CachedContentProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project)));
+          .pipe(
+            Effect.catchTag("Conflict", () =>
+              findOwned(id, env.project, env.region),
+            ),
+          );
         current = created ?? undefined;
       }
 

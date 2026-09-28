@@ -11,7 +11,6 @@ import {
   type AttributeValues,
   type AttributeValuesMap,
   type Documentation,
-  DEFAULT_LOCATION,
   createOwnership,
   encodeOwnership,
   expandParent,
@@ -47,7 +46,7 @@ export type ApisVersionProps = {
   versionId?: string;
   /**
    * Location used when `api` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -156,9 +155,10 @@ const parentApi = (value: string, project: string, location: string) =>
 const toAttrs = (
   version: apihub.GoogleCloudApihubV1Version,
   project: string,
+  region: string,
 ): ApisVersion["Attributes"] => {
   const name = version.name ?? "";
-  const parsed = parseResourceName(name, "versions");
+  const parsed = parseResourceName(name, "versions", region);
   const description = parseOwnership(version.description).text;
   return {
     name,
@@ -209,13 +209,18 @@ export const ApisVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
+        env.region,
       );
       return replaceOnIdentity({
         previousId: olds?.versionId ?? output?.versionId,
         nextId: news.versionId ?? olds?.versionId ?? output?.versionId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: location,
         previousParent: olds?.api ?? output?.api,
         nextParent: news.api ?? olds?.api ?? output?.api,
@@ -224,7 +229,10 @@ export const ApisVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const api = parentApi(
         olds?.api ?? output?.api ?? "",
         env.project,
@@ -238,7 +246,7 @@ export const ApisVersionProvider = () =>
       const name = output?.name ?? resourceName(api, versionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -248,17 +256,20 @@ export const ApisVersionProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const apis = yield* listApis(
-          `projects/${env.project}/locations/${DEFAULT_LOCATION}`,
+          `projects/${env.project}/locations/${env.region}`,
         );
         const versions = yield* listChildResources(apis, listVersions);
         return versions
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const api = parentApi(news.api, env.project, location);
       const versionId = yield* toPhysicalId(
         id,
@@ -336,7 +347,7 @@ export const ApisVersionProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

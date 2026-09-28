@@ -12,7 +12,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_ADVERTISE_MODE = "DEFAULT";
 const DEFAULT_KEEPALIVE = 20;
 const MAX_NAME_LENGTH = 63;
@@ -73,7 +72,7 @@ export type RouterProps = {
   /**
    * Region the router lives in. Immutable — changing it replaces the
    * router. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -219,8 +218,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
@@ -396,7 +395,7 @@ const toAttrs = (
   return {
     routerName: router.name ?? "",
     project,
-    region: normalizeRegion(router.region),
+    region: lastSegment(router.region ?? "").toLowerCase(),
     network: router.network ?? "",
     description: parsed.description,
     bgp: toBgp(router.bgp),
@@ -590,10 +589,17 @@ export const RouterProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.routerName ?? output?.routerName;
       const nextName = news.routerName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const identityChanged =
         previousRegion !== nextRegion ||
         (previousName !== undefined &&
@@ -634,7 +640,10 @@ export const RouterProvider = () =>
         olds?.routerName,
         output?.routerName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, routerName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -675,7 +684,7 @@ export const RouterProvider = () =>
         news.routerName,
         output?.routerName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const network = networkRef(env.project, news.network);
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
@@ -739,7 +748,7 @@ export const RouterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const routerName = output.routerName;
       if (!routerName) return;
       yield* compute

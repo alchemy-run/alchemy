@@ -30,7 +30,7 @@ export type EvaluationItemProps = {
   evaluationItemId?: string;
   /**
    * Region. Immutable — changing it replaces the item.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -221,13 +221,18 @@ export const EvaluationItemProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationItemId ?? output?.evaluationItemId;
       const nextId = news.evaluationItemId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousType =
         olds?.evaluationItemType ?? output?.evaluationItemType ?? "";
       const nextType = news.evaluationItemType ?? previousType;
@@ -246,7 +251,10 @@ export const EvaluationItemProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const itemId = olds?.evaluationItemId ?? output?.evaluationItemId;
       const name =
         output?.name ??
@@ -270,7 +278,10 @@ export const EvaluationItemProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const itemId = news.evaluationItemId ?? output?.evaluationItemId;
       const name =
         output?.name ??

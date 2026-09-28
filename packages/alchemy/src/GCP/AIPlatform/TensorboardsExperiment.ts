@@ -16,9 +16,9 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { listLocations } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 import {
-  DEFAULT_LOCATION,
   lastSegment,
   locationOf,
   locationParent,
@@ -235,7 +235,10 @@ export const TensorboardsExperimentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const parents = yield* listParents(env.project, DEFAULT_LOCATION);
+        const parents = (yield* Effect.forEach(
+          listLocations(env.region),
+          (location) => listParents(env.project, location),
+        )).flat();
         const pages = yield* Effect.forEach(
           parents,
           (parent) => listAtParent(parent, env.project),

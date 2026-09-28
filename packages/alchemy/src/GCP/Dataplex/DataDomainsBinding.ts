@@ -188,7 +188,7 @@ export const DataDomainsBindingProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const domains = yield* listAlchemyDataDomains(env.project);
+        const domains = yield* listAlchemyDataDomains(env.project, env.region);
         const pages = yield* Effect.forEach(
           domains,
           (domain) =>

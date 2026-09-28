@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_TEMPLATE_ID_LENGTH = 64;
 export const MAX_DISPLAY_NAME_LENGTH = 200;
 export const MAX_DESCRIPTION_LENGTH = 2000;
@@ -34,13 +33,19 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
-export const locationParent = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const locationParent = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const parseName = (name: string, collection: string) => {
+export const parseName = (
+  name: string,
+  collection: string,
+  fallbackLocation: string,
+) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
@@ -51,7 +56,7 @@ export const parseName = (name: string, collection: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -304,11 +309,12 @@ export const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], never, R> =>
   Effect.firstSuccessOf<Effect.Effect<A[], E, R>>([
     list(`projects/${project}/locations/-`),
-    list(locationParent(project, DEFAULT_LOCATION)),
+    list(locationParent(project, region)),
   ]).pipe(Effect.orElseSucceed((): A[] => []));
 
 export const findOwned = <A, E, R>(

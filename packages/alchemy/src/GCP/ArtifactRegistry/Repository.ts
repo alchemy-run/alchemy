@@ -19,7 +19,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_FORMAT = "DOCKER";
 const DEFAULT_MODE = "STANDARD_REPOSITORY";
 const MAX_NAME_LENGTH = 63;
@@ -38,7 +37,7 @@ export type RepositoryProps = {
    * Artifact Registry location (`us-central1`, `us`, `europe`, …).
    * Immutable — changing it replaces the repository. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -202,8 +201,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const normalizeFormat = (format: string | undefined) =>
   (format ?? DEFAULT_FORMAT).toUpperCase();
@@ -219,7 +218,7 @@ const resourceName = (
   repositoryId: string,
 ) => `projects/${project}/locations/${location}/repositories/${repositoryId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const repositoriesAt = parts.lastIndexOf("repositories");
   const locationsAt = parts.lastIndexOf("locations");
@@ -230,7 +229,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     repositoryId:
       repositoriesAt >= 0 && parts[repositoriesAt + 1]
         ? parts[repositoriesAt + 1]!
@@ -259,9 +258,13 @@ const toId = (
     );
   });
 
-const toAttrs = (repo: artifactregistry.Repository, project: string) => {
+const toAttrs = (
+  repo: artifactregistry.Repository,
+  project: string,
+  region: string,
+) => {
   const name = repo.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     repositoryId: parsed.repositoryId,
@@ -410,13 +413,18 @@ export const RepositoryProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.repositoryId ?? output?.repositoryId;
       const nextId = news.repositoryId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousFormat = normalizeFormat(olds?.format ?? output?.format);
       const nextFormat = normalizeFormat(news.format ?? output?.format);
       const previousMode = normalizeMode(olds?.mode ?? output?.mode);
@@ -453,12 +461,15 @@ export const RepositoryProvider = () =>
         olds?.repositoryId,
         output?.repositoryId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, repositoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -480,7 +491,7 @@ export const RepositoryProvider = () =>
                 key.startsWith("alchemy-"),
               ),
             )
-            .map((repo) => toAttrs(repo, env.project)),
+            .map((repo) => toAttrs(repo, env.project, env.region)),
         );
       }),
 
@@ -491,7 +502,10 @@ export const RepositoryProvider = () =>
         news.repositoryId,
         output?.repositoryId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const format = normalizeFormat(news.format);
       const mode = normalizeMode(news.mode);
       const name = resourceName(env.project, location, repositoryId);
@@ -580,7 +594,7 @@ export const RepositoryProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 60;
 const MULTI_REGION = new Set(["us", "eu"]);
 
@@ -194,7 +193,7 @@ export type ConnectionProps = {
    * BigQuery connection location (`us-central1`, `US`, `EU`,
    * `aws-us-east-1`, …). Immutable — changing it replaces the connection.
    * Regional ids are lowercased; multi-regions `US` / `EU` stay uppercase.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -379,8 +378,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) => {
-  const raw = lastSegment(location ?? DEFAULT_LOCATION);
+const normalizeLocation = (location: string | undefined, fallback: string) => {
+  const raw = lastSegment(location ?? fallback);
   const lower = raw.toLowerCase();
   return MULTI_REGION.has(lower) ? lower.toUpperCase() : lower;
 };
@@ -403,9 +402,7 @@ const parseName = (name: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     connectionId:
       connectionsAt >= 0 && parts[connectionsAt + 1]
         ? parts[connectionsAt + 1]!
@@ -811,6 +808,7 @@ export const ConnectionProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.connectionId ?? output?.connectionId;
@@ -822,8 +820,12 @@ export const ConnectionProvider = () =>
 
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const locationChanged = previousLocation !== nextLocation;
 
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
@@ -868,7 +870,10 @@ export const ConnectionProvider = () =>
         olds?.connectionId,
         output?.connectionId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
@@ -891,7 +896,7 @@ export const ConnectionProvider = () =>
         );
         if (wildcard.length > 0) return wildcard;
         const fallback = yield* Effect.forEach(
-          [DEFAULT_LOCATION, "US", "EU", "us-east1"],
+          [...new Set(["us-central1", env.region, "US", "EU", "us-east1"])],
           (location) =>
             listOwnedAt(parentOf(env.project, location), env.project),
           { concurrency: 4 },
@@ -911,7 +916,10 @@ export const ConnectionProvider = () =>
         news.connectionId,
         output?.connectionId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, connectionId);
       const parent = parentOf(env.project, location);
       const ownership = yield* createInternalLabels(id);

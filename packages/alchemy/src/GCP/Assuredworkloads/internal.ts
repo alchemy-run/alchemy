@@ -9,7 +9,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_DISPLAY_NAME_LENGTH = 30;
 export const MIN_DISPLAY_NAME_LENGTH = 4;
 
@@ -61,13 +60,13 @@ export const organizationParent = (value: string) =>
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (location: string) =>
+  lastSegment(location).toLowerCase();
 
 export const locationParent = (organization: string, location: string) =>
   `${organizationParent(organization)}/locations/${normalizeLocation(location)}`;
 
-export const parseName = (name: string) => {
+export const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const workloadsAt = parts.lastIndexOf("workloads");
   const locationsAt = parts.lastIndexOf("locations");
@@ -77,7 +76,7 @@ export const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : defaultLocation,
     id:
       workloadsAt >= 0 && parts[workloadsAt + 1]
         ? parts[workloadsAt + 1]!
@@ -194,10 +193,10 @@ export const listWorkloads = (organization: string, location: string) =>
     ),
   );
 
-export const listOwnedWorkloads = (organization: string) =>
+export const listOwnedWorkloads = (organization: string, region: string) =>
   Effect.gen(function* () {
     const wildcard = yield* listWorkloads(organization, "-");
-    const regional = yield* listWorkloads(organization, DEFAULT_LOCATION);
+    const regional = yield* listWorkloads(organization, region);
     const byName = new Map<string, ApiWorkload>();
     for (const workload of [...wildcard, ...regional]) {
       if (workload.name) byName.set(workload.name, workload);

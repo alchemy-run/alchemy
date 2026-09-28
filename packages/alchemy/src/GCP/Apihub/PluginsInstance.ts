@@ -11,7 +11,6 @@ import type { Providers } from "../Providers.ts";
 import {
   ApihubInstanceFailed,
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   encodeOwnershipLine,
   hasOwnershipMarker,
   locationParent,
@@ -170,9 +169,10 @@ const resourceName = (plugin: string, pluginInstanceId: string) =>
 const toAttrs = (
   instance: apihub.GoogleCloudApihubV1PluginInstance,
   project: string,
+  region: string,
 ): PluginsInstance["Attributes"] => {
   const name = instance.name ?? "";
-  const parsed = parseName(name, "instances");
+  const parsed = parseName(name, "instances", region);
   const { text } = parseOwnership(instance.displayName);
   return {
     name,
@@ -201,13 +201,13 @@ const getByName = (name: string) =>
         .getProjectsLocationsPluginsInstances({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPluginsInstances
     .pages({ parent, pageSize: 1000 })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.pluginInstances ?? [])),
       Stream.filter((item) => hasOwnershipMarker(item.displayName)),
-      Stream.map((item) => toAttrs(item, project)),
+      Stream.map((item) => toAttrs(item, project, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -263,6 +263,7 @@ export const PluginsInstanceProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const extra =
         olds !== undefined &&
         (!sameJson(news.authConfig, olds.authConfig) ||
@@ -287,9 +288,13 @@ export const PluginsInstanceProvider = () =>
           news.pluginInstanceId ??
           olds?.pluginInstanceId ??
           output?.pluginInstanceId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: extra || pluginChanged,
       });
@@ -313,7 +318,7 @@ export const PluginsInstanceProvider = () =>
         (plugin.length > 0 ? resourceName(plugin, pluginInstanceId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.displayName))
         ? attrs
         : Unowned(attrs);
@@ -323,17 +328,19 @@ export const PluginsInstanceProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          `${locationParent(env.project, DEFAULT_LOCATION)}/plugins/-`,
+          `${locationParent(env.project, env.region)}/plugins/-`,
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const plugin = news.plugin;
-      const parsedPlugin = parseName(plugin, "plugins");
+      const parsedPlugin = parseName(plugin, "plugins", env.region);
       const location = normalizeLocation(
         news.location ?? parsedPlugin.location ?? output?.location,
+        env.region,
       );
       const pluginName = plugin.includes("/")
         ? plugin
@@ -413,7 +420,7 @@ export const PluginsInstanceProvider = () =>
         });
       }
 
-      return toAttrs(ready, env.project);
+      return toAttrs(ready, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

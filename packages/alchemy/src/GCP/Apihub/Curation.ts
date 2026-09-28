@@ -8,7 +8,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   createOwnership,
   encodeOwnership,
   hasOwnershipMarker,
@@ -52,7 +51,7 @@ export type CurationProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * curation.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -155,9 +154,10 @@ const toEndpoint = (
 const toAttrs = (
   curation: apihub.GoogleCloudApihubV1Curation,
   project: string,
+  region: string,
 ) => {
   const name = curation.name ?? "";
-  const parsed = parseResourceName(name, "curations");
+  const parsed = parseResourceName(name, "curations", region);
   return {
     name,
     curationId: parsed.id,
@@ -188,12 +188,17 @@ export const CurationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.curationId ?? output?.curationId,
         nextId: news.curationId ?? olds?.curationId ?? output?.curationId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra: !sameJson(
           news.endpoint ?? olds?.endpoint,
@@ -204,7 +209,10 @@ export const CurationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const curationId = yield* toPhysicalId(
         id,
         olds?.curationId,
@@ -214,7 +222,7 @@ export const CurationProvider = () =>
         output?.name ?? resourceName(env.project, location, curationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -224,16 +232,19 @@ export const CurationProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listCurations(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
         );
         return items
           .filter((item) => hasOwnershipMarker(item.description))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = locationParent(env.project, location);
       const curationId = yield* toPhysicalId(
         id,
@@ -290,7 +301,7 @@ export const CurationProvider = () =>
         });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

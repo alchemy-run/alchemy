@@ -15,7 +15,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_REGION,
   NetworkConnectivityNotResolved,
   changedFields,
   collectPages,
@@ -57,7 +56,8 @@ export type MulticloudDataTransferConfigProps = {
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile
+   *   region, else `us-central1`)
    */
   location?: string;
   /**
@@ -191,14 +191,15 @@ const toServices = (
 const toAttrs = (
   config: networkconnectivity.MulticloudDataTransferConfig,
   project: string,
+  region: string,
 ) => {
   const name = config.name ?? "";
-  const parsed = parseName(name, COLLECTION, DEFAULT_REGION);
+  const parsed = parseName(name, COLLECTION, region);
   return {
     name,
     multicloudDataTransferConfigId: parsed.id,
     project: parsed.project || project,
-    location: parsed.location || DEFAULT_REGION,
+    location: parsed.location || region,
     description: config.description,
     services: toServices(config.services),
     destinationsCount: config.destinationsCount,
@@ -229,6 +230,7 @@ export const MulticloudDataTransferConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousId =
         olds?.multicloudDataTransferConfigId ??
         output?.multicloudDataTransferConfigId;
@@ -240,11 +242,11 @@ export const MulticloudDataTransferConfigProvider = () =>
         : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       if (
         (previousId !== undefined &&
@@ -267,13 +269,13 @@ export const MulticloudDataTransferConfigProvider = () =>
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name =
         output?.name ?? resourceName(env.project, location, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -294,7 +296,7 @@ export const MulticloudDataTransferConfigProvider = () =>
         );
         return items
           .filter((item) => hasAlchemyLabelKeys(item.labels))
-          .map((item) => toAttrs(item, env.project));
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -307,7 +309,7 @@ export const MulticloudDataTransferConfigProvider = () =>
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
-        DEFAULT_REGION,
+        env.region,
       );
       const name = resourceName(env.project, location, configId);
       const desiredLabels = {
@@ -384,7 +386,7 @@ export const MulticloudDataTransferConfigProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

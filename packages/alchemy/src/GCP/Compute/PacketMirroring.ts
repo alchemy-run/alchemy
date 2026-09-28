@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_ENABLE: compute.PacketMirroringEnableEnum = "TRUE";
 const DEFAULT_PRIORITY = 1000;
 const DEFAULT_DIRECTION: compute.PacketMirroringFilterDirectionEnum = "BOTH";
@@ -76,7 +75,7 @@ export type PacketMirroringProps = {
   /**
    * Region the policy lives in. Immutable — changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -257,8 +256,8 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? "";
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -445,7 +444,7 @@ const toAttrs = (policy: compute.PacketMirroring, project: string) => {
   return {
     packetMirroringName: policy.name ?? policy.id ?? "",
     project,
-    region: normalizeRegion(policy.region),
+    region: lastSegment(policy.region).toLowerCase(),
     description: parsed.description,
     network: policy.network?.url ?? "",
     networkCanonicalUrl: policy.network?.canonicalUrl,
@@ -599,11 +598,18 @@ export const PacketMirroringProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName =
         olds?.packetMirroringName ?? output?.packetMirroringName;
       const nextName = news.packetMirroringName ?? previousName;
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? previousRegion);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? previousRegion,
+        env.region,
+      );
       const previousNetwork = lastSegment(olds?.network ?? output?.network);
       const nextNetwork = lastSegment(news.network);
       const previousDescription =
@@ -638,7 +644,10 @@ export const PacketMirroringProvider = () =>
         olds?.packetMirroringName,
         output?.packetMirroringName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(
         env.project,
         region,
@@ -681,7 +690,7 @@ export const PacketMirroringProvider = () =>
         news.packetMirroringName,
         output?.packetMirroringName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredNetwork = toNetworkUrl(env.project, news.network);
@@ -815,7 +824,7 @@ export const PacketMirroringProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       const operation = yield* compute
         .deletePacketMirrorings({
           project: env.project,

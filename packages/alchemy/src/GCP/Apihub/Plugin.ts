@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
-  DEFAULT_LOCATION,
   DEFAULT_PLUGIN_ACTIONS,
   encodeOwnership,
   hasOwnershipMarker,
@@ -48,7 +47,7 @@ export type PluginProps = {
   /**
    * Location of the API Hub instance (`us-central1`, …). Immutable —
    * changing it replaces the plugin.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -185,9 +184,13 @@ export const Plugin = Resource<Plugin>("GCP.Apihub.Plugin");
 const resourceName = (project: string, location: string, pluginId: string) =>
   `${locationParent(project, location)}/plugins/${pluginId}`;
 
-const toAttrs = (plugin: apihub.GoogleCloudApihubV1Plugin, project: string) => {
+const toAttrs = (
+  plugin: apihub.GoogleCloudApihubV1Plugin,
+  project: string,
+  region: string,
+) => {
   const name = plugin.name ?? "";
-  const parsed = parseName(name, "plugins");
+  const parsed = parseName(name, "plugins", region);
   const { text } = parseOwnership(plugin.description);
   return {
     name,
@@ -217,11 +220,11 @@ const getByName = (name: string) =>
         .getProjectsLocationsPlugins({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listAt = (parent: string, project: string) =>
+const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPlugins.pages({ parent, pageSize: 1000 }).pipe(
     Stream.flatMap((page) => Stream.fromIterable(page.plugins ?? [])),
     Stream.filter((item) => hasOwnershipMarker(item.description)),
-    Stream.map((item) => toAttrs(item, project)),
+    Stream.map((item) => toAttrs(item, project, region)),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -242,6 +245,7 @@ export const PluginProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const extra =
         olds !== undefined &&
         (!sameText(news.displayName, olds.displayName) ||
@@ -256,9 +260,13 @@ export const PluginProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.pluginId ?? output?.pluginId,
         nextId: news.pluginId ?? olds?.pluginId ?? output?.pluginId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra,
       });
@@ -271,12 +279,15 @@ export const PluginProvider = () =>
         olds?.pluginId,
         output?.pluginId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, pluginId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* ownedByAlchemy(id, existing.description))
         ? attrs
         : Unowned(attrs);
@@ -286,14 +297,18 @@ export const PluginProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         return yield* listAt(
-          locationParent(env.project, DEFAULT_LOCATION),
+          locationParent(env.project, env.region),
           env.project,
+          env.region,
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const pluginId = yield* toPhysicalId(id, news.pluginId, output?.pluginId);
       const name = resourceName(env.project, location, pluginId);
       const ownership = yield* ownershipLabels(id);
@@ -343,7 +358,7 @@ export const PluginProvider = () =>
             });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

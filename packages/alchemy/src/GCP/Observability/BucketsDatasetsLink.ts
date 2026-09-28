@@ -10,7 +10,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_BUCKET_LOCATION,
   encodeDescription,
   hasOwnershipMarker,
   linkResourceName,
@@ -41,7 +40,7 @@ export type BucketsDatasetsLinkProps = {
   /**
    * Bucket location used when `dataset` is a bare id. Immutable —
    * changing it replaces the link.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -275,8 +274,7 @@ export const BucketsDatasetsLinkProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location =
-        olds?.location ?? output?.location ?? DEFAULT_BUCKET_LOCATION;
+      const location = olds?.location ?? output?.location ?? env.region;
       const parent = resolveDatasetParent(
         olds?.dataset ?? output?.dataset ?? "",
         olds?.bucket ?? output?.bucket,
@@ -322,7 +320,7 @@ export const BucketsDatasetsLinkProvider = () =>
                     return toAttrs(
                       link,
                       parsed?.project ?? env.project,
-                      parsed?.location ?? DEFAULT_BUCKET_LOCATION,
+                      parsed?.location ?? env.region,
                       parsed?.bucketId ?? "",
                       parsed?.datasetId ?? "",
                     );
@@ -336,8 +334,7 @@ export const BucketsDatasetsLinkProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location =
-        news.location ?? output?.location ?? DEFAULT_BUCKET_LOCATION;
+      const location = news.location ?? output?.location ?? env.region;
       const parent = resolveDatasetParent(
         news.dataset,
         news.bucket,

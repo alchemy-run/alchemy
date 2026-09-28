@@ -17,7 +17,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_REGION = "us-central1";
 const DEFAULT_SESSION_AFFINITY = "NONE";
 const MAX_NAME_LENGTH = 63;
 
@@ -37,7 +36,7 @@ export type TargetPoolProps = {
   /**
    * Region the pool lives in. Immutable — changing it replaces the pool.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
@@ -205,8 +204,8 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
+  lastSegment(region ?? defaultRegion).toLowerCase();
 
 const sessionAffinityOf = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_SESSION_AFFINITY;
@@ -298,7 +297,7 @@ const toAttrs = (
   return {
     targetPoolName: pool.name ?? "",
     project,
-    region: normalizeRegion(pool.region),
+    region: lastSegment(pool.region).toLowerCase(),
     description: parsed.description,
     sessionAffinity: sessionAffinityOf(pool.sessionAffinity),
     backupPool: pool.backupPool,
@@ -450,6 +449,7 @@ export const TargetPoolProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousName = olds?.targetPoolName ?? output?.targetPoolName;
       const nextName = news.targetPoolName ?? previousName;
       const nameChanged =
@@ -457,8 +457,14 @@ export const TargetPoolProvider = () =>
         nextName !== undefined &&
         nextName !== previousName;
 
-      const previousRegion = normalizeRegion(olds?.region ?? output?.region);
-      const nextRegion = normalizeRegion(news.region ?? output?.region);
+      const previousRegion = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
+      const nextRegion = normalizeRegion(
+        news.region ?? output?.region,
+        env.region,
+      );
       const regionChanged = previousRegion !== nextRegion;
 
       const affinityChanged =
@@ -494,7 +500,10 @@ export const TargetPoolProvider = () =>
         olds?.targetPoolName,
         output?.targetPoolName,
       );
-      const region = normalizeRegion(olds?.region ?? output?.region);
+      const region = normalizeRegion(
+        olds?.region ?? output?.region,
+        env.region,
+      );
       const existing = yield* getByName(env.project, region, targetPoolName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -533,7 +542,7 @@ export const TargetPoolProvider = () =>
         news.targetPoolName,
         output?.targetPoolName,
       );
-      const region = normalizeRegion(news.region ?? output?.region);
+      const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const sessionAffinity = sessionAffinityOf(news.sessionAffinity);
@@ -734,7 +743,7 @@ export const TargetPoolProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const region = normalizeRegion(output.region);
+      const region = normalizeRegion(output.region, env.region);
       yield* compute
         .deleteTargetPools({
           project,

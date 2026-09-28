@@ -51,7 +51,7 @@ export type BackupVaultsBackupProps = {
   backupVault: string;
   /**
    * Region used when `backupVault` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -188,9 +188,9 @@ const toOntap = (
         snapshotUuid: source.snapshotUuid,
       };
 
-const toAttrs = (item: netapp.Backup, project: string) => {
+const toAttrs = (item: netapp.Backup, project: string, region: string) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "backups");
+  const parsed = parseName(name, "backups", region);
   return {
     name,
     backupId: parsed.id,
@@ -218,8 +218,8 @@ const getByName = (name: string) =>
     .getProjectsLocationsBackupVaultsBackups({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string) =>
-  listAtNested(project, "backupVaults/-", (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtNested(project, region, "backupVaults/-", (parent) =>
     listLabeledPages(
       netapp.listProjectsLocationsBackupVaultsBackups.pages({
         parent,
@@ -243,15 +243,20 @@ export const BackupVaultsBackupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousVolume = olds?.sourceVolume ?? output?.sourceVolume;
       const previousSnapshot = olds?.sourceSnapshot ?? output?.sourceSnapshot;
       const previousOntap = olds?.ontapSource ?? output?.ontapSource;
       return replaceOnIdentity({
         previousId: olds?.backupId ?? output?.backupId,
         nextId: news.backupId ?? olds?.backupId ?? output?.backupId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.backupVault ?? output?.backupVault,
         nextParent: news.backupVault,
@@ -277,7 +282,10 @@ export const BackupVaultsBackupProvider = () =>
         output?.backupId,
         "backup",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const vault = expandParent(
         olds?.backupVault ?? output?.backupVault ?? "",
         env.project,
@@ -287,7 +295,7 @@ export const BackupVaultsBackupProvider = () =>
       const name = output?.name ?? resourceName(vault, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -296,8 +304,8 @@ export const BackupVaultsBackupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -308,7 +316,10 @@ export const BackupVaultsBackupProvider = () =>
         output?.backupId,
         "backup",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const vault = expandParent(
         news.backupVault,
         env.project,
@@ -384,7 +395,7 @@ export const BackupVaultsBackupProvider = () =>
         );
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

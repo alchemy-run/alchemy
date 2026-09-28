@@ -9,8 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_LOCATION,
-  LIST_LOCATIONS,
+  listLocations,
   hasOwnershipMarker,
   lastSegment,
   normalizeLocation,
@@ -36,7 +35,7 @@ export type ReservationGroupProps = {
    * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
    * changing it replaces the group. Multi-regions `US` and `EU` stay
    * uppercase; regional ids are lowercased.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
 };
@@ -143,6 +142,7 @@ export const ReservationGroupProvider = () =>
 
     diff: Effect.fn(function* ({ id, news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.reservationGroupId ?? output?.reservationGroupId;
       const nextId = yield* toResourceId(
@@ -151,9 +151,11 @@ export const ReservationGroupProvider = () =>
         previousId,
       );
       const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
+        olds?.location ?? output?.location ?? env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
 
       const replace =
         (previousId !== undefined && nextId !== previousId) ||
@@ -176,7 +178,9 @@ export const ReservationGroupProvider = () =>
         olds?.reservationGroupId,
         output?.reservationGroupId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location ?? env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, reservationGroupId);
       const existing = yield* getByName(name);
@@ -191,7 +195,7 @@ export const ReservationGroupProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(LIST_LOCATIONS)),
+          listLocations(env.region),
           (location) => listOwnedAt(env.project, location),
           { concurrency: 4 },
         );
@@ -209,7 +213,9 @@ export const ReservationGroupProvider = () =>
         news.reservationGroupId,
         output?.reservationGroupId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location ?? env.region,
+      );
       const name = resourceName(env.project, location, reservationGroupId);
       const parent = parentOf(env.project, location);
 

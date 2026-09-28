@@ -7,7 +7,6 @@ import { alchemyLabelKeys } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 100;
 export const DEFAULT_TRACE_LOCATION = "global";
-export const DEFAULT_BUCKET_LOCATION = "us-central1";
 export const DEFAULT_BUCKET_ID = "_Trace";
 export const DEFAULT_DATASET_ID = "Spans";
 
@@ -236,7 +235,7 @@ export const resolveDatasetParent = (
   };
 };
 
-export const listLocationIds = (project: string) =>
+export const listLocationIds = (project: string, region: string) =>
   observability.listProjectsLocations
     .pages({
       name: `projects/${project}`,
@@ -252,11 +251,11 @@ export const listLocationIds = (project: string) =>
       Effect.map((chunk) => {
         const ids = new Set(Array.from(chunk));
         ids.add(DEFAULT_TRACE_LOCATION);
-        ids.add(DEFAULT_BUCKET_LOCATION);
+        ids.add(region);
         return [...ids];
       }),
       Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([DEFAULT_TRACE_LOCATION, DEFAULT_BUCKET_LOCATION]),
+        Effect.succeed([DEFAULT_TRACE_LOCATION, region]),
       ),
     );
 
@@ -283,7 +282,7 @@ export const listProjectBuckets = () =>
       `projects/${env.project}/locations/-`,
     );
     if (wildcard.length > 0) return wildcard;
-    const locations = yield* listLocationIds(env.project);
+    const locations = yield* listLocationIds(env.project, env.region);
     const pages = yield* Effect.forEach(
       locations,
       (location) =>

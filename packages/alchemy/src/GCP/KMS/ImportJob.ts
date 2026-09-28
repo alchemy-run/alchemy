@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const DEFAULT_PROTECTION: kms.ImportJobProtectionLevelEnum = "SOFTWARE";
 const DEFAULT_IMPORT_METHOD: kms.ImportJobImportMethodEnum =
   "RSA_OAEP_3072_SHA256_AES_256";
@@ -27,7 +26,7 @@ export type ImportJobProps = {
    * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
    * `keyRing` is a bare id. Immutable — changing it replaces the import
    * job. `US-CENTRAL1` is accepted and normalized to `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -152,8 +151,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const normalizeProtection = (
   value: string | undefined,
@@ -162,7 +161,7 @@ const normalizeProtection = (
     ? DEFAULT_PROTECTION
     : (value as kms.ImportJobProtectionLevelEnum);
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const importJobsAt = parts.lastIndexOf("importJobs");
   const keyRingsAt = parts.lastIndexOf("keyRings");
@@ -176,7 +175,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     keyRing,
     importJobId:
       importJobsAt >= 0 && parts[importJobsAt + 1]
@@ -189,10 +188,12 @@ const resolveParent = (
   project: string,
   keyRing: string,
   location: string | undefined,
+  region: string,
 ) => {
   if (keyRing.includes("/")) {
     const parsed = parseName(
       keyRing.includes("/importJobs/") ? keyRing : `${keyRing}/importJobs/_`,
+      region,
     );
     return {
       parent: parsed.keyRing,
@@ -200,7 +201,7 @@ const resolveParent = (
       project: parsed.project || project,
     };
   }
-  const loc = normalizeLocation(location);
+  const loc = normalizeLocation(location, region);
   return {
     parent: `projects/${project}/locations/${loc}/keyRings/${keyRing}`,
     location: loc,
@@ -224,9 +225,13 @@ const toId = (id: string, importJobId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (job: kms.ImportJob, project: string): ImportJobAttrs => {
+const toAttrs = (
+  job: kms.ImportJob,
+  project: string,
+  region: string,
+): ImportJobAttrs => {
   const name = job.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     importJobId: parsed.importJobId,
@@ -404,6 +409,7 @@ export const ImportJobProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.importJobId ?? output?.importJobId;
       const nextId = news.importJobId ?? previousId;
@@ -415,12 +421,13 @@ export const ImportJobProvider = () =>
       const previousParent =
         output?.keyRing ??
         (olds?.keyRing
-          ? resolveParent("", olds.keyRing, olds.location).parent
+          ? resolveParent("", olds.keyRing, olds.location, env.region).parent
           : undefined);
       const nextParent = resolveParent(
         output?.project ?? "",
         news.keyRing,
         news.location ?? output?.location,
+        env.region,
       ).parent;
       const parentChanged =
         previousParent !== undefined && previousParent !== nextParent;
@@ -445,6 +452,7 @@ export const ImportJobProvider = () =>
                 env.project,
                 olds?.keyRing ?? output?.keyRing ?? "",
                 olds?.location ?? output?.location,
+                env.region,
               ).parent,
               importJobId,
             )
@@ -454,7 +462,7 @@ export const ImportJobProvider = () =>
       if (existing === undefined) return undefined;
       // ImportJobs have no labels, so existence at the computed name is
       // ownership. Adopting an expired job is harmless.
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, env.region);
     }),
 
     list: () =>
@@ -478,7 +486,7 @@ export const ImportJobProvider = () =>
           );
           for (const jobs of batches) {
             for (const job of jobs) {
-              found.push(toAttrs(job, env.project));
+              found.push(toAttrs(job, env.project, env.region));
             }
           }
           pageToken = response.nextPageToken;
@@ -498,6 +506,7 @@ export const ImportJobProvider = () =>
         env.project,
         news.keyRing,
         news.location ?? output?.location,
+        env.region,
       );
       const name = resourceName(parent.parent, importJobId);
       const importMethod = news.importMethod ?? DEFAULT_IMPORT_METHOD;
@@ -528,7 +537,7 @@ export const ImportJobProvider = () =>
         current = yield* waitReady(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

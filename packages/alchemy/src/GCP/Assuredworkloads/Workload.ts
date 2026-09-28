@@ -17,7 +17,6 @@ import {
 import type { Providers } from "../Providers.ts";
 import {
   type ApiWorkload,
-  DEFAULT_LOCATION,
   deleteChildResources,
   fieldMask,
   fingerprint,
@@ -135,7 +134,7 @@ export type WorkloadProps = {
    * Location (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the workload. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -325,9 +324,10 @@ export class WorkloadNotResolved extends Data.TaggedError(
 const toAttrs = (
   workload: ApiWorkload,
   project: string,
+  region: string,
 ): Workload["Attributes"] => {
   const name = workload.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   const organization = parsed.organization
     ? organizationParent(parsed.organization)
     : "";
@@ -336,7 +336,7 @@ const toAttrs = (
     workloadId: parsed.id || lastSegment(name),
     organization,
     organizationId: organizationIdOf(organization),
-    location: parsed.location || DEFAULT_LOCATION,
+    location: parsed.location || region,
     project,
     displayName: workload.displayName,
     complianceRegime: workload.complianceRegime,
@@ -433,10 +433,7 @@ export const WorkloadProvider = () =>
         news.organization !== undefined
           ? organizationParent(news.organization)
           : previousOrg;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(news.location ?? previousLocation);
+      const previousLocation = olds?.location ?? output?.location;
       const previousRegime = olds?.complianceRegime ?? output?.complianceRegime;
       const previousBilling = olds?.billingAccount ?? output?.billingAccount;
       const previousPartner = olds?.partner ?? output?.partner;
@@ -450,7 +447,10 @@ export const WorkloadProvider = () =>
         (previousOrg !== undefined &&
           nextOrg !== undefined &&
           organizationParent(previousOrg) !== organizationParent(nextOrg)) ||
-          previousLocation !== nextLocation ||
+          (previousLocation !== undefined &&
+            news.location !== undefined &&
+            normalizeLocation(previousLocation) !==
+              normalizeLocation(news.location)) ||
           (previousRegime !== undefined &&
             previousRegime !== news.complianceRegime) ||
           !sameText(previousBilling, news.billingAccount) ||
@@ -488,11 +488,11 @@ export const WorkloadProvider = () =>
         ),
       );
       const location = normalizeLocation(
-        olds?.location ?? output?.location ?? DEFAULT_LOCATION,
+        olds?.location ?? output?.location ?? env.region,
       );
       const existing = yield* observe(id, output?.name, organization, location);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -503,8 +503,10 @@ export const WorkloadProvider = () =>
         const env = yield* GcpEnvironment.current;
         const organization = yield* tryResolveOrganization();
         if (organization === undefined) return [];
-        const workloads = yield* listOwnedWorkloads(organization);
-        return workloads.map((workload) => toAttrs(workload, env.project));
+        const workloads = yield* listOwnedWorkloads(organization, env.region);
+        return workloads.map((workload) =>
+          toAttrs(workload, env.project, env.region),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -514,7 +516,7 @@ export const WorkloadProvider = () =>
         output?.organization,
       );
       const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
+        news.location ?? output?.location ?? env.region,
       );
       const parent = locationParent(organization, location);
       const desiredLabels = {
@@ -618,7 +620,7 @@ export const WorkloadProvider = () =>
         return yield* new WorkloadNotResolved({ name });
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

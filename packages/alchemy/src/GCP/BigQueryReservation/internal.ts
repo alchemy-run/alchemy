@@ -7,9 +7,11 @@ import {
   sanitizeLabelValue,
 } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_NAME_LENGTH = 64;
-export const LIST_LOCATIONS = ["-", DEFAULT_LOCATION, "US", "EU"] as const;
+
+/** Locations swept by `list`: every location, the stack region, and the multi-regions. */
+export const listLocations = (region: string) =>
+  Array.from(new Set(["-", region, "US", "EU"]));
 const OWNER_PREFIX = "alch---";
 
 export const lastSegment = (value: string) => {
@@ -18,8 +20,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) => {
-  const value = lastSegment(location ?? DEFAULT_LOCATION);
+export const normalizeLocation = (location: string) => {
+  const value = lastSegment(location);
   const upper = value.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
   return value.toLowerCase();
@@ -40,9 +42,7 @@ export const parseResourceName = (
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     resourceId:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!

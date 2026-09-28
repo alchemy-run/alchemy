@@ -9,10 +9,12 @@ import {
 } from "../Labels.ts";
 import { resourceNameFromOperation as resourceNameFromOperationImpl } from "./operations.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
-export const LIST_LOCATIONS = ["us-central1"] as const;
+/** Locations `list` scans: the pre-`GCP.Region` default plus the stack region. */
+export const listLocations = (region: string): string[] => [
+  ...new Set(["us-central1", region]),
+];
 
 export const createInternalLabels = createInternalLabelsImpl;
 export const toLabels = toLabelsImpl;
@@ -24,13 +26,15 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  fallback: string,
+) => lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const locationOf = (name: string, fallback = DEFAULT_LOCATION) => {
+export const locationOf = (name: string, fallback = "") => {
   const parts = name.split("/");
   const index = parts.indexOf("locations");
   return index >= 0 ? (parts[index + 1] ?? fallback) : fallback;
@@ -52,9 +56,7 @@ export const parseName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     reasoningEngineId:
       enginesAt >= 0 && parts[enginesAt + 1] ? parts[enginesAt + 1]! : "",
     resourceId:

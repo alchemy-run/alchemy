@@ -82,7 +82,7 @@ export type NfsShareProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the share. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -263,9 +263,13 @@ const desiredClient = (
   noRootSquash: client.noRootSquash,
 });
 
-const toAttrs = (item: baremetalsolution.NfsShare, project: string) => {
+const toAttrs = (
+  item: baremetalsolution.NfsShare,
+  project: string,
+  region: string,
+) => {
   const name = item.name ?? "";
-  const parsed = parseName(name, "nfsShares");
+  const parsed = parseName(name, "nfsShares", region);
   return {
     name,
     nfsShareId: parsed.id || item.nfsShareId || item.id || "",
@@ -292,8 +296,8 @@ const getByName = (name: string) =>
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
-const listOwned = (project: string) =>
-  listAtLocation(project, (parent) =>
+const listOwned = (project: string, region: string) =>
+  listAtLocation(project, region, (parent) =>
     listLabeledPages(
       baremetalsolution.listProjectsLocationsNfsShares.pages({
         parent,
@@ -310,6 +314,7 @@ export const NfsShareProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       const previousType = olds?.storageType ?? output?.storageType;
       const nextType = news.storageType ?? previousType;
       const previousPod = olds?.pod ?? output?.pod;
@@ -317,9 +322,13 @@ export const NfsShareProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.nfsShareId ?? output?.nfsShareId,
         nextId: news.nfsShareId ?? olds?.nfsShareId ?? output?.nfsShareId,
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         extra:
           (previousType !== undefined &&
@@ -339,12 +348,15 @@ export const NfsShareProvider = () =>
         output?.nfsShareId,
         "nfsshare",
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, nfsShareId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -353,8 +365,8 @@ export const NfsShareProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project);
-        return items.map((item) => toAttrs(item, env.project));
+        const items = yield* listOwned(env.project, env.region);
+        return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -365,7 +377,10 @@ export const NfsShareProvider = () =>
         output?.nfsShareId,
         "nfsshare",
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, nfsShareId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -456,10 +471,10 @@ export const NfsShareProvider = () =>
           ready.name ?? name,
           (item) => item.state,
         );
-        return toAttrs(patched, env.project);
+        return toAttrs(patched, env.project, env.region);
       }
 
-      return toAttrs(ready, env.project);
+      return toAttrs(ready, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {

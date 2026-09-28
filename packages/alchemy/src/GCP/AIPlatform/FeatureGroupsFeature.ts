@@ -43,7 +43,7 @@ export type FeatureGroupsFeatureProps = {
   featureId?: string;
   /**
    * Region used when `featureGroup` is a bare id.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -229,6 +229,7 @@ export const FeatureGroupsFeatureProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featureId ?? output?.featureId;
       const nextId = news.featureId ?? previousId;
@@ -241,8 +242,12 @@ export const FeatureGroupsFeatureProvider = () =>
         : previousParent;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parentChanged =
         previousParent.length > 0 &&
         lastSegment(nextParent) !== lastSegment(previousParent);
@@ -258,7 +263,10 @@ export const FeatureGroupsFeatureProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const parent = parentOf(
         env.project,
         location,
@@ -310,7 +318,10 @@ export const FeatureGroupsFeatureProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const parent = parentOf(env.project, location, news.featureGroup);
       const featureId = yield* toPhysicalSnake(
         id,

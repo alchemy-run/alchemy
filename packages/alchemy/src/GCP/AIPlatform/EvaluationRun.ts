@@ -30,7 +30,7 @@ export type EvaluationRunProps = {
   evaluationRunId?: string;
   /**
    * Region. Immutable — changing it replaces the run.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -239,13 +239,18 @@ export const EvaluationRunProvider = () =>
     stables: ["name", "evaluationRunId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationRunId ?? output?.evaluationRunId;
       const nextId = news.evaluationRunId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const previousDisplay = olds?.displayName ?? output?.displayName ?? "";
       const nextDisplay = news.displayName ?? previousDisplay;
       const replace =
@@ -260,7 +265,10 @@ export const EvaluationRunProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const runId = olds?.evaluationRunId ?? output?.evaluationRunId;
       const name =
         output?.name ??
@@ -284,7 +292,10 @@ export const EvaluationRunProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const runId = news.evaluationRunId ?? output?.evaluationRunId;
       const name =
         output?.name ??

@@ -7,7 +7,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
-export const DEFAULT_LOCATION = "us-central1";
 export const DEFAULT_SERVING_LOCALITY = "GLOBAL_ACCESS";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_BACKEND_ID_LENGTH = 49;
@@ -60,14 +59,16 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+export const normalizeLocation = (
+  location: string | undefined,
+  defaultLocation: string,
+) => lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const normalizeServingLocality = (value: string | undefined) =>
   (value ?? DEFAULT_SERVING_LOCALITY).toUpperCase();
 
-export const parentOf = (project: string, location: string | undefined) =>
-  `projects/${project}/locations/${normalizeLocation(location)}`;
+export const parentOf = (project: string, location: string) =>
+  `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
 export const defaultServiceAccount = (project: string) =>
   `firebase-app-hosting-compute@${project}.iam.gserviceaccount.com`;
@@ -122,9 +123,7 @@ export const parseName = (name: string, collection: string) => {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     id:
       collectionAt >= 0 && parts[collectionAt + 1]
         ? parts[collectionAt + 1]!
@@ -374,21 +373,23 @@ export const waitUntilGone = <A, E, R>(
 
 export const listAtLocation = <A, E, R>(
   project: string,
+  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], never, R> =>
   Effect.firstSuccessOf<Effect.Effect<A[], E, R>>([
     list(`projects/${project}/locations/-`),
-    list(`projects/${project}/locations/${DEFAULT_LOCATION}`),
+    list(`projects/${project}/locations/${region}`),
   ]).pipe(Effect.orElseSucceed((): A[] => []));
 
 export const listAtNested = <A, E, R>(
   project: string,
+  region: string,
   nested: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], never, R> =>
   Effect.firstSuccessOf<Effect.Effect<A[], E, R>>([
     list(`projects/${project}/locations/-/${nested}`),
-    list(`projects/${project}/locations/${DEFAULT_LOCATION}/${nested}`),
+    list(`projects/${project}/locations/${region}/${nested}`),
   ]).pipe(Effect.orElseSucceed((): A[] => []));
 
 export const listLabeledPages = <Page, A, E, R>(

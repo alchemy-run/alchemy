@@ -6,7 +6,8 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 
-export const DEFAULT_CONFIG_ID = "regional-us-central1";
+/** Default instance config: the regional config of the stack's GCP region. */
+export const defaultConfigId = (region: string) => `regional-${region}`;
 export const DEFAULT_PROCESSING_UNITS = 100;
 export const DEFAULT_PARTITION_PROCESSING_UNITS = 1000;
 export const MAX_INSTANCE_ID_LENGTH = 64;
@@ -75,8 +76,8 @@ export const databaseIdOf = (value: string) =>
     ? parseResourceName(value).databaseId
     : lastSegment(value);
 
-export const configIdOf = (config: string | undefined) =>
-  lastSegment(config ?? DEFAULT_CONFIG_ID).toLowerCase();
+export const configIdOf = (config: string | undefined, region: string) =>
+  lastSegment(config ?? defaultConfigId(region)).toLowerCase();
 
 export const instanceName = (project: string, instanceId: string) =>
   `projects/${project}/instances/${instanceId}`;
@@ -128,8 +129,12 @@ export const backupScheduleName = (
 export const instanceConfigName = (project: string, configId: string) =>
   `projects/${project}/instanceConfigs/${configId}`;
 
-export const configNameOf = (project: string, config: string | undefined) => {
-  const raw = (config ?? DEFAULT_CONFIG_ID).trim();
+export const configNameOf = (
+  project: string,
+  config: string | undefined,
+  region: string,
+) => {
+  const raw = (config ?? defaultConfigId(region)).trim();
   if (raw.includes("/")) return raw;
   return instanceConfigName(project, raw);
 };

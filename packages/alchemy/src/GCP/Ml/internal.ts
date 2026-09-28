@@ -13,7 +13,6 @@ import {
   stripInternalLabels,
 } from "../Labels.ts";
 
-export const DEFAULT_REGION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 
@@ -160,11 +159,12 @@ export const sameStringList = (
 
 export const normalizeRegions = (
   regions: readonly string[] | undefined,
+  fallback: readonly string[],
 ): string[] => {
   const next = [...(regions ?? [])]
     .map((region) => lastSegment(region).toLowerCase())
     .filter((region) => region.length > 0);
-  return next.length > 0 ? next : [DEFAULT_REGION];
+  return next.length > 0 ? next : [...fallback];
 };
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>

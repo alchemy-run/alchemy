@@ -9,7 +9,6 @@ import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { alchemyLabelKeys } from "../Labels.ts";
 
-export const DEFAULT_REGION = "us-central1";
 export const MAX_NAME_LENGTH = 63;
 
 export const lastSegment = (value: string | undefined): string => {
@@ -18,8 +17,10 @@ export const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? value;
 };
 
-export const normalizeRegion = (region: string | undefined) =>
-  lastSegment(region ?? DEFAULT_REGION).toLowerCase();
+export const normalizeRegion = (
+  region: string | undefined,
+  defaultRegion: string,
+) => lastSegment(region ?? defaultRegion).toLowerCase();
 
 export const rfc1035 = (name: string, fallback: string): string => {
   let next = name

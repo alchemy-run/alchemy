@@ -5,6 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -32,7 +33,7 @@ export type EncryptionConfigProps = {
   /**
    * Region (`us-central1`, …). Global is not supported. Immutable —
    * changing it replaces the config.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
@@ -161,6 +162,7 @@ export const EncryptionConfigProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId:
           olds?.encryptionConfigId ??
@@ -170,9 +172,13 @@ export const EncryptionConfigProvider = () =>
           news.encryptionConfigId,
           olds?.encryptionConfigId ?? output?.encryptionConfigId,
         ),
-        previousLocation: normalizeLocation(olds?.location ?? output?.location),
+        previousLocation: normalizeLocation(
+          olds?.location ?? output?.location,
+          env.region,
+        ),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
+          env.region,
         ),
         previousParent: olds?.organizationId ?? output?.organizationId,
         nextParent: news.organizationId,
@@ -180,13 +186,17 @@ export const EncryptionConfigProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
+      const env = yield* GcpEnvironment.current;
       const encryptionConfigId = toId(
         olds?.encryptionConfigId,
         output?.encryptionConfigId,
       );
       const organizationId = olds?.organizationId ?? output?.organizationId;
       if (organizationId === undefined) return undefined;
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ??
         resourceName(organizationId, location, encryptionConfigId);
@@ -199,11 +209,15 @@ export const EncryptionConfigProvider = () =>
     list: () => Effect.succeed([]),
 
     reconcile: Effect.fn(function* ({ news, output }) {
+      const env = yield* GcpEnvironment.current;
       const encryptionConfigId = toId(
         news.encryptionConfigId,
         output?.encryptionConfigId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(
         news.organizationId,
         location,

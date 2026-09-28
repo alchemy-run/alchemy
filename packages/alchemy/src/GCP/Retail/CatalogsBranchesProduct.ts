@@ -399,7 +399,7 @@ export const CatalogsBranchesProductProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listProjectCatalogs(env.project);
+        const catalogs = yield* listProjectCatalogs(env.project, env.region);
         const pages = yield* Effect.forEach(
           catalogs,
           (catalog) =>

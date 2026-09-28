@@ -16,7 +16,6 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const DEFAULT_LOCATION = "us-central1";
 const MAX_NAME_LENGTH = 63;
 const OWNERSHIP_USERNAME = "alchemy-owner";
 
@@ -47,7 +46,7 @@ export type AclPolicyProps = {
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
-   * @default "us-central1"
+   * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
@@ -168,8 +167,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string | undefined) =>
-  lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
+const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -187,7 +186,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, location: string, aclPolicyId: string) =>
   `projects/${project}/locations/${location}/aclPolicies/${aclPolicyId}`;
 
-const parseName = (name: string) => {
+const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const policiesAt = parts.lastIndexOf("aclPolicies");
   const locationsAt = parts.lastIndexOf("locations");
@@ -198,7 +197,7 @@ const parseName = (name: string) => {
     location:
       locationsAt >= 0 && parts[locationsAt + 1]
         ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+        : fallbackLocation,
     aclPolicyId:
       policiesAt >= 0 && parts[policiesAt + 1]
         ? parts[policiesAt + 1]!
@@ -295,9 +294,9 @@ const desiredRules = (
   labels: Record<string, string>,
 ): redis.AclRule[] => [...userRulesOf(news.rules), encodeOwnershipRule(labels)];
 
-const toAttrs = (policy: redis.AclPolicy, project: string) => {
+const toAttrs = (policy: redis.AclPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
-  const parsed = parseName(name);
+  const parsed = parseName(name, region);
   return {
     name,
     aclPolicyId: parsed.aclPolicyId,
@@ -445,13 +444,18 @@ export const AclPolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      const env = yield* GcpEnvironment.current;
 
       const previousId = olds?.aclPolicyId ?? output?.aclPolicyId;
       const nextId = news.aclPolicyId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
+        env.region,
       );
-      const nextLocation = normalizeLocation(news.location ?? output?.location);
+      const nextLocation = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const replace =
         (previousId !== undefined &&
           nextId !== undefined &&
@@ -468,12 +472,15 @@ export const AclPolicyProvider = () =>
         olds?.aclPolicyId,
         output?.aclPolicyId,
       );
-      const location = normalizeLocation(olds?.location ?? output?.location);
+      const location = normalizeLocation(
+        olds?.location ?? output?.location,
+        env.region,
+      );
       const name =
         output?.name ?? resourceName(env.project, location, aclPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, env.region);
       return (yield* hasAlchemyLabels(id, ownershipLabelsOf(existing.rules)))
         ? attrs
         : Unowned(attrs);
@@ -495,7 +502,7 @@ export const AclPolicyProvider = () =>
               (policy) =>
                 !isPlaceholder(policy) && hasOwnershipMarker(policy.rules),
             ),
-            Stream.map((policy) => toAttrs(policy, env.project)),
+            Stream.map((policy) => toAttrs(policy, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -510,7 +517,10 @@ export const AclPolicyProvider = () =>
         news.aclPolicyId,
         output?.aclPolicyId,
       );
-      const location = normalizeLocation(news.location ?? output?.location);
+      const location = normalizeLocation(
+        news.location ?? output?.location,
+        env.region,
+      );
       const name = resourceName(env.project, location, aclPolicyId);
       const ownership = yield* createInternalLabels(id);
       const bodyRules = desiredRules(news, ownership);
@@ -568,7 +578,7 @@ export const AclPolicyProvider = () =>
         current = yield* waitUntilActive(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
