@@ -155,6 +155,21 @@ const COLORED_APP = `construct app() {
     queue.send(file)
   }
 }`;
+/** The same program, with the read passed in: nothing to see inside anymore. */
+const PASSED = (type: string) => `construct app() {
+  const bucket = Bucket({ versioning: true })
+  const queue = Queue()
+
+  runtime function api(
+    req,
+    read: ${type},
+  ) {
+    const file = read(req.key)
+    queue.send(file)
+  }
+}`;
+const UNKNOWN_READ = { from: "api", to: "bucket", tone: "bad" as const, label: "s3:???" };
+
 /** What the function needs, inferred from its body the way a type would be. */
 const INFERRED_NEEDS = COLORED_APP.replace(
   "  runtime function api(req) {",
@@ -888,6 +903,46 @@ const EVERYTHING: BundlePanel = {
   used: USED_CLIENTS,
   note: "{extra} clients the code never calls",
 };
+
+/** The build-up to Effect, inside the same imaginary program. */
+const passedIn: StepSpec[] = [
+  lang({
+    title: "But real code passes functions around",
+    src: { code: PASSED("(key) => File") },
+    marks: [{ kind: "circle", find: "read(req.key)", label: "which bucket? could be anything", side: "right", tone: "bad" }],
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: [UNKNOWN_READ, SEND] },
+    notes:
+      "But real code doesn't call everything directly. Here api is handed a read function. Which bucket does it read? It depends on the caller, so reading api's body tells you nothing.",
+  }),
+  lang({
+    title: "…so the only thing left to read is its type",
+    src: { code: PASSED("(key) => File needs s3:GetObject") },
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    notes:
+      "So the function's type has to carry it. read says what it returns, and what it needs from the outside world: s3:GetObject.",
+  }),
+  lang({
+    title: "Then the policy falls out of the types",
+    src: { code: PASSED("(key) => File needs s3:GetObject") },
+    marks: [
+      { kind: "circle", find: "needs s3:GetObject", tone: "construct" },
+      { kind: "underline", find: "runtime function api(", label: "so api needs it too", side: "right", tone: "construct" },
+    ],
+    diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
+    notes:
+      "Now nobody reads function bodies. api calls read, so api needs s3:GetObject too, exactly like a type checker propagates a return type. The policy is just type checking.",
+  }),
+  lang({
+    title: "It could say how it fails too, that seems like a good idea 😏",
+    src: { code: PASSED("(key) => File throws NotFound needs s3:GetObject") },
+    notes: "And while we're at it, the type could say how it fails, too.",
+  }),
+  lang({
+    title: "Wait… this looks familiar",
+    src: { code: PASSED("(key) => Effect<File, NotFound, s3:GetObject>") },
+    notes: "Wait. A value, how it fails, and what it needs. We've seen this before.",
+  }),
+];
 
 /** Every step ever written, in the original long order. `steps` below picks from it. */
 const allSteps: StepSpec[] = [
@@ -2143,11 +2198,7 @@ export const steps: StepSpec[] = [
   pick("…just as a compiler infers a type from a function's body"),
 
   // 3. Effect already models this
-  pick("But it can't see inside a function that's passed in", "But reading the code breaks down when a function is passed in", { file: "app.ts" }),
-  pick("Unless its type says what it needs", "…unless its type says what it needs", { file: "app.ts" }),
-  pick("Then inferring permissions is just type checking", "Then the policy falls out of the types", { file: "app.ts" }),
-  pick("It could say how it fails too, that seems like a good idea 😏", undefined, { file: "app.ts" }),
-  pick("Wait… this looks familiar", undefined, { file: "app.ts" }),
+  ...passedIn,
   pick("That's exactly the type of an Effect"),
 
   // 4. How bindings work in Alchemy
