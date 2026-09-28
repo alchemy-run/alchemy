@@ -81,5 +81,5 @@ test.provider.skipIf(!ZONE_NAME)(
 
       expect(yield* readRecord(hostedZoneId!)).toBeUndefined();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
 );

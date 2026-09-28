@@ -167,6 +167,16 @@ const probeRedirect = (url: string) =>
 // placement, target health AND certificate issuance).
 describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
   "celld ingress (public ALB + domain)",
+  {
+    tags: [
+      "provider:celld",
+      "provider:aws",
+      "provider:aws:ecs",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "live",
+    ],
+  },
   () => {
     beforeAll(
       Effect.gen(function* () {

@@ -92,5 +92,6 @@ for (const fails of [false, true]) {
           expect(closed).toBe(1);
         }
       }),
+    { tags: ["unit", "local"] },
   );
 }

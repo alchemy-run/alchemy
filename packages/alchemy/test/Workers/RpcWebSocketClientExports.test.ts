@@ -122,6 +122,16 @@ layer(NodeServices.layer)("provider WebSocket RPC client exports", (it) => {
           expect(entry.imports).toEqual([]);
           expect(entry.dynamicImports).toEqual([]);
         }),
+      {
+        tags: [
+          "unit",
+          "local",
+          "provider:cloudflare",
+          "provider:cloudflare:worker",
+          "provider:celld",
+          "provider:rivet",
+        ],
+      },
     );
   }
 });

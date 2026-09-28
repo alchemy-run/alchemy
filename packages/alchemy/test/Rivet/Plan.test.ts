@@ -28,7 +28,7 @@ const testOptions = {
 const { test } = Test.make(testOptions);
 const scratch = Core.scratchStack(testOptions, "RivetPlan", import.meta.url);
 
-describe("rivet plan", () => {
+describe("rivet plan", { tags: ["provider:rivet"] }, () => {
   test(
     "schema facade registers without evaluating its native instance",
     Effect.gen(function* () {
@@ -70,7 +70,10 @@ describe("rivet plan", () => {
       expect(host).toBeDefined();
       expect((host as any).props.exports.Room.kind).toBe("durableObject");
     }),
-    { timeout: 30_000 },
+    {
+      tags: ["provider:aws", "provider:aws:ecs", "provider:aws:ec2", "live"],
+      timeout: 30_000,
+    },
   );
 
   test(
@@ -110,7 +113,7 @@ describe("rivet plan", () => {
       expect(after).toContain('classes: [{"className":"Room"}]');
       expect(before).toContain('classes: [{"className":"Room"}]');
     }),
-    { timeout: 5000 },
+    { tags: ["unit", "local"], timeout: 5000 },
   );
   test(
     "bindWorker stamps the engine endpoint and VPC attachment, no secret",
@@ -145,7 +148,10 @@ describe("rivet plan", () => {
       expect(call).toBeDefined();
       expect(Object.keys(call.data)).toEqual(["vpc"]);
     }),
-    { timeout: 120_000 },
+    {
+      tags: ["provider:aws", "provider:aws:ecs", "provider:aws:ec2", "live"],
+      timeout: 120_000,
+    },
   );
 
   test(
@@ -176,6 +182,9 @@ describe("rivet plan", () => {
       console.log("expose refusal:", text.slice(0, 400));
       expect(text).toContain("enforces no caller token");
     }),
-    { timeout: 120_000 },
+    {
+      tags: ["provider:aws", "provider:aws:ecs", "provider:aws:ec2", "live"],
+      timeout: 120_000,
+    },
   );
 });

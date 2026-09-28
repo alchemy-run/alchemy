@@ -83,159 +83,174 @@ const request = Effect.fn(
   }),
 );
 
-describe("workflow response classification", () => {
-  const url = "https://workflow.testing.workers.dev/start/success";
-  const body = `<!DOCTYPE html>
+describe(
+  "workflow response classification",
+  {
+    tags: [
+      "unit",
+      "local",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+    ],
+  },
+  () => {
+    const url = "https://workflow.testing.workers.dev/start/success";
+    const body = `<!DOCTYPE html>
 <meta http-equiv="refresh" content="30">
 <title>Page not found</title>
 <link rel="icon" href="https://workers.cloudflare.com/favicon.ico">
 <h1>There is nothing here yet</h1>
 <p>If you expect something to be here, it may take some time.<br/>Please check back again later.</p>`;
-  const headers = {
-    server: "cloudflare",
-    "content-type": "text/html; charset=UTF-8",
-    "cf-ray": "a3d1ff6739c3fef7-SEA",
-  };
+    const headers = {
+      server: "cloudflare",
+      "content-type": "text/html; charset=UTF-8",
+      "cf-ray": "a3d1ff6739c3fef7-SEA",
+    };
 
-  it.live("retries the native placeholder before starting one workflow", () =>
-    Effect.gen(function* () {
-      let attempts = 0;
-      let starts = 0;
-      const client = HttpClient.make((httpRequest) =>
-        Effect.sync(() => {
-          expect(httpRequest.method).toBe("POST");
-          attempts++;
-          if (attempts === 1) {
+    it.live("retries the native placeholder before starting one workflow", () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        let starts = 0;
+        const client = HttpClient.make((httpRequest) =>
+          Effect.sync(() => {
+            expect(httpRequest.method).toBe("POST");
+            attempts++;
+            if (attempts === 1) {
+              return HttpClientResponse.fromWeb(
+                httpRequest,
+                new Response(body, { status: 404, headers }),
+              );
+            }
+            starts++;
+            return HttpClientResponse.fromWeb(
+              httpRequest,
+              Response.json({ id: "one-workflow" }),
+            );
+          }),
+        );
+        const result = yield* request(url, "POST").pipe(
+          Effect.provideService(HttpClient.HttpClient, client),
+        );
+        expect(JSON.parse(result)).toEqual({ id: "one-workflow" });
+        expect(attempts).toBe(2);
+        expect(starts).toBe(1);
+      }),
+    );
+
+    const rejected: Array<{
+      name: string;
+      status?: number;
+      body?: string;
+      headers?: Record<string, string>;
+      url?: string;
+    }> = [
+      { name: "application text 404", body: "Not Found" },
+      { name: "application JSON 404", body: '{"error":"Not Found"}' },
+      {
+        name: "application HTML 404",
+        body: "<title>Page not found</title><h1>Not Found</h1>",
+      },
+      { name: "application 500", status: 500, body: "Internal Server Error" },
+      { name: "wrong status", status: 500 },
+      {
+        name: "wrong content type",
+        headers: { ...headers, "content-type": "application/json" },
+      },
+      { name: "missing server", headers: { ...headers, server: "" } },
+      { name: "missing Ray ID", headers: { ...headers, "cf-ray": "" } },
+      {
+        name: "invalid Ray ID",
+        headers: { ...headers, "cf-ray": "not-a-ray" },
+      },
+      { name: "custom domain", url: "https://example.com/start/success" },
+      {
+        name: "local HTTP target",
+        url: "http://workflow.testing.workers.dev/start/success",
+      },
+      {
+        name: "incomplete page",
+        body: body.replace(
+          'href="https://workers.cloudflare.com/favicon.ico"',
+          'href="/favicon.ico"',
+        ),
+      },
+    ];
+    for (const response of rejected) {
+      it.live(`does not replay a workflow start after ${response.name}`, () =>
+        Effect.gen(function* () {
+          let attempts = 0;
+          const client = HttpClient.make((httpRequest) =>
+            Effect.sync(() => {
+              attempts++;
+              return HttpClientResponse.fromWeb(
+                httpRequest,
+                new Response(response.body ?? body, {
+                  status: response.status ?? 404,
+                  headers: response.headers ?? headers,
+                }),
+              );
+            }),
+          );
+          const error = yield* request(response.url ?? url, "POST").pipe(
+            Effect.provideService(HttpClient.HttpClient, client),
+            Effect.flip,
+          );
+          expect(error).not.toBeInstanceOf(WorkflowWorkerNotReady);
+          expect(attempts).toBe(1);
+        }),
+      );
+    }
+
+    it.live(
+      "requires the fixture readiness body rather than a precreate 200",
+      () =>
+        Effect.gen(function* () {
+          let attempts = 0;
+          const client = HttpClient.make((httpRequest) =>
+            Effect.sync(() => {
+              expect(httpRequest.method).toBe("GET");
+              attempts++;
+              return HttpClientResponse.fromWeb(
+                httpRequest,
+                new Response(
+                  attempts === 1
+                    ? "Alchemy worker is being deployed..."
+                    : "ready",
+                ),
+              );
+            }),
+          );
+          const result = yield* request(
+            "https://workflow.testing.workers.dev/ready",
+          ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+          expect(result).toBe("ready");
+          expect(attempts).toBe(2);
+        }),
+    );
+
+    it.live("bounds repeated native placeholder responses", () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const client = HttpClient.make((httpRequest) =>
+          Effect.sync(() => {
+            attempts++;
             return HttpClientResponse.fromWeb(
               httpRequest,
               new Response(body, { status: 404, headers }),
             );
-          }
-          starts++;
-          return HttpClientResponse.fromWeb(
-            httpRequest,
-            Response.json({ id: "one-workflow" }),
-          );
-        }),
-      );
-      const result = yield* request(url, "POST").pipe(
-        Effect.provideService(HttpClient.HttpClient, client),
-      );
-      expect(JSON.parse(result)).toEqual({ id: "one-workflow" });
-      expect(attempts).toBe(2);
-      expect(starts).toBe(1);
-    }),
-  );
-
-  const rejected: Array<{
-    name: string;
-    status?: number;
-    body?: string;
-    headers?: Record<string, string>;
-    url?: string;
-  }> = [
-    { name: "application text 404", body: "Not Found" },
-    { name: "application JSON 404", body: '{"error":"Not Found"}' },
-    {
-      name: "application HTML 404",
-      body: "<title>Page not found</title><h1>Not Found</h1>",
-    },
-    { name: "application 500", status: 500, body: "Internal Server Error" },
-    { name: "wrong status", status: 500 },
-    {
-      name: "wrong content type",
-      headers: { ...headers, "content-type": "application/json" },
-    },
-    { name: "missing server", headers: { ...headers, server: "" } },
-    { name: "missing Ray ID", headers: { ...headers, "cf-ray": "" } },
-    { name: "invalid Ray ID", headers: { ...headers, "cf-ray": "not-a-ray" } },
-    { name: "custom domain", url: "https://example.com/start/success" },
-    {
-      name: "local HTTP target",
-      url: "http://workflow.testing.workers.dev/start/success",
-    },
-    {
-      name: "incomplete page",
-      body: body.replace(
-        'href="https://workers.cloudflare.com/favicon.ico"',
-        'href="/favicon.ico"',
-      ),
-    },
-  ];
-  for (const response of rejected) {
-    it.live(`does not replay a workflow start after ${response.name}`, () =>
-      Effect.gen(function* () {
-        let attempts = 0;
-        const client = HttpClient.make((httpRequest) =>
-          Effect.sync(() => {
-            attempts++;
-            return HttpClientResponse.fromWeb(
-              httpRequest,
-              new Response(response.body ?? body, {
-                status: response.status ?? 404,
-                headers: response.headers ?? headers,
-              }),
-            );
           }),
         );
-        const error = yield* request(response.url ?? url, "POST").pipe(
+        const error = yield* request(url, "POST").pipe(
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.flip,
         );
-        expect(error).not.toBeInstanceOf(WorkflowWorkerNotReady);
-        expect(attempts).toBe(1);
+        expect(error).toBeInstanceOf(WorkflowWorkerNotReady);
+        expect(attempts).toBe(9);
       }),
     );
-  }
-
-  it.live(
-    "requires the fixture readiness body rather than a precreate 200",
-    () =>
-      Effect.gen(function* () {
-        let attempts = 0;
-        const client = HttpClient.make((httpRequest) =>
-          Effect.sync(() => {
-            expect(httpRequest.method).toBe("GET");
-            attempts++;
-            return HttpClientResponse.fromWeb(
-              httpRequest,
-              new Response(
-                attempts === 1
-                  ? "Alchemy worker is being deployed..."
-                  : "ready",
-              ),
-            );
-          }),
-        );
-        const result = yield* request(
-          "https://workflow.testing.workers.dev/ready",
-        ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-        expect(result).toBe("ready");
-        expect(attempts).toBe(2);
-      }),
-  );
-
-  it.live("bounds repeated native placeholder responses", () =>
-    Effect.gen(function* () {
-      let attempts = 0;
-      const client = HttpClient.make((httpRequest) =>
-        Effect.sync(() => {
-          attempts++;
-          return HttpClientResponse.fromWeb(
-            httpRequest,
-            new Response(body, { status: 404, headers }),
-          );
-        }),
-      );
-      const error = yield* request(url, "POST").pipe(
-        Effect.provideService(HttpClient.HttpClient, client),
-        Effect.flip,
-      );
-      expect(error).toBeInstanceOf(WorkflowWorkerNotReady);
-      expect(attempts).toBe(9);
-    }),
-  );
-});
+  },
+);
 
 const waitForReady = Effect.fn(function* (url: string) {
   const ready = yield* Effect.gen(function* () {

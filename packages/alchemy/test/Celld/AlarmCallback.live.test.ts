@@ -22,6 +22,7 @@ it.effect(
       expect(typeof fixture.default).toBe("function");
       expect(Effect.isEffect(makeCallbackHarness)).toBe(true);
     }),
+  { tags: ["unit", "local", "provider:celld"] },
 );
 
 it.effect.skipIf(callbackEnvironment.enabled)(
@@ -36,6 +37,7 @@ it.effect.skipIf(callbackEnvironment.enabled)(
       ),
       Effect.provide(FetchHttpClient.layer),
     ),
+  { tags: ["unit", "local", "provider:celld"] },
 );
 
 it.live.skipIf(!callbackEnvironment.enabled)(
@@ -287,5 +289,5 @@ it.live.skipIf(!callbackEnvironment.enabled)(
         ),
       ),
     ),
-  { timeout: 120_000 },
+  { tags: ["provider:celld", "local", "native"], timeout: 120_000 },
 );

@@ -91,7 +91,7 @@ it.live.skipIf(!publish && !url)(
         expect(socket.readyState).toBe(WebSocket.OPEN);
       }).pipe(Effect.provide(observed.layer));
     }),
-  { timeout: 90_000 },
+  { tags: ["provider:celld", "local", "native"], timeout: 90_000 },
 );
 
 it.live.skipIf(!publish && !url)(
@@ -123,5 +123,5 @@ it.live.skipIf(!publish && !url)(
         expect(observed.sockets[0]!.readyState).toBe(WebSocket.OPEN);
       }).pipe(Effect.provide(observed.layer));
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:celld", "local", "native"], timeout: 30_000 },
 );

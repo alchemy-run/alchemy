@@ -20,27 +20,30 @@ const storage = (initial: unknown = null) =>
     return { native, socket: makeAttachmentMethods(native) };
   });
 
-it.effect("shares codec transforms and unchecked attachment values", () =>
-  Effect.gen(function* () {
-    const { socket, native } = yield* storage();
-    const Session = Schema.Struct({
-      count: Schema.NumberFromString,
-      joined: Schema.DateFromString,
-    });
-    const joined = yield* Effect.sync(
-      () => new Date("2026-01-02T03:04:05.000Z"),
-    );
-    yield* socket.setAttachment(Session, { count: 42, joined });
-    expect(native.read()).toEqual({
-      count: "42",
-      joined: joined.toISOString(),
-    });
-    const decoded = yield* socket.getAttachment(Session);
-    expect(decoded.count).toBe(42);
-    expect(decoded.joined).toBeInstanceOf(Date);
-    yield* Effect.sync(() => socket.serializeAttachment("17"));
-    expect(yield* socket.getAttachment(Schema.NumberFromString)).toBe(17);
-  }),
+it.effect(
+  "shares codec transforms and unchecked attachment values",
+  () =>
+    Effect.gen(function* () {
+      const { socket, native } = yield* storage();
+      const Session = Schema.Struct({
+        count: Schema.NumberFromString,
+        joined: Schema.DateFromString,
+      });
+      const joined = yield* Effect.sync(
+        () => new Date("2026-01-02T03:04:05.000Z"),
+      );
+      yield* socket.setAttachment(Session, { count: 42, joined });
+      expect(native.read()).toEqual({
+        count: "42",
+        joined: joined.toISOString(),
+      });
+      const decoded = yield* socket.getAttachment(Session);
+      expect(decoded.count).toBe(42);
+      expect(decoded.joined).toBeInstanceOf(Date);
+      yield* Effect.sync(() => socket.serializeAttachment("17"));
+      expect(yield* socket.getAttachment(Schema.NumberFromString)).toBe(17);
+    }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -70,6 +73,7 @@ it.effect(
         __alchemyRpcWebSocket: "application-data",
       });
     }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -90,6 +94,7 @@ it.effect(
       );
       expect(socket.deserializeAttachment()).toEqual({ count: "9" });
     }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -138,4 +143,5 @@ it.effect(
         .pipe(Effect.result);
       expect(Result.isFailure(write) && write.failure.reason).toBe("write");
     }),
+  { tags: ["unit", "local"] },
 );

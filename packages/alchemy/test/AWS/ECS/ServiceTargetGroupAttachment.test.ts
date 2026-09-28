@@ -185,5 +185,14 @@ test.provider(
 
       yield* reclaimTaskDefinitionFamily(FAMILY);
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ecs",
+      "provider:aws:ec2",
+      "provider:aws:elbv2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

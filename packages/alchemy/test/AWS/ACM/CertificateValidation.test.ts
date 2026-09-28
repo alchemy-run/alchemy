@@ -128,5 +128,14 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(yield* countRecords(deployed.zoneId, deployed.recordName)).toBe(0);
     }),
-  { timeout: 480_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:acm",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "live",
+    ],
+    timeout: 480_000,
+  },
 );

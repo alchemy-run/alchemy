@@ -14,6 +14,7 @@ it.effect(
         output: { minify: true, codeSplitting: false },
       });
     }),
+  { tags: ["unit", "local", "provider:celld"] },
 );
 it.effect(
   "Celld rejects explicit unsupported code splitting before bundling",
@@ -26,4 +27,5 @@ it.effect(
       if (Result.isFailure(result))
         expect(result.failure.reason).toBe("unsupported");
     }),
+  { tags: ["unit", "local", "provider:celld"] },
 );

@@ -136,7 +136,10 @@ test(
         expect(result.meta.preparedSql).toBe(source);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -158,5 +161,8 @@ test(
         expect(calls.at(-1)?.sql).toBe("SELECT 1; SELECT 2;");
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );

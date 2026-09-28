@@ -147,386 +147,408 @@ const setup = Effect.gen(function* () {
   return { ...fake, calls, layer };
 });
 
-describe("Celld Application lifecycle", () => {
-  test.effect(
-    "reads an interrupted pre-publication row without blocking dependency cleanup",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        const root = yield* prepare();
-        const props = { ...propsFor(root), fleetUrl: undefined };
-        expect(
-          yield* readApplication(props, owner).pipe(Effect.provide(env.layer)),
-        ).toBeUndefined();
-        expect(env.calls.count).toBe(0);
-        expect(env.objects.size).toBe(0);
-        const reconcile = yield* reconcileApplication(props, owner).pipe(
-          Effect.provide(env.layer),
-          Effect.result,
-        );
-        expect(Result.isFailure(reconcile) && reconcile.failure._tag).toBe(
-          "Celld.ResourceCatalogError",
-        );
-      }),
-  );
-  test.effect(
-    "publishes the transformed root and preserves source identities across secondary changes",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
+describe(
+  "Celld Application lifecycle",
+  { tags: ["unit", "local", "provider:celld"] },
+  () => {
+    test.effect(
+      "reads an interrupted pre-publication row without blocking dependency cleanup",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
           const root = yield* prepare();
-          const worker = yield* prepare("jobs-first", [], "jobs");
-          yield* stageDeployment(env.store, root);
-          yield* stageDeployment(env.store, worker);
-          const props = {
-            ...propsFor(root),
-            workers: [{ ...propsFor(worker).entrypoint, exposed: false }],
-          };
-          const expected = yield* prepareApplicationGraph(root, [worker]);
-          const initial = yield* reconcileApplication(props, owner);
-          const first = (yield* readPublicationReceipt(env.store))!;
-          expect(first.root).toEqual(expected.root.pointer);
-          expect(first.root.version).not.toBe(root.version);
-          expect(initial.candidates).toEqual([
-            root.candidate.key,
-            worker.candidate.key,
-          ]);
-          expect(expected.root.manifest.raw_metadata).toEqual(
-            expect.objectContaining({
-              [APPLICATION_GRAPH_METADATA]: {
-                schemaVersion: 1,
-                revision: expected.revision,
-                candidates: [root, worker].map((source) => ({
-                  scriptName: source.scriptName,
-                  key: source.candidate.key,
-                })),
-              },
-              bindings: [
-                {
-                  type: "service",
-                  name: "__ALCHEMY_APP_WORKER_0",
-                  service: "jobs",
-                },
-              ],
-            }),
-          );
-          const next = yield* prepare("jobs-second", [], "jobs");
-          yield* stageDeployment(env.store, next);
-          const updated = yield* reconcileApplication(
-            {
-              ...props,
-              workers: [{ ...propsFor(next).entrypoint, exposed: false }],
-            },
-            owner,
-          );
-          expect(updated.revision).not.toBe(initial.revision);
+          const props = { ...propsFor(root), fleetUrl: undefined };
           expect(
-            (yield* readPublicationReceipt(env.store))!.root.version,
-          ).not.toBe(first.root.version);
-          expect(updated.candidates).toEqual([
-            root.candidate.key,
-            next.candidate.key,
-          ]);
-          expect(env.calls.count).toBe(2);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "resumes failed first activation under the same transaction when read observes its receipt",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          yield* stageDeployment(env.store, root);
-          env.calls.fail = true;
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(propsFor(root), owner)),
+            yield* readApplication(props, owner).pipe(
+              Effect.provide(env.layer),
             ),
-          ).toBe(true);
-          const receipt = (yield* readPublicationReceipt(env.store))!;
-          const lock = env.objects.get(APPLICATION_LOCK_KEY)!;
-          const writes = env.writes.length;
-          env.calls.fail = false;
-          expect(
-            (yield* readApplication(propsFor(root), owner))!.revision,
-          ).toBe(receipt.revision);
-          expect(env.writes.length).toBe(writes);
-          expect(lock).toBeDefined();
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-          expect(env.calls.count).toBe(2);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-  test.effect(
-    "does not return readiness if native pointers change during activation",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          yield* stageDeployment(env.store, root);
-          env.calls.after = () => {
-            env.objects.delete("deploy/current.json");
-          };
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(propsFor(root), owner)),
-            ),
-          ).toBe(true);
-          expect(env.calls.count).toBe(1);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "resumes an owned partial publication despite drift from the previous receipt",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const first = yield* prepare();
-          yield* stageDeployment(env.store, first);
-          const initial = yield* reconcileApplication(propsFor(first), owner);
-          const second = yield* prepare("second");
-          yield* stageDeployment(env.store, second);
-          env.failBefore.add("deploy/current.json");
-          const interrupted = yield* Effect.result(
-            reconcileApplication(propsFor(second), owner),
-          );
-          expect(Result.isFailure(interrupted)).toBe(true);
-          expect((yield* readPublicationReceipt(env.store))!.revision).toBe(
-            initial.revision,
-          );
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(true);
-          expect(
-            yield* readApplication(propsFor(second), owner),
           ).toBeUndefined();
-          expect(
-            yield* readApplication(propsFor(first), owner),
-          ).toBeUndefined();
-          const resumed = yield* reconcileApplication(propsFor(second), owner);
-          expect(resumed.revision).not.toBe(initial.revision);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-          expect(env.calls.count).toBe(2);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "resumes a cron-only graph change interrupted before pointer acknowledgement",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const first = yield* prepare();
-          yield* stageDeployment(env.store, first);
-          const initial = yield* reconcileApplication(propsFor(first), owner);
-          const next = yield* prepare("first", ["*/5 * * * *"]);
-          yield* stageDeployment(env.store, next);
-          expect(next.version).toBe(first.version);
-          const transaction = yield* digest(
-            yield* encode({
-              owner,
-              candidates: [next.candidate.key],
-              priorRevision: initial.revision,
-            }),
-          );
-          env.race.set("deploy/root/current.json", () => {
-            env.failBefore.add(
-              `alchemy/application/v1/transactions/${transaction}.json`,
-            );
-          });
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(propsFor(next), owner)),
-            ),
-          ).toBe(true);
-          const resumed = yield* reconcileApplication(propsFor(next), owner);
-          expect(resumed.revision).not.toBe(initial.revision);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "uses the journal's prior revision after the new receipt already committed",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const first = yield* prepare();
-          yield* stageDeployment(env.store, first);
-          const initial = yield* reconcileApplication(propsFor(first), owner);
-          const next = yield* prepare("next");
-          yield* stageDeployment(env.store, next);
-          const transaction = yield* digest(
-            yield* encode({
-              owner,
-              candidates: [next.candidate.key],
-              priorRevision: initial.revision,
-            }),
-          );
-          env.race.set(APPLICATION_RECEIPT_KEY, () => {
-            env.failBefore.add(
-              `alchemy/application/v1/transactions/${transaction}.json`,
-            );
-          });
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(propsFor(next), owner)),
-            ),
-          ).toBe(true);
-          const committed = (yield* readPublicationReceipt(env.store))!;
-          expect(committed.revision).not.toBe(initial.revision);
-          const resumed = yield* readApplication(propsFor(next), owner);
-          expect(resumed!.revision).toBe(committed.revision);
-          expect(
-            (yield* reconcileApplication(propsFor(next), owner)).revision,
-          ).toBe(committed.revision);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "a graph no-op still activates and saved publication output is not readiness evidence",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          yield* stageDeployment(env.store, root);
-          const props = propsFor(root);
-          const initial = yield* reconcileApplication(props, owner);
-          const writes = env.writes.length;
-          expect(yield* reconcileApplication(props, owner)).toEqual(initial);
-          expect(env.writes.slice(writes)).toEqual([APPLICATION_LOCK_KEY]);
-          expect(env.calls.count).toBe(2);
-          env.calls.fail = true;
-          expect(
-            Result.isFailure(
-              yield* Effect.result(readApplication(props, owner)),
-            ),
-          ).toBe(true);
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(props, owner)),
-            ),
-          ).toBe(true);
-          expect(env.writes.slice(writes)).toEqual([
-            APPLICATION_LOCK_KEY,
-            APPLICATION_LOCK_KEY,
-          ]);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(true);
-          const failedReceipt = (yield* readPublicationReceipt(env.store))!;
-          env.calls.fail = false;
-          expect(yield* readApplication(props, owner)).toEqual(initial);
-          expect(
-            (yield* readPublicationReceipt(env.store))!.transactionId,
-          ).toBe(failedReceipt.transactionId);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "cross-fleet members and non-root exposure fail before publication writes",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          const props = propsFor(root);
-          const foreign = {
-            ...props,
-            entrypoint: { ...props.entrypoint, fleetId: "OtherFleet" },
-          };
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(foreign, owner)),
-            ),
-          ).toBe(true);
-          const exposed = {
-            ...props,
-            workers: [
-              {
-                ...props.entrypoint,
-                workerName: "secondary",
-                stagedManifestKey: "not-read",
-                exposed: true,
-              },
-            ],
-          };
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(exposed, owner)),
-            ),
-          ).toBe(true);
-          expect(env.writes).toEqual([]);
           expect(env.calls.count).toBe(0);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "refuses changed candidates while an earlier operation holds the lock",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          yield* stageDeployment(env.store, root);
-          env.failBefore.add("deploy/current.json");
-          expect(
-            Result.isFailure(
-              yield* Effect.result(reconcileApplication(propsFor(root), owner)),
-            ),
-          ).toBe(true);
-          const changed = yield* prepare("different operation");
-          yield* stageDeployment(env.store, changed);
-          const writes = env.writes.length;
-          expect(
-            Result.isFailure(
-              yield* Effect.result(
-                reconcileApplication(propsFor(changed), owner),
-              ),
-            ),
-          ).toBe(true);
-          expect(env.writes.length).toBe(writes);
-          yield* reconcileApplication(propsFor(root), owner);
-          expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-
-  test.effect(
-    "rejects a Worker reference whose name differs from its candidate",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* setup;
-        yield* Effect.gen(function* () {
-          const root = yield* prepare();
-          yield* stageDeployment(env.store, root);
-          const props = propsFor(root);
-          expect(
-            Result.isFailure(
-              yield* Effect.result(
-                reconcileApplication(
+          expect(env.objects.size).toBe(0);
+          const reconcile = yield* reconcileApplication(props, owner).pipe(
+            Effect.provide(env.layer),
+            Effect.result,
+          );
+          expect(Result.isFailure(reconcile) && reconcile.failure._tag).toBe(
+            "Celld.ResourceCatalogError",
+          );
+        }),
+    );
+    test.effect(
+      "publishes the transformed root and preserves source identities across secondary changes",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            const worker = yield* prepare("jobs-first", [], "jobs");
+            yield* stageDeployment(env.store, root);
+            yield* stageDeployment(env.store, worker);
+            const props = {
+              ...propsFor(root),
+              workers: [{ ...propsFor(worker).entrypoint, exposed: false }],
+            };
+            const expected = yield* prepareApplicationGraph(root, [worker]);
+            const initial = yield* reconcileApplication(props, owner);
+            const first = (yield* readPublicationReceipt(env.store))!;
+            expect(first.root).toEqual(expected.root.pointer);
+            expect(first.root.version).not.toBe(root.version);
+            expect(initial.candidates).toEqual([
+              root.candidate.key,
+              worker.candidate.key,
+            ]);
+            expect(expected.root.manifest.raw_metadata).toEqual(
+              expect.objectContaining({
+                [APPLICATION_GRAPH_METADATA]: {
+                  schemaVersion: 1,
+                  revision: expected.revision,
+                  candidates: [root, worker].map((source) => ({
+                    scriptName: source.scriptName,
+                    key: source.candidate.key,
+                  })),
+                },
+                bindings: [
                   {
-                    ...props,
-                    entrypoint: { ...props.entrypoint, workerName: "imposter" },
+                    type: "service",
+                    name: "__ALCHEMY_APP_WORKER_0",
+                    service: "jobs",
                   },
-                  owner,
+                ],
+              }),
+            );
+            const next = yield* prepare("jobs-second", [], "jobs");
+            yield* stageDeployment(env.store, next);
+            const updated = yield* reconcileApplication(
+              {
+                ...props,
+                workers: [{ ...propsFor(next).entrypoint, exposed: false }],
+              },
+              owner,
+            );
+            expect(updated.revision).not.toBe(initial.revision);
+            expect(
+              (yield* readPublicationReceipt(env.store))!.root.version,
+            ).not.toBe(first.root.version);
+            expect(updated.candidates).toEqual([
+              root.candidate.key,
+              next.candidate.key,
+            ]);
+            expect(env.calls.count).toBe(2);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "resumes failed first activation under the same transaction when read observes its receipt",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            yield* stageDeployment(env.store, root);
+            env.calls.fail = true;
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(root), owner),
                 ),
               ),
-            ),
-          ).toBe(true);
-          expect(env.objects.has("deploy/current.json")).toBe(false);
-        }).pipe(Effect.provide(env.layer));
-      }),
-  );
-});
+            ).toBe(true);
+            const receipt = (yield* readPublicationReceipt(env.store))!;
+            const lock = env.objects.get(APPLICATION_LOCK_KEY)!;
+            const writes = env.writes.length;
+            env.calls.fail = false;
+            expect(
+              (yield* readApplication(propsFor(root), owner))!.revision,
+            ).toBe(receipt.revision);
+            expect(env.writes.length).toBe(writes);
+            expect(lock).toBeDefined();
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+            expect(env.calls.count).toBe(2);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+    test.effect(
+      "does not return readiness if native pointers change during activation",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            yield* stageDeployment(env.store, root);
+            env.calls.after = () => {
+              env.objects.delete("deploy/current.json");
+            };
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(root), owner),
+                ),
+              ),
+            ).toBe(true);
+            expect(env.calls.count).toBe(1);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "resumes an owned partial publication despite drift from the previous receipt",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const first = yield* prepare();
+            yield* stageDeployment(env.store, first);
+            const initial = yield* reconcileApplication(propsFor(first), owner);
+            const second = yield* prepare("second");
+            yield* stageDeployment(env.store, second);
+            env.failBefore.add("deploy/current.json");
+            const interrupted = yield* Effect.result(
+              reconcileApplication(propsFor(second), owner),
+            );
+            expect(Result.isFailure(interrupted)).toBe(true);
+            expect((yield* readPublicationReceipt(env.store))!.revision).toBe(
+              initial.revision,
+            );
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(true);
+            expect(
+              yield* readApplication(propsFor(second), owner),
+            ).toBeUndefined();
+            expect(
+              yield* readApplication(propsFor(first), owner),
+            ).toBeUndefined();
+            const resumed = yield* reconcileApplication(
+              propsFor(second),
+              owner,
+            );
+            expect(resumed.revision).not.toBe(initial.revision);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+            expect(env.calls.count).toBe(2);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "resumes a cron-only graph change interrupted before pointer acknowledgement",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const first = yield* prepare();
+            yield* stageDeployment(env.store, first);
+            const initial = yield* reconcileApplication(propsFor(first), owner);
+            const next = yield* prepare("first", ["*/5 * * * *"]);
+            yield* stageDeployment(env.store, next);
+            expect(next.version).toBe(first.version);
+            const transaction = yield* digest(
+              yield* encode({
+                owner,
+                candidates: [next.candidate.key],
+                priorRevision: initial.revision,
+              }),
+            );
+            env.race.set("deploy/root/current.json", () => {
+              env.failBefore.add(
+                `alchemy/application/v1/transactions/${transaction}.json`,
+              );
+            });
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(next), owner),
+                ),
+              ),
+            ).toBe(true);
+            const resumed = yield* reconcileApplication(propsFor(next), owner);
+            expect(resumed.revision).not.toBe(initial.revision);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "uses the journal's prior revision after the new receipt already committed",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const first = yield* prepare();
+            yield* stageDeployment(env.store, first);
+            const initial = yield* reconcileApplication(propsFor(first), owner);
+            const next = yield* prepare("next");
+            yield* stageDeployment(env.store, next);
+            const transaction = yield* digest(
+              yield* encode({
+                owner,
+                candidates: [next.candidate.key],
+                priorRevision: initial.revision,
+              }),
+            );
+            env.race.set(APPLICATION_RECEIPT_KEY, () => {
+              env.failBefore.add(
+                `alchemy/application/v1/transactions/${transaction}.json`,
+              );
+            });
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(next), owner),
+                ),
+              ),
+            ).toBe(true);
+            const committed = (yield* readPublicationReceipt(env.store))!;
+            expect(committed.revision).not.toBe(initial.revision);
+            const resumed = yield* readApplication(propsFor(next), owner);
+            expect(resumed!.revision).toBe(committed.revision);
+            expect(
+              (yield* reconcileApplication(propsFor(next), owner)).revision,
+            ).toBe(committed.revision);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "a graph no-op still activates and saved publication output is not readiness evidence",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            yield* stageDeployment(env.store, root);
+            const props = propsFor(root);
+            const initial = yield* reconcileApplication(props, owner);
+            const writes = env.writes.length;
+            expect(yield* reconcileApplication(props, owner)).toEqual(initial);
+            expect(env.writes.slice(writes)).toEqual([APPLICATION_LOCK_KEY]);
+            expect(env.calls.count).toBe(2);
+            env.calls.fail = true;
+            expect(
+              Result.isFailure(
+                yield* Effect.result(readApplication(props, owner)),
+              ),
+            ).toBe(true);
+            expect(
+              Result.isFailure(
+                yield* Effect.result(reconcileApplication(props, owner)),
+              ),
+            ).toBe(true);
+            expect(env.writes.slice(writes)).toEqual([
+              APPLICATION_LOCK_KEY,
+              APPLICATION_LOCK_KEY,
+            ]);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(true);
+            const failedReceipt = (yield* readPublicationReceipt(env.store))!;
+            env.calls.fail = false;
+            expect(yield* readApplication(props, owner)).toEqual(initial);
+            expect(
+              (yield* readPublicationReceipt(env.store))!.transactionId,
+            ).toBe(failedReceipt.transactionId);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "cross-fleet members and non-root exposure fail before publication writes",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            const props = propsFor(root);
+            const foreign = {
+              ...props,
+              entrypoint: { ...props.entrypoint, fleetId: "OtherFleet" },
+            };
+            expect(
+              Result.isFailure(
+                yield* Effect.result(reconcileApplication(foreign, owner)),
+              ),
+            ).toBe(true);
+            const exposed = {
+              ...props,
+              workers: [
+                {
+                  ...props.entrypoint,
+                  workerName: "secondary",
+                  stagedManifestKey: "not-read",
+                  exposed: true,
+                },
+              ],
+            };
+            expect(
+              Result.isFailure(
+                yield* Effect.result(reconcileApplication(exposed, owner)),
+              ),
+            ).toBe(true);
+            expect(env.writes).toEqual([]);
+            expect(env.calls.count).toBe(0);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "refuses changed candidates while an earlier operation holds the lock",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            yield* stageDeployment(env.store, root);
+            env.failBefore.add("deploy/current.json");
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(root), owner),
+                ),
+              ),
+            ).toBe(true);
+            const changed = yield* prepare("different operation");
+            yield* stageDeployment(env.store, changed);
+            const writes = env.writes.length;
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(propsFor(changed), owner),
+                ),
+              ),
+            ).toBe(true);
+            expect(env.writes.length).toBe(writes);
+            yield* reconcileApplication(propsFor(root), owner);
+            expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+
+    test.effect(
+      "rejects a Worker reference whose name differs from its candidate",
+      () =>
+        Effect.gen(function* () {
+          const env = yield* setup;
+          yield* Effect.gen(function* () {
+            const root = yield* prepare();
+            yield* stageDeployment(env.store, root);
+            const props = propsFor(root);
+            expect(
+              Result.isFailure(
+                yield* Effect.result(
+                  reconcileApplication(
+                    {
+                      ...props,
+                      entrypoint: {
+                        ...props.entrypoint,
+                        workerName: "imposter",
+                      },
+                    },
+                    owner,
+                  ),
+                ),
+              ),
+            ).toBe(true);
+            expect(env.objects.has("deploy/current.json")).toBe(false);
+          }).pipe(Effect.provide(env.layer));
+        }),
+    );
+  },
+);

@@ -177,7 +177,10 @@ test(
         expect(f.objects.size).toBe(0);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -204,7 +207,10 @@ test(
         expect(f.objects.size).toBe(0);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -237,7 +243,10 @@ test(
         expect(f.objects.has(migrationLockKey("database"))).toBe(true);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -260,7 +269,10 @@ test(
         );
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -287,7 +299,10 @@ test(
         expect(f.objects.size).toBe(0);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -323,7 +338,10 @@ test(
         });
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -350,7 +368,10 @@ test(
         );
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -371,5 +392,8 @@ test(
         expect(f.objects.size).toBe(0);
       }),
     ),
-  { timeout: 30_000 },
+  {
+    tags: ["unit", "local", "provider:celld", "provider:celld:d1"],
+    timeout: 30_000,
+  },
 );

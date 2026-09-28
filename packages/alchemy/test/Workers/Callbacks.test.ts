@@ -73,7 +73,7 @@ class Invocation extends Context.Service<Invocation, string>()(
   "CallbackTest.Invocation",
 ) {}
 
-describe("shared durable callbacks", () => {
+describe("shared durable callbacks", { tags: ["unit", "local"] }, () => {
   it.live("validates registration windows, names, delays and schedules", () =>
     Effect.gen(function* () {
       const { registry, jobs } = memoryStore();

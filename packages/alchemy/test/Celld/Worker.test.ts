@@ -82,6 +82,7 @@ test(
     expect(entry).toContain('fleet.durableObject("Probe")');
     expect(entry).toContain('fleet.workflow("Job")');
   }),
+  { tags: ["unit", "local", "provider:celld"] },
 );
 
 const reference = (worker: CelldWorker) => ({
@@ -240,7 +241,7 @@ test(
       expect(final.resources[id].action).toBe("noop");
     yield* stack.destroy();
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  { timeout: 120_000 },
+  { tags: ["unit", "local", "provider:celld"], timeout: 120_000 },
 );
 
 test(
@@ -321,4 +322,5 @@ test(
       ),
     ),
   ),
+  { tags: ["unit", "local", "provider:celld"] },
 );

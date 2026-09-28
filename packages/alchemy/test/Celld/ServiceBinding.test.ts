@@ -130,204 +130,210 @@ const Captured = Schema.Array(
   Schema.Struct({ storageBindings: StorageMetadata }),
 );
 
-describe("Celld native service fetch", () => {
-  test.effect(
-    "registers the physical Worker name and fleet validation metadata",
-    () => {
-      const { bindings, layer } = fixture();
-      return Effect.gen(function* () {
-        yield* Fetch(worker());
-        expect(yield* Output.evaluate(bindings, {})).toEqual([
-          {
-            bindings: [
-              {
-                type: "service",
-                name: "Api",
-                service: "physical-Services/Api",
-              },
-            ],
-            storageBindings: [
-              {
-                resource: "Services/Api",
-                fleetId: "Cells",
-                fleetUrl: "http://cells:8080",
-              },
-            ],
-          },
-        ]);
-        yield* Fetch(worker("Other/Api", "OtherCells"), {
-          bindingName: "OtherApi",
-        });
-        const captured = yield* Schema.decodeUnknownEffect(Captured)(
-          yield* Output.evaluate(bindings, {}),
-        );
-        yield* validateStorageBindings(
-          { fleetId: "Cells", fleetUrl: "http://cells:8080" },
-          captured[0].storageBindings,
-        );
-        const foreign = yield* Effect.result(
-          validateStorageBindings(
+describe(
+  "Celld native service fetch",
+  { tags: ["unit", "local", "provider:celld"] },
+  () => {
+    test.effect(
+      "registers the physical Worker name and fleet validation metadata",
+      () => {
+        const { bindings, layer } = fixture();
+        return Effect.gen(function* () {
+          yield* Fetch(worker());
+          expect(yield* Output.evaluate(bindings, {})).toEqual([
+            {
+              bindings: [
+                {
+                  type: "service",
+                  name: "Api",
+                  service: "physical-Services/Api",
+                },
+              ],
+              storageBindings: [
+                {
+                  resource: "Services/Api",
+                  fleetId: "Cells",
+                  fleetUrl: "http://cells:8080",
+                },
+              ],
+            },
+          ]);
+          yield* Fetch(worker("Other/Api", "OtherCells"), {
+            bindingName: "OtherApi",
+          });
+          const captured = yield* Schema.decodeUnknownEffect(Captured)(
+            yield* Output.evaluate(bindings, {}),
+          );
+          yield* validateStorageBindings(
             { fleetId: "Cells", fleetUrl: "http://cells:8080" },
-            captured[1].storageBindings,
-          ),
-        );
-        expect(Result.isFailure(foreign) && foreign.failure._tag).toBe(
-          "Celld.StorageFleetMismatch",
-        );
-      }).pipe(Effect.provide(layer));
-    },
-  );
+            captured[0].storageBindings,
+          );
+          const foreign = yield* Effect.result(
+            validateStorageBindings(
+              { fleetId: "Cells", fleetUrl: "http://cells:8080" },
+              captured[1].storageBindings,
+            ),
+          );
+          expect(Result.isFailure(foreign) && foreign.failure._tag).toBe(
+            "Celld.StorageFleetMismatch",
+          );
+        }).pipe(Effect.provide(layer));
+      },
+    );
 
-  test.effect(
-    "looks up the native fetcher lazily and preserves method, body, query and headers",
-    () => {
-      const { env, layer } = fixture();
-      return Effect.gen(function* () {
-        const fetchApi = yield* Fetch(worker());
-        let calls = 0;
-        env.Api = {
-          marker: "native receiver",
-          fetch(this: { marker: string }, input: Request | string | URL) {
-            expect(this.marker).toBe("native receiver");
-            calls++;
-            return Effect.runPromise(
-              Effect.gen(function* () {
-                const request = yield* Effect.sync(() => new Request(input));
-                expect(request.method).toBe("POST");
-                expect(request.url).toBe("https://service.test/path?key=value");
-                expect(request.headers.get("x-example")).toBe("preserved");
-                expect(yield* Effect.tryPromise(() => request.text())).toBe(
-                  "payload",
-                );
-                return yield* Effect.sync(
-                  () =>
-                    new Response("native response", {
-                      status: 201,
-                      headers: { "x-response": "yes" },
-                    }),
-                );
-              }),
-            );
-          },
-        };
-        const response = yield* fetchApi(
-          HttpClientRequest.post("https://service.test/path").pipe(
-            HttpClientRequest.setUrlParam("key", "value"),
-            HttpClientRequest.setHeader("x-example", "preserved"),
-            HttpClientRequest.bodyText("payload"),
-          ),
-        );
-        expect(response.status).toBe(201);
-        expect(response.headers["x-response"]).toBe("yes");
-        expect(yield* response.text).toBe("native response");
-        expect(calls).toBe(1);
-        expect(Reflect.get(fetchApi, "increment")).toBeUndefined();
-        expect(Reflect.get(fetchApi, "connect")).toBeUndefined();
-      }).pipe(Effect.provide(layer));
-    },
-  );
+    test.effect(
+      "looks up the native fetcher lazily and preserves method, body, query and headers",
+      () => {
+        const { env, layer } = fixture();
+        return Effect.gen(function* () {
+          const fetchApi = yield* Fetch(worker());
+          let calls = 0;
+          env.Api = {
+            marker: "native receiver",
+            fetch(this: { marker: string }, input: Request | string | URL) {
+              expect(this.marker).toBe("native receiver");
+              calls++;
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  const request = yield* Effect.sync(() => new Request(input));
+                  expect(request.method).toBe("POST");
+                  expect(request.url).toBe(
+                    "https://service.test/path?key=value",
+                  );
+                  expect(request.headers.get("x-example")).toBe("preserved");
+                  expect(yield* Effect.tryPromise(() => request.text())).toBe(
+                    "payload",
+                  );
+                  return yield* Effect.sync(
+                    () =>
+                      new Response("native response", {
+                        status: 201,
+                        headers: { "x-response": "yes" },
+                      }),
+                  );
+                }),
+              );
+            },
+          };
+          const response = yield* fetchApi(
+            HttpClientRequest.post("https://service.test/path").pipe(
+              HttpClientRequest.setUrlParam("key", "value"),
+              HttpClientRequest.setHeader("x-example", "preserved"),
+              HttpClientRequest.bodyText("payload"),
+            ),
+          );
+          expect(response.status).toBe(201);
+          expect(response.headers["x-response"]).toBe("yes");
+          expect(yield* response.text).toBe("native response");
+          expect(calls).toBe(1);
+          expect(Reflect.get(fetchApi, "increment")).toBeUndefined();
+          expect(Reflect.get(fetchApi, "connect")).toBeUndefined();
+        }).pipe(Effect.provide(layer));
+      },
+    );
 
-  test.effect(
-    "forwards Effect server requests without exporting native RPC",
-    () => {
-      const { env, layer } = fixture();
-      return Effect.gen(function* () {
-        const native: NativeFetcher = {
-          fetch: (input) =>
-            Effect.runPromise(
-              Effect.gen(function* () {
-                const request = yield* Effect.sync(() => new Request(input));
-                expect(request.headers.get("authorization")).toBe(
-                  "Bearer example",
-                );
-                return yield* Effect.sync(
-                  () => new Response("forwarded", { status: 202 }),
-                );
+    test.effect(
+      "forwards Effect server requests without exporting native RPC",
+      () => {
+        const { env, layer } = fixture();
+        return Effect.gen(function* () {
+          const native: NativeFetcher = {
+            fetch: (input) =>
+              Effect.runPromise(
+                Effect.gen(function* () {
+                  const request = yield* Effect.sync(() => new Request(input));
+                  expect(request.headers.get("authorization")).toBe(
+                    "Bearer example",
+                  );
+                  return yield* Effect.sync(
+                    () => new Response("forwarded", { status: 202 }),
+                  );
+                }),
+              ),
+          };
+          env.Api = native;
+          const fetchApi = yield* Fetch(worker());
+          const request = yield* Effect.sync(() =>
+            HttpServerRequest.fromWeb(
+              new Request("https://service.test/forward", {
+                headers: { authorization: "Bearer example" },
               }),
             ),
-        };
-        env.Api = native;
-        const fetchApi = yield* Fetch(worker());
-        const request = yield* Effect.sync(() =>
-          HttpServerRequest.fromWeb(
-            new Request("https://service.test/forward", {
-              headers: { authorization: "Bearer example" },
-            }),
-          ),
-        );
-        const response = yield* fetchApi(request);
-        expect(response.status).toBe(202);
-        const web = HttpServerResponse.toWeb(response);
-        expect(yield* Effect.tryPromise(() => web.text())).toBe("forwarded");
-      }).pipe(Effect.provide(layer));
-    },
-  );
-
-  test.effect(
-    "wraps missing, malformed, synchronous and rejected native fetch failures",
-    () => {
-      const { env, layer } = fixture();
-      return Effect.gen(function* () {
-        const fetchApi = yield* Fetch(worker());
-        for (const native of [
-          undefined,
-          { fetch: 1 },
-          {
-            fetch: () => {
-              throw "native failure";
-            },
-          },
-          {
-            fetch: () =>
-              Effect.runPromise(
-                Effect.fail(new Error("rejected native fetch")),
-              ),
-          },
-        ]) {
-          env.Api = native;
-          const result = yield* Effect.result(
-            fetchApi(HttpClientRequest.get("https://service.test/error")),
           );
-          expect(Result.isFailure(result) && result.failure._tag).toBe(
-            "RpcCallError",
-          );
-        }
-      }).pipe(Effect.provide(layer));
-    },
-  );
+          const response = yield* fetchApi(request);
+          expect(response.status).toBe(202);
+          const web = HttpServerResponse.toWeb(response);
+          expect(yield* Effect.tryPromise(() => web.text())).toBe("forwarded");
+        }).pipe(Effect.provide(layer));
+      },
+    );
 
-  test.effect(
-    "does not register infrastructure in the runtime phase",
-    () => {
-      const { env, bindings, layer } = fixture();
-      return Effect.gen(function* () {
-        const previous = yield* Effect.sync(
-          () => globalThis.__ALCHEMY_RUNTIME__,
-        );
-        yield* Effect.gen(function* () {
-          yield* Effect.sync(() => {
-            globalThis.__ALCHEMY_RUNTIME__ = true;
-          });
-          env.Api = {
-            fetch: () =>
-              Effect.runPromise(Effect.sync(() => new Response("runtime"))),
-          };
+    test.effect(
+      "wraps missing, malformed, synchronous and rejected native fetch failures",
+      () => {
+        const { env, layer } = fixture();
+        return Effect.gen(function* () {
           const fetchApi = yield* Fetch(worker());
-          expect(
-            yield* (yield* fetchApi(
-              HttpClientRequest.get("https://service.test"),
-            )).text,
-          ).toBe("runtime");
-          expect(bindings).toEqual([]);
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              globalThis.__ALCHEMY_RUNTIME__ = previous;
-            }),
-          ),
-        );
-      }).pipe(Effect.provide(layer));
-    },
-    { exclusive: true },
-  );
-});
+          for (const native of [
+            undefined,
+            { fetch: 1 },
+            {
+              fetch: () => {
+                throw "native failure";
+              },
+            },
+            {
+              fetch: () =>
+                Effect.runPromise(
+                  Effect.fail(new Error("rejected native fetch")),
+                ),
+            },
+          ]) {
+            env.Api = native;
+            const result = yield* Effect.result(
+              fetchApi(HttpClientRequest.get("https://service.test/error")),
+            );
+            expect(Result.isFailure(result) && result.failure._tag).toBe(
+              "RpcCallError",
+            );
+          }
+        }).pipe(Effect.provide(layer));
+      },
+    );
+
+    test.effect(
+      "does not register infrastructure in the runtime phase",
+      () => {
+        const { env, bindings, layer } = fixture();
+        return Effect.gen(function* () {
+          const previous = yield* Effect.sync(
+            () => globalThis.__ALCHEMY_RUNTIME__,
+          );
+          yield* Effect.gen(function* () {
+            yield* Effect.sync(() => {
+              globalThis.__ALCHEMY_RUNTIME__ = true;
+            });
+            env.Api = {
+              fetch: () =>
+                Effect.runPromise(Effect.sync(() => new Response("runtime"))),
+            };
+            const fetchApi = yield* Fetch(worker());
+            expect(
+              yield* (yield* fetchApi(
+                HttpClientRequest.get("https://service.test"),
+              )).text,
+            ).toBe("runtime");
+            expect(bindings).toEqual([]);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                globalThis.__ALCHEMY_RUNTIME__ = previous;
+              }),
+            ),
+          );
+        }).pipe(Effect.provide(layer));
+      },
+      { exclusive: true },
+    );
+  },
+);

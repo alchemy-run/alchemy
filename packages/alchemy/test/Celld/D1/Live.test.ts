@@ -256,7 +256,10 @@ live(
           expect(replay.failure._tag).toBe("PeerReplayRejected");
       }),
     ),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:celld", "provider:celld:d1", "local", "native"],
+    timeout: 120_000,
+  },
 );
 
 live(
@@ -361,7 +364,10 @@ live(
         ).toBe(true);
       }),
     ),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:celld", "provider:celld:d1", "local", "native"],
+    timeout: 120_000,
+  },
 );
 
 live(
@@ -425,7 +431,10 @@ live(
         ).toBeUndefined();
       }),
     ),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:celld", "provider:celld:d1", "local", "native"],
+    timeout: 120_000,
+  },
 );
 
 live(
@@ -684,5 +693,9 @@ live(
         }).pipe(Effect.provide(layer));
       }),
     ),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:celld", "provider:celld:d1", "local", "native"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

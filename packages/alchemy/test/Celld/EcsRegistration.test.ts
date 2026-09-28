@@ -71,4 +71,5 @@ test.effect(
         "SYSTEMCTL start --no-block celld-host-cleanup",
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["provider:celld", "provider:aws", "provider:aws:ec2", "local"] },
 );

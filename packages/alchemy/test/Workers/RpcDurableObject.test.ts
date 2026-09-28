@@ -139,6 +139,7 @@ it.effect(
       expect(observations.every((value) => value.closed)).toBe(true);
       expect(observations[0]!.scope).not.toBe(observations[1]!.scope);
     }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -163,6 +164,7 @@ it.effect(
         })),
       ).toEqual([{ invocation: "stream", closed: true }]);
     }),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -180,4 +182,5 @@ it.effect(
       }).pipe(Effect.scoped, Effect.provideService(Invocation, "queue"));
       expect(observations[0]!.closed).toBe(true);
     }),
+  { tags: ["unit", "local"] },
 );

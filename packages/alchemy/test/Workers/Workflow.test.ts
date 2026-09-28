@@ -36,7 +36,7 @@ const encode = (value: unknown) =>
     callbackFailure(Cause.fail(value), terminalFailure, "task", identity),
   );
 
-describe("shared Workflow failures", () => {
+describe("shared Workflow failures", { tags: ["unit", "local"] }, () => {
   it.effect(
     "restores tagged data and supported built-ins without claiming prototype identity",
     () =>
@@ -188,144 +188,149 @@ describe("shared Workflow failures", () => {
   );
 });
 
-describe("shared Workflow callback lifetime", () => {
-  it.effect(
-    "closes fresh attempts before retry and preserves the original in-flight Cause",
-    () =>
-      Effect.gen(function* () {
-        const scopes: Scope.Scope[] = [];
-        const entries: string[] = [];
-        const error = new Busy({ attempt: 2 });
-        const cause = Cause.fail(error);
-        const exit = yield* runWorkflowTask({
-          name: "task",
-          identity,
-          terminalFailure,
-          effect: (attempt: number) =>
-            Effect.gen(function* () {
-              scopes.push(yield* Scope.Scope);
-              entries.push(`open:${attempt}`);
-              yield* Effect.addFinalizer(() =>
-                Effect.sync(() => {
-                  entries.push(`close:${attempt}`);
-                }),
-              );
-              return yield* Effect.failCause(cause);
-            }),
-          native: (callback) =>
-            Effect.runPromise(
+describe(
+  "shared Workflow callback lifetime",
+  { tags: ["unit", "local"] },
+  () => {
+    it.effect(
+      "closes fresh attempts before retry and preserves the original in-flight Cause",
+      () =>
+        Effect.gen(function* () {
+          const scopes: Scope.Scope[] = [];
+          const entries: string[] = [];
+          const error = new Busy({ attempt: 2 });
+          const cause = Cause.fail(error);
+          const exit = yield* runWorkflowTask({
+            name: "task",
+            identity,
+            terminalFailure,
+            effect: (attempt: number) =>
               Effect.gen(function* () {
-                yield* Effect.tryPromise({
-                  try: () => callback(1),
-                  catch: (e) => e,
-                }).pipe(Effect.result);
-                return yield* Effect.promise(() => callback(2));
+                scopes.push(yield* Scope.Scope);
+                entries.push(`open:${attempt}`);
+                yield* Effect.addFinalizer(() =>
+                  Effect.sync(() => {
+                    entries.push(`close:${attempt}`);
+                  }),
+                );
+                return yield* Effect.failCause(cause);
               }),
-            ),
-        }).pipe(Effect.exit);
-        expect(scopes[0]).not.toBe(scopes[1]);
-        expect(entries).toEqual(["open:1", "close:1", "open:2", "close:2"]);
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit)) {
-          expect(Cause.squash(exit.cause)).toBe(error);
-          expect(exit.cause.reasons).toHaveLength(cause.reasons.length);
-          expect(Cause.hasDies(exit.cause)).toBe(false);
-        }
-      }),
-  );
+            native: (callback) =>
+              Effect.runPromise(
+                Effect.gen(function* () {
+                  yield* Effect.tryPromise({
+                    try: () => callback(1),
+                    catch: (e) => e,
+                  }).pipe(Effect.result);
+                  return yield* Effect.promise(() => callback(2));
+                }),
+              ),
+          }).pipe(Effect.exit);
+          expect(scopes[0]).not.toBe(scopes[1]);
+          expect(entries).toEqual(["open:1", "close:1", "open:2", "close:2"]);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.squash(exit.cause)).toBe(error);
+            expect(exit.cause.reasons).toHaveLength(cause.reasons.length);
+            expect(Cause.hasDies(exit.cause)).toBe(false);
+          }
+        }),
+    );
 
-  it.effect(
-    "restores persisted failures without reexecuting the callback",
-    () =>
+    it.effect(
+      "restores persisted failures without reexecuting the callback",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* encode(new Busy({ attempt: 2 }));
+          let executed = false;
+          const value = yield* runWorkflowTask<void, Busy, void>({
+            name: "task",
+            identity,
+            terminalFailure,
+            effect: () =>
+              Effect.sync(() => {
+                executed = true;
+              }),
+            native: () =>
+              Effect.runPromise(Effect.die(new Error(error.message))),
+          }).pipe(
+            Effect.catchTag("Busy", (error) => Effect.succeed(error.attempt)),
+          );
+          expect(value).toBe(2);
+          expect(executed).toBe(false);
+        }),
+    );
+
+    it.live("interrupts and joins active callback finalizers", () =>
       Effect.gen(function* () {
-        const error = yield* encode(new Busy({ attempt: 2 }));
-        let executed = false;
-        const value = yield* runWorkflowTask<void, Busy, void>({
+        const started = yield* Deferred.make<void>();
+        const entries: string[] = [];
+        const fiber = yield* runWorkflowTask({
           name: "task",
           identity,
           terminalFailure,
           effect: () =>
-            Effect.sync(() => {
-              executed = true;
-            }),
-          native: () => Effect.runPromise(Effect.die(new Error(error.message))),
-        }).pipe(
-          Effect.catchTag("Busy", (error) => Effect.succeed(error.attempt)),
-        );
-        expect(value).toBe(2);
-        expect(executed).toBe(false);
-      }),
-  );
-
-  it.live("interrupts and joins active callback finalizers", () =>
-    Effect.gen(function* () {
-      const started = yield* Deferred.make<void>();
-      const entries: string[] = [];
-      const fiber = yield* runWorkflowTask({
-        name: "task",
-        identity,
-        terminalFailure,
-        effect: () =>
-          Effect.gen(function* () {
-            yield* Effect.addFinalizer(() =>
-              Effect.sleep("10 millis").pipe(
-                Effect.andThen(
-                  Effect.sync(() => {
-                    entries.push("closed");
-                  }),
-                ),
-              ),
-            );
-            yield* Deferred.succeed(started, undefined);
-            yield* Effect.never;
-          }),
-        native: (callback) => callback(undefined),
-      }).pipe(Effect.forkChild);
-      yield* Deferred.await(started);
-      yield* Fiber.interrupt(fiber);
-      entries.push("joined");
-      expect(entries).toEqual(["closed", "joined"]);
-    }),
-  );
-
-  it.effect(
-    "does not let native control errors become application failures",
-    () =>
-      Effect.gen(function* () {
-        const error = new Error("Aborting engine: User called pause");
-        const exit = yield* runWorkflowTask({
-          name: "task",
-          identity,
-          terminalFailure,
-          effect: () => Effect.succeed(1),
-          native: () => Effect.runPromise(Effect.die(error)),
-        }).pipe(Effect.exit);
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit)) {
-          expect(Cause.hasDies(exit.cause)).toBe(true);
-          expect(Cause.squash(exit.cause)).toBe(error);
-        }
-      }),
-  );
-
-  it.effect(
-    "does not replace run success or failure with cleanup defects",
-    () =>
-      Effect.gen(function* () {
-        for (const body of [Effect.succeed("ok"), Effect.fail("original")]) {
-          const exit = yield* withWorkflowScope(
             Effect.gen(function* () {
-              yield* Effect.addFinalizer(() => Effect.die("cleanup"));
-              return yield* body;
+              yield* Effect.addFinalizer(() =>
+                Effect.sleep("10 millis").pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      entries.push("closed");
+                    }),
+                  ),
+                ),
+              );
+              yield* Deferred.succeed(started, undefined);
+              yield* Effect.never;
             }),
-          ).pipe(Effect.exit);
-          const expected = yield* body.pipe(Effect.exit);
-          expect(exit._tag).toBe(expected._tag);
-          if (Exit.isFailure(exit)) {
-            expect(Cause.squash(exit.cause)).toBe("original");
-            expect(Cause.hasDies(exit.cause)).toBe(false);
-          } else expect(exit.value).toBe("ok");
-        }
+          native: (callback) => callback(undefined),
+        }).pipe(Effect.forkChild);
+        yield* Deferred.await(started);
+        yield* Fiber.interrupt(fiber);
+        entries.push("joined");
+        expect(entries).toEqual(["closed", "joined"]);
       }),
-  );
-});
+    );
+
+    it.effect(
+      "does not let native control errors become application failures",
+      () =>
+        Effect.gen(function* () {
+          const error = new Error("Aborting engine: User called pause");
+          const exit = yield* runWorkflowTask({
+            name: "task",
+            identity,
+            terminalFailure,
+            effect: () => Effect.succeed(1),
+            native: () => Effect.runPromise(Effect.die(error)),
+          }).pipe(Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasDies(exit.cause)).toBe(true);
+            expect(Cause.squash(exit.cause)).toBe(error);
+          }
+        }),
+    );
+
+    it.effect(
+      "does not replace run success or failure with cleanup defects",
+      () =>
+        Effect.gen(function* () {
+          for (const body of [Effect.succeed("ok"), Effect.fail("original")]) {
+            const exit = yield* withWorkflowScope(
+              Effect.gen(function* () {
+                yield* Effect.addFinalizer(() => Effect.die("cleanup"));
+                return yield* body;
+              }),
+            ).pipe(Effect.exit);
+            const expected = yield* body.pipe(Effect.exit);
+            expect(exit._tag).toBe(expected._tag);
+            if (Exit.isFailure(exit)) {
+              expect(Cause.squash(exit.cause)).toBe("original");
+              expect(Cause.hasDies(exit.cause)).toBe(false);
+            } else expect(exit.value).toBe("ok");
+          }
+        }),
+    );
+  },
+);

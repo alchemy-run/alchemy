@@ -55,6 +55,7 @@ const getJson = <T>(path: string) =>
 // and waits out Fargate placement — minutes, not seconds).
 describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
   "rivet engine conformance",
+  { tags: ["provider:rivet", "provider:aws", "provider:aws:ecs", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {

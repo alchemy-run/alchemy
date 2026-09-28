@@ -102,6 +102,7 @@ const migrationSnapshot: SqlMigrationSnapshot = {
 // Opt-in launches the actual Rust engine and native RivetKit, never an in-memory driver.
 describe.skipIf(!process.env.ALCHEMY_TEST_RIVET_NATIVE)(
   "Rivet native persistence and WebSockets",
+  { tags: ["provider:rivet", "local", "native"] },
   () => {
     it.live(
       "isolates automatic idle against a native raw-WebSocket control",

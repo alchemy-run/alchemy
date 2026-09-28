@@ -27,6 +27,7 @@ it.effect(
         { durableObjects: [{ name: "Room", className: "Room" }] },
       ]);
     }),
+  { tags: ["unit", "local", "provider:celld"] },
 );
 
 class Calls extends RpcGroup.make(
@@ -96,4 +97,5 @@ it.effect(
       expect(exports.get("Inline")?.provider).toBe("Celld.Worker");
       expect(bindings).toHaveLength(2);
     }),
+  { tags: ["unit", "local", "provider:celld"] },
 );

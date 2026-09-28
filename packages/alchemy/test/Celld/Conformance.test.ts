@@ -78,6 +78,7 @@ const inWorker = <T>(route: string) =>
 // and Fargate placement take minutes, not seconds).
 describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
   "celld engine conformance",
+  { tags: ["provider:celld", "provider:aws", "provider:aws:ecs", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {

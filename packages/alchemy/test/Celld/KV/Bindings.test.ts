@@ -186,169 +186,174 @@ const fixture = () => {
   return { client, native, calls };
 };
 
-describe("Celld KV native client adapters", () => {
-  test.effect(
-    "CRUD preserves metadata, JSON generics, nulls and bulk Maps",
-    () =>
+describe(
+  "Celld KV native client adapters",
+  { tags: ["unit", "local", "provider:celld", "provider:celld:kv"] },
+  () => {
+    test.effect(
+      "CRUD preserves metadata, JSON generics, nulls and bulk Maps",
+      () =>
+        request(
+          Effect.gen(function* () {
+            const { client } = fixture();
+            yield* client.put("profile", '{"name":"sam"}', {
+              metadata: { revision: 1 },
+            });
+            expect(
+              yield* client.get<{ name: string }>("profile", "json"),
+            ).toEqual({ name: "sam" });
+            const row = yield* client.getWithMetadata<
+              { name: string },
+              { revision: number }
+            >("profile", "json");
+            expect(row).toEqual({
+              value: { name: "sam" },
+              metadata: { revision: 1 },
+              cacheStatus: null,
+            });
+            const bulk = yield* client.get(["profile", "absent"], "text");
+            expect(bulk).toBeInstanceOf(Map);
+            expect(bulk.get("absent")).toBeNull();
+            const metadata = yield* client.getWithMetadata<{
+              revision: number;
+            }>(["profile", "absent"], "text");
+            expect(metadata.get("profile")).toEqual({
+              value: '{"name":"sam"}',
+              metadata: { revision: 1 },
+            });
+            expect(metadata.get("absent")).toEqual({
+              value: null,
+              metadata: null,
+            });
+            yield* client.put("profile", "updated");
+            expect(yield* client.getWithMetadata("profile")).toEqual({
+              value: "updated",
+              metadata: null,
+              cacheStatus: null,
+            });
+            yield* client.delete("profile");
+            yield* client.delete("profile");
+            expect(yield* client.get("profile")).toBeNull();
+          }),
+        ),
+    );
+
+    test.effect("binary slices and streaming reads preserve bytes", () =>
       request(
         Effect.gen(function* () {
           const { client } = fixture();
-          yield* client.put("profile", '{"name":"sam"}', {
-            metadata: { revision: 1 },
-          });
-          expect(
-            yield* client.get<{ name: string }>("profile", "json"),
-          ).toEqual({ name: "sam" });
-          const row = yield* client.getWithMetadata<
-            { name: string },
-            { revision: number }
-          >("profile", "json");
-          expect(row).toEqual({
-            value: { name: "sam" },
-            metadata: { revision: 1 },
-            cacheStatus: null,
-          });
-          const bulk = yield* client.get(["profile", "absent"], "text");
-          expect(bulk).toBeInstanceOf(Map);
-          expect(bulk.get("absent")).toBeNull();
-          const metadata = yield* client.getWithMetadata<{ revision: number }>(
-            ["profile", "absent"],
-            "text",
+          yield* client.put(
+            "bytes",
+            new Uint8Array([99, 0, 255, 98]).subarray(1, 3),
           );
-          expect(metadata.get("profile")).toEqual({
-            value: '{"name":"sam"}',
-            metadata: { revision: 1 },
-          });
-          expect(metadata.get("absent")).toEqual({
-            value: null,
-            metadata: null,
-          });
-          yield* client.put("profile", "updated");
-          expect(yield* client.getWithMetadata("profile")).toEqual({
-            value: "updated",
-            metadata: null,
-            cacheStatus: null,
-          });
-          yield* client.delete("profile");
-          yield* client.delete("profile");
-          expect(yield* client.get("profile")).toBeNull();
+          const buffer = yield* client.get("bytes", { type: "arrayBuffer" });
+          expect(Array.from(new Uint8Array(buffer!))).toEqual([0, 255]);
+          const body = yield* client.get("bytes", "stream");
+          const streamed = yield* Effect.tryPromise(() =>
+            new Response(body).arrayBuffer(),
+          );
+          expect(Array.from(new Uint8Array(streamed))).toEqual([0, 255]);
         }),
       ),
-  );
+    );
 
-  test.effect("binary slices and streaming reads preserve bytes", () =>
-    request(
-      Effect.gen(function* () {
-        const { client } = fixture();
-        yield* client.put(
-          "bytes",
-          new Uint8Array([99, 0, 255, 98]).subarray(1, 3),
-        );
-        const buffer = yield* client.get("bytes", { type: "arrayBuffer" });
-        expect(Array.from(new Uint8Array(buffer!))).toEqual([0, 255]);
-        const body = yield* client.get("bytes", "stream");
-        const streamed = yield* Effect.tryPromise(() =>
-          new Response(body).arrayBuffer(),
-        );
-        expect(Array.from(new Uint8Array(streamed))).toEqual([0, 255]);
-      }),
-    ),
-  );
-
-  test.effect(
-    "forwards read, write and list options without adding cache claims",
-    () =>
-      request(
-        Effect.gen(function* () {
-          const { client, calls } = fixture();
-          const options: NamespacePutOptions = {
-            metadata: { n: 1 },
-            expiration: 2_000_000_000,
-            expirationTtl: 120,
-          };
-          yield* client.put("p/a", "a", options);
-          yield* client.put("p/b", "b");
-          yield* client.put("other", "c");
-          yield* client.get("p/a", { type: "text", cacheTtl: 60 });
-          const first = yield* client.list<{ n: number }>({
-            prefix: "p/",
-            limit: 1,
-          });
-          expect(first.list_complete).toBe(false);
-          expect(first.keys[0].metadata).toEqual({ n: 1 });
-          expect(first.cacheStatus).toBeNull();
-          if (!first.list_complete) {
-            const second = yield* client.list({
+    test.effect(
+      "forwards read, write and list options without adding cache claims",
+      () =>
+        request(
+          Effect.gen(function* () {
+            const { client, calls } = fixture();
+            const options: NamespacePutOptions = {
+              metadata: { n: 1 },
+              expiration: 2_000_000_000,
+              expirationTtl: 120,
+            };
+            yield* client.put("p/a", "a", options);
+            yield* client.put("p/b", "b");
+            yield* client.put("other", "c");
+            yield* client.get("p/a", { type: "text", cacheTtl: 60 });
+            const first = yield* client.list<{ n: number }>({
               prefix: "p/",
               limit: 1,
-              cursor: first.cursor,
             });
-            expect(second.list_complete).toBe(true);
-            expect(second.keys.map((key) => key.name)).toEqual(["p/b"]);
-          }
-          expect(calls[0].options).toBe(options);
-          expect(
-            calls.find((call) => call.operation === "get")?.options,
-          ).toEqual({ type: "text", cacheTtl: 60 });
-        }),
-      ),
-  );
+            expect(first.list_complete).toBe(false);
+            expect(first.keys[0].metadata).toEqual({ n: 1 });
+            expect(first.cacheStatus).toBeNull();
+            if (!first.list_complete) {
+              const second = yield* client.list({
+                prefix: "p/",
+                limit: 1,
+                cursor: first.cursor,
+              });
+              expect(second.list_complete).toBe(true);
+              expect(second.keys.map((key) => key.name)).toEqual(["p/b"]);
+            }
+            expect(calls[0].options).toBe(options);
+            expect(
+              calls.find((call) => call.operation === "get")?.options,
+            ).toEqual({ type: "text", cacheTtl: 60 });
+          }),
+        ),
+    );
 
-  test.effect("wraps parse errors, native failures and missing bindings", () =>
-    request(
-      Effect.gen(function* () {
-        const { client, native } = fixture();
-        yield* client.put("bad", "not json");
-        const badJson = yield* Effect.result(client.get("bad", "json"));
-        expect(Result.isFailure(badJson) && badJson.failure._tag).toBe(
-          "Celld.KV.NamespaceError",
-        );
-        native.delete = () => {
-          throw null;
-        };
-        const failed = yield* Effect.result(client.delete("bad"));
-        expect(Result.isFailure(failed) && failed.failure.cause).toBeNull();
-        const missing = makeReadWriteKVClient(
-          makeKVNamespaceHelpers({}, { LogicalId: "missing" }),
-        );
-        const absent = yield* Effect.result(missing.raw);
-        expect(Result.isFailure(absent) && absent.failure.message).toContain(
-          "Missing Celld KV binding",
-        );
-      }),
-    ),
-  );
-
-  test.effect(
-    "rejects stream and blob writes rather than fabricating support",
-    () =>
-      request(
-        Effect.gen(function* () {
-          const { client, calls } = fixture();
-          const values = yield* Effect.sync(() => [
-            new Blob(["x"]),
-            new Response("x").body,
-          ]);
-          for (const value of values) {
-            const result = yield* Effect.result(
-              client.put("unsupported", value as unknown as ArrayBuffer),
-            );
-            expect(Result.isFailure(result) && result.failure._tag).toBe(
+    test.effect(
+      "wraps parse errors, native failures and missing bindings",
+      () =>
+        request(
+          Effect.gen(function* () {
+            const { client, native } = fixture();
+            yield* client.put("bad", "not json");
+            const badJson = yield* Effect.result(client.get("bad", "json"));
+            expect(Result.isFailure(badJson) && badJson.failure._tag).toBe(
               "Celld.KV.NamespaceError",
             );
+            native.delete = () => {
+              throw null;
+            };
+            const failed = yield* Effect.result(client.delete("bad"));
+            expect(Result.isFailure(failed) && failed.failure.cause).toBeNull();
+            const missing = makeReadWriteKVClient(
+              makeKVNamespaceHelpers({}, { LogicalId: "missing" }),
+            );
+            const absent = yield* Effect.result(missing.raw);
             expect(
-              Result.isFailure(result) && result.failure.message,
-            ).toContain("streams and blobs are unsupported");
-          }
-          expect(calls).toEqual([]);
-        }),
-      ),
-  );
+              Result.isFailure(absent) && absent.failure.message,
+            ).toContain("Missing Celld KV binding");
+          }),
+        ),
+    );
 
-  test("owns callable service identities", () => {
-    expect(typeof ReadNamespace).toBe("function");
-    expect(ReadNamespace.key).toBe("Celld.KV.ReadNamespace");
-    expect(WriteNamespace.key).toBe("Celld.KV.WriteNamespace");
-    expect(ReadWriteNamespace.key).toBe("Celld.KV.ReadWriteNamespace");
-  });
-});
+    test.effect(
+      "rejects stream and blob writes rather than fabricating support",
+      () =>
+        request(
+          Effect.gen(function* () {
+            const { client, calls } = fixture();
+            const values = yield* Effect.sync(() => [
+              new Blob(["x"]),
+              new Response("x").body,
+            ]);
+            for (const value of values) {
+              const result = yield* Effect.result(
+                client.put("unsupported", value as unknown as ArrayBuffer),
+              );
+              expect(Result.isFailure(result) && result.failure._tag).toBe(
+                "Celld.KV.NamespaceError",
+              );
+              expect(
+                Result.isFailure(result) && result.failure.message,
+              ).toContain("streams and blobs are unsupported");
+            }
+            expect(calls).toEqual([]);
+          }),
+        ),
+    );
+
+    test("owns callable service identities", () => {
+      expect(typeof ReadNamespace).toBe("function");
+      expect(ReadNamespace.key).toBe("Celld.KV.ReadNamespace");
+      expect(WriteNamespace.key).toBe("Celld.KV.WriteNamespace");
+      expect(ReadWriteNamespace.key).toBe("Celld.KV.ReadWriteNamespace");
+    });
+  },
+);

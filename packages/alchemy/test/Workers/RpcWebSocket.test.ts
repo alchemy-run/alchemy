@@ -130,6 +130,7 @@ it.effect(
         "Interrupt",
       ]);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -160,6 +161,7 @@ it.effect(
       expect(seen).toEqual([{ _tag: "Ping" }]);
       expect(connection.closes).toEqual([]);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -191,6 +193,7 @@ it.effect(
       expect(duplicate.closes).toEqual([1012]);
       expect(valid.closes).toEqual([]);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -221,6 +224,7 @@ it.effect(
       }
       expect(pending.metadata()).toMatchObject({ pending: true });
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -251,6 +255,7 @@ it.effect(
       expect(c.metadata()).toMatchObject({ clientId: 2 });
       expect([...a.closes, ...b.closes, ...c.closes]).toEqual([]);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -288,6 +293,7 @@ it.effect(
       yield* Fiber.join(delivery);
       expect(dispatched).toBe(true);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -325,6 +331,7 @@ it.effect(
       yield* Fiber.join(response);
       expect(heartbeat()).not.toBeNull();
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 class Calls extends RpcGroup.make(
@@ -435,6 +442,7 @@ it.effect(
         ),
       ).toHaveLength(2);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -490,6 +498,7 @@ it.effect(
       expect(pending.closes).toEqual([1012]);
       expect(yield* restored.transport.accept(idle.value)).toBe(true);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -538,6 +547,7 @@ it.effect(
       expect(connection.metadata()).toMatchObject({ pending: false });
       expect(heartbeat()).not.toBeNull();
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );
 
 it.effect(
@@ -590,4 +600,5 @@ it.effect(
       });
       expect(connection.closes).toEqual([]);
     }).pipe(Effect.scoped),
+  { tags: ["unit", "local"] },
 );

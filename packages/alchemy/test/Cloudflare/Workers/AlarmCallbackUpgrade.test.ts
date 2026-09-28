@@ -139,117 +139,155 @@ const count = (
     (delivery) => delivery.channel === channel && delivery.id === id,
   ).length;
 
-describe("upgrade response classification", () => {
-  const url = "https://upgrade.testing.workers.dev";
-  const body = `<!DOCTYPE html>
+describe(
+  "upgrade response classification",
+  {
+    tags: [
+      "unit",
+      "local",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+    ],
+  },
+  () => {
+    const url = "https://upgrade.testing.workers.dev";
+    const body = `<!DOCTYPE html>
 <title>Script not found | upgrade.testing.workers.dev | Cloudflare</title>
 <span class="cf-error-code">1104</span>
 <p>The script used to render this page could not be found.</p>`;
-  const headers = {
-    server: "cloudflare",
-    "content-type": "text/html; charset=UTF-8",
-    "cf-ray": "a3d1ff6739c3fef7-SEA",
-  };
+    const headers = {
+      server: "cloudflare",
+      "content-type": "text/html; charset=UTF-8",
+      "cf-ray": "a3d1ff6739c3fef7-SEA",
+    };
 
-  const retryable: Array<{
-    name: string;
-    status: number;
-    headers: Record<string, string>;
-    body: string;
-  }> = [
-    { name: "native missing script", status: 500, headers, body },
-    {
-      name: "explicit stale worker version",
-      status: 409,
-      headers: { "x-alarm-worker-version": "v1" },
-      body: "Alarm worker version mismatch",
-    },
-    {
-      name: "explicit stale V1 route",
-      status: 404,
-      headers: { "x-alchemy-upgrade-version": "v1" },
-      body: "Not Found",
-    },
-  ];
-  for (const response of retryable) {
-    it.live(`retries ${response.name} before executing a mutation`, () =>
-      Effect.gen(function* () {
-        let attempts = 0;
-        let mutations = 0;
-        const client = HttpClient.make((request) =>
-          Effect.sync(() => {
-            expect(request.method).toBe("POST");
-            attempts++;
-            if (attempts === 1) {
+    const retryable: Array<{
+      name: string;
+      status: number;
+      headers: Record<string, string>;
+      body: string;
+    }> = [
+      { name: "native missing script", status: 500, headers, body },
+      {
+        name: "explicit stale worker version",
+        status: 409,
+        headers: { "x-alarm-worker-version": "v1" },
+        body: "Alarm worker version mismatch",
+      },
+      {
+        name: "explicit stale V1 route",
+        status: 404,
+        headers: { "x-alchemy-upgrade-version": "v1" },
+        body: "Not Found",
+      },
+    ];
+    for (const response of retryable) {
+      it.live(`retries ${response.name} before executing a mutation`, () =>
+        Effect.gen(function* () {
+          let attempts = 0;
+          let mutations = 0;
+          const client = HttpClient.make((request) =>
+            Effect.sync(() => {
+              expect(request.method).toBe("POST");
+              attempts++;
+              if (attempts === 1) {
+                return HttpClientResponse.fromWeb(
+                  request,
+                  new Response(response.body, response),
+                );
+              }
+              mutations++;
               return HttpClientResponse.fromWeb(
                 request,
-                new Response(response.body, response),
+                Response.json({ seeded: true }),
               );
-            }
-            mutations++;
-            return HttpClientResponse.fromWeb(
-              request,
-              Response.json({ seeded: true }),
-            );
-          }),
-        );
-        const result = yield* requestJson(url, "seed").pipe(
-          Effect.provideService(HttpClient.HttpClient, client),
-        );
-        expect(result).toEqual({ seeded: true });
-        expect(attempts).toBe(2);
-        expect(mutations).toBe(1);
-      }),
-    );
-  }
+            }),
+          );
+          const result = yield* requestJson(url, "seed").pipe(
+            Effect.provideService(HttpClient.HttpClient, client),
+          );
+          expect(result).toEqual({ seeded: true });
+          expect(attempts).toBe(2);
+          expect(mutations).toBe(1);
+        }),
+      );
+    }
 
-  const rejected: Array<{
-    name: string;
-    status?: number;
-    body?: string;
-    headers?: Record<string, string>;
-  }> = [
-    { name: "generic HTTP500", body: "Internal Server Error" },
-    { name: "empty HTTP500", body: "" },
-    { name: "other edge error", body: body.replace("1104", "1101") },
-    { name: "wrong status", status: 502 },
-    { name: "unmarked HTTP404", status: 404, body: "Not Found" },
-    {
-      name: "application conflict",
-      status: 409,
-      headers: { "x-alarm-worker-version": "v1" },
-      body: "Application conflict",
-    },
-    {
-      name: "current worker version conflict",
-      status: 409,
-      headers: { "x-alarm-worker-version": "v2" },
-      body: "Alarm worker version mismatch",
-    },
-    {
-      name: "JSON error",
-      headers: { ...headers, "content-type": "application/json" },
-    },
-    {
-      name: "non-Cloudflare response",
-      headers: { ...headers, server: "test" },
-    },
-    { name: "missing Ray ID", headers: { ...headers, "cf-ray": "" } },
-    { name: "invalid Ray ID", headers: { ...headers, "cf-ray": "not-a-ray" } },
-    {
-      name: "wrong host",
-      body: body.replace("upgrade.testing.workers.dev", "other.workers.dev"),
-    },
-    {
-      name: "missing script explanation",
-      body: body.replace(
-        "The script used to render this page could not be found.",
-        "Script crashed.",
-      ),
-    },
-  ];
-  for (const response of rejected) {
-    it.live(`does not replay a mutation after ${response.name}`, () =>
+    const rejected: Array<{
+      name: string;
+      status?: number;
+      body?: string;
+      headers?: Record<string, string>;
+    }> = [
+      { name: "generic HTTP500", body: "Internal Server Error" },
+      { name: "empty HTTP500", body: "" },
+      { name: "other edge error", body: body.replace("1104", "1101") },
+      { name: "wrong status", status: 502 },
+      { name: "unmarked HTTP404", status: 404, body: "Not Found" },
+      {
+        name: "application conflict",
+        status: 409,
+        headers: { "x-alarm-worker-version": "v1" },
+        body: "Application conflict",
+      },
+      {
+        name: "current worker version conflict",
+        status: 409,
+        headers: { "x-alarm-worker-version": "v2" },
+        body: "Alarm worker version mismatch",
+      },
+      {
+        name: "JSON error",
+        headers: { ...headers, "content-type": "application/json" },
+      },
+      {
+        name: "non-Cloudflare response",
+        headers: { ...headers, server: "test" },
+      },
+      { name: "missing Ray ID", headers: { ...headers, "cf-ray": "" } },
+      {
+        name: "invalid Ray ID",
+        headers: { ...headers, "cf-ray": "not-a-ray" },
+      },
+      {
+        name: "wrong host",
+        body: body.replace("upgrade.testing.workers.dev", "other.workers.dev"),
+      },
+      {
+        name: "missing script explanation",
+        body: body.replace(
+          "The script used to render this page could not be found.",
+          "Script crashed.",
+        ),
+      },
+    ];
+    for (const response of rejected) {
+      it.live(`does not replay a mutation after ${response.name}`, () =>
+        Effect.gen(function* () {
+          let attempts = 0;
+          const client = HttpClient.make((request) =>
+            Effect.sync(() => {
+              attempts++;
+              return HttpClientResponse.fromWeb(
+                request,
+                new Response(response.body ?? body, {
+                  status: response.status ?? 500,
+                  headers: response.headers ?? headers,
+                }),
+              );
+            }),
+          );
+          const error = yield* requestJson(url, "seed").pipe(
+            Effect.provideService(HttpClient.HttpClient, client),
+            Effect.flip,
+          );
+          expect(error).not.toBeInstanceOf(UpgradeRequestNotExecuted);
+          expect(attempts).toBe(1);
+        }),
+      );
+    }
+
+    it.live("bounds repeated missing-script responses", () =>
       Effect.gen(function* () {
         let attempts = 0;
         const client = HttpClient.make((request) =>
@@ -257,10 +295,7 @@ describe("upgrade response classification", () => {
             attempts++;
             return HttpClientResponse.fromWeb(
               request,
-              new Response(response.body ?? body, {
-                status: response.status ?? 500,
-                headers: response.headers ?? headers,
-              }),
+              new Response(body, { status: 500, headers }),
             );
           }),
         );
@@ -268,33 +303,12 @@ describe("upgrade response classification", () => {
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.flip,
         );
-        expect(error).not.toBeInstanceOf(UpgradeRequestNotExecuted);
-        expect(attempts).toBe(1);
+        expect(error).toBeInstanceOf(UpgradeRequestNotExecuted);
+        expect(attempts).toBe(9);
       }),
     );
-  }
-
-  it.live("bounds repeated missing-script responses", () =>
-    Effect.gen(function* () {
-      let attempts = 0;
-      const client = HttpClient.make((request) =>
-        Effect.sync(() => {
-          attempts++;
-          return HttpClientResponse.fromWeb(
-            request,
-            new Response(body, { status: 500, headers }),
-          );
-        }),
-      );
-      const error = yield* requestJson(url, "seed").pipe(
-        Effect.provideService(HttpClient.HttpClient, client),
-        Effect.flip,
-      );
-      expect(error).toBeInstanceOf(UpgradeRequestNotExecuted);
-      expect(attempts).toBe(9);
-    }),
-  );
-});
+  },
+);
 
 for (const dev of [true, false]) {
   describe(

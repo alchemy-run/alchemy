@@ -277,5 +277,5 @@ test.skipIf(!enabled)(
         Effect.timeout("115 seconds"),
       ),
     ),
-  { timeout: 120_000 },
+  { tags: ["provider:celld", "local", "native"], timeout: 120_000 },
 );

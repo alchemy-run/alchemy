@@ -170,7 +170,8 @@ let publishedVersion = "";
 
 // Retain the dedicated fixture bucket, daemon, observations and ownership records.
 describe.skipIf(!enabled)(
-  "Celld 0.5 native features over API-only publication",
+  `Celld ${DEFAULT_CELLD_VERSION} native features over API-only publication`,
+  { tags: ["provider:celld", "local", "native"] },
   () => {
     beforeAll(
       () =>

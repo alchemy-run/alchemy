@@ -119,7 +119,7 @@ test(
         expect(calls).toEqual(["exec", "statements", "migrate"]);
       }),
     ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local", "provider:celld"], timeout: 30_000 },
 );
 
 test(
@@ -163,7 +163,7 @@ test(
         }
       }),
     ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local", "provider:celld"], timeout: 30_000 },
 );
 
 test(
@@ -191,24 +191,28 @@ test(
         expect(calls).toBe(0);
       }),
     ),
-  { timeout: 30_000 },
+  { tags: ["unit", "local", "provider:celld"], timeout: 30_000 },
 );
 
-test("D1 scope follows the namespace hash and two HMAC rounds", () =>
-  run(
-    Effect.gen(function* () {
-      const scope = yield* d1Scope("Db");
-      const expected = yield* Effect.sync(() => {
-        const key = createHash("sha256")
-          .update("cells:v1:d1:__D1Database")
-          .digest();
-        const first = createHmac("sha256", key)
-          .update("Db")
-          .digest()
-          .subarray(0, 16);
-        return `__D1Database:${Buffer.from(first).toString("hex")}${createHmac("sha256", key).update(first).digest("hex").slice(0, 32)}`;
-      });
-      expect(scope).toBe(expected);
-      expect(yield* d1Scope("Other")).not.toBe(scope);
-    }),
-  ));
+test(
+  "D1 scope follows the namespace hash and two HMAC rounds",
+  () =>
+    run(
+      Effect.gen(function* () {
+        const scope = yield* d1Scope("Db");
+        const expected = yield* Effect.sync(() => {
+          const key = createHash("sha256")
+            .update("cells:v1:d1:__D1Database")
+            .digest();
+          const first = createHmac("sha256", key)
+            .update("Db")
+            .digest()
+            .subarray(0, 16);
+          return `__D1Database:${Buffer.from(first).toString("hex")}${createHmac("sha256", key).update(first).digest("hex").slice(0, 32)}`;
+        });
+        expect(scope).toBe(expected);
+        expect(yield* d1Scope("Other")).not.toBe(scope);
+      }),
+    ),
+  { tags: ["unit", "local", "provider:celld"] },
+);

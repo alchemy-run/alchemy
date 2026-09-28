@@ -149,140 +149,152 @@ const fixture = (
   };
 };
 
-describe("Celld external Worker binding", () => {
-  test.effect(
-    "depends on Application activation rather than staged Worker connectivity",
-    () => {
-      const f = fixture({ absent: true });
-      return Effect.gen(function* () {
-        const client = yield* bindWorker(app, worker);
-        expect(f.requests).toHaveLength(0);
-        const connection = Object.values(f.outputs).find(
-          (output) => "App" in Output.resolveUpstream(output),
-        );
-        expect(connection).toBeDefined();
-        const pending = yield* Effect.result(
-          Output.evaluate(connection!, f.values),
-        );
-        expect(Result.isFailure(pending) && pending.failure._tag).toBe(
-          "MissingSourceError",
-        );
-        f.values.App = activated;
-        expect(yield* client.fleetUrl).toBe(activated.fleetUrl);
-        expect(yield* Output.evaluate(f.bindings, f.values)).toEqual([
-          { vpc: { subnetIds: ["subnet-app"], securityGroupIds: ["sg-app"] } },
-        ]);
-        expect(f.requests).toHaveLength(0);
-      }).pipe(Effect.provide(f.layer));
-    },
-  );
-
-  test.effect(
-    "routes root HTTP, Worker RPC and Durable Object RPC through the activated private endpoint",
-    () => {
-      const f = fixture();
-      return Effect.gen(function* () {
-        yield* bindWorker(app, worker);
-        const application = (yield* Stack).resources.App as Application;
-        const client = yield* bindWorker<Counter>(application, worker);
-        yield* client.fetch(
-          HttpClientRequest.post("https://ignored.example/hello?q=1").pipe(
-            HttpClientRequest.bodyText("payload"),
-            HttpClientRequest.setHeader("x-custom", "kept"),
-          ),
-        );
-        expect(yield* client.increment()).toBe(1);
-        expect(
-          yield* client
-            .durableObject<Counter>("Counter")
-            .getByName("a/b")
-            .increment(),
-        ).toBe(1);
-        yield* client
-          .durableObject<Counter>("Counter")
-          .getByName("a/b")
-          .fetch(HttpClientRequest.get("/state?key=value"));
-        expect(f.requests.map((request) => request.url)).toEqual([
-          `${activated.fleetUrl}/hello?q=1`,
-          `${activated.fleetUrl}/__rpc__/increment`,
-          `${activated.fleetUrl}/Counter/a%2Fb/__rpc__/increment`,
-          `${activated.fleetUrl}/Counter/a%2Fb/state?key=value`,
-        ]);
-        expect(f.requests[0].method).toBe("POST");
-        expect(f.requests[0].headers["x-custom"]).toBe("kept");
-        expect(f.requests[0].body._tag).toBe("Uint8Array");
-        for (const request of f.requests)
-          expect(request.headers["x-alchemy-fleet-secret"]).toBe("root-secret");
-      }).pipe(Effect.provide(f.layer));
-    },
-  );
-
-  for (const [name, options] of [
-    ["non-root Worker", { workerName: "background" }],
-    ["same-named Worker in another fleet", { fleetId: "OtherCells" }],
-    ["Application without a revision", { application: { revision: "" } }],
-    [
-      "Application without a root identity",
-      { application: { workerName: "" } },
-    ],
-  ] as const) {
-    test.effect(`rejects ${name} before dispatch`, () => {
-      const f = fixture(options);
-      return Effect.gen(function* () {
-        const client = yield* bindWorker(app, worker);
-        const result = yield* Effect.exit(
-          client.fetch(HttpClientRequest.get("/")),
-        );
-        expect(Exit.isFailure(result)).toBe(true);
-        if (Exit.isFailure(result))
-          expect(Cause.squash(result.cause)).toBeInstanceOf(WorkerUnreachable);
-        expect(f.requests).toHaveLength(0);
-      }).pipe(Effect.provide(f.layer));
-    });
-  }
-
-  test.effect("refuses calls outside a bound runtime", () => {
-    const f = fixture({ unbound: true });
-    return Effect.gen(function* () {
-      const client = yield* bindWorker(app, worker);
-      const result = yield* Effect.result(
-        client.fetch(HttpClientRequest.get("/")),
-      );
-      expect(Result.isFailure(result) && result.failure).toBeInstanceOf(
-        WorkerUnreachable,
-      );
-      expect(f.requests).toHaveLength(0);
-    }).pipe(Effect.provide(f.layer));
-  });
-
-  for (const [name, options] of [
-    ["connection loss after mutation", { disconnect: true }],
-    ["429 response", { status: 429 }],
-    ["500 response", { status: 500 }],
-    ["503 response", { status: 503 }],
-    ["malformed success response", { malformed: true }],
-  ] as const) {
+describe(
+  "Celld external Worker binding",
+  { tags: ["unit", "local", "provider:celld"] },
+  () => {
     test.effect(
-      `never replays Worker or Durable Object mutations after ${name}`,
+      "depends on Application activation rather than staged Worker connectivity",
       () => {
-        const f = fixture(options);
+        const f = fixture({ absent: true });
         return Effect.gen(function* () {
-          const client = yield* bindWorker<Counter>(app, worker);
-          const own = yield* Effect.result(client.increment());
-          expect(Result.isFailure(own)).toBe(true);
-          expect(f.requests).toHaveLength(1);
-          const cell = yield* Effect.result(
-            client
-              .durableObject<Counter>("Counter")
-              .getByName("one")
-              .increment(),
+          const client = yield* bindWorker(app, worker);
+          expect(f.requests).toHaveLength(0);
+          const connection = Object.values(f.outputs).find(
+            (output) => "App" in Output.resolveUpstream(output),
           );
-          expect(Result.isFailure(cell)).toBe(true);
-          expect(f.requests).toHaveLength(2);
-          yield* Effect.result(client.fetch(HttpClientRequest.post("/mutate")));
-          expect(f.requests).toHaveLength(3);
+          expect(connection).toBeDefined();
+          const pending = yield* Effect.result(
+            Output.evaluate(connection!, f.values),
+          );
+          expect(Result.isFailure(pending) && pending.failure._tag).toBe(
+            "MissingSourceError",
+          );
+          f.values.App = activated;
+          expect(yield* client.fleetUrl).toBe(activated.fleetUrl);
+          expect(yield* Output.evaluate(f.bindings, f.values)).toEqual([
+            {
+              vpc: { subnetIds: ["subnet-app"], securityGroupIds: ["sg-app"] },
+            },
+          ]);
+          expect(f.requests).toHaveLength(0);
         }).pipe(Effect.provide(f.layer));
       },
     );
-  }
-});
+
+    test.effect(
+      "routes root HTTP, Worker RPC and Durable Object RPC through the activated private endpoint",
+      () => {
+        const f = fixture();
+        return Effect.gen(function* () {
+          yield* bindWorker(app, worker);
+          const application = (yield* Stack).resources.App as Application;
+          const client = yield* bindWorker<Counter>(application, worker);
+          yield* client.fetch(
+            HttpClientRequest.post("https://ignored.example/hello?q=1").pipe(
+              HttpClientRequest.bodyText("payload"),
+              HttpClientRequest.setHeader("x-custom", "kept"),
+            ),
+          );
+          expect(yield* client.increment()).toBe(1);
+          expect(
+            yield* client
+              .durableObject<Counter>("Counter")
+              .getByName("a/b")
+              .increment(),
+          ).toBe(1);
+          yield* client
+            .durableObject<Counter>("Counter")
+            .getByName("a/b")
+            .fetch(HttpClientRequest.get("/state?key=value"));
+          expect(f.requests.map((request) => request.url)).toEqual([
+            `${activated.fleetUrl}/hello?q=1`,
+            `${activated.fleetUrl}/__rpc__/increment`,
+            `${activated.fleetUrl}/Counter/a%2Fb/__rpc__/increment`,
+            `${activated.fleetUrl}/Counter/a%2Fb/state?key=value`,
+          ]);
+          expect(f.requests[0].method).toBe("POST");
+          expect(f.requests[0].headers["x-custom"]).toBe("kept");
+          expect(f.requests[0].body._tag).toBe("Uint8Array");
+          for (const request of f.requests)
+            expect(request.headers["x-alchemy-fleet-secret"]).toBe(
+              "root-secret",
+            );
+        }).pipe(Effect.provide(f.layer));
+      },
+    );
+
+    for (const [name, options] of [
+      ["non-root Worker", { workerName: "background" }],
+      ["same-named Worker in another fleet", { fleetId: "OtherCells" }],
+      ["Application without a revision", { application: { revision: "" } }],
+      [
+        "Application without a root identity",
+        { application: { workerName: "" } },
+      ],
+    ] as const) {
+      test.effect(`rejects ${name} before dispatch`, () => {
+        const f = fixture(options);
+        return Effect.gen(function* () {
+          const client = yield* bindWorker(app, worker);
+          const result = yield* Effect.exit(
+            client.fetch(HttpClientRequest.get("/")),
+          );
+          expect(Exit.isFailure(result)).toBe(true);
+          if (Exit.isFailure(result))
+            expect(Cause.squash(result.cause)).toBeInstanceOf(
+              WorkerUnreachable,
+            );
+          expect(f.requests).toHaveLength(0);
+        }).pipe(Effect.provide(f.layer));
+      });
+    }
+
+    test.effect("refuses calls outside a bound runtime", () => {
+      const f = fixture({ unbound: true });
+      return Effect.gen(function* () {
+        const client = yield* bindWorker(app, worker);
+        const result = yield* Effect.result(
+          client.fetch(HttpClientRequest.get("/")),
+        );
+        expect(Result.isFailure(result) && result.failure).toBeInstanceOf(
+          WorkerUnreachable,
+        );
+        expect(f.requests).toHaveLength(0);
+      }).pipe(Effect.provide(f.layer));
+    });
+
+    for (const [name, options] of [
+      ["connection loss after mutation", { disconnect: true }],
+      ["429 response", { status: 429 }],
+      ["500 response", { status: 500 }],
+      ["503 response", { status: 503 }],
+      ["malformed success response", { malformed: true }],
+    ] as const) {
+      test.effect(
+        `never replays Worker or Durable Object mutations after ${name}`,
+        () => {
+          const f = fixture(options);
+          return Effect.gen(function* () {
+            const client = yield* bindWorker<Counter>(app, worker);
+            const own = yield* Effect.result(client.increment());
+            expect(Result.isFailure(own)).toBe(true);
+            expect(f.requests).toHaveLength(1);
+            const cell = yield* Effect.result(
+              client
+                .durableObject<Counter>("Counter")
+                .getByName("one")
+                .increment(),
+            );
+            expect(Result.isFailure(cell)).toBe(true);
+            expect(f.requests).toHaveLength(2);
+            yield* Effect.result(
+              client.fetch(HttpClientRequest.post("/mutate")),
+            );
+            expect(f.requests).toHaveLength(3);
+          }).pipe(Effect.provide(f.layer));
+        },
+      );
+    }
+  },
+);

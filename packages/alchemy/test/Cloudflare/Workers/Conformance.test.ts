@@ -20,29 +20,33 @@ let baseUrl = "";
 
 // The engine conformance spec, run against a REAL Cloudflare Worker with
 // real Durable Objects.
-describe.skipIf(!!process.env.FAST)("Cloudflare engine conformance", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* sharedStack.destroy();
-      const { url } = yield* sharedStack.deploy(
-        Effect.gen(function* () {
-          const worker = yield* ConformanceWorker;
-          return { url: worker.url };
-        }),
-      );
-      expect(url).toBeTruthy();
-      baseUrl = String(url).replace(/\/+$/, "");
-      yield* Effect.logInfo(`Cloudflare conformance worker: ${baseUrl}`);
-      // Default budget (~2.5 min) — workers.dev propagation after a first
-      // deploy — fits inside this hook's timeout.
-      yield* waitForReady(baseUrl);
-    }),
-    { timeout: 300_000 },
-  );
+describe.skipIf(!!process.env.FAST)(
+  "Cloudflare engine conformance",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const { url } = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const worker = yield* ConformanceWorker;
+            return { url: worker.url };
+          }),
+        );
+        expect(url).toBeTruthy();
+        baseUrl = String(url).replace(/\/+$/, "");
+        yield* Effect.logInfo(`Cloudflare conformance worker: ${baseUrl}`);
+        // Default budget (~2.5 min) — workers.dev propagation after a first
+        // deploy — fits inside this hook's timeout.
+        yield* waitForReady(baseUrl);
+      }),
+      { timeout: 300_000 },
+    );
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 300_000,
-  });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
+      timeout: 300_000,
+    });
 
-  conformanceTests(test, { baseUrl: () => baseUrl });
-});
+    conformanceTests(test, { baseUrl: () => baseUrl });
+  },
+);

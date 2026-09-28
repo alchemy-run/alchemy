@@ -33,6 +33,14 @@ const decodeManifest = Schema.decodeEffect(
 
 describe.skipIf(!process.env.CELLD_TEST_DOCKER)(
   "Celld local Docker image publication",
+  {
+    tags: [
+      "provider:celld",
+      "provider:celld:container",
+      "provider:docker",
+      "local",
+    ],
+  },
   () => {
     it.effect(
       "exports only the target architecture from a multi-platform image store",

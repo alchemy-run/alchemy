@@ -132,6 +132,7 @@ it.effect(
         expect(retained?.owner.instanceId).toBe(instanceId);
       }).pipe(Effect.provide(f.layer));
     }),
+  { tags: ["unit", "local", "provider:celld", "provider:celld:d1"] },
 );
 
 it.effect(
@@ -174,6 +175,7 @@ it.effect(
         expect(f.calls).toHaveLength(1);
       }).pipe(Effect.provide(f.layer));
     }),
+  { tags: ["unit", "local", "provider:celld", "provider:celld:d1"] },
 );
 
 it.effect(
@@ -198,4 +200,5 @@ it.effect(
         expect(f.objects.size).toBe(1);
       }).pipe(Effect.provide(f.layer));
     }),
+  { tags: ["unit", "local", "provider:celld", "provider:celld:d1"] },
 );

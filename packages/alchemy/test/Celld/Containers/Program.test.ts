@@ -43,4 +43,5 @@ it.effect(
       );
       expect(closed).toBe(true);
     }),
+  { tags: ["unit", "local", "provider:celld", "provider:celld:container"] },
 );

@@ -117,69 +117,73 @@ const fixture = (failures: number, code: string, message: string) => {
   return { calls, reconcile, attempts: () => attempts };
 };
 
-describe("AutoScalingGroup instance profile propagation", () => {
-  it.live("retries a not-yet-visible profile and then reconciles", () =>
-    Effect.gen(function* () {
-      const test = fixture(2, "ValidationError", propagationMessage);
-      const group = yield* test.reconcile;
-      expect(test.attempts()).toBe(3);
-      expect(group.autoScalingGroupName).toBe("profile-retry");
-      expect(test.calls).toContain("UpdateAutoScalingGroup");
-    }),
-  );
-
-  for (const message of [
-    "The specified launch template does not exist",
-    "iamInstanceProfile.name is invalid. Invalid IAM Instance Profile ARN",
-  ]) {
-    it.live(`does not retry unrelated validation: ${message}`, () =>
+describe(
+  "AutoScalingGroup instance profile propagation",
+  { tags: ["unit", "local", "provider:aws", "provider:aws:autoscaling"] },
+  () => {
+    it.live("retries a not-yet-visible profile and then reconciles", () =>
       Effect.gen(function* () {
-        const test = fixture(9, "ValidationError", message);
+        const test = fixture(2, "ValidationError", propagationMessage);
+        const group = yield* test.reconcile;
+        expect(test.attempts()).toBe(3);
+        expect(group.autoScalingGroupName).toBe("profile-retry");
+        expect(test.calls).toContain("UpdateAutoScalingGroup");
+      }),
+    );
+
+    for (const message of [
+      "The specified launch template does not exist",
+      "iamInstanceProfile.name is invalid. Invalid IAM Instance Profile ARN",
+    ]) {
+      it.live(`does not retry unrelated validation: ${message}`, () =>
+        Effect.gen(function* () {
+          const test = fixture(9, "ValidationError", message);
+          const result = yield* test.reconcile.pipe(Effect.result);
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("ValidationError");
+            expect(result.failure.message).toBe(message);
+          }
+          expect(test.attempts()).toBe(1);
+          expect(test.calls).not.toContain("UpdateAutoScalingGroup");
+        }),
+      );
+    }
+
+    it.live("does not retry a matching message with another error tag", () =>
+      Effect.gen(function* () {
+        const test = fixture(9, "AccessDenied", propagationMessage);
+        const result = yield* test.reconcile.pipe(Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("AccessDeniedException");
+        }
+        expect(test.attempts()).toBe(1);
+      }),
+    );
+
+    it.live("stops after eight retries when the profile remains invalid", () =>
+      Effect.gen(function* () {
+        const test = fixture(10, "ValidationError", propagationMessage);
         const result = yield* test.reconcile.pipe(Effect.result);
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure._tag).toBe("ValidationError");
-          expect(result.failure.message).toBe(message);
+          expect(result.failure.message).toBe(propagationMessage);
         }
-        expect(test.attempts()).toBe(1);
+        expect(test.attempts()).toBe(9);
         expect(test.calls).not.toContain("UpdateAutoScalingGroup");
       }),
     );
-  }
 
-  it.live("does not retry a matching message with another error tag", () =>
-    Effect.gen(function* () {
-      const test = fixture(9, "AccessDenied", propagationMessage);
-      const result = yield* test.reconcile.pipe(Effect.result);
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("AccessDeniedException");
-      }
-      expect(test.attempts()).toBe(1);
-    }),
-  );
-
-  it.live("stops after eight retries when the profile remains invalid", () =>
-    Effect.gen(function* () {
-      const test = fixture(10, "ValidationError", propagationMessage);
-      const result = yield* test.reconcile.pipe(Effect.result);
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("ValidationError");
-        expect(result.failure.message).toBe(propagationMessage);
-      }
-      expect(test.attempts()).toBe(9);
-      expect(test.calls).not.toContain("UpdateAutoScalingGroup");
-    }),
-  );
-
-  it.live("continues reconciliation on an AlreadyExistsFault race", () =>
-    Effect.gen(function* () {
-      const test = fixture(1, "AlreadyExists", "Group already exists");
-      const group = yield* test.reconcile;
-      expect(test.attempts()).toBe(1);
-      expect(group.autoScalingGroupName).toBe("profile-retry");
-      expect(test.calls).toContain("UpdateAutoScalingGroup");
-    }),
-  );
-});
+    it.live("continues reconciliation on an AlreadyExistsFault race", () =>
+      Effect.gen(function* () {
+        const test = fixture(1, "AlreadyExists", "Group already exists");
+        const group = yield* test.reconcile;
+        expect(test.attempts()).toBe(1);
+        expect(group.autoScalingGroupName).toBe("profile-retry");
+        expect(test.calls).toContain("UpdateAutoScalingGroup");
+      }),
+    );
+  },
+);
