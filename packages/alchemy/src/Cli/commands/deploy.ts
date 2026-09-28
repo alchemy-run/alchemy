@@ -294,6 +294,7 @@ export const planCommand = Command.make(
     envFile,
     stage,
     profile,
+    adopt,
     detailed,
   },
   (args) =>

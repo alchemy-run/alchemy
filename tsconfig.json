@@ -49,6 +49,9 @@
       "path": "./packages/node-utils/tsconfig.json"
     },
     {
+      "path": "./packages/vite-plugin-copy-editor/tsconfig.json"
+    },
+    {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
@@ -135,6 +138,9 @@
     },
     {
       "path": "./examples/cloudflare-agent/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-preview-benchmark/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"

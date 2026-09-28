@@ -94,6 +94,20 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  it.live("plan accepts --adopt like deploy --dry-run", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject([
+        "plan",
+        "--adopt",
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).not.toContain("Unrecognized flag");
+      expect(stderr).toContain(
+        "Stack entrypoint 'alchemy.run.ts' does not exist",
+      );
+    }),
+  );
+
   it.live("bare `profile` without a terminal prints help and exits 1", () =>
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["profile"])).toBe(1);
