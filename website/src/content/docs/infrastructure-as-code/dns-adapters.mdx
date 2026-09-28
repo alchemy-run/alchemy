@@ -237,12 +237,14 @@ arguments:
 This walkthrough adds an adapter for a hypothetical "Acme DNS" API. Any
 platform's `domain.dns` can then publish records there.
 
-### Write the record resources
+### Write the record resource
 
-An adapter needs resources that manage records at the DNS host. At minimum
-that's a list resource that publishes explicit records, keyed by name and
-type, whose `reconcile` adds the listed values and removes the ones it
-published before but no longer lists:
+An adapter declares resources, so your DNS host first needs a resource that
+manages DNS records. The simplest one that covers every adapter function is
+a **record list**: one resource that owns a list of
+`{ name, type, value }` records. A list fits because platforms often don't
+know how many records they need until deploy time. ACM, for example,
+returns one validation record per hostname on the certificate.
 
 ```typescript
 // src/acme-dns/RecordList.ts
@@ -252,6 +254,7 @@ import type { DnsRecord } from "alchemy/DNS";
 export interface RecordListProps {
   /** Zone that owns the records. Inferred from each name when omitted. */
   zone?: string;
+  /** Records to publish, e.g. `{ name: "www.example.com", type: "CNAME", value: "d123.cloudfront.net" }`. */
   records: DnsRecord[];
 }
 
@@ -264,7 +267,9 @@ export type RecordList = Resource<
 export const RecordList = Resource<RecordList>("AcmeDns.RecordList");
 ```
 
-Implement its provider as described in
+Its provider's `reconcile` creates each listed record and deletes the ones
+it created before that are no longer listed; `delete` removes the records it
+created. Build it as described in
 [Custom Provider](/infrastructure-as-code/custom-provider).
 `Cloudflare.DNS.RecordList` and `AWS.Route53.RecordList` are complete
 references.
@@ -298,21 +303,18 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { Providers } from "./Providers.ts";
 import { RecordList } from "./RecordList.ts";
 
-// Record values may be Outputs; resource props resolve them at deploy time.
-const cnames = (names: string[], target: DNS.DnsHostnameTarget) =>
-  names.map((name) => ({ name, type: "CNAME" as const, value: target.hostname as string }));
-
 export const adapter = {
+  // Point one hostname at the platform: a CNAME, or A/AAAA records.
   alias: (id, { zone, name, target }) =>
-    RecordList(`${id}-Alias`, {
+    RecordList(id, { zone, records: DNS.aliasRecords(name, target) as DNS.DnsRecord[] }),
+  // Several hostnames at one hostname target. Give RecordList a `{ names }`
+  // binding contract to let sites attached to an AWS.Website.Router add theirs.
+  aliasSet: (id, { zone, names = [], target }) =>
+    RecordList(id, {
       zone,
-      records: DNS.isHostnameTarget(target)
-        ? cnames([name], target)
-        : (DNS.addressRecords(name, target.ipv4, target.ipv6) as DNS.DnsRecord[]),
+      records: names.map((name) => ({ name, type: "CNAME" as const, value: target.hostname as string })),
     }),
-  // Give the list a `{ names }` binding contract so a Router can add hostnames.
-  aliasSet: (id, { zone, names, target }) =>
-    RecordList(`${id}-Alias`, { zone, records: cnames(names ?? [], target) }),
+  // Records the platform computed, e.g. certificate validation CNAMEs.
   records: (id, { zone, records, retain }) =>
     RecordList(id, { zone, records: records as DNS.DnsRecord[] }).pipe(
       retain ? RemovalPolicy.retain() : (effect) => effect,

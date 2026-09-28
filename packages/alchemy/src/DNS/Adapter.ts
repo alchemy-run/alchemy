@@ -294,3 +294,16 @@ export const addressRecords = (
     ([v4, v6]: any) => toRecords(v4 as string[], v6 as string[]),
   ) as unknown as Input<DnsRecord[]>;
 };
+
+/**
+ * The records that point `name` at `target`: a `CNAME` to a hostname
+ * target, or `A` / `AAAA` records for an address target. A convenience for
+ * adapters whose `alias` publishes through a list-of-records resource.
+ */
+export const aliasRecords = (
+  name: string,
+  target: DnsAliasTarget,
+): Input<DnsRecord[]> =>
+  isHostnameTarget(target)
+    ? [{ name, type: "CNAME", value: target.hostname as string }]
+    : addressRecords(name, target.ipv4, target.ipv6);
