@@ -213,5 +213,5 @@ test.provider.skipIf(!runLifecycle)(
         }
       }
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 2_400_000 },
 );

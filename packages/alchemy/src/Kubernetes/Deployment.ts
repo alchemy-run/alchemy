@@ -143,7 +143,9 @@ export interface DeploymentPropsBase extends PlatformProps {
   /**
    * Cloud-specific workload-identity options, consumed by the cluster
    * platform's identity adapter (on EKS: `{ managedPolicyArns: [...] }`
-   * attaches extra managed policies to the generated pod-identity role).
+   * attaches extra managed policies to the generated pod-identity role; on
+   * GKE: `{ gcpServiceAccount }` runs the pods as an existing Google
+   * service account instead of the ServiceAccount's own principal).
    */
   identity?: WorkloadIdentityOptions;
   /**
@@ -227,7 +229,8 @@ export interface Deployment extends Resource<
     imageUri: string;
     /**
      * Workload-identity state provisioned by the cluster platform's
-     * adapter (on EKS: the pod-identity role + association).
+     * adapter (on EKS: the pod-identity role + association; on GKE: the
+     * Workload Identity principal and the IAM grants applied to it).
      */
     identity: IdentityState | undefined;
     /**
@@ -275,7 +278,11 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * it accepts the same `{ env, policyStatements }` host binding contract as
  * `AWS.Lambda.Function` and `AWS.ECS.Task`: every AWS `Binding.Service`
  * (S3, DynamoDB, SQS, …) attaches env vars to the pod spec and IAM policy
- * statements to a generated pod-identity role. On registry-less clusters
+ * statements to a generated pod-identity role. On `GCP.Container.Cluster`
+ * targets it accepts the `{ env, iam }` contract of `GCP.Run.Service`:
+ * every GCP `Binding.Service` attaches env vars to the pod spec and grants
+ * its IAM roles to the Kubernetes ServiceAccount's Workload Identity
+ * Federation principal. On registry-less clusters
  * (`Kubernetes.KubeConfig(...)`) run pre-built `image` references and bind
  * through environment variables.
  * ### Creating a Deployment
@@ -437,6 +444,29 @@ const retryUntilServiceReady = <A, E, R>(
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
+
+class ServiceStillExists extends Data.TaggedError(
+  "Kubernetes.ServiceStillExists",
+)<{}> {}
+
+/**
+ * Bounded (~3 min) wait for a deleted Service to disappear, i.e. for the
+ * cloud controller to tear down its load balancer and drop the finalizer.
+ */
+const waitForServiceGone = (
+  transport: ClusterTransport,
+  service: KubernetesObjectRef,
+): Effect.Effect<void, unknown> =>
+  Effect.retry(
+    readObject({ transport, object: service }).pipe(
+      Effect.flatMap(() => Effect.fail(new ServiceStillExists())),
+      Effect.catchIf(isNotFound, () => Effect.void),
+    ),
+    {
+      while: (error) => error instanceof ServiceStillExists,
+      schedule: loadBalancerRetrySchedule,
+    },
+  );
 
 export const DeploymentProvider = () =>
   Provider.effect(
@@ -817,6 +847,20 @@ export const DeploymentProvider = () =>
               transport,
               objects: output.kubernetesObjects ?? [],
             }).pipe(Effect.catch(() => Effect.void));
+            // A LoadBalancer Service carries the cloud controller's cleanup
+            // finalizer; wait for it so the cloud load balancer is gone
+            // before the cluster (and its controller) can be deleted —
+            // deleting the cluster first leaks the load balancer.
+            yield* Effect.forEach(
+              (output.kubernetesObjects ?? []).filter(
+                (object) => object.kind === "Service",
+              ),
+              (service) =>
+                waitForServiceGone(transport, service).pipe(
+                  Effect.catch(() => Effect.void),
+                ),
+              { discard: true },
+            );
           }
 
           if (adapter.identity) {

@@ -26,9 +26,11 @@ export type { GcpIamResourceKind } from "./IamPolicy.ts";
 
 /**
  * IAM grant a binding attaches to a GCP runtime host (Cloud Run
- * Service/Job/WorkerPool or Cloud Function) — the GCP analog of an AWS
- * binding's `policyStatements`. The role is granted to the host's runtime
- * service account.
+ * Service/Job/WorkerPool, Cloud Function, or a `Kubernetes.Deployment` /
+ * `Kubernetes.Job` on GKE) — the GCP analog of an AWS binding's
+ * `policyStatements`. The role is granted to the host's runtime identity:
+ * the runtime service account, or on GKE the Kubernetes ServiceAccount's
+ * Workload Identity Federation principal.
  */
 export type GcpIamGrant = {
   /**
@@ -88,12 +90,19 @@ const GCP_HOST_TYPES = new Set([
   "GCP.Run.Job",
   "GCP.Run.WorkerPool",
   "GCP.CloudFunctions.Function",
+  // Kubernetes workloads accept `{ env, iam }` through the augmented
+  // `WorkloadBindingContract`; the GKE cluster adapter grants `iam` to the
+  // workload's Workload Identity principal.
+  "Kubernetes.Deployment",
+  "Kubernetes.Job",
 ]);
 
 /**
- * True for any Alchemy GCP host that accepts {@link GcpHostBinding}.
- * HTTP `Binding.Service` implementations guard `host.bind` with this
- * before granting IAM / injecting env.
+ * True for any Alchemy host that accepts {@link GcpHostBinding}: the Cloud
+ * Run and Cloud Functions hosts, and `Kubernetes.Deployment` /
+ * `Kubernetes.Job` (granted through the GKE cluster adapter). HTTP
+ * `Binding.Service` implementations guard `host.bind` with this before
+ * granting IAM / injecting env.
  */
 export const isGcpHost = (
   value: ResourceLike | undefined,

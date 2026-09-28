@@ -3759,6 +3759,21 @@ importers:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
 
+  examples/gcp-gke:
+    dependencies:
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
+
   examples/gcp-memorystore-redis:
     dependencies:
       '@distilled.cloud/gcp':

@@ -4,13 +4,18 @@
  *
  * - **connect** — Google OAuth bearer tokens against the cluster endpoint,
  *   re-getting the cluster when the connection doesn't carry endpoint/CA.
- * - **identity** — GKE Workload Identity: annotates the Kubernetes
- *   ServiceAccount with `iam.gke.io/gcp-service-account` when a GSA email
- *   is supplied. Distilled has no IAM v1 service-account CRUD, so Alchemy
- *   does not create GSAs or bind `roles/iam.workloadIdentityUser` —
- *   provision those out-of-band. The cluster's
- *   `workloadIdentityConfig.workloadPool` is enabled by
- *   `GCP.Container.Cluster`.
+ * - **identity** — GKE Workload Identity Federation: every `iam` grant a
+ *   GCP binding attaches to the workload is granted directly to the
+ *   Kubernetes ServiceAccount's principal
+ *   (`principal://iam.googleapis.com/projects/{number}/locations/global/workloadIdentityPools/{project}.svc.id.goog/subject/ns/{namespace}/sa/{ksa}`)
+ *   — no Google service account involved. Applied grants are recorded in
+ *   the identity state; grants no binding asks for any more are revoked on
+ *   the next reconcile, and all of them on delete. With
+ *   `identity.gcpServiceAccount`, the KSA is instead annotated with
+ *   `iam.gke.io/gcp-service-account`, granted
+ *   `roles/iam.workloadIdentityUser` on that GSA, and the binding grants
+ *   go to the GSA. The cluster's `workloadIdentityConfig.workloadPool` is
+ *   enabled by `GCP.Container.Cluster` (Autopilot enables it by default).
  * - **registry** — a per-workload Artifact Registry Docker repository;
  *   `main` programs are bundled, `context` Dockerfiles built, and `image`
  *   refs mirrored into it.
@@ -40,16 +45,26 @@ import {
   type ImageRegistryDeleteOptions,
   type ImageRegistryResolveOptions,
   type ImageRegistryResult,
+  type WorkloadBindingContract,
   type WorkloadIdentityReconcileOptions,
 } from "../../Kubernetes/ClusterAdapter.ts";
 import type { Connection } from "../../Kubernetes/Connection.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import {
   makeImageSource,
   type ImageSourceLike,
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  projectNumber,
+  revokeHostIam,
+  syncHostIam,
+  type AppliedIamGrant,
+  type GcpIamGrant,
+} from "../Host.ts";
+import { revokeIamMembership, updateIamMembership } from "../IamPolicy.ts";
 
 declare module "../../Kubernetes/Connection.ts" {
   interface AuthRegistry {
@@ -76,16 +91,29 @@ declare module "../../Kubernetes/Connection.ts" {
 declare module "../../Kubernetes/ClusterAdapter.ts" {
   interface IdentityStateRegistry {
     /**
-     * GKE Workload Identity. Distilled has no IAM v1, so Alchemy does not
-     * create Google service accounts or grant
-     * `roles/iam.workloadIdentityUser` — supply an existing GSA via
-     * `identity.gcpServiceAccount` and bind IAM out-of-band.
+     * GKE Workload Identity Federation: binding grants are applied to the
+     * Kubernetes ServiceAccount's principal (or to the GSA supplied via
+     * `identity.gcpServiceAccount`).
      */
     "gcp-workload-identity": {
       /** Workload Identity pool (`{project}.svc.id.goog`). */
       workloadPool: string;
+      /** Project the grants and workload pool belong to. */
+      project?: string;
+      /**
+       * The IAM member binding grants were applied to — the KSA's
+       * `principal://…` identifier, or `serviceAccount:{gsa}`.
+       */
+      member?: string;
+      /** Grants applied to `member`, revoked once no binding asks for them. */
+      iamGrants?: AppliedIamGrant[];
       /** Existing GSA email stamped on the KSA annotation, if any. */
       gcpServiceAccount?: string;
+      /**
+       * The KSA principal granted `roles/iam.workloadIdentityUser` on
+       * `gcpServiceAccount`, if any.
+       */
+      impersonator?: string;
     };
   }
   interface RegistryStateRegistry {
@@ -103,12 +131,22 @@ declare module "../../Kubernetes/ClusterAdapter.ts" {
   }
   interface WorkloadIdentityOptions {
     /**
-     * Existing Google service-account email bound to the Kubernetes
-     * ServiceAccount via `iam.gke.io/gcp-service-account`. Distilled has
-     * no IAM v1, so Alchemy does not create the GSA or grant
-     * `roles/iam.workloadIdentityUser` — provision those out-of-band.
+     * Existing Google service-account email the workload runs as (GKE
+     * only). Alchemy annotates the Kubernetes ServiceAccount with
+     * `iam.gke.io/gcp-service-account`, grants the KSA principal
+     * `roles/iam.workloadIdentityUser` on the GSA, and lands binding
+     * grants on the GSA. Omit it (the default) to grant bindings directly
+     * to the KSA's Workload Identity Federation principal.
      */
     gcpServiceAccount?: string;
+  }
+  interface WorkloadBindingContract {
+    /**
+     * IAM grants landed on the workload's Workload Identity principal (GKE
+     * only) — the same host-binding channel as `GCP.Run.Service` and
+     * `GCP.Function`.
+     */
+    iam?: GcpIamGrant[];
   }
   interface WorkloadServicesRegistry {
     /** GCP credential-chain services ambient inside GKE workload pods. */
@@ -144,6 +182,44 @@ export const apiServerEndpoint = (endpoint: string | undefined) => {
 };
 
 export const workloadPoolOf = (project: string) => `${project}.svc.id.goog`;
+
+/**
+ * The Workload Identity Federation principal of a Kubernetes
+ * ServiceAccount — the IAM member GKE pods running as that KSA
+ * authenticate as. Every cluster in the project shares the pool, so the
+ * same `namespace`/`serviceAccount` pair is one identity project-wide.
+ */
+export const workloadIdentityPrincipal = (options: {
+  projectNumber: string;
+  project: string;
+  namespace: string;
+  serviceAccount: string;
+}) =>
+  `principal://iam.googleapis.com/projects/${options.projectNumber}` +
+  `/locations/global/workloadIdentityPools/${workloadPoolOf(options.project)}` +
+  `/subject/ns/${options.namespace}/sa/${options.serviceAccount}`;
+
+const WORKLOAD_IDENTITY_USER = "roles/iam.workloadIdentityUser";
+
+const gsaResourceName = (email: string) =>
+  `projects/-/serviceAccounts/${email}`;
+
+/** Binding channels a GKE workload can materialize. */
+const GKE_BINDING_KEYS = new Set(["env", "iam"]);
+
+/** Narrow persisted identity state (possibly a legacy shape). */
+const identityStateOf = (state: Record<string, unknown> | undefined) => ({
+  member: typeof state?.member === "string" ? state.member : undefined,
+  iamGrants: Array.isArray(state?.iamGrants)
+    ? (state.iamGrants as AppliedIamGrant[])
+    : [],
+  gcpServiceAccount:
+    typeof state?.gcpServiceAccount === "string"
+      ? state.gcpServiceAccount
+      : undefined,
+  impersonator:
+    typeof state?.impersonator === "string" ? state.impersonator : undefined,
+});
 
 /**
  * Build a {@link ClusterTransport} for a GKE cluster from known
@@ -446,15 +522,92 @@ export const GkeKubernetesAdapter = () =>
         options: WorkloadIdentityReconcileOptions,
       ) {
         const auth = yield* narrowGkeAuth(options.connection);
+        const bindings = options.bindings.filter(
+          (
+            binding: ResourceBinding<WorkloadBindingContract> & {
+              action?: string;
+            },
+          ) => binding.action !== "delete",
+        );
+        const unsupported = [
+          ...new Set(
+            bindings.flatMap((binding) =>
+              Object.entries(binding.data ?? {})
+                .filter(
+                  ([key, value]) =>
+                    value !== undefined && !GKE_BINDING_KEYS.has(key),
+                )
+                .map(([key]) => key),
+            ),
+          ),
+        ];
+        if (unsupported.length > 0) {
+          return yield* Effect.die(
+            new Error(
+              `'${options.id}': bindings carry ${unsupported.join(", ")}, ` +
+                "which GKE workloads cannot materialize (only env and " +
+                "GCP `iam` grants).",
+            ),
+          );
+        }
         return yield* Effect.gen(function* () {
           const env = yield* GcpEnvironment.current;
           const project = auth.project ?? env.project;
           const workloadPool = workloadPoolOf(project);
-          const gcpServiceAccount =
-            options.options?.gcpServiceAccount ??
-            (typeof options.state?.gcpServiceAccount === "string"
-              ? options.state.gcpServiceAccount
-              : undefined);
+          const principal = workloadIdentityPrincipal({
+            projectNumber: yield* projectNumber(project),
+            project,
+            namespace: options.namespace,
+            serviceAccount: options.serviceAccount,
+          });
+          const gcpServiceAccount = options.options?.gcpServiceAccount;
+          const member = gcpServiceAccount
+            ? `serviceAccount:${gcpServiceAccount}`
+            : principal;
+          const previous = identityStateOf(options.state);
+
+          // Let the KSA impersonate the user-supplied GSA.
+          if (gcpServiceAccount) {
+            yield* updateIamMembership({
+              kind: "iam.serviceAccount",
+              name: gsaResourceName(gcpServiceAccount),
+              member: principal,
+              add: [WORKLOAD_IDENTITY_USER],
+            });
+          }
+          if (
+            previous.gcpServiceAccount !== undefined &&
+            previous.impersonator !== undefined &&
+            (previous.gcpServiceAccount !== gcpServiceAccount ||
+              previous.impersonator !== principal)
+          ) {
+            yield* revokeIamMembership({
+              kind: "iam.serviceAccount",
+              name: gsaResourceName(previous.gcpServiceAccount),
+              member: previous.impersonator,
+              roles: [WORKLOAD_IDENTITY_USER],
+            });
+          }
+
+          // A renamed KSA / namespace or a GSA switch is a new member: its
+          // predecessor loses everything it was granted.
+          const sameMember = previous.member === member;
+          if (previous.member !== undefined && !sameMember) {
+            yield* revokeHostIam({
+              serviceAccount: previous.member,
+              grants: previous.iamGrants,
+            });
+          }
+          const { grants } = yield* syncHostIam({
+            project,
+            serviceAccount: member,
+            // The principal is shared by every cluster in the project, so
+            // only grants this workload recorded are ever revoked.
+            managed: false,
+            bindings,
+            previous: sameMember ? previous.iamGrants : undefined,
+          });
+
           return {
             env: {
               GOOGLE_PROJECT_ID: project,
@@ -466,18 +619,43 @@ export const GkeKubernetesAdapter = () =>
             state: {
               kind: "gcp-workload-identity" as const,
               workloadPool,
+              project,
+              member,
+              iamGrants: grants,
               gcpServiceAccount,
+              impersonator: gcpServiceAccount ? principal : undefined,
             },
           };
         }).pipe(withGcp);
       });
 
-      const identityDelete = Effect.fn(function* (_options: {
+      const identityDelete = Effect.fn(function* (options: {
         connection: Connection | undefined;
         state: Record<string, unknown> | undefined;
       }) {
-        // Distilled has no IAM v1: Alchemy never created a GSA, so there is
-        // nothing to tear down. The KSA dies with the workload's objects.
+        // Grants live on project / resource IAM policies, not on the
+        // cluster, so they are revoked even when the cluster is gone. The
+        // KSA itself dies with the workload's objects.
+        const state = identityStateOf(options.state);
+        yield* Effect.gen(function* () {
+          if (state.member !== undefined) {
+            yield* revokeHostIam({
+              serviceAccount: state.member,
+              grants: state.iamGrants,
+            });
+          }
+          if (
+            state.gcpServiceAccount !== undefined &&
+            state.impersonator !== undefined
+          ) {
+            yield* revokeIamMembership({
+              kind: "iam.serviceAccount",
+              name: gsaResourceName(state.gcpServiceAccount),
+              member: state.impersonator,
+              roles: [WORKLOAD_IDENTITY_USER],
+            });
+          }
+        }).pipe(withGcp);
       });
 
       const registryResolve = (

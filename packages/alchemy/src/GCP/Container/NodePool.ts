@@ -658,8 +658,9 @@ const waitForOperation = (
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Container.NodePoolOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        // Node pool create/delete takes several minutes.
+        times: 60,
+        schedule: Schedule.spaced("10 seconds"),
       }),
     );
   });
@@ -711,8 +712,9 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Container.NodePoolNotReady" ||
         error._tag === "GCP.Container.NodePoolNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Node pool create/delete takes several minutes.
+      times: 60,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -725,8 +727,9 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.NodePoolStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Node pool create/delete takes several minutes.
+      times: 60,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 

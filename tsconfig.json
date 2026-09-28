@@ -131,6 +131,9 @@
       "path": "./examples/gcp-pubsub-worker/tsconfig.json"
     },
     {
+      "path": "./examples/gcp-gke/tsconfig.json"
+    },
+    {
       "path": "./examples/gcp-scheduled-job/tsconfig.json"
     },
     {

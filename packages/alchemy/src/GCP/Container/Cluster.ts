@@ -513,6 +513,13 @@ const isNotFoundOperation = (operation: container.Operation) => {
   return text.includes("not found") || text.includes("notfound");
 };
 
+// Cluster create / delete runs 5–10 min (Autopilot included) and most
+// updates several minutes; bounded at 15 min.
+const clusterOperationSchedule = Schedule.max([
+  Schedule.spaced("10 seconds"),
+  Schedule.recurs(90),
+]);
+
 const waitForOperation = (
   project: string,
   location: string,
@@ -574,8 +581,7 @@ const waitForOperation = (
       Effect.retry({
         while: (error) =>
           error._tag === "GCP.Container.ClusterOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
+        schedule: clusterOperationSchedule,
       }),
     );
   });
@@ -622,8 +628,7 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Container.ClusterNotReady" ||
         error._tag === "GCP.Container.ClusterNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      schedule: clusterOperationSchedule,
     }),
   );
 
@@ -636,8 +641,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      schedule: clusterOperationSchedule,
     }),
   );
 
