@@ -8,9 +8,7 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({
-  providers: GCP.providers().pipe(
-    Layer.provideMerge(GCP.Region.of("us-east4")),
-  ),
+  providers: GCP.providers().pipe(Layer.provideMerge(GCP.Region("us-east4"))),
 });
 
 const logLevel = Effect.provideService(
@@ -87,4 +85,24 @@ test.provider.skipIf(!hasGcpCreds)(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },
+);
+
+const withoutOverride = Test.make({ providers: GCP.providers() });
+
+withoutOverride.test.provider.skipIf(!hasGcpCreds)(
+  "without GCP.Region, the credentials' region is the default",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const queue = yield* stack.deploy(
+        GCP.CloudTasks.Queue("CredentialsRegionQueue", {}),
+      );
+      const expected =
+        process.env.GOOGLE_CLOUD_REGION ??
+        process.env.CLOUDSDK_COMPUTE_REGION ??
+        "us-central1";
+      expect(queue.name).toContain(`/locations/${expected}/`);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

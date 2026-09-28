@@ -8,8 +8,8 @@ import * as Layer from "effect/Layer";
 
 const { test } = Test.make({
   providers: GCP.providers().pipe(
-    Layer.provideMerge(GCP.Region.of("us-east4")),
-    Layer.provideMerge(GCP.Region.regionalEndpoints("prefer")),
+    Layer.provideMerge(GCP.Region("us-east4")),
+    Layer.provideMerge(GCP.RegionalEndpoints("prefer")),
   ),
 });
 
@@ -20,7 +20,7 @@ const hasGcpCreds = !!(
 );
 
 test.provider.skipIf(!hasGcpCreds)(
-  "regionalEndpoints('prefer') on the providers layer deploys through the regional endpoint",
+  "GCP.RegionalEndpoints('prefer') on the providers layer deploys through the regional endpoint",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

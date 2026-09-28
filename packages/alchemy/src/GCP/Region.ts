@@ -1,20 +1,23 @@
-import * as Region from "@distilled.cloud/gcp/Region";
+import * as DistilledRegion from "@distilled.cloud/gcp/Region";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import type * as Layer from "effect/Layer";
 import { GcpEnvironment } from "./Environment.ts";
 
-export {
-  Region,
-  RegionalEndpoints,
-  type RegionName,
-  type RegionalEndpointMode,
+export type {
+  RegionalEndpointMode,
+  RegionName,
 } from "@distilled.cloud/gcp/Region";
 
 /**
- * Default region for every GCP resource in scope that is created without
- * an explicit `location` / `region` — the GCP counterpart of
- * `AWS.Region.of`. Without it, the region comes from the profile, then
- * `GOOGLE_CLOUD_REGION` / `CLOUDSDK_COMPUTE_REGION`, then `us-central1`.
+ * Override the default GCP region — the region regional resources land in
+ * when created without an explicit `location` / `region`.
+ *
+ * Like AWS, the region normally comes with the credentials: the profile's
+ * region, else `GOOGLE_CLOUD_REGION` / `CLOUDSDK_COMPUTE_REGION`, else
+ * `us-central1`. Provide `GCP.Region(...)` on the providers layer only to
+ * override that for a stack. A resource that should live elsewhere takes
+ * an explicit `location`; a recorded location always wins, so changing
+ * the region never moves a deployed resource.
  *
  * ### Choosing a region
  * **Example:** Deploy a stack to europe-west1
@@ -23,21 +26,17 @@ export {
  *   "App",
  *   {
  *     providers: GCP.providers().pipe(
- *       Layer.provideMerge(GCP.Region.of("europe-west1")),
+ *       Layer.provideMerge(GCP.Region("europe-west1")),
  *     ),
  *     state: Alchemy.localState(),
  *   },
  *   program,
  * );
  * ```
- *
- * A single resource in another region takes an explicit `location` /
- * `region` prop instead.
  */
-export const of = (region: Region.RegionName) => Region.of(region);
-
-/** Default region from `GOOGLE_CLOUD_REGION` / `CLOUDSDK_COMPUTE_REGION`. */
-export const fromEnv = () => Region.fromEnv();
+export const Region = (
+  region: DistilledRegion.RegionName,
+): Layer.Layer<DistilledRegion.Region> => DistilledRegion.of(region);
 
 /**
  * Route requests to Google's regional endpoints
@@ -48,13 +47,22 @@ export const fromEnv = () => Region.fromEnv();
  * - `"prefer"`: every request for a regional resource whose service
  *   publishes a regional endpoint, so traffic terminates in-region.
  * - `"never"`: always the global endpoint.
+ *
+ * ### Data residency
+ * **Example:** Keep every regional request in-region
+ * ```typescript
+ * GCP.providers().pipe(
+ *   Layer.provideMerge(GCP.Region("europe-west1")),
+ *   Layer.provideMerge(GCP.RegionalEndpoints("prefer")),
+ * );
+ * ```
  */
-export const regionalEndpoints = (mode: Region.RegionalEndpointMode) =>
-  Region.regionalEndpoints(mode);
+export const RegionalEndpoints = (
+  mode: DistilledRegion.RegionalEndpointMode,
+): Layer.Layer<DistilledRegion.RegionalEndpoints> =>
+  DistilledRegion.regionalEndpoints(mode);
 
 /** The effective default region in the current scope. */
-export const current = Effect.suspend(() =>
+export const currentRegion = Effect.suspend(() =>
   GcpEnvironment.use((env) => Effect.map(env, ({ region }) => region)),
 );
-
-export type RegionLayer = Layer.Layer<Region.Region>;

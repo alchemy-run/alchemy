@@ -72,16 +72,17 @@ single stack can span GCP and Cloudflare or AWS.
 ## Choose a region
 
 Regional resources created without a `location` / `region` prop land in
-the stack's region. It comes from `GCP.Region.of(...)` on the providers
-layer, then the environment (`GOOGLE_CLOUD_REGION`), then the profile's
-region, then `us-central1`:
+the default region. Like AWS, it comes with the credentials: the
+profile's region, overridden by `GOOGLE_CLOUD_REGION` (or
+`CLOUDSDK_COMPUTE_REGION`), else `us-central1`. To pin a stack to a
+region regardless of credentials, provide `GCP.Region(...)`:
 
 ```typescript
 export default Alchemy.Stack(
   "App",
   {
     providers: GCP.providers().pipe(
-      Layer.provideMerge(GCP.Region.of("europe-west1")),
+      Layer.provideMerge(GCP.Region("europe-west1")),
     ),
     state: Alchemy.localState(),
   },
@@ -100,7 +101,7 @@ residency, send every regional request to its regional endpoint:
 
 ```typescript
 GCP.providers().pipe(
-  Layer.provideMerge(GCP.Region.regionalEndpoints("prefer")),
+  Layer.provideMerge(GCP.RegionalEndpoints("prefer")),
 );
 ```
 
