@@ -129,11 +129,10 @@ export const demo: StepSpec[] = [
   // 1. The data
   ...chain(LINK, [
     {
-      title: "Start with the data, a short code and a URL",
-      omit: ["createdAt", "notFound"],
-      notes: "Everything starts from the schema. A Link is a short code and the URL it points to.",
+      title: "Start with the data, a Link",
+      omit: ["notFound"],
+      notes: "Everything starts from the schema. A Link is a short code, the URL it points to, and when it was created.",
     },
-    { title: "…and when it was created", omit: ["notFound"], notes: "Plus a timestamp." },
     {
       title: "A missing link is a typed error",
       omit: ["status"],
