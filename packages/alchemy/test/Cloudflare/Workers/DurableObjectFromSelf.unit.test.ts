@@ -68,9 +68,8 @@ describe("DurableObject.from same-worker binding (#1843)", { tags }, () => {
         class Counter extends Cloudflare.DurableObject<Counter, {}>()(
           "Counter",
         ) {}
-        class OtherWorker extends Cloudflare.Worker<OtherWorker>()(
+        class OtherWorker extends Cloudflare.Worker<OtherWorker, {}, Counter>()(
           "OtherWorker",
-          {},
         ) {}
         class HostWorker extends Cloudflare.Worker<HostWorker, {}, Counter>()(
           "HostWorker",
@@ -101,6 +100,5 @@ describe("DurableObject.from same-worker binding (#1843)", { tags }, () => {
         expect(registered).toBeDefined();
         expect(registered?.scriptName).toBeDefined();
       }),
-    { tags },
   );
 });
