@@ -41,6 +41,7 @@ import {
   aliasedWidgetProvider,
   ArtifactProbe,
   BindingTarget,
+  capturedConfigHost,
   CollisionRegistry,
   DeleteFirstResource,
   DeletedBindingRegressionTarget,
@@ -735,6 +736,23 @@ describe("Action output convergence", { tags: ["unit", "local"] }, () => {
       }),
     );
   }
+});
+
+// #1831: a changed value read by a Platform's Init must reach the provider,
+// even though `CapturedConfigHost`'s diff always returns `noop`.
+describe("Platform Init-captured config", { tags: ["unit", "local"] }, () => {
+  test.provider("a changed captured value deploys and converges", (stack) =>
+    Effect.gen(function* () {
+      expect((yield* stack.deploy(capturedConfigHost("a"))).mode).toBe("a");
+      expect(
+        actionOfPlan(yield* stack.plan(capturedConfigHost("a")), "Host"),
+      ).toBe("noop");
+      expect((yield* stack.deploy(capturedConfigHost("b"))).mode).toBe("b");
+      expect(
+        actionOfPlan(yield* stack.plan(capturedConfigHost("b")), "Host"),
+      ).toBe("noop");
+    }),
+  );
 });
 
 describe("basic operations", { tags: ["unit", "local"] }, () => {
