@@ -16,6 +16,7 @@ import {
   type ProviderMode,
 } from "./ProviderMode.ts";
 import { ref as makeRef } from "./Ref.ts";
+import { DependsOn } from "./DependsOn.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { RenamePolicy } from "./Rename.ts";
 import { Self } from "./Self.ts";
@@ -135,6 +136,12 @@ export interface ResourceLike<
    * resource-scoped override — the planner falls back to the stack/CLI default.
    */
   Adopt: boolean | undefined;
+  /**
+   * Extra ordering dependencies captured from the ambient {@link DependsOn}
+   * at registration time (e.g. via `.pipe(dependsOn(migrate))`). Planned as
+   * upstream edges but never part of the resource's props or diff.
+   */
+  DependsOn?: readonly unknown[];
   /**
    * Per-resource provider mode captured from the ambient
    * {@link ProviderModePolicy} at registration time. `"live"` when the
@@ -466,6 +473,9 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
         ),
         Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
+          Effect.map(Option.getOrUndefined),
+        ),
+        DependsOn: yield* Effect.serviceOption(DependsOn).pipe(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,

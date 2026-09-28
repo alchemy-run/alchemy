@@ -239,8 +239,10 @@ export interface Deployment extends Resource<
      * The LoadBalancer URL (`http://<hostname>[:port]` — the cloud load
      * balancer listens on the Service `port`, so a non-80 port is part of
      * the URL) when `serviceType` is `LoadBalancer`, otherwise
-     * `undefined`. May be `undefined` immediately after a create while
-     * the cloud load balancer is still provisioning.
+     * `undefined`. Eventual: the deploy waits for the load balancer's
+     * address only when something reads `url` (a downstream resource,
+     * `dependsOn`, or the Stack's outputs). Otherwise it may be `undefined`
+     * while the load balancer is still provisioning.
      */
     url: string | undefined;
     /** References to the Kubernetes objects created for the deployment. */
@@ -446,26 +448,27 @@ class ServiceNotReady extends Data.TaggedError(
   "Kubernetes.ServiceNotReady",
 )<{}> {}
 
-// Bounded ~3 min wait for the cloud load balancer to publish its hostname
-// (an EKS Auto Mode NLB typically appears within 2–3 min of the Service
-// apply).
-const loadBalancerRetrySchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(36),
-]);
-
 /**
  * Explicitly-typed pipeable retry for the LB-hostname wait. An inline
  * `Effect.retry` in the provider leaks `Retry.Return`'s conditional into
- * declaration emit and widens the provider layer to `unknown` R.
+ * declaration emit and widens the provider layer to `unknown` R. Unbounded:
+ * the user bounds the wait (`--settle-timeout` or interrupting the deploy).
  */
 const retryUntilServiceReady = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (error) => error instanceof ServiceNotReady,
-    schedule: loadBalancerRetrySchedule,
+    schedule: Schedule.spaced("5 seconds"),
   });
+
+/** The Service URL for a load balancer address: port omitted when 80. */
+const loadBalancerUrl = (hostname: string | undefined, port: number) =>
+  hostname === undefined
+    ? undefined
+    : port === 80
+      ? `http://${hostname}`
+      : `http://${hostname}:${port}`;
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
@@ -490,8 +493,8 @@ export const DeploymentProvider = () =>
               Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")),
             );
 
-      // Read a LoadBalancer Service's assigned hostname (bounded wait).
-      const waitForLoadBalancer = (
+      // A LoadBalancer Service's assigned hostname or IP, if it has one yet.
+      const readLoadBalancerAddress = (
         transport: ClusterTransport,
         service: KubernetesObjectRef,
       ) =>
@@ -508,15 +511,6 @@ export const DeploymentProvider = () =>
             )?.status?.loadBalancer?.ingress?.[0];
             return ingress?.hostname ?? ingress?.ip;
           }),
-          Effect.flatMap((hostname) =>
-            hostname
-              ? Effect.succeed(hostname)
-              : Effect.fail(new ServiceNotReady()),
-          ),
-          retryUntilServiceReady,
-          Effect.catchTag("Kubernetes.ServiceNotReady", () =>
-            Effect.succeed(undefined),
-          ),
         );
 
       return {
@@ -529,6 +523,33 @@ export const DeploymentProvider = () =>
           "identity",
           "registry",
         ],
+        eventual: ["url"],
+        // Wait for the load balancer address of a `LoadBalancer` Service.
+        settle: Effect.fn(function* ({ news, output }) {
+          if (
+            output.url !== undefined ||
+            (news.serviceType ?? "LoadBalancer") !== "LoadBalancer"
+          ) {
+            return {};
+          }
+          const connection = connectionOfOutput(output);
+          if (!connection) return {};
+          const transport = yield* connectCluster(connection);
+          const hostname = yield* readLoadBalancerAddress(transport, {
+            apiVersion: "v1",
+            kind: "Service",
+            name: output.serviceName,
+            namespace: output.namespace,
+          }).pipe(
+            Effect.flatMap((hostname) =>
+              hostname
+                ? Effect.succeed(hostname)
+                : Effect.fail(new ServiceNotReady()),
+            ),
+            retryUntilServiceReady,
+          );
+          return { url: loadBalancerUrl(hostname, output.port) };
+        }),
         // A Deployment's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources (identity role, image repository).
         // There is no single enumeration that faithfully reconstructs that
@@ -810,23 +831,21 @@ export const DeploymentProvider = () =>
             `Applied Kubernetes Deployment ${namespace}/${baseName}`,
           );
 
-          // Resolve the LoadBalancer URL if applicable. The cloud listener
-          // is the Service `port` (Kubernetes maps `spec.ports[].port` 1:1
-          // to it), so the URL carries the port unless it's 80 — mirroring
-          // `AWS.ECS.Service`'s url semantics.
-          const hostname =
+          // The LoadBalancer URL if the address is already assigned. `url`
+          // is eventual: `settle` waits for it, only when something reads
+          // it. The cloud listener is the Service `port` (Kubernetes maps
+          // `spec.ports[].port` 1:1 to it), so the URL carries the port
+          // unless it's 80, mirroring `AWS.ECS.Service`'s url semantics.
+          const url =
             serviceType === "LoadBalancer"
-              ? yield* waitForLoadBalancer(
-                  transport,
-                  toKubernetesObjectRef(serviceObject),
+              ? loadBalancerUrl(
+                  yield* readLoadBalancerAddress(
+                    transport,
+                    toKubernetesObjectRef(serviceObject),
+                  ),
+                  port,
                 )
               : undefined;
-          const url =
-            hostname === undefined
-              ? undefined
-              : port === 80
-                ? `http://${hostname}`
-                : `http://${hostname}:${port}`;
 
           return {
             connection,

@@ -74,14 +74,16 @@ is reachable:
 - **`"ClusterIP"`** is reachable inside the cluster only. `url` is
   `undefined`.
 
-For a `LoadBalancer` Service, the deploy waits up to about three
-minutes for the cluster to publish the load balancer's hostname or
-IP, then sets `url`. The port is part of the URL unless it's `80`.
-If no address appears in time, the deploy still succeeds and `url`
-is `undefined`. The next update picks it up.
+`url` is an [eventual attribute](/infrastructure-as-code/resource#eventual-attributes).
+The deploy waits for the load balancer's hostname or IP only when
+something reads `url`: another resource, a `dependsOn(web.url)`, or
+the Stack's outputs. Then it waits as long as it takes. Otherwise it
+doesn't wait, and `url` may be `undefined` until the address appears.
+The port is part of the URL unless it's `80`.
 
 Clusters without a load balancer controller never assign an
-address. That includes kind, minikube, and most bare-metal clusters.
+address, so nothing should read `url` there. That includes kind,
+minikube, and most bare-metal clusters.
 Use `ClusterIP` or `NodePort` there, or install a controller such as
 [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind)
 or [MetalLB](https://metallb.io). Inside the cluster, a Service is
@@ -245,8 +247,8 @@ In the Stack, `yield* Api` and provide the default export with
 
 ## What a deploy waits for
 
-A deploy finishes when the API server has accepted the objects and,
-for `LoadBalancer` Services, when the load balancer address is known.
+A deploy finishes when the API server has accepted the objects. It
+waits for the load balancer address only when something reads `url`.
 It doesn't wait for the rollout. Pods may still be pulling images or
 failing health checks. Check with `kubectl rollout status`, or add a
 smoke-test [Job](/kubernetes/workloads/jobs) that calls the Service.
@@ -274,7 +276,8 @@ smoke-test [Job](/kubernetes/workloads/jobs) that calls the Service.
 - `namespace` is the namespace of all three objects.
 - `port` is the container and Service port.
 - `url` is the load balancer URL for `LoadBalancer` Services, and
-  `undefined` otherwise.
+  `undefined` otherwise. It's eventual: reading it waits for the
+  address.
 - `imageUri` is the image the pods run.
 - `connection` is the cluster connection.
 - `kubernetesObjects` holds references to the applied objects.

@@ -111,11 +111,31 @@ and [Helm charts](/kubernetes/objects/helm-charts#release-name-and-namespace).
 
 Applying succeeds as soon as the API server accepts the objects. A
 Deployment's pods may still be pulling images, and a Job may still
-be running or failing. The one exception is a `LoadBalancer` Service,
-whose deploy waits up to about three minutes for an address. Use
+be running or failing. Most dependencies don't need more: Kubernetes
+retries until an app's database or Secret exists. Use
 `kubectl rollout status`, a smoke-test
 [Job](/kubernetes/workloads/jobs), or your own health checks to
-gate on readiness.
+check readiness.
+
+## Waiting for eventual attributes
+
+A few attributes are only known once the cluster has done its work:
+a Deployment's load balancer `url` and a Job's `completedAt`. They are
+[eventual attributes](/infrastructure-as-code/resource#eventual-attributes).
+The deploy waits for one only when something reads it, or a resource
+`dependsOn` it or its resource. Then it waits until the value
+exists, or fails when the Job fails or its pod can't start.
+
+```typescript
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "ghcr.io/acme/web:1.4.0",
+  port: 8080,
+}).pipe(dependsOn(migrate));
+```
+
+Resources that don't read those attributes deploy without waiting.
+Bound every wait with `alchemy deploy --settle-timeout <duration>`.
 
 ## Transient errors
 

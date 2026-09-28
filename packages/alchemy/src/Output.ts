@@ -827,6 +827,59 @@ export const upstream = <E extends Output<any, any>>(
   return {};
 };
 
+/** Marks a whole-resource reference: every attribute of the resource. */
+export const ALL_ATTRIBUTES = "*";
+
+/**
+ * The attributes of each upstream resource that `value` reads, keyed by FQN.
+ * A `resource.attr` reference records `attr`; passing the resource itself
+ * (or deriving from it as a whole) records {@link ALL_ATTRIBUTES}. Walks the
+ * same values as {@link upstreamAny}, so every upstream it finds appears
+ * here too.
+ */
+export const referencedAttributes = (
+  value: any,
+  into: Map<string, Set<string>> = new Map(),
+  seen: WeakSet<object> = new WeakSet(),
+): Map<string, Set<string>> => {
+  const add = (fqn: string, attr: string) => {
+    const attrs = into.get(fqn) ?? new Set<string>();
+    attrs.add(attr);
+    into.set(fqn, attrs);
+  };
+  const walk = (value: any): void => {
+    if (isPrimitive(value)) {
+      return;
+    } else if (isResource(value)) {
+      add((value as unknown as Resource).FQN, ALL_ATTRIBUTES);
+    } else if (isResourceExpr(value)) {
+      add(value.src.FQN, ALL_ATTRIBUTES);
+    } else if (isPropExpr(value)) {
+      if (isResourceExpr(value.expr)) {
+        add(value.expr.src.FQN, String(value.identifier));
+      } else {
+        walk(value.expr);
+      }
+    } else if (isAllExpr(value)) {
+      value.outs.forEach(walk);
+    } else if (
+      isEffectExpr(value) ||
+      isApplyExpr(value) ||
+      isFlatMapExpr(value) ||
+      isNamedExpr(value)
+    ) {
+      walk(value.expr);
+    } else if (isPlainData(value)) {
+      if (alreadySeen(value, seen)) {
+        return;
+      }
+      Object.values(value).forEach(walk);
+    }
+  };
+  walk(value);
+  return into;
+};
+
 // TODO(sam): add a type
 export const resolveUpstream = <const A>(
   value: A,

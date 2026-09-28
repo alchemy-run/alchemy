@@ -1,4 +1,6 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -36,6 +38,7 @@ import {
 import {
   connectCluster,
   deleteObjects,
+  listPods,
   readObject,
   reconcileObjects,
   KubernetesApiError,
@@ -215,6 +218,12 @@ export interface Job extends Resource<
     jobName: string;
     /** The cron schedule, when the workload is a CronJob. */
     schedule: string | undefined;
+    /**
+     * When the one-shot Job completed successfully (RFC 3339). Eventual:
+     * reading it, or `dependsOn(job)`, waits for the Job to finish and
+     * fails the deploy if the Job fails. Always `undefined` for a CronJob.
+     */
+    completedAt: string | undefined;
     /** The name of the service account the pods run as. */
     serviceAccountName: string;
     /** The URI of the container image the job runs. */
@@ -368,6 +377,21 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * ### Waiting for Completion
+ * **Example:** Deploy the app after its migration succeeds
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   main: import.meta.url,
+ * });
+ *
+ * const web = yield* Kubernetes.Deployment("Web", {
+ *   cluster,
+ *   image: "ghcr.io/acme/web:1.4.0",
+ *   port: 8080,
+ * }).pipe(dependsOn(migrate));
+ * ```
+ *
  * @resource
  * @product Workloads
  */
@@ -414,6 +438,38 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
     },
   });
 
+/** A one-shot Job failed, or can't run, while something waited for it. */
+export class JobFailed extends Data.TaggedError("Kubernetes.JobFailed")<{
+  message: string;
+  jobName: string;
+  namespace: string;
+}> {}
+
+class JobRunning extends Data.TaggedError("Kubernetes.JobRunning")<{}> {}
+
+// Container waiting reasons that won't resolve without a change: the Job
+// would otherwise sit in Pending forever.
+const STUCK_REASONS = new Set([
+  "ErrImagePull",
+  "ImagePullBackOff",
+  "InvalidImageName",
+  "ErrImageNeverPull",
+  "CreateContainerConfigError",
+]);
+
+/**
+ * Explicitly-typed pipeable retry for the Job completion wait (see the
+ * Deployment's `retryUntilServiceReady`). Unbounded: the user bounds the
+ * wait with `--settle-timeout` or by interrupting the deploy.
+ */
+const retryWhileRunning = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (error) => error instanceof JobRunning,
+    schedule: Schedule.spaced("2 seconds"),
+  });
+
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
 
@@ -450,6 +506,87 @@ export const JobProvider = () =>
         // reconstructs the composite, so enumeration is empty; `read`
         // refreshes known instances.
         list: () => Effect.succeed([] as Job["Attributes"][]),
+        eventual: ["completedAt"],
+        // Wait for a one-shot Job to finish. Fails on a Failed Job, on a Pod
+        // that can't start (bad image, missing Secret), or when the Job was
+        // garbage-collected before its outcome was seen.
+        settle: Effect.fn(function* ({ output }) {
+          if (output.kind !== "Job" || output.completedAt !== undefined) {
+            return {};
+          }
+          const connection = connectionOfOutput(output);
+          if (!connection) return {};
+          const transport = yield* connectCluster(connection);
+          const { jobName, namespace } = output;
+          const fail = (message: string) =>
+            Effect.fail(new JobFailed({ message, jobName, namespace }));
+
+          const completedAt = yield* Effect.gen(function* () {
+            const job = (yield* readObject({
+              transport,
+              object: {
+                apiVersion: "batch/v1",
+                kind: "Job",
+                name: jobName,
+                namespace,
+              },
+            }).pipe(
+              Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            )) as
+              | {
+                  status?: {
+                    completionTime?: string;
+                    conditions?: ReadonlyArray<{
+                      type?: string;
+                      status?: string;
+                      reason?: string;
+                      message?: string;
+                    }>;
+                  };
+                }
+              | undefined;
+            if (job === undefined) {
+              return yield* fail(
+                `Job ${namespace}/${jobName} was deleted before it finished ` +
+                  "(is ttlSecondsAfterFinished shorter than the deploy?)",
+              );
+            }
+            const condition = (type: string) =>
+              job.status?.conditions?.find(
+                (c) => c.type === type && c.status === "True",
+              );
+            const complete = condition("Complete");
+            if (complete) {
+              return job.status?.completionTime ?? new Date().toISOString();
+            }
+            const failed = condition("Failed");
+            if (failed) {
+              return yield* fail(
+                `Job ${namespace}/${jobName} failed: ${failed.reason ?? "Failed"}` +
+                  (failed.message ? ` (${failed.message})` : ""),
+              );
+            }
+            const pods = yield* listPods({
+              transport,
+              namespace,
+              labelSelector: `job-name=${jobName}`,
+            });
+            for (const pod of pods) {
+              for (const container of pod.status?.containerStatuses ?? []) {
+                const waiting = container.state?.waiting;
+                if (waiting?.reason && STUCK_REASONS.has(waiting.reason)) {
+                  return yield* fail(
+                    `Job ${namespace}/${jobName} can't start: pod ` +
+                      `${pod.metadata?.name} is ${waiting.reason}` +
+                      (waiting.message ? ` (${waiting.message})` : ""),
+                  );
+                }
+              }
+            }
+            return yield* Effect.fail(new JobRunning());
+          }).pipe(retryWhileRunning);
+          return { completedAt };
+        }),
         diff: Effect.fn(function* ({
           olds = {} as JobProps,
           news: input,
@@ -702,6 +839,8 @@ export const JobProvider = () =>
             kind,
             jobName,
             schedule: news.schedule,
+            // Eventual: `settle` waits for the Job when something reads it.
+            completedAt: undefined,
             serviceAccountName,
             imageUri: resolved.imageUri,
             identity: identity?.state,

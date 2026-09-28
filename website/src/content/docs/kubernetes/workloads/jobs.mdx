@@ -150,10 +150,48 @@ new Job whenever what it runs changes. A Job runs:
 - For Effect programs, on every deploy that changes the program or
   anything it imports.
 
-A Job doesn't run on deploys that leave it unchanged. The deploy
-doesn't wait for the Job to finish. Follow it with
+A Job doesn't run on deploys that leave it unchanged. By default the
+deploy doesn't wait for the Job to finish. Follow it with
 `kubectl wait --for=condition=complete job/<jobName>` and
 `kubectl logs job/<jobName>`.
+
+## Wait for a Job to finish
+
+To run something only after a Job succeeds, such as the app after its
+migration, pipe it through `dependsOn`:
+
+```typescript
+import { dependsOn } from "alchemy";
+
+const migrate = yield* Kubernetes.Job("Migrate", {
+  cluster,
+  main: import.meta.url,
+  backoffLimit: 2,
+});
+
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "ghcr.io/acme/web:1.4.0",
+  port: 8080,
+}).pipe(dependsOn(migrate));
+```
+
+The deploy applies `Web` once `Migrate` has completed. If the Job
+fails, or its pod can't start (for example because its image can't
+be pulled), the deploy fails with the reason, and `Web` isn't
+touched.
+
+This works because a one-shot Job's `completedAt` attribute is
+[eventual](/infrastructure-as-code/resource#eventual-attributes). The
+deploy waits for the Job only when something needs it:
+`dependsOn(migrate)`, a resource that reads `migrate.completedAt`, or
+a Stack output that returns it. Other Jobs don't hold up the deploy.
+
+The wait has no time limit. Bound it with
+`alchemy deploy --settle-timeout <duration>`, or interrupt the
+deploy. If `ttlSecondsAfterFinished` deletes the Job before the
+deploy sees its outcome, the deploy fails, so keep it longer than
+the Job takes.
 
 ## Job names
 
@@ -238,6 +276,8 @@ CronJob. Alchemy applies the new object and deletes the old one.
 - `jobName` is the name of the Job or CronJob object.
 - `kind` is `"Job"` or `"CronJob"`.
 - `schedule` is the cron schedule, or `undefined` for a one-shot Job.
+- `completedAt` is when a one-shot Job completed. It's eventual:
+  reading it waits for the Job. It's always `undefined` for a CronJob.
 - `serviceAccountName` is the ServiceAccount the pods run as.
 - `namespace` is the namespace of the objects.
 - `imageUri` is the image the pods run.

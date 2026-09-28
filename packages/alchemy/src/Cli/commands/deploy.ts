@@ -1,3 +1,4 @@
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
@@ -16,6 +17,7 @@ import {
   dryRun as dryRunFlag,
   envFile,
   force,
+  settleTimeout,
   include,
   exclude,
   validateSelectionOptions,
@@ -35,6 +37,7 @@ interface StackCommandOptions {
   readonly profile?: string;
   readonly dryRun?: boolean;
   readonly force?: boolean;
+  readonly settleTimeout?: Option.Option<Duration.Duration>;
   readonly include?: ReadonlyArray<string>;
   readonly exclude?: ReadonlyArray<string>;
   readonly yes?: boolean;
@@ -193,6 +196,9 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     target,
     operation: options.destroy ? "destroy" : "deploy",
     force: options.force,
+    settleTimeout: Option.getOrUndefined(
+      options.settleTimeout ?? Option.none(),
+    ),
     include: options.include,
     exclude: options.exclude,
     adopt: options.adopt,
@@ -237,6 +243,7 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
+    settleTimeout,
     include,
     exclude,
     config: optionalConfig,

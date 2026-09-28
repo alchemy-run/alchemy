@@ -78,6 +78,13 @@ interface BaseResourceState {
    * any stamped row.
    */
   providerMode?: ProviderMode;
+  /**
+   * The provider's eventual attributes (see `ProviderService.eventual`)
+   * whose values in `attr` came from `settle` and are final for this
+   * generation. `reconcile` clears it: attributes it returns are provisional
+   * until something references them and `settle` runs.
+   */
+  settled?: string[];
 }
 
 export interface CreatingResourceState extends BaseResourceState {

@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { apply as applyPlan } from "../../Apply.ts";
 import * as Plan from "../../Plan.ts";
@@ -16,6 +17,8 @@ export interface PlanInput {
   readonly target: StackTarget;
   readonly operation: "deploy" | "destroy";
   readonly force?: boolean;
+  /** See {@link Plan.MakePlanOptions.settleTimeout}. */
+  readonly settleTimeout?: Duration.Input;
   readonly include?: never;
   readonly exclude?: never;
   readonly adopt?: boolean;
@@ -153,6 +156,7 @@ const planStack = <Module = unknown>(input: FilteredPlanInput) =>
         ? Plan.destroy(session.stack)
         : Plan.make(session.stack, {
             force: input.force,
+            settleTimeout: input.settleTimeout,
             include: input.include,
             exclude: input.exclude,
           })
