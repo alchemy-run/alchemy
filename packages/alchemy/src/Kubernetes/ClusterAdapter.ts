@@ -107,8 +107,17 @@ export type IdentityState = {
 /**
  * Image-registry state persisted on a workload's attributes, keyed by
  * adapter kind (AWS registers `"aws-ecr"` with the repository name/URI).
+ * The built-in `"registry"` entry records images pushed to a connection's
+ * {@link Connection.registry}.
  */
-export interface RegistryStateRegistry {}
+export interface RegistryStateRegistry {
+  registry: {
+    /** The registry `server` the image was pushed to. */
+    server: string;
+    /** The repository the image was pushed to (`<server>/<name>`). */
+    repository: string;
+  };
+}
 
 /** The discriminated registry-state union across all registered adapters. */
 export type RegistryState = {
