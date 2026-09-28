@@ -381,7 +381,7 @@ for (const spec of steps) {
           const line = step.lines[a]!;
           remap.set(a++, lines.length);
           lines.push(line);
-          diff.push(textOf(line).trim() ? { kind: "add" } : null);
+          diff.push(/[A-Za-z0-9]/.test(textOf(line)) ? { kind: "add" } : null);
         }
       }
     }
@@ -401,6 +401,16 @@ for (const spec of steps) {
     }
   });
 }
+
+// Hand-picked emphasis wins over the automatic diff.
+steps.forEach((spec, i) => {
+  const step = resolved[i]!;
+  if (spec.kind !== "code" || step.kind !== "code" || !spec.emphasize) return;
+  step.diff = step.lines.map((line) => {
+    const text = line.map((t) => t.text).join("");
+    return spec.emphasize!.some((e) => text.includes(e)) ? { kind: "add" as const } : null;
+  });
+});
 
 // One size per sequence: a snippet keeps its size as panels and marks come and go.
 const groupSize = new Map<string, number>();

@@ -75,6 +75,11 @@ export interface CodeSpec {
   cross?: boolean;
   /** Don't highlight or spotlight the lines that changed since the previous step. */
   quiet?: boolean;
+  /**
+   * Lines to mark in green, by text they contain. Replaces the automatic diff:
+   * the green is for drawing the eye, not a faithful patch.
+   */
+  emphasize?: string[];
   frames?: number;
 }
 
@@ -909,6 +914,7 @@ const passedIn: StepSpec[] = [
   lang({
     title: "But real code passes functions around",
     src: { code: PASSED("(key) => File") },
+    emphasize: ["read: (key)"],
     marks: [{ kind: "circle", find: "read(req.key)", label: "which bucket? could be anything", side: "right", tone: "bad" }],
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: [UNKNOWN_READ, SEND] },
     notes:

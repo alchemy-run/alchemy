@@ -277,8 +277,10 @@ export const CodeSlide = ({
     prev?.diff ? !!prev.diff[j] : prevEdit && !prevMatched.has(j) && !!lineText(prev!.lines[j] ?? []).trim();
   const prevAny = (morph2 || !!prev?.diff) && prev!.tints.length === 0 && !prev!.quiet && prev!.lines.some((_, j) => prevChanged(j));
   const dimT = interpolate(local, [0, 8], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // Lines with a mark on them stay bright too: dimming what's circled fights the circle.
+  const marked = (i: number) => step.marks.some((m) => i >= m.line && i <= (m.toLine ?? m.line));
   const lineLevel = (i: number) => {
-    const target = anyChanged ? (changed(i) ? 1 : 0.4) : 1;
+    const target = anyChanged ? (changed(i) || marked(i) ? 1 : 0.4) : 1;
     const from = matched.get(i);
     const start = from === undefined ? target : prevAny ? (prevChanged(from) ? 1 : 0.4) : 1;
     return start + (target - start) * dimT;
