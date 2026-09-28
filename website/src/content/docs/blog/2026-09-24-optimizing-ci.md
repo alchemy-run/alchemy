@@ -15,6 +15,8 @@ Our first immediate improvement came from moving our workflows to [Blacksmith](h
 | cloudflare-tools | 16.2 min | 5.3 min | −67% |
 | pr-package | 5.0 min | 3.2 min | −36% |
 
+These numbers are compiled from a very short numbers of runs we had immediately after switching, since I started optimizing the CI pipeline soon after we don't have much data to compare, but it's clear that just by switching to Blacksmith made a difference already.
+
 We also switched our package manager from `bun` to `pnpm` ([#1214](https://github.com/alchemy-run/alchemy/pull/1214)). Bun kept us giving trouble: it behaves weirdly around updating lock files when manually add/removing deps from `package.json`, fails randomly during install failures in CI, broke our publishing of packages when using `workspace:` and `catalog:` in dependencies, doesn't respect `publishConfig` overrides, didn't have deduping until `1.4`, doesn't work without `pkg.alchemy.run` preview URLs since it doesn't dedupe tarball url deps, and the list goes on.
 
 We are still supporting and using bun as our runtime, but our repo is stuck on bun `1.3.13` since later versions introduced a [bug in `AsyncLocalStorage`](https://github.com/oven-sh/bun/issues/32693) which breaks our test runner. This is yet to be fixed and our blocker for upgrading `bun`.
