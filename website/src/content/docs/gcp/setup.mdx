@@ -39,9 +39,6 @@ In CI (`CI=true`), Alchemy skips profiles and reads the environment:
   as an alias).
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to the key file.
 
-- `GOOGLE_CLOUD_REGION` — default region (`CLOUDSDK_COMPUTE_REGION`,
-  which `gcloud config set compute/region` writes, is also read).
-
 Or `GOOGLE_ACCESS_TOKEN` plus `GOOGLE_PROJECT_ID` for a short-lived
 token. On GKE with Workload Identity, neither is needed — the metadata
 server is the last link in the chain.
@@ -72,10 +69,10 @@ single stack can span GCP and Cloudflare or AWS.
 ## Choose a region
 
 Regional resources created without a `location` / `region` prop land in
-the default region. Like AWS, it comes with the credentials: the
-profile's region, overridden by `GOOGLE_CLOUD_REGION` (or
-`CLOUDSDK_COMPUTE_REGION`), else `us-central1`. To pin a stack to a
-region regardless of credentials, provide `GCP.Region(...)`:
+the default region. It comes with the credential (the profile's
+`region`, which `alchemy profile` asks for), else `us-central1`. To pin
+a stack to a region regardless of the credential, provide
+`GCP.Region(...)`:
 
 ```typescript
 export default Alchemy.Stack(

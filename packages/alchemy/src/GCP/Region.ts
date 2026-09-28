@@ -12,10 +12,11 @@ export type {
  * Override the default GCP region — the region regional resources land in
  * when created without an explicit `location` / `region`.
  *
- * Like AWS, the region normally comes with the credentials: the profile's
- * region, else `GOOGLE_CLOUD_REGION` / `CLOUDSDK_COMPUTE_REGION`, else
- * `us-central1`. Provide `GCP.Region(...)` on the providers layer only to
- * override that for a stack. A resource that should live elsewhere takes
+ * The region normally comes with the credentials (the profile's
+ * `region`), else `us-central1`. Provide `GCP.Region(...)` on the
+ * providers layer to override that for a stack. There is no environment
+ * variable: Google's SDKs don't define one, and deployed GCP runtimes
+ * read their region from the metadata server. A resource that should live elsewhere takes
  * an explicit `location`; a recorded location always wins, so changing
  * the region never moves a deployed resource.
  *

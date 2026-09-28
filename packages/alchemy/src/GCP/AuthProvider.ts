@@ -28,9 +28,6 @@ export const GOOGLE_PROJECT_ID_ENV = "GOOGLE_PROJECT_ID";
 export const GOOGLE_CLOUD_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT";
 export const GOOGLE_APPLICATION_CREDENTIALS_ENV =
   "GOOGLE_APPLICATION_CREDENTIALS";
-export const GOOGLE_CLOUD_REGION_ENV = "GOOGLE_CLOUD_REGION";
-/** The region `gcloud config set compute/region` exports. */
-export const CLOUDSDK_COMPUTE_REGION_ENV = "CLOUDSDK_COMPUTE_REGION";
 /** Region when neither the environment nor the profile names one. */
 export const DEFAULT_GCP_REGION = "us-central1";
 
@@ -460,20 +457,16 @@ export const GcpAuth = AuthProviderLayer<
       }
     };
 
-    // An explicitly-set region env var wins over the profile's region,
-    // matching AWS_REGION over an AWS profile's region.
+    // The region is part of the credential (the profile's `region`).
+    // Google SDKs define no default-region environment variable; override
+    // per stack with the `GCP.Region(...)` layer.
     const resolveCredentials = (
       profileName: string,
       config: GcpAuthConfig,
     ): Effect.Effect<GcpResolvedCredentials, AuthError | NeedsReauth> =>
       Effect.gen(function* () {
         const token = yield* resolveToken(profileName, config);
-        const region =
-          (yield* getEnv(GOOGLE_CLOUD_REGION_ENV)) ??
-          (yield* getEnv(CLOUDSDK_COMPUTE_REGION_ENV)) ??
-          config.region ??
-          DEFAULT_GCP_REGION;
-        return { ...token, region };
+        return { ...token, region: config.region ?? DEFAULT_GCP_REGION };
       });
 
     const logout = (profileName: string, config: GcpAuthConfig) =>
@@ -551,14 +544,9 @@ export const GcpAuth = AuthProviderLayer<
         }),
       );
 
-    const readEnvironment = Effect.gen(function* () {
-      const token = yield* resolveFromEnv();
-      const region =
-        (yield* getEnv(GOOGLE_CLOUD_REGION_ENV)) ??
-        (yield* getEnv(CLOUDSDK_COMPUTE_REGION_ENV)) ??
-        DEFAULT_GCP_REGION;
-      return { ...token, region };
-    });
+    const readEnvironment = resolveFromEnv().pipe(
+      Effect.map((token) => ({ ...token, region: DEFAULT_GCP_REGION })),
+    );
 
     return {
       configSchema: GcpAuthConfigSchema,

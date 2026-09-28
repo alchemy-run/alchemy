@@ -181,12 +181,7 @@ export const fromMetadataServer = (): Layer.Layer<
       const region = Effect.gen(function* () {
         const cached = yield* Ref.get(regionCache);
         if (cached !== undefined) return cached;
-        const fromEnv = yield* Config.option(
-          Config.String("GOOGLE_CLOUD_REGION"),
-        );
-        const resolved = Option.isSome(fromEnv)
-          ? fromEnv.value
-          : yield* fetchMetadataRegion(http);
+        const resolved = yield* fetchMetadataRegion(http);
         if (resolved !== undefined) yield* Ref.set(regionCache, resolved);
         return resolved;
       });

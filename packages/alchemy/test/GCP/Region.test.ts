@@ -5,6 +5,9 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import { fromCredentials, GcpEnvironment } from "@/GCP/Environment";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({
@@ -53,6 +56,47 @@ test(
   }),
 );
 
+const credentialWithRegion = (region: string | undefined) =>
+  Layer.succeed(
+    Credentials,
+    Effect.succeed({
+      accessToken: Redacted.make("token"),
+      project: "p",
+      region,
+    }),
+  );
+
+const resolvedRegion = (layer: Layer.Layer<GcpEnvironment>) =>
+  GcpEnvironment.use((env) => Effect.map(env, (e) => e.region)).pipe(
+    Effect.provide(layer),
+  );
+
+test(
+  "the credential's region is the default; GCP.Region overrides it",
+  Effect.gen(function* () {
+    expect(
+      yield* resolvedRegion(
+        fromCredentials().pipe(
+          Layer.provide(credentialWithRegion("asia-east1")),
+        ),
+      ),
+    ).toEqual("asia-east1");
+    expect(
+      yield* resolvedRegion(
+        fromCredentials().pipe(Layer.provide(credentialWithRegion(undefined))),
+      ),
+    ).toEqual("us-central1");
+    expect(
+      yield* resolvedRegion(
+        fromCredentials().pipe(
+          Layer.provide(credentialWithRegion("asia-east1")),
+          Layer.provide(GCP.Region("europe-west1")),
+        ),
+      ),
+    ).toEqual("europe-west1");
+  }),
+);
+
 test.provider.skipIf(!hasGcpCreds)(
   "a stack-level GCP.Region sets the default region; regional secrets reach their endpoint",
   (stack) =>
@@ -90,18 +134,22 @@ test.provider.skipIf(!hasGcpCreds)(
 const withoutOverride = Test.make({ providers: GCP.providers() });
 
 withoutOverride.test.provider.skipIf(!hasGcpCreds)(
-  "without GCP.Region, the credentials' region is the default",
+  "without GCP.Region, the credential's region is the default",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const queue = yield* stack.deploy(
-        GCP.CloudTasks.Queue("CredentialsRegionQueue", {}),
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* GCP.CloudTasks.Queue(
+            "CredentialsRegionQueue",
+            {},
+          );
+          return { queue: queue.name, region: yield* GCP.currentRegion };
+        }),
       );
-      const expected =
-        process.env.GOOGLE_CLOUD_REGION ??
-        process.env.CLOUDSDK_COMPUTE_REGION ??
-        "us-central1";
-      expect(queue.name).toContain(`/locations/${expected}/`);
+      // The testing credential sets no region, so the default applies.
+      expect(out.region).toEqual("us-central1");
+      expect(out.queue).toContain("/locations/us-central1/");
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
