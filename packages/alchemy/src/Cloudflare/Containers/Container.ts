@@ -712,10 +712,18 @@ export const Container: ResourceClassLike<ContainerApplication> &
       });
     }
   },
-  // `ref`, `Type`, `Provider`, and the other static fields come from the
-  // Platform. The dispatcher above stays: its per-id values carry the
-  // Container-specific markers the generic Platform constructor omits.
-  ContainerPlatform,
+  {
+    Type: ContainerTypeId,
+    // Read `ContainerPlatform` lazily: this module and ContainerPlatform.ts
+    // import each other, so it may not be initialized at module load.
+    ref: (id: string, options?: { stage?: string; stack?: string }) =>
+      (
+        ContainerPlatform as unknown as Pick<
+          ResourceClass<ContainerApplication>,
+          "ref"
+        >
+      ).ref(id, options),
+  },
 ) as any;
 
 export declare namespace Container {
