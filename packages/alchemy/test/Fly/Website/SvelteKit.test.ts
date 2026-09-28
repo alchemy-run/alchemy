@@ -9,7 +9,7 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { createHash } from "node:crypto";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {

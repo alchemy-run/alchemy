@@ -15,7 +15,7 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
 

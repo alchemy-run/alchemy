@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import CronTestWorker from "./fixtures/cron/cron-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,

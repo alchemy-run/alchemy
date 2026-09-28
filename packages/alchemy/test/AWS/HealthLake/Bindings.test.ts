@@ -7,7 +7,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import HealthLakeTestFunctionLive, {
   HealthLakeTestFunction,
   IMPORT_PREFIX,

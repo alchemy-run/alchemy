@@ -235,7 +235,7 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  *
  * **Example:** Put an object from a Service
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",

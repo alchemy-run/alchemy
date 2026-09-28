@@ -4,9 +4,9 @@ import type { PlatformIdentity } from "@/Platform.ts";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as Rpc from "effect/unstable/rpc/Rpc";
-import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcServer from "effect/rpc/RpcServer";
 
 const ping = Rpc.make("ping", {
   success: Schema.Void,

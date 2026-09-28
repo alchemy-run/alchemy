@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as RpcClient from "effect/rpc/RpcClient";
 import ChatPersistenceRpcWorker from "./fixtures/ChatPersistenceRpcWorker.ts";
 import { ChatRpcs } from "./fixtures/ChatRpcs.ts";
 import { Gateway } from "./fixtures/Gateway.ts";

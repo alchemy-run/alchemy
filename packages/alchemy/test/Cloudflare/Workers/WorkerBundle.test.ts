@@ -9,7 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import RequireNodeBuiltinsWorker from "./fixtures/require-node-builtins/worker.ts";
 
 const decode = (content: string | Uint8Array<ArrayBufferLike>) =>

@@ -4,13 +4,13 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { AiError, LanguageModel, Response, Tool } from "effect/unstable/ai";
-import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import * as Sse from "effect/unstable/encoding/Sse";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { AiError, LanguageModel, Response, Tool } from "effect/ai";
+import { toCodecOpenAI } from "effect/ai/OpenAiStructuredOutput";
+import * as Sse from "effect/encoding/Sse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
 /** Runtime-only connection obtained from QueryAIGateway, never an account API key. */
@@ -77,7 +77,7 @@ export interface LanguageModelOptions {
  * ```
  *
  * @layer
- * @provides effect/unstable/ai/LanguageModel
+ * @provides effect/ai/LanguageModel
  * @product AI Gateway
  * @category AI Gateway
  */

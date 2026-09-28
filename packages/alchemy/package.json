@@ -180,6 +180,11 @@
         "bun": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
       },
+      "./Doppler": {
+        "types": "./lib/Doppler/index.d.ts",
+        "bun": "./src/Doppler/index.ts",
+        "default": "./lib/Doppler/index.js"
+      },
       "./Git": {
         "types": "./lib/Git/index.d.ts",
         "bun": "./src/Git/index.ts",
@@ -194,6 +199,11 @@
         "types": "./lib/Http/index.d.ts",
         "bun": "./src/Http/index.ts",
         "default": "./lib/Http/index.js"
+      },
+      "./Infisical": {
+        "types": "./lib/Infisical/index.d.ts",
+        "bun": "./src/Infisical/index.ts",
+        "default": "./lib/Infisical/index.js"
       },
       "./Kubernetes": {
         "types": "./lib/Kubernetes/index.d.ts",
@@ -343,6 +353,11 @@
         "types": "./lib/TUI/index.d.ts",
         "bun": "./src/TUI/index.ts",
         "default": "./lib/TUI/index.js"
+      },
+      "./Secrets": {
+        "types": "./lib/Secrets/index.d.ts",
+        "bun": "./src/Secrets/index.ts",
+        "default": "./lib/Secrets/index.js"
       },
       "./Server": {
         "types": "./lib/Server/index.d.ts",

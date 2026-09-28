@@ -10,7 +10,7 @@ import {
   RpcMiddleware,
   RpcSerialization,
   RpcServer,
-} from "effect/unstable/rpc";
+} from "effect/rpc";
 
 class Dependency extends Context.Service<Dependency, string>()(
   "RpcSocketDependency",

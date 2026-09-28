@@ -283,7 +283,7 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * **Example:** Bind and query
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Postgres";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export default class Api extends Railway.Service<Api>()(
  *   "Api",

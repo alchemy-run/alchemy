@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
 import { Account, AccountProvider } from "./Account.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";

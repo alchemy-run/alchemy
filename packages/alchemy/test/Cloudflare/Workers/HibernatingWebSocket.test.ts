@@ -9,7 +9,7 @@ import * as Exit from "effect/Exit";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import AttachmentWorker from "./fixtures/hibernating-websocket/worker.ts";
 

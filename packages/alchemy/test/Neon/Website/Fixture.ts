@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as FileSystem from "effect/FileSystem";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { functionTextSamples } from "../FunctionRollout.ts";
 
 const buildDirectories = new Set([

@@ -5,7 +5,7 @@ import * as redshift from "@distilled.cloud/aws/redshift";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import RedshiftConnectFunctionLive, {
   RedshiftConnectFunction,
 } from "./fixtures/connect-handler";

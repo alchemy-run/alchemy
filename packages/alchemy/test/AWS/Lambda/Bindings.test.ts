@@ -5,7 +5,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import LambdaBindingsTestFunctionLive, {
   LambdaBindingsTestFunction,
 } from "./bindings-handler.ts";

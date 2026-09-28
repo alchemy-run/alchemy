@@ -5,7 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import NativeLanguageModel from "./fixtures/language-model-native.ts";
 import HttpLanguageModel from "./fixtures/language-model-http.ts";
 import { languageModelBranch } from "./fixtures/language-model-resources.ts";

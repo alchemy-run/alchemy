@@ -10,9 +10,9 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { LanguageModel, Tool, Toolkit } from "effect/unstable/ai";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { LanguageModel, Tool, Toolkit } from "effect/ai";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 const secret = "nt_live_SECRET_SENTINEL";
 const Sum = Tool.make("sum", {

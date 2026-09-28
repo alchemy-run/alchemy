@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import BackendEffect from "./fixtures/backend-effect.ts";
 import { backendBranch, backendDataApi } from "./fixtures/backend-resources.ts";
 

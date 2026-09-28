@@ -4,7 +4,7 @@ import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as FileSystem from "effect/FileSystem";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));

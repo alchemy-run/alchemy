@@ -3,7 +3,7 @@ import { CredentialsFromToken } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /** Dashboard host used by `railway login --browserless` pairing URLs. */
 export const RAILWAY_CLI_LOGIN_HOST = "https://railway.com";

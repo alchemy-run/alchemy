@@ -7,10 +7,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as EffectHttp from "effect/http/HttpEffect";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { safeHttpEffect } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
@@ -20,7 +20,7 @@ import { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import type { FunctionRuntimeContext } from "./FunctionRuntimeContext.ts";
 import { FunctionUpgradeSockets } from "./FunctionUpgrade.ts";
 
-const closeRequestScope = (scope: Scope.Scope) => {
+const closeRequestScope = (scope: Scope.Closeable) => {
   nativeWaitUntil(
     Effect.runPromise(
       Scope.close(scope, Exit.void).pipe(
@@ -116,7 +116,8 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               const socket = FunctionUpgradeSockets.get(res.body.body);
               if (socket && socket.readyState !== socket.CLOSED) {
                 EffectHttp.scopeDisableClose(scope);
-                const onClose = () => closeRequestScope(scope);
+                const onClose = () =>
+                  closeRequestScope(scope as Scope.Closeable);
                 socket.addEventListener("close", onClose, { once: true });
                 request.signal.addEventListener("abort", onClose, {
                   once: true,

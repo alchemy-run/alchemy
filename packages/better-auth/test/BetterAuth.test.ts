@@ -3,8 +3,8 @@ import { APIError } from "better-auth/api";
 import { anonymous } from "better-auth/plugins/anonymous";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import {
   BetterAuth,
   BetterAuthApiError,

@@ -209,7 +209,7 @@ export type Bucket = Resource<
  *
  * **Example:** Put an object from a Service
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",

@@ -10,7 +10,7 @@ import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import * as Clock from "effect/Clock";
 import * as Cause from "effect/Cause";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import {
   assertDead,
   lifecycleFixture,
