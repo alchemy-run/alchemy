@@ -205,7 +205,11 @@ export const collectBindingState = (
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
   const redis: { name: string; id?: string }[] = [];
-  const buckets: { name: string; id?: string }[] = [];
+  const buckets: {
+    name: string;
+    id?: string;
+    values?: Record<string, string>;
+  }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
   const targets: BoundTarget[] = [];
   for (const binding of active) {
@@ -230,15 +234,34 @@ export const collectBindingState = (
           name?: unknown;
           id?: unknown;
           addOnId?: unknown;
+          bucketName?: unknown;
+          accessKeyId?: unknown;
+          secretAccessKey?: unknown;
+          endpoint?: unknown;
+          region?: unknown;
         }
       | undefined;
     const bucketName = coerceBindingName(bucket?.name);
     const bucketId =
       coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
     if (bucketName !== undefined || bucketId !== undefined) {
+      // The bound Bucket's attributes carry the create-time Tigris
+      // credentials, which Fly's add-on lookup often returns empty.
+      const values: Record<string, string> = {};
+      for (const [key, value] of [
+        ["BUCKET_NAME", bucket?.bucketName],
+        ["AWS_ACCESS_KEY_ID", bucket?.accessKeyId],
+        ["AWS_SECRET_ACCESS_KEY", bucket?.secretAccessKey],
+        ["AWS_ENDPOINT_URL_S3", bucket?.endpoint],
+        ["AWS_REGION", bucket?.region],
+      ] as const) {
+        const plain = plainEnvValue(value);
+        if (plain !== undefined) values[key] = plain;
+      }
       buckets.push({
         name: bucketName ?? "",
         id: bucketId,
+        values,
       });
     }
     const pg = binding?.data?.postgres;

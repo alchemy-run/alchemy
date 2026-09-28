@@ -158,16 +158,34 @@ const withBase = (base: string, url: string) => {
 
 /**
  * Bind another {@link Service} and get a typed client for it. The client
- * calls the Service's methods (everything it returns besides `fetch` and
- * `run`) and forwards `fetch` requests, over Fly's private network.
+ * calls the Service's methods (everything its program returns besides
+ * `fetch` and `run`) and forwards `fetch` requests, over Fly's private
+ * network.
  *
- * Binding makes the caller deploy after the Service, records the binding
- * so reconcile can check the Service is reachable, and hands the caller
- * the Service's private address and caller token. Only callers that bind
- * a Service receive its token, so other Services on the same network
- * cannot call its methods.
+ * Binding makes the caller deploy after the Service and hands it the
+ * Service's private address and caller token. Only callers that bind a
+ * Service receive its token, so other Services on the same network cannot
+ * call its methods. Every call must also carry Fly's signed `Fly-Src`
+ * header from the same organization, so the public internet cannot call
+ * them. Calls are plain HTTP inside Fly's WireGuard-encrypted network.
  *
- * **Example:** Call a private Service
+ * ### Call a private Service
+ * **Example:** Methods on the target
+ * ```typescript
+ * export default class Users extends Fly.Service<Users>()(
+ *   "Users",
+ *   { main: import.meta.url, public: false },
+ *   Effect.gen(function* () {
+ *     return {
+ *       list: () => Effect.succeed(USERS),
+ *       get: (id: string) =>
+ *         Effect.succeed(USERS.find((user) => user.id === id)),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Bind it and call a method
  * ```typescript
  * export default class Orders extends Fly.Service<Orders>()(
  *   "Orders",
@@ -175,16 +193,68 @@ const withBase = (base: string, url: string) => {
  *   Effect.gen(function* () {
  *     const users = yield* Fly.bindService(Users);
  *     return {
- *       listOrders: () =>
+ *       list: () =>
  *         Effect.forEach(ORDERS, (order) =>
  *           users
- *             .getUser(order.userId)
+ *             .get(order.userId)
  *             .pipe(Effect.map((user) => ({ ...order, user }))),
  *         ),
  *     };
  *   }),
  * ) {}
  * ```
+ *
+ * ### Stream and forward HTTP
+ * **Example:** A method that returns a Stream
+ * ```typescript
+ * const all = yield* users.streamAll().pipe(Stream.runCollect);
+ * ```
+ *
+ * **Example:** Send a request to the Service's `fetch`
+ * ```typescript
+ * const response = yield* users.fetch(HttpClientRequest.get("/users/u1"));
+ * ```
+ *
+ * ### Bind one port
+ * {@link bindEndpoint} targets one published port, such as an admin API
+ * or a raw TCP protocol. Deploy fails with `Fly.EndpointNotPublished`
+ * when the Service does not publish it.
+ *
+ * **Example:** An admin API on port 9000
+ * ```typescript
+ * const admin = yield* Fly.bindEndpoint(Users, { port: 9000 });
+ * const stats = yield* admin.client.get("/stats");
+ * const host = yield* admin.host; // "{appName}.flycast"
+ * ```
+ *
+ * ### Two Services that bind each other
+ * Declare each as a tag class with its method shape, and implement each
+ * in its own file as the default export of `.make`.
+ *
+ * **Example:** Ping and Pong
+ * ```typescript
+ * // src/services.ts
+ * export class Ping extends Fly.Service<Ping, Named>()("Ping") {}
+ * export class Pong extends Fly.Service<Pong, Named>()("Pong") {}
+ *
+ * // src/ping.ts
+ * export default Ping.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const pong = yield* Fly.bindService(Pong);
+ *     return { name: () => Effect.succeed("ping") };
+ *   }),
+ * );
+ * ```
+ *
+ * ### Errors
+ * Each fails the caller's deploy before the caller is created:
+ * `Fly.ServiceUnreachable` when the caller and the Service are on
+ * different networks, `Fly.ServiceNotBindable` when the Service publishes
+ * no ports, and `Fly.EndpointNotPublished` for a port it does not publish.
+ *
+ * @binding
+ * @product Service
  */
 export const bindService = <Shape, Req = never>(
   target: Target<Shape> | Effect.Effect<Target<Shape>, never, Req>,
@@ -225,22 +295,10 @@ export const bindService = <Shape, Req = never>(
   });
 
 /**
- * Bind one published port of another {@link Service}. Use it for a port
- * other than the Service's main HTTP port, such as an admin API on its own
- * port or a raw TCP protocol. Reconcile fails with
- * `Fly.EndpointNotPublished` when the Service does not publish `port`.
- *
- * **Example:** An admin API on port 9000
- * ```typescript
- * const admin = yield* Fly.bindEndpoint(Admin, { port: 9000 });
- * const response = yield* admin.client.get("/stats");
- * ```
- *
- * **Example:** A raw TCP port
- * ```typescript
- * const cache = yield* Fly.bindEndpoint(Cache, { port: 6379 });
- * const host = yield* cache.host; // "{appName}.flycast"
- * ```
+ * Bind one published port of another {@link Service}: an admin API on
+ * its own port, or a raw TCP protocol. Returns the port's private host,
+ * its URL when it serves plain HTTP, and an `HttpClient` whose relative
+ * requests go there. See {@link bindService}.
  */
 export const bindEndpoint = <Shape, Req = never>(
   target: Target<Shape> | Effect.Effect<Target<Shape>, never, Req>,
