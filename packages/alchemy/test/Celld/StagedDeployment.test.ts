@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import { prepareBootstrap } from "@/Celld/Bootstrap.ts";
 import {
   APPLICATION_LOCK_KEY,
@@ -159,7 +160,7 @@ describe("Celld staged deployment verification", () => {
         const fake = yield* makeStore;
         const prepared = yield* prepareBootstrap({
           bucket: { uri: "s3://bootstrap" },
-          runtimeVersion: "0.5.0",
+          runtimeVersion: DEFAULT_CELLD_VERSION,
         });
         yield* stageDeployment(fake.store, prepared);
         expect(

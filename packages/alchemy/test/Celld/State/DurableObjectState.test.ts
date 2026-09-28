@@ -6,6 +6,7 @@ import {
 } from "@/Celld/DurableObjectState.ts";
 import type { NativeDurableObjectClass } from "@/Celld/WorkerLoader.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
+import { makeSyncSqlExecutor } from "@/Workers/SqlMigrationsApply.ts";
 import { nativeState } from "./fixtures/native-state.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
@@ -44,6 +45,43 @@ describe("Celld provider-owned DurableObjectState", () => {
           "request service",
         );
       }).pipe(Effect.provide(services)),
+  );
+
+  it.effect(
+    "SQL migration batches use a zero-argument transactionSync callback",
+    () =>
+      Effect.gen(function* () {
+        const statements: string[] = [];
+        let active = false;
+        let transactions = 0;
+        const executor = makeSyncSqlExecutor({
+          sql: {
+            exec: (sql) => {
+              expect(active).toBe(true);
+              statements.push(sql);
+              return { toArray: () => [] };
+            },
+          },
+          transactionSync: (run) => {
+            expect(run.length).toBe(0);
+            transactions++;
+            active = true;
+            try {
+              return run();
+            } finally {
+              active = false;
+            }
+          },
+        });
+        const batch = [
+          "CREATE TABLE example (id INTEGER PRIMARY KEY)",
+          "INSERT INTO example (id) VALUES (1)",
+        ];
+        yield* executor.batch(batch);
+        expect(transactions).toBe(1);
+        expect(statements).toEqual(batch);
+        expect(active).toBe(false);
+      }),
   );
 
   it.effect(

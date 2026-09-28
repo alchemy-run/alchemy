@@ -15,8 +15,8 @@ It does not invoke Wrangler or `celld deploy`.
 Install Alchemy and Effect in a Bun project and configure an
 [Alchemy profile](/environments/profiles) with AWS credentials. The deploying
 identity needs permissions for the host's ECS, networking, IAM, object storage,
-and management resources. Keep the default pinned Celld image until you have
-tested an override against the APIs you use.
+and management resources. The host uses the supported, digest-pinned Celld
+0.6.0 image; arbitrary runtime versions and image overrides are rejected.
 
 <Code code={`bun add alchemy "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}"`} lang="sh" />
 
@@ -126,6 +126,19 @@ The host owns infrastructure and private management access. Alchemy publishes
 through APIs and activates the selected revision; application requests go to
 the declared entrypoint. Background and service Workers belong in
 `Application.workers` and must use the same fleet.
+
+## Upgrade an existing fleet
+
+Updating the Alchemy package does not authorize an in-place runtime migration.
+The host rejects changes to an existing fleet's runtime version or image during
+an ordinary deployment. Preserve the backing data and plan a separate maintenance
+operation before upgrading an existing fleet.
+
+The [Celld 0.6.0 release notes](https://github.com/denoland/celld/releases/tag/v0.6.0)
+require stopping the entire fleet when upgrading from 0.5.1 with fleet durability;
+bucket durability supports a rolling update upstream. Alchemy's host keeps its
+more conservative stopped-fleet requirement. These release notes do not establish
+a verified direct upgrade from 0.5.0 to 0.6.0.
 
 ## Limitations
 

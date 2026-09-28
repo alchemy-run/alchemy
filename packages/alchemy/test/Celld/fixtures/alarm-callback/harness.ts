@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import { Endpoint } from "@distilled.cloud/celld/Endpoint";
 import * as Node from "@distilled.cloud/celld/node";
 import { Artifacts, makeScopedArtifacts } from "@/Artifacts.ts";
@@ -213,7 +214,7 @@ export const makeCallbackHarness = Effect.gen(function* () {
         ...connection,
         main,
         isExternal: version === "v1",
-        celldVersion: "0.5.0",
+        celldVersion: DEFAULT_CELLD_VERSION,
         compatibilityDate: "2026-09-01",
         compatibilityFlags: ["nodejs_compat"],
         fleetSecret: Redacted.make("callback-fixture-secret"),

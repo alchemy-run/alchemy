@@ -19,11 +19,10 @@ export class WorkerLoaderError extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-/** Celld v0.5 accepts JavaScript and WebAssembly, not cjs/py/text/data/json wrappers. */
+/** Celld accepts JavaScript and WebAssembly, not cjs/py/text/data/json wrappers. */
 export type WorkerLoaderModule =
   | string
   | { js: string }
-  | BufferSource
   | { wasm: BufferSource };
 
 export interface WorkerLoaderWorkerCode {
@@ -169,8 +168,8 @@ export const fromNativeWorkerLoader = (
 /**
  * A native worker_loader binding for Celld V8. Loaded workers support fetch,
  * direct single-method RPC, and facet class tokens, not pipelined RPC or
- * introspection. Native code-size limits apply; configurable resource limits,
- * tails, and experimental flags are not supported.
+ * introspection. Native code-size limits apply; this adapter does not expose
+ * configurable resource limits, tails, or experimental flags.
  *
  * ### Loading a Worker
  * **Example:** Register at init, then load within a request scope

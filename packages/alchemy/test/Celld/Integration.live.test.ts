@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Node from "@distilled.cloud/celld/node";
 import { Endpoint } from "@distilled.cloud/celld/Endpoint";
@@ -127,7 +128,7 @@ test.skipIf(!enabled)(
               ...connection,
               main: new URL("./fixtures/integration/worker.ts", import.meta.url)
                 .href,
-              celldVersion: "0.5.0",
+              celldVersion: DEFAULT_CELLD_VERSION,
               fleetSecret: Redacted.make("local-integration-gateway-secret"),
               compatibilityDate: "2026-09-01",
               compatibilityFlags: ["nodejs_compat"],

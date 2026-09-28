@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import * as Node from "@distilled.cloud/celld/node";
 import {
   APPLICATION_CLAIM_KEY,
@@ -642,7 +643,7 @@ describe("Celld Application publication", () => {
             expect(result.failure._tag).toBe("Celld.DeploymentError");
             expect(result.failure.reason).toBe("unsupported");
             expect(result.failure.message).toBe(
-              "Celld v0.5.0 cannot safely retire the previous root's persisted cron cell .cron:app when changing its script identity or removing all cron triggers. Keep root script app and at least one cron trigger; this transition requires verified native cron retirement support.",
+              `Celld ${DEFAULT_CELLD_VERSION} cannot safely retire the previous root's persisted cron cell .cron:app when changing its script identity or removing all cron triggers. Keep root script app and at least one cron trigger; this transition requires verified native cron retirement support.`,
             );
           }
           expect(fake.writes.slice(writes)).toEqual([]);

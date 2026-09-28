@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import { Retry } from "@distilled.cloud/aws/Retry";
@@ -73,7 +74,7 @@ export const prepareD1Live = (endpoint: string) =>
       );
     const bootstrap = yield* ensureBootstrap(store, {
       bucket,
-      runtimeVersion: "0.5.0",
+      runtimeVersion: DEFAULT_CELLD_VERSION,
     });
     yield* Effect.log({
       bucket: fixtureBucket,

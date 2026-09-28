@@ -4,6 +4,7 @@ import {
   type NativeDurableObjectClass,
   type NativeLoadedWorker,
   type NativeWorkerLoader,
+  type WorkerLoaderModule,
   type WorkerLoaderWorkerCode,
 } from "@/Celld/WorkerLoader.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
@@ -20,12 +21,25 @@ const code: WorkerLoaderWorkerCode = {
   modules: { "main.js": "export default {}" },
   globalOutbound: null,
 };
+type Assert<T extends true> = T;
+export type WorkerLoaderCodeContract = [
+  Assert<
+    {} extends Pick<WorkerLoaderWorkerCode, "compatibilityDate"> ? false : true
+  >,
+  Assert<ArrayBuffer extends WorkerLoaderModule ? false : true>,
+  Assert<Uint8Array extends WorkerLoaderModule ? false : true>,
+  Assert<
+    { wasm: Uint8Array<ArrayBuffer> } extends WorkerLoaderModule ? true : false
+  >,
+];
+
 class Value extends Context.Service<Value, string>()("Loader.Test.Value") {}
 
 const fixture = () =>
   Effect.sync(() => {
     const calls: string[] = [];
     const selections: unknown[] = [];
+    const loadedCodes: WorkerLoaderWorkerCode[] = [];
     const callbacks: (() =>
       | WorkerLoaderWorkerCode
       | Promise<WorkerLoaderWorkerCode>)[] = [];
@@ -56,8 +70,9 @@ const fixture = () =>
       },
     };
     const native: NativeWorkerLoader = {
-      load: () => {
+      load: (code) => {
         calls.push("load");
+        loadedCodes.push(code);
         return worker;
       },
       get: (name, callback) => {
@@ -66,7 +81,7 @@ const fixture = () =>
         return worker;
       },
     };
-    return { native, calls, callbacks, selections, token };
+    return { native, calls, callbacks, selections, loadedCodes, token };
   });
 
 describe("Celld native WorkerLoader adapter", () => {
@@ -107,6 +122,28 @@ describe("Celld native WorkerLoader adapter", () => {
           expect(selections[0]).toEqual({ name: "Tool", options: { props } });
         }).pipe(Effect.scoped);
         expect(calls.filter((call) => call === "dispose")).toHaveLength(1);
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+  );
+
+  it.effect(
+    "forwards the required compatibility date and explicit Wasm module wrapper",
+    () =>
+      Effect.gen(function* () {
+        const { native, loadedCodes, callbacks } = yield* fixture();
+        const loader = fromNativeWorkerLoader(() => native);
+        const wasm = yield* Effect.sync(
+          () => new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+        );
+        const source: WorkerLoaderWorkerCode = {
+          ...code,
+          modules: { ...code.modules, "module.wasm": { wasm } },
+        };
+        yield* loader.load(source).pipe(Effect.scoped);
+        expect(loadedCodes[0]).toBe(source);
+        expect(loadedCodes[0]!.compatibilityDate).toBe("2026-09-01");
+        expect(loadedCodes[0]!.modules["module.wasm"]).toEqual({ wasm });
+        yield* loader.get("wasm", () => source);
+        expect(yield* Effect.sync(callbacks[0]!)).toBe(source);
       }).pipe(Effect.provide(RuntimeContext.phantom)),
   );
 

@@ -124,8 +124,7 @@ export const resolveEcsHostConfiguration = (
       image !== DEFAULT_CELLD_IMAGE
     ) {
       return yield* new EcsHostConfigurationError({
-        message:
-          "EcsFleet only supports the pinned Celld 0.5.0 runtime image. Binary upgrades require an explicit stopped-fleet maintenance procedure, not an ECS rolling deployment.",
+        message: `EcsFleet only supports the pinned Celld ${DEFAULT_CELLD_VERSION} runtime image. Binary upgrades require an explicit stopped-fleet maintenance procedure, not an ECS rolling deployment.`,
       });
     }
     const capacity = options.capacity?.type ?? "fargate";

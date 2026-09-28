@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import * as Node from "@distilled.cloud/celld/node";
 import {
   ensureBootstrap,
@@ -10,7 +11,10 @@ import {
   stageDeployment,
 } from "@/Celld/Deployment.ts";
 import { decode, encode } from "@/Celld/Deployment/Objects.ts";
-import { BOOTSTRAP_MARKER_KEY } from "@/Celld/Deployment/Publication.ts";
+import {
+  BOOTSTRAP_MARKER_KEY,
+  BootstrapDescriptorSchema,
+} from "@/Celld/Deployment/Publication.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -18,7 +22,7 @@ import { makeStore } from "./DeploymentStore.ts";
 
 const props = {
   bucket: { uri: "s3://test-fleet", region: "us-east-1" },
-  runtimeVersion: "0.5.0",
+  runtimeVersion: DEFAULT_CELLD_VERSION,
 };
 const app = () =>
   prepareDeployment({
@@ -65,6 +69,37 @@ describe("Celld startup Bootstrap", () => {
         const writes = fake.writes.length;
         yield* ensureBootstrap(fake.store, props);
         expect(fake.writes.length).toBe(writes);
+      }),
+  );
+
+  test.effect(
+    "rejects old runtime descriptors without migrating retained state",
+    () =>
+      Effect.gen(function* () {
+        for (const runtimeVersion of ["0.5.0", "0.5.1"]) {
+          const fake = yield* makeStore;
+          yield* ensureBootstrap(fake.store, props);
+          const descriptor = yield* decode(
+            BootstrapDescriptorSchema,
+            fake.objects.get(BOOTSTRAP_MARKER_KEY)!.body,
+          );
+          expect(descriptor.runtimeVersion).toBe(DEFAULT_CELLD_VERSION);
+          yield* fake.store.put(
+            BOOTSTRAP_MARKER_KEY,
+            yield* encode({ ...descriptor, runtimeVersion }),
+          );
+          const before = new Map(fake.objects);
+          const writes = fake.writes.length;
+          for (const operation of [readBootstrap, ensureBootstrap]) {
+            expect(
+              Result.isFailure(
+                yield* Effect.result(operation(fake.store, props)),
+              ),
+            ).toBe(true);
+            expect(fake.writes.length).toBe(writes);
+            expect(fake.objects).toEqual(before);
+          }
+        }
       }),
   );
 
@@ -137,7 +172,14 @@ describe("Celld startup Bootstrap", () => {
     "refuses unsupported runtime migrations, altered descriptors and corrupt roots",
     () =>
       Effect.gen(function* () {
-        for (const runtimeVersion of ["0.1.0", "0.4.0", "0.6.0", "latest"])
+        for (const runtimeVersion of [
+          "0.1.0",
+          "0.4.0",
+          "0.5.0",
+          "0.5.1",
+          "0.7.0",
+          "latest",
+        ])
           expect(
             Result.isFailure(
               yield* Effect.result(

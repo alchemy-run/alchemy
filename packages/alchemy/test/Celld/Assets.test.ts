@@ -227,6 +227,23 @@ describe("Celld asset reader", () => {
   );
 
   test.effect(
+    "accepts root worker-first routes and exclusions supported by Celld 0.6",
+    () =>
+      withDirectory(({ main }) =>
+        Effect.gen(function* () {
+          for (const routes of [["/"], ["/*", "!/"]]) {
+            const assets = yield* readAssets(
+              main,
+              { directory: "public", runWorkerFirst: routes },
+              compatibility,
+            );
+            expect(assets.index.config.run_worker_first).toEqual(routes);
+          }
+        }),
+      ),
+  );
+
+  test.effect(
     "matches the native MIME table without inventing unknown content types",
     () =>
       withDirectory(({ main, write }) =>
@@ -723,7 +740,8 @@ describe("Celld asset reader", () => {
             [],
             ["!/only-negative"],
             ["/same", "/same"],
-            ["/"],
+            ["/", ""],
+            ["/", "!"],
             ["not-absolute"],
             ["/back\\slash"],
             [`/${"x".repeat(100)}`],

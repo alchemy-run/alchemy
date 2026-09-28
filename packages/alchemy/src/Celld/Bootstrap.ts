@@ -25,6 +25,7 @@ import {
 import { FleetStorage, type Store } from "./FleetStorage.ts";
 import type { FleetBucket } from "./Host.ts";
 import type { Providers } from "./Providers.ts";
+import { DEFAULT_CELLD_VERSION } from "./RuntimeVersion.ts";
 
 export interface BootstrapProps {
   /** Existing backing bucket; no Fleet or compute dependency is required. */
@@ -51,7 +52,7 @@ export interface Bootstrap extends Resource<
 > {}
 
 /**
- * Prepare a retained v0.5 startup deployment before fleet compute starts.
+ * Prepare a retained native startup deployment before fleet compute starts.
  * An existing root is read and preserved, never replaced by the bootstrap.
  *
  * ### Bootstrapping a Bucket
@@ -59,7 +60,7 @@ export interface Bootstrap extends Resource<
  * ```typescript
  * const bootstrap = yield* Celld.Bootstrap("Bootstrap", {
  *   bucket: { uri: "s3://my-fleet", region: "us-east-1" },
- *   runtimeVersion: "0.5.0",
+ *   runtimeVersion: Celld.DEFAULT_CELLD_VERSION,
  * });
  * // Pass bootstrap.version into the host's compute resource properties.
  * ```
@@ -69,13 +70,13 @@ export interface Bootstrap extends Resource<
  */
 export const Bootstrap = Resource<Bootstrap>("Celld.Bootstrap");
 
-/** Prepared local v0.5 fixture, also suitable for the host's live startup test. */
+/** Prepared local native fixture, also suitable for the host's live startup test. */
 export const prepareBootstrap = (props: BootstrapProps) =>
   Effect.gen(function* () {
-    if (props.runtimeVersion !== "0.5.0")
+    if (props.runtimeVersion !== DEFAULT_CELLD_VERSION)
       return yield* refuse(
         "unsupported",
-        "Bootstrap supports exactly Celld 0.5.0. Runtime migrations, including direct 0.1 upgrades, require an operator migration.",
+        `Bootstrap supports exactly Celld ${DEFAULT_CELLD_VERSION}. Runtime migrations require an explicit stopped-fleet operator migration.`,
       );
     if (!/^s3:\/\/[^/]+$/.test(props.bucket.uri))
       return yield* refuse(
@@ -120,7 +121,7 @@ const observeRoot = (store: Store) =>
     )
       return yield* refuse(
         "unsupported",
-        "Existing root is not a complete supported v0.5 deployment pointer; refusing automatic migration.",
+        "Existing root is not a complete supported native deployment pointer; refusing automatic migration.",
       );
     const manifestObject = yield* store.get(`${pointer.prefix}/manifest.json`);
     if (!manifestObject)
@@ -176,7 +177,7 @@ const observeRoot = (store: Store) =>
     )
       return yield* refuse(
         "unsupported",
-        "Existing root requires runtime features newer than v0.5.0.",
+        `Existing root requires runtime features unsupported by Celld ${DEFAULT_CELLD_VERSION}.`,
       );
     for (const module of manifest.modules) {
       if (
@@ -255,7 +256,7 @@ const expectedDescriptor = (
   pointer: Node.DeployPointer,
 ) => ({
   schemaVersion: 1 as const,
-  runtimeVersion: "0.5.0" as const,
+  runtimeVersion: DEFAULT_CELLD_VERSION,
   bucket: props.bucket,
   pointer,
 });

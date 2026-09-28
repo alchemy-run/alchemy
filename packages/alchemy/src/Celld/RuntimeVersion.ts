@@ -2,11 +2,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 /** Exact runtime release supported by the native deployment protocol. */
-export const DEFAULT_CELLD_VERSION = "0.5.0";
+export const DEFAULT_CELLD_VERSION = "0.6.0";
 
-/** Multi-architecture v0.5.0 image, release commit 12d5b6333fe52717325addcfe1e99e9fd4f77bcd. */
+/** Multi-architecture v0.6.0 image, release commit bad4649d01f0db84cdc9093527e72e64ca7a14bf. */
 export const DEFAULT_CELLD_IMAGE =
-  "ghcr.io/denoland/celld@sha256:df8e74bb9a059df5779644368984933eba76acd6a2d196672732f4368f760fc8";
+  "ghcr.io/denoland/celld@sha256:e188a7f2bb0b8cec9fb04ee4c3d1ed7cca0ea0419519ae2a9ba36e5b6fe5161b";
 
 /** Public Worker traffic; the peer/operator listener must remain private. */
 export const CELLD_PUBLIC_PORT = 8080;

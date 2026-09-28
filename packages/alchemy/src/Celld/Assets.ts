@@ -191,7 +191,7 @@ export const readAssets = (
           () => new TextEncoder().encode(route).length,
         );
         if (
-          length <= 1 ||
+          length === 0 ||
           length > 100 ||
           /[\\\0]/.test(route) ||
           (!route.startsWith("/") && !route.startsWith("!/"))

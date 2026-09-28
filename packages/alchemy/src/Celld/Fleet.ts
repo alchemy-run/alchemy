@@ -190,9 +190,11 @@ export type FleetClass = {
  * storage APIs; {@link Celld.Application} publishes and activates the selected graph.
  * Neither Wrangler nor `celld deploy` is invoked.
  *
- * ### v0.5.0 capabilities and limits <!-- api-prose -->
+ * ### Capabilities and limits <!-- api-prose -->
  * Celld embeds V8 rather than workerd. This integration targets the pinned
- * v0.5.0 runtime and is not a general Cloudflare API implementation.
+ * {@link Celld.DEFAULT_CELLD_VERSION} runtime, not a general Cloudflare API implementation.
+ * Runtime upgrades require an explicit stopped-fleet maintenance procedure;
+ * a normal deploy never rolls an existing fleet onto a new runtime.
  *
  * - {@link Celld.KV.Namespace}, {@link Celld.D1.Database}, {@link Celld.R2.Bucket},
  *   {@link Celld.Queues.Queue}, {@link Celld.DurableObject}, {@link Celld.Workflow},

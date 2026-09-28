@@ -7,6 +7,7 @@ import {
   type PreparedDeployment,
 } from "../Deployment.ts";
 import type { Store, StoredObject } from "../FleetStorage.ts";
+import { DEFAULT_CELLD_VERSION } from "../RuntimeVersion.ts";
 import {
   bytes,
   conditionalPut,
@@ -28,7 +29,7 @@ export const ROOT_POINTER_KEY = "deploy/current.json";
 
 export const BootstrapDescriptorSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
-  runtimeVersion: Schema.Literal("0.5.0"),
+  runtimeVersion: Schema.Literal(DEFAULT_CELLD_VERSION),
   bucket: Schema.Struct({
     uri: Schema.String,
     region: Schema.optional(Schema.String),
@@ -269,7 +270,7 @@ const checkGraph = (options: PublishApplicationOptions) =>
     if (options.workers.some((worker) => worker.manifest.crons?.length))
       return yield* refuse(
         "unsupported",
-        "Celld v0.5 runs only the root schedule; non-root cron triggers are refused.",
+        "Celld runs only the root schedule; non-root cron triggers are refused.",
       );
     const classes = new Set<string>();
     const queues = new Set<string>();
@@ -374,7 +375,7 @@ const checkCronTransition = (
     )
       return yield* refuse(
         "unsupported",
-        `Celld v0.5.0 cannot safely retire the previous root's persisted cron cell .cron:${scriptName} when changing its script identity or removing all cron triggers. Keep root script ${scriptName} and at least one cron trigger; this transition requires verified native cron retirement support.`,
+        `Celld ${DEFAULT_CELLD_VERSION} cannot safely retire the previous root's persisted cron cell .cron:${scriptName} when changing its script identity or removing all cron triggers. Keep root script ${scriptName} and at least one cron trigger; this transition requires verified native cron retirement support.`,
       );
   });
 

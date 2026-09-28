@@ -732,12 +732,13 @@ export const CelldWorkerProvider = () =>
           }),
         );
       }
-      if ((news.celldVersion ?? DEFAULT_CELLD_VERSION) !== "0.5.0") {
+      if (
+        (news.celldVersion ?? DEFAULT_CELLD_VERSION) !== DEFAULT_CELLD_VERSION
+      ) {
         return yield* Effect.fail(
           new DeploymentError({
             reason: "unsupported",
-            message:
-              "API deployment supports Celld 0.5.0 only; runtime upgrades require an explicit maintenance operation.",
+            message: `API deployment supports Celld ${DEFAULT_CELLD_VERSION} only; runtime upgrades require an explicit stopped-fleet maintenance operation.`,
           }),
         );
       }

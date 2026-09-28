@@ -110,7 +110,7 @@ Celld's Worker surface is provider-owned. Cloudflare-only bindings do not become
 available by changing an import. Public ingress is an application decision;
 management traffic stays on the host's private control path.
 
-Celld v0.5.0 runs cron triggers only on the Application entrypoint and cannot
+Celld v0.6.0 runs cron triggers only on the Application entrypoint and cannot
 safely retire a previous root's persisted cron cell. Once the root has cron
 triggers, Application rejects changing its script identity or removing all
 triggers before native publication writes. Keep the same root script and a

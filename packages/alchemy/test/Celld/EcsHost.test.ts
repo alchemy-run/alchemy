@@ -144,6 +144,19 @@ describe("Celld ECS host", () => {
     }
   });
 
+  test("requires a full fleet stop when upgrading from the previous WAL format", () => {
+    const result = run(
+      validateEcsHostTransition(
+        { ...configuration, runtimeVersion: "0.5.1" },
+        configuration,
+      ),
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure.message).toContain("stopped-fleet maintenance");
+    }
+  });
+
   test("rejects a container runtime on Fargate", () => {
     const result = run(
       resolveEcsHostConfiguration({ containerRuntime: "runsc" }, {}),
@@ -172,7 +185,9 @@ describe("Celld ECS host", () => {
   test("rejects an unsupported runtime version or unverified image", () => {
     for (const props of [
       { runtimeVersion: "0.1.0" },
-      { runtimeVersion: "0.6.0" },
+      { runtimeVersion: "0.5.0" },
+      { runtimeVersion: "0.5.1" },
+      { runtimeVersion: "0.7.0" },
       { image: "ghcr.io/denoland/celld:latest" },
     ]) {
       expect(
@@ -189,6 +204,8 @@ describe("Celld ECS host", () => {
     ).toBe(true);
     for (const previous of [
       { ...configuration, runtimeVersion: "0.1.0" },
+      { ...configuration, runtimeVersion: "0.5.0" },
+      { ...configuration, runtimeVersion: "0.5.1" },
       { ...configuration, image: "legacy-image" },
       { ...configuration, capacity: "ec2" as const },
       { ...configuration, instanceType: "m7i.large" },

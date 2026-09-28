@@ -1,3 +1,4 @@
+import { DEFAULT_CELLD_VERSION } from "@/Celld/RuntimeVersion.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Node from "@distilled.cloud/celld/node";
 import * as Runtime from "@distilled.cloud/celld/runtime";
@@ -435,7 +436,7 @@ live(
         const f = yield* fixture;
         const bootstrapProps = {
           bucket: connection.bucket,
-          runtimeVersion: "0.5.0",
+          runtimeVersion: DEFAULT_CELLD_VERSION,
         };
         yield* ensureBootstrap(f.store, bootstrapProps);
         const bootstrap = yield* prepareBootstrap(bootstrapProps);
