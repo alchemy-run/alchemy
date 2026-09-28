@@ -108,20 +108,17 @@ address that never arrives.
 ## Expose services on localhost
 
 To reach a service without `port-forward`, forward a host port to the
-node with `config`. This maps `localhost:8080` to port 30080 on the
-node:
+node. This maps `localhost:8080` to port 30080 on the node:
 
 ```typescript
 const cluster = yield* Kubernetes.LocalCluster("Cluster", {
   name: "alchemy",
-  config: {
-    nodes: [
-      {
-        role: "control-plane",
-        extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
-      },
-    ],
-  },
+  nodes: [
+    {
+      role: "control-plane",
+      extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
+    },
+  ],
 });
 ```
 
@@ -155,32 +152,29 @@ yield* Kubernetes.Manifest("WebNodePort", {
 
 `curl localhost:8080` now reaches podinfo. The same approach puts an
 ingress controller or Gateway implementation on ports 80 and 443:
-map those ports in `config`, then install the controller with a
+map those ports on the node, then install the controller with a
 [Helm chart](/kubernetes/objects/helm-charts), configured for kind.
 
 ## Configure the cluster
 
-`config` takes any
-[kind cluster configuration](https://kind.sigs.k8s.io/docs/user/configuration/),
-written as an object: `nodes` with their `extraPortMappings`,
-`extraMounts`, and labels, `networking`, `featureGates`, and so on.
-Alchemy adds the `kind` and `apiVersion` header and the containerd
-setting its registry needs. The cluster's name always comes from
-`name`.
+`LocalCluster` accepts the fields of a
+[kind cluster configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+as props: `nodes` with their `extraPortMappings`, `extraMounts`, and
+labels, `networking`, `featureGates`, `runtimeConfig`, and the kubeadm
+and containerd patches. Alchemy adds the containerd setting its
+registry needs.
 
 Worker nodes pull from the registry too:
 
 ```typescript
 const cluster = yield* Kubernetes.LocalCluster("Cluster", {
   name: "alchemy",
-  config: {
-    nodes: [{ role: "control-plane" }, { role: "worker" }, { role: "worker" }],
-  },
+  nodes: [{ role: "control-plane" }, { role: "worker" }, { role: "worker" }],
 });
 ```
 
-kind can't change a running cluster, so changing `config` replaces
-the cluster.
+kind can't change a running cluster, so changing any of these fields
+replaces the cluster.
 
 ## Choose a Kubernetes version
 
@@ -216,8 +210,8 @@ their images to the new port.
 
 ## Updates and replacement
 
-- Changing `name`, `nodeImage`, `kubeconfig`, or `config` replaces
-  the cluster.
+- Changing `name`, `nodeImage`, `kubeconfig`, or any kind field
+  (`nodes`, `networking`, and so on) replaces the cluster.
   Alchemy deletes the cluster and creates a new one. Everything
   deployed to it is recreated on the new cluster.
 - Changing `registryPort` moves the registry to the new port.

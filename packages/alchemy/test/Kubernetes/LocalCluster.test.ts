@@ -2,6 +2,7 @@ import * as Kubernetes from "@/Kubernetes";
 import { connectCluster, readObject } from "@/Kubernetes/internal/client.ts";
 import {
   kindClusterConfig,
+  kindConfigOf,
   REGISTRY_CONTAINERD_PATCH,
 } from "@/Kubernetes/internal/kind.ts";
 import { imagePlatformOf } from "@/Kubernetes/internal/workload.ts";
@@ -69,9 +70,7 @@ test.provider(
         olds: { name: "dev" },
         news: {
           name: "dev",
-          config: {
-            nodes: [{ role: "control-plane", extraPortMappings: ports }],
-          },
+          nodes: [{ role: "control-plane", extraPortMappings: ports }],
         },
       });
       expect(reconfigured?.action).toBe("replace");
@@ -80,15 +79,11 @@ test.provider(
         ...base,
         olds: {
           name: "dev",
-          config: {
-            nodes: [{ role: "control-plane", extraPortMappings: ports }],
-          },
+          nodes: [{ role: "control-plane", extraPortMappings: ports }],
         },
         news: {
           name: "dev",
-          config: {
-            nodes: [{ extraPortMappings: ports, role: "control-plane" }],
-          },
+          nodes: [{ extraPortMappings: ports, role: "control-plane" }],
         },
       });
       expect(sameConfig).toBeUndefined();
@@ -107,22 +102,32 @@ test.provider(
   "user kind config is kept and the registry patch is appended",
   () =>
     Effect.sync(() => {
-      expect(kindClusterConfig(undefined)).toEqual({
+      expect(kindClusterConfig(kindConfigOf({ name: "dev" }))).toEqual({
         kind: "Cluster",
         apiVersion: "kind.x-k8s.io/v1alpha4",
         containerdConfigPatches: [REGISTRY_CONTAINERD_PATCH],
       });
-      const config = kindClusterConfig({
-        nodes: [
-          {
-            role: "control-plane",
-            extraPortMappings: [{ containerPort: 80, hostPort: 8080 }],
-          },
-          { role: "worker" },
-        ],
-        containerdConfigPatches: ["# user patch"],
-        kind: "Ignored",
-      });
+      const config = kindClusterConfig(
+        kindConfigOf({
+          name: "dev",
+          registryPort: 5002,
+          nodeImage: "kindest/node:v1.33.1",
+          nodes: [
+            {
+              role: "control-plane",
+              extraPortMappings: [{ containerPort: 80, hostPort: 8080 }],
+            },
+            { role: "worker" },
+          ],
+          networking: { podSubnet: "10.244.0.0/16" },
+          containerdConfigPatches: ["# user patch"],
+        }),
+      );
+      // Alchemy's own props never reach kind's config.
+      expect(config.name).toBeUndefined();
+      expect(config.registryPort).toBeUndefined();
+      expect(config.nodeImage).toBeUndefined();
+      expect(config.networking).toEqual({ podSubnet: "10.244.0.0/16" });
       expect(config.kind).toBe("Cluster");
       expect(config.nodes).toHaveLength(2);
       expect(config.containerdConfigPatches).toEqual([

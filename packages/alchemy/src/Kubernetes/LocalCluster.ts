@@ -14,10 +14,10 @@ import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import type { Connection, ContainerRegistry } from "./Connection.ts";
 import { applyObject, connectCluster } from "./internal/client.ts";
-import { kindClusterConfig } from "./internal/kind.ts";
+import { kindClusterConfig, kindConfigOf } from "./internal/kind.ts";
 import type { Providers } from "./Providers.ts";
 
-export interface LocalClusterProps {
+export interface LocalClusterProps extends KindClusterConfig {
   /**
    * Name of the kind cluster. Its kubeconfig context is `kind-<name>`.
    * Changing it replaces the cluster.
@@ -33,7 +33,8 @@ export interface LocalClusterProps {
   registryPort?: number;
   /**
    * The kind node image, which selects the Kubernetes version (e.g.
-   * `kindest/node:v1.33.1`). Changing it replaces the cluster.
+   * `kindest/node:v1.33.1`). A node's own `image` overrides it. Changing it
+   * replaces the cluster.
    * @default kind's default node image
    */
   nodeImage?: string;
@@ -43,65 +44,115 @@ export interface LocalClusterProps {
    * @default `$KUBECONFIG` or `~/.kube/config`
    */
   kubeconfig?: string;
-  /**
-   * Extra [kind cluster configuration](https://kind.sigs.k8s.io/docs/user/configuration/):
-   * nodes and their `extraPortMappings`, `networking`, `featureGates`, and
-   * so on. Alchemy adds the `kind`/`apiVersion` header and the containerd
-   * patch its image registry needs; the cluster name comes from `name`.
-   * kind can't reconfigure a running cluster, so changing `config`
-   * replaces the cluster.
-   */
-  config?: KindClusterConfig;
 }
 
 /**
- * A [kind `Cluster` config](https://kind.sigs.k8s.io/docs/user/configuration/)
- * without its `kind`/`apiVersion` header. The common fields are typed; any
- * other field kind accepts is passed through.
+ * The fields of a [kind `Cluster` config](https://kind.sigs.k8s.io/docs/user/configuration/)
+ * (`kind.x-k8s.io/v1alpha4`), accepted directly on `LocalCluster`. kind
+ * can't reconfigure a running cluster, so changing any of them replaces the
+ * cluster.
  */
 export interface KindClusterConfig {
-  /** The cluster's nodes. Defaults to a single control-plane node. */
+  /**
+   * The cluster's nodes.
+   * @default a single control-plane node
+   */
   nodes?: KindNode[];
-  /** Cluster networking: pod and service subnets, API server address, CNI. */
-  networking?: Record<string, unknown>;
+  /** Cluster networking. */
+  networking?: KindNetworking;
   /** Kubernetes feature gates, e.g. `{ InPlacePodVerticalScaling: true }`. */
   featureGates?: Record<string, boolean>;
-  /** API server `--runtime-config` entries. */
+  /** API server `--runtime-config` entries, e.g. `{ "api/alpha": "false" }`. */
   runtimeConfig?: Record<string, string>;
-  /** kubeadm config patches applied to every node. */
+  /** kubeadm config patches (YAML strategic-merge) applied to every node. */
   kubeadmConfigPatches?: string[];
+  /** kubeadm config patches (RFC 6902 JSON patches) applied to every node. */
+  kubeadmConfigPatchesJSON6902?: KindJsonPatch[];
   /**
-   * containerd config patches. Alchemy appends its own for the image
+   * containerd config patches (TOML). Alchemy appends its own for the image
    * registry.
    */
   containerdConfigPatches?: string[];
-  [key: string]: unknown;
+  /** containerd config patches (RFC 6902 JSON patches). */
+  containerdConfigPatchesJSON6902?: string[];
 }
 
-/** A node in a {@link KindClusterConfig}. */
+/** A node in a kind cluster. */
 export interface KindNode {
+  /** Whether the node runs the control plane or only workloads. */
   role: "control-plane" | "worker";
   /** Node image for this node, overriding `nodeImage`. */
   image?: string;
-  /** Node labels. */
+  /** Kubernetes labels for the node. */
   labels?: Record<string, string>;
   /** Host ports forwarded to the node container. */
-  extraPortMappings?: {
-    containerPort: number;
-    hostPort: number;
-    listenAddress?: string;
-    protocol?: "TCP" | "UDP" | "SCTP";
-  }[];
+  extraPortMappings?: KindPortMapping[];
   /** Host paths mounted into the node container. */
-  extraMounts?: {
-    hostPath: string;
-    containerPath: string;
-    readOnly?: boolean;
-    propagation?: "None" | "HostToContainer" | "Bidirectional";
-  }[];
-  /** kubeadm config patches for this node. */
+  extraMounts?: KindMount[];
+  /** kubeadm config patches (YAML strategic-merge) for this node. */
   kubeadmConfigPatches?: string[];
-  [key: string]: unknown;
+  /** kubeadm config patches (RFC 6902 JSON patches) for this node. */
+  kubeadmConfigPatchesJSON6902?: KindJsonPatch[];
+}
+
+/** A host port forwarded to a kind node container. */
+export interface KindPortMapping {
+  /** Port on the node container, e.g. a NodePort or hostPort. */
+  containerPort: number;
+  /** Port on the host. */
+  hostPort: number;
+  /**
+   * Host address to listen on.
+   * @default "0.0.0.0"
+   */
+  listenAddress?: string;
+  /** @default "TCP" */
+  protocol?: "TCP" | "UDP" | "SCTP";
+}
+
+/** A host path mounted into a kind node container. */
+export interface KindMount {
+  /** Path on the host. */
+  hostPath: string;
+  /** Path in the node container. */
+  containerPath: string;
+  readOnly?: boolean;
+  /** Relabel the mount for SELinux hosts. */
+  selinuxRelabel?: boolean;
+  propagation?: "None" | "HostToContainer" | "Bidirectional";
+}
+
+/** Cluster networking settings for kind. */
+export interface KindNetworking {
+  ipFamily?: "ipv4" | "ipv6" | "dual";
+  /**
+   * Host port of the API server.
+   * @default a random port
+   */
+  apiServerPort?: number;
+  /**
+   * Host address the API server listens on.
+   * @default "127.0.0.1"
+   */
+  apiServerAddress?: string;
+  /** Pod network CIDR. */
+  podSubnet?: string;
+  /** Service network CIDR. */
+  serviceSubnet?: string;
+  /** Skip kind's default CNI so you can install your own. */
+  disableDefaultCNI?: boolean;
+  kubeProxyMode?: "iptables" | "ipvs" | "nftables" | "none";
+  /** DNS search domains for nodes. */
+  dnsSearch?: string[];
+}
+
+/** An RFC 6902 JSON patch targeting a kubeadm config object. */
+export interface KindJsonPatch {
+  group: string;
+  version: string;
+  kind: string;
+  /** The JSON patch document, as YAML or JSON. */
+  patch: string;
 }
 
 export interface LocalCluster extends Resource<
@@ -182,14 +233,12 @@ export interface LocalCluster extends Resource<
  * ```typescript
  * const cluster = yield* Kubernetes.LocalCluster("Cluster", {
  *   name: "alchemy",
- *   config: {
- *     nodes: [
- *       {
- *         role: "control-plane",
- *         extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
- *       },
- *     ],
- *   },
+ *   nodes: [
+ *     {
+ *       role: "control-plane",
+ *       extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
+ *     },
+ *   ],
  * });
  * ```
  *
@@ -399,7 +448,7 @@ export const LocalClusterProvider = () =>
         name: string;
         nodeImage: string | undefined;
         kubeconfig: string | undefined;
-        config: KindClusterConfig | undefined;
+        config: KindClusterConfig;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         if (!(yield* clusterExists(options.name))) {
@@ -548,7 +597,9 @@ export const LocalClusterProvider = () =>
             (news.name !== undefined && oldName !== newName) ||
             olds?.nodeImage !== news.nodeImage ||
             olds?.kubeconfig !== news.kubeconfig ||
-            !deepEqual(olds?.config, news.config, { stripNullish: true })
+            !deepEqual(kindConfigOf(olds ?? {}), kindConfigOf(news), {
+              stripNullish: true,
+            })
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
@@ -582,7 +633,7 @@ export const LocalClusterProvider = () =>
             name,
             nodeImage: news.nodeImage,
             kubeconfig: news.kubeconfig,
-            config: news.config,
+            config: kindConfigOf(news),
             session,
           });
           yield* ensureRegistry({ id, name, registryPort, session });

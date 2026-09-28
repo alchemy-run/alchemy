@@ -1,4 +1,4 @@
-import type { KindClusterConfig } from "../LocalCluster.ts";
+import type { KindClusterConfig, LocalClusterProps } from "../LocalCluster.ts";
 
 /**
  * containerd patch enabling the per-registry `hosts.toml` directory that
@@ -9,17 +9,38 @@ import type { KindClusterConfig } from "../LocalCluster.ts";
 export const REGISTRY_CONTAINERD_PATCH = `[plugins."io.containerd.grpc.v1.cri".registry]
   config_path = "/etc/containerd/certs.d"`;
 
+/** The kind config fields of a `LocalCluster`'s props. */
+export const kindConfigOf = ({
+  nodes,
+  networking,
+  featureGates,
+  runtimeConfig,
+  kubeadmConfigPatches,
+  kubeadmConfigPatchesJSON6902,
+  containerdConfigPatches,
+  containerdConfigPatchesJSON6902,
+}: Partial<LocalClusterProps>): KindClusterConfig => ({
+  nodes,
+  networking,
+  featureGates,
+  runtimeConfig,
+  kubeadmConfigPatches,
+  kubeadmConfigPatchesJSON6902,
+  containerdConfigPatches,
+  containerdConfigPatchesJSON6902,
+});
+
 /**
  * The kind cluster config `LocalCluster` passes to `kind create cluster`:
- * the user's config with the kind/apiVersion header and the registry
+ * the kind fields with the kind/apiVersion header and the registry
  * containerd patch added. kind reads YAML, and JSON is valid YAML.
  */
-export const kindClusterConfig = (config: KindClusterConfig | undefined) => ({
-  ...config,
+export const kindClusterConfig = (config: KindClusterConfig) => ({
   kind: "Cluster",
   apiVersion: "kind.x-k8s.io/v1alpha4",
+  ...JSON.parse(JSON.stringify(config)),
   containerdConfigPatches: [
-    ...(config?.containerdConfigPatches ?? []),
+    ...(config.containerdConfigPatches ?? []),
     REGISTRY_CONTAINERD_PATCH,
   ],
 });
