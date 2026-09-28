@@ -11,6 +11,7 @@ import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Progress, type ProgressEvent } from "@/Report.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
+import { packEnvValue } from "@/RuntimeContext.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -38,6 +39,7 @@ import {
   ArtifactProbe,
   BindingTarget,
   Bucket,
+  capturedConfigHost,
   Function,
   inDev,
   KindStablesResource,
@@ -1359,6 +1361,49 @@ test(
   }),
   { tags: ["unit", "local"] },
 );
+
+// #1831: values a Platform's Init captures reach the provider only through
+// `props.env`. `CapturedConfigHost`'s diff always returns `noop`, so these
+// actions come from the engine's own comparison of the captured values.
+describe("Platform Init-captured config", { tags: ["unit", "local"] }, () => {
+  const seedHost = (mode: string) =>
+    seed({
+      Host: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Host",
+        fqn: "Host",
+        namespace: undefined,
+        resourceType: "Test.CapturedConfigHost",
+        status: "created",
+        props: {
+          main: "index.ts",
+          env: { CAPTURED_MODE: packEnvValue(Redacted.make(mode)) },
+        },
+        attr: { mode },
+        bindings: [],
+        downstream: [],
+      },
+    });
+
+  test(
+    "an unchanged captured value keeps the provider's noop",
+    Effect.gen(function* () {
+      yield* seedHost("a");
+      const plan = yield* capturedConfigHost("a").pipe(makePlan);
+      expect(plan.resources.Host.action).toBe("noop");
+    }),
+  );
+
+  test(
+    "a changed captured value plans an update over the provider's noop",
+    Effect.gen(function* () {
+      yield* seedHost("a");
+      const plan = yield* capturedConfigHost("b").pipe(makePlan);
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+});
 
 describe(
   "replace resource when replaceString changes",

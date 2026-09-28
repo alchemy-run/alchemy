@@ -802,6 +802,18 @@ describe("Output.interpolate", { tags: ["unit", "local"] }, () => {
       }),
     ),
   );
+
+  it("derives its binding id from the template and arguments only", () => {
+    // The runtime bundler reprints function source, so a binding id that
+    // embeds the mapper's source differs between deploy and runtime.
+    const src = fakeResource("Test.Service", "Web");
+    // @ts-expect-error
+    const service = Output.of(src).serviceName;
+    const expr = Output.interpolate`http://${service}:${Output.literal(80)}`;
+    expect(String(expr[Symbol.for("nodejs.util.inspect.custom")]())).toBe(
+      "interpolate(http://${Web.serviceName}:${80})",
+    );
+  });
 });
 
 describe("Output coercion guard", { tags: ["unit", "local"] }, () => {

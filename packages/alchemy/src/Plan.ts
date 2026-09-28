@@ -34,6 +34,7 @@ import {
   type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
+import { capturedEnvKeys } from "./RuntimeContext.ts";
 import { parseFqn } from "./FQN.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -1742,6 +1743,16 @@ const makePlan = <A>(
                       : "noop",
                 } as UpdateDiff | NoopDiff),
             ),
+            // Values a Platform's Init captured (`yield* Config.x(...)`,
+            // `yield* output`) reach the provider only through `props.env`,
+            // and a provider's diff may not compare `env` (#1831). The engine
+            // compares them itself so a changed value always deploys.
+            Effect.map((diff) =>
+              diff.action === "noop" &&
+              capturedEnvChanged(resource, oldProps, news)
+                ? ({ action: "update" } satisfies UpdateDiff)
+                : diff,
+            ),
             Effect.map((diff) =>
               options.force && diff.action === "noop"
                 ? ({
@@ -2457,6 +2468,22 @@ export const destroy = (stack: {
         actions: {},
         output: undefined,
       }).pipe(Effect.map((plan) => ({ ...plan, destroy: true })));
+
+/**
+ * Whether any `env` value a Platform's Init captured differs from the
+ * persisted props. An unresolved value counts as changed.
+ */
+const capturedEnvChanged = (
+  resource: ResourceLike,
+  olds: { env?: Record<string, unknown> } | undefined,
+  news: { env?: Record<string, unknown> } | undefined,
+): boolean => {
+  const keys = capturedEnvKeys(resource);
+  if (keys.length === 0) return false;
+  const pick = (props: { env?: Record<string, unknown> } | undefined) =>
+    Object.fromEntries(keys.map((key) => [key, props?.env?.[key]]));
+  return havePropsChanged(pick(olds), pick(news));
+};
 
 const providePlanScope =
   (fqn: string, instanceId: string) =>

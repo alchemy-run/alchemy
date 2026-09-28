@@ -251,6 +251,9 @@
       "path": "./examples/prisma-tutorial/tsconfig.json"
     },
     {
+      "path": "./examples/kubernetes-tutorial/tsconfig.json"
+    },
+    {
       "path": "./examples/prisma-website-vite/tsconfig.json"
     },
     {
