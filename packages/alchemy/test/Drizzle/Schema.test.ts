@@ -374,3 +374,176 @@ test.provider(
     }),
   { tags: ["unit", "local"] },
 );
+
+const USERS_MODULE_SOURCE = SCHEMA_SOURCE;
+
+const POSTS_MODULE_SOURCE = `
+import { pgTable, serial, text } from "drizzle-orm/pg-core";
+
+export const posts = pgTable("posts", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+});
+`;
+
+const SQLITE_POSTS_MODULE_SOURCE = `
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const posts = sqliteTable("posts", {
+  id: integer("id").primaryKey(),
+  title: text("title").notNull(),
+});
+`;
+
+const stageModules = (root: string, modules: Record<string, string>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = path.join(root, "tables");
+    yield* fs.makeDirectory(dir, { recursive: true });
+    for (const [name, source] of Object.entries(modules)) {
+      yield* fs.writeFileString(path.join(dir, name), source);
+    }
+    return dir;
+  });
+
+const readTableNames = (out: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const [dir] = yield* readMigrationDirs(out);
+    const sql = yield* fs.readFileString(
+      path.join(out, dir ?? "", "migration.sql"),
+    );
+    return [...sql.matchAll(/CREATE TABLE [`"](\w+)[`"]/g)]
+      .map((match) => match[1])
+      .sort();
+  });
+
+test.provider(
+  "an array of schema modules generates every table",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+      const dir = yield* stageModules(ws.root, {
+        "users.ts": USERS_MODULE_SOURCE,
+        "posts.ts": POSTS_MODULE_SOURCE,
+      });
+
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: [path.join(dir, "users.ts"), path.join(dir, "posts.ts")],
+          out: ws.out,
+        }),
+      );
+
+      expect(yield* readMigrationDirs(ws.out)).toHaveLength(1);
+      expect(yield* readTableNames(ws.out)).toEqual(["posts", "users"]);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "a glob matches every schema module",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+      const dir = yield* stageModules(ws.root, {
+        "users.ts": USERS_MODULE_SOURCE,
+        "posts.ts": POSTS_MODULE_SOURCE,
+      });
+
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: path.join(dir, "*.ts"),
+          out: ws.out,
+        }),
+      );
+
+      expect(yield* readTableNames(ws.out)).toEqual(["posts", "users"]);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "a schema with no matching module fails",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+
+      const result = yield* Effect.result(
+        stack.deploy(
+          Drizzle.Schema("app-schema", {
+            schema: path.join(ws.root, "missing", "*.ts"),
+            out: ws.out,
+          }),
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("No schema module matches");
+      }
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "splitting one schema module into several is a noop",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(DRIFTED_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: ws.schemaPath,
+          out: ws.out,
+        }),
+      );
+      const initialDirs = yield* readMigrationDirs(ws.out);
+
+      const dir = yield* stageModules(ws.root, {
+        "users.ts": USERS_MODULE_SOURCE,
+        "posts.ts": POSTS_MODULE_SOURCE,
+      });
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: [path.join(dir, "users.ts"), path.join(dir, "posts.ts")],
+          out: ws.out,
+        }),
+      );
+
+      expect(yield* getStatus("app-schema")).toEqual("created");
+      expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "sqlite CLI fallback generates every table of an array of modules",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+      const dir = yield* stageModules(ws.root, {
+        "users.ts": SQLITE_SCHEMA_SOURCE,
+        "posts.ts": SQLITE_POSTS_MODULE_SOURCE,
+      });
+
+      yield* stack.deploy(
+        Drizzle.Schema("sqlite-schema", {
+          dialect: "sqlite",
+          schema: [path.join(dir, "users.ts"), path.join(dir, "posts.ts")],
+          out: ws.out,
+        }),
+      );
+
+      expect(yield* readMigrationDirs(ws.out)).toHaveLength(1);
+      expect(yield* readTableNames(ws.out)).toEqual(["posts", "users"]);
+    }),
+  { tags: ["unit", "local"] },
+);

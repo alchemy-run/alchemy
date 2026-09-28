@@ -4,6 +4,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess } from "effect/unstable/process";
 import * as crypto from "node:crypto";
+import { glob } from "tinyglobby";
 import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -30,14 +31,18 @@ type DrizzleKitApi = {
 
 export type SchemaProps = {
   /**
-   * Path to the schema module, relative to the current working directory.
-   * The module is loaded via dynamic `import()` so drizzle-kit can introspect
-   * the table definitions, then diffed against the latest snapshot under
-   * `out` to detect changes.
+   * The schema modules: a path or glob, or an array of them, relative to the
+   * current working directory — the same form as drizzle-kit's `schema`
+   * config. Every matched module is loaded via dynamic `import()` and their
+   * exports are combined so drizzle-kit can introspect the table
+   * definitions, then diffed against the latest snapshot under `out` to
+   * detect changes.
    *
    * @example "./src/schema.ts"
+   * @example "./src/schema/*.ts"
+   * @example ["./src/users.ts", "./src/posts.ts"]
    */
-  schema: string;
+  schema: string | string[];
   /**
    * Output directory for generated migrations. Each migration is written as
    * `{out}/{timestamp}_migration/{migration.sql, snapshot.json}`. Pass this
@@ -127,6 +132,11 @@ const dialectModule = (dialect: Dialect): string => {
 
 const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
+const schemaPatterns = (p: SchemaProps): string[] =>
+  typeof p.schema === "string" ? [p.schema] : p.schema;
+
+const describeSchema = (p: SchemaProps) => schemaPatterns(p).join(", ");
+
 const tsStamp = () =>
   new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
@@ -146,20 +156,53 @@ export const SchemaProvider = () =>
       // `resolveOut` form.
       const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
 
-      const resolveSchema = (p: SchemaProps) =>
-        path.resolve(process.cwd(), p.schema);
+      // Resolve `schema` to the matched module files, sorted so the result
+      // does not depend on filesystem order. drizzle-kit globs the same
+      // patterns; Windows backslashes are glob escapes, so pass forward
+      // slashes.
+      const resolveSchemaFiles = (p: SchemaProps) =>
+        Effect.gen(function* () {
+          const files = yield* Effect.tryPromise({
+            try: () =>
+              glob(
+                schemaPatterns(p).map((pattern) =>
+                  pattern.replaceAll("\\", "/"),
+                ),
+                { cwd: process.cwd(), absolute: true },
+              ),
+            catch: (cause) =>
+              new Error(
+                `Failed to resolve schema ${describeSchema(p)}: ${cause}`,
+              ),
+          });
+          if (files.length === 0) {
+            return yield* Effect.fail(
+              new Error(`No schema module matches ${describeSchema(p)}`),
+            );
+          }
+          return files.sort();
+        });
 
+      // Load every schema module and combine their exports. drizzle-kit reads
+      // only the values, so each distinct value is kept once: a table that
+      // two modules export is still one table.
       const loadSchemaModule = (p: SchemaProps) =>
         Effect.gen(function* () {
-          const schemaPath = resolveSchema(p);
-          return yield* Effect.tryPromise({
-            try: () =>
-              import(/* @vite-ignore */ schemaPath) as Promise<
-                Record<string, unknown>
-              >,
-            catch: (cause) =>
-              new Error(`Failed to import schema at ${p.schema}: ${cause}`),
-          });
+          const files = yield* resolveSchemaFiles(p);
+          const modules = yield* Effect.forEach(files, (file) =>
+            Effect.tryPromise({
+              try: () =>
+                import(/* @vite-ignore */ file) as Promise<
+                  Record<string, unknown>
+                >,
+              catch: (cause) =>
+                new Error(`Failed to import schema at ${file}: ${cause}`),
+            }),
+          );
+          const values = new Set(modules.flatMap((m) => Object.values(m)));
+          return Object.fromEntries(
+            [...values].map((value, index) => [String(index), value]),
+          );
         });
 
       const loadKit = (dialect: Dialect) =>
@@ -194,23 +237,30 @@ export const SchemaProvider = () =>
         Effect.gen(function* () {
           const dialect = props.dialect ?? "postgres";
           const bin = yield* drizzleKitBin(dialect);
-          const schemaPath = resolveSchema(props);
+          const schemaFiles = yield* resolveSchemaFiles(props);
           const nodeExecPath = yield* Effect.sync(() => process.execPath);
           const nodeModulesPath = path.join(process.cwd(), "node_modules");
 
-          // drizzle-kit globs the --schema/--out values; Windows backslashes
-          // are treated as glob escapes and match nothing, so pass forward
-          // slashes.
-          const args = [
-            bin,
-            "generate",
-            "--dialect",
-            dialect === "postgres" ? "postgresql" : dialect,
-            "--schema",
-            schemaPath.replaceAll("\\", "/"),
-            "--out",
-            out.replaceAll("\\", "/"),
-          ];
+          // The CLI's `--schema` takes one path, so hand drizzle-kit a config
+          // file listing every schema module. drizzle-kit globs the schema
+          // and out values; Windows backslashes are treated as glob escapes
+          // and match nothing, so pass forward slashes.
+          const configDir = yield* fs.makeTempDirectory({
+            prefix: "alchemy-drizzle-config-",
+          });
+          yield* Effect.addFinalizer(() =>
+            fs.remove(configDir, { recursive: true }).pipe(Effect.ignore),
+          );
+          const config = path.join(configDir, "drizzle.config.mjs");
+          yield* fs.writeFileString(
+            config,
+            `export default ${JSON.stringify({
+              dialect: dialect === "postgres" ? "postgresql" : dialect,
+              schema: schemaFiles.map((file) => file.replaceAll("\\", "/")),
+              out: out.replaceAll("\\", "/"),
+            })};\n`,
+          );
+          const args = [bin, "generate", "--config", config];
 
           const commandOptions = {
             cwd: process.cwd(),
@@ -262,12 +312,14 @@ export const SchemaProvider = () =>
             return yield* Effect.fail(
               new Error(
                 [
-                  `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
+                  `drizzle-kit needs a decision for ${describeSchema(props)} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
                   "",
                   result.stdout.trim(),
                   "",
                   "To resolve, generate the migration yourself and commit it:",
-                  `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+                  typeof props.schema === "string"
+                    ? `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`
+                    : `  npx drizzle-kit generate, with a drizzle.config.ts that sets dialect "${dialect === "postgres" ? "postgresql" : dialect}", schema ${JSON.stringify(props.schema)} and out "${props.out ?? "./migrations"}"`,
                   "then re-run the deploy (the schema resource will see no drift and apply the committed migration).",
                   "Alternatively, run the deploy in a terminal to answer drizzle-kit's prompts interactively.",
                 ].join("\n"),
@@ -280,7 +332,7 @@ export const SchemaProvider = () =>
               `drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`,
             ),
           );
-        });
+        }).pipe(Effect.scoped);
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
       // prefix. Returns an empty array if `out` doesn't exist.
@@ -488,9 +540,14 @@ export const SchemaProvider = () =>
           // testing `isAbsolute`: on Windows a cross-drive `out` can never be
           // relativized, so its canonical form IS absolute and an isAbsolute
           // check would flag an update on every deploy.
+          //
+          // Otherwise the schema is a noop even when `schema` itself changed:
+          // moving tables between modules, or listing them differently,
+          // leaves the migrations untouched, so it must not cascade into an
+          // update of the database resources that consume `out`.
           return changed || output.out !== relativeOut(resolveOut(news))
             ? { action: "update" }
-            : undefined;
+            : { action: "noop" };
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;
@@ -507,7 +564,7 @@ export const SchemaProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           yield* session.note(
-            `${output ? "Regenerating" : "Generating"} drizzle migrations for ${news.schema}`,
+            `${output ? "Regenerating" : "Generating"} drizzle migrations for ${describeSchema(news)}`,
           );
           return yield* regenerate(news);
         }),
