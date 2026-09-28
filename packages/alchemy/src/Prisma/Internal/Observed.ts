@@ -80,6 +80,8 @@ export interface ObservedBucket {
   readonly name: string;
   readonly createdAt: string;
   readonly project: { readonly id: string };
+  readonly branchId?: string | null;
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedApp {
@@ -91,6 +93,7 @@ export interface ObservedApp {
   readonly latestDeploymentId: string | null;
   readonly appEndpointDomain: string;
   readonly createdAt: string;
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedDeployment {
@@ -129,6 +132,7 @@ export interface ObservedProjectDatabase extends ObservedDatabase {
   readonly createdAt: string;
   readonly source: ObservedSource | null;
   readonly project: { readonly id: string };
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedProject {

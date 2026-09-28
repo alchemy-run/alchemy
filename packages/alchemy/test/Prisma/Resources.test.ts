@@ -470,7 +470,11 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     if (head === "databases") {
       if (id === undefined) {
         return request.method === "GET"
-          ? call(client.listDatabases, [], list)
+          ? call(
+              client.listDatabases,
+              [Object.fromEntries(new URLSearchParams(request.search))],
+              list,
+            )
           : call(client.createDatabase, [body]);
       }
       if (tail === "connections") {
@@ -3778,6 +3782,7 @@ describe(
                 host: undefined,
                 user: undefined,
                 password: undefined,
+                logicalId: null,
               },
             ),
           );
@@ -3849,6 +3854,7 @@ describe(
                 latestDeploymentId: null,
                 appEndpointDomain: "service-1.prisma.build",
                 createdAt,
+                logicalId: null,
               },
             ),
           );
@@ -4052,6 +4058,7 @@ describe(
                 host: undefined,
                 user: undefined,
                 password: undefined,
+                logicalId: null,
               },
             ),
           );
@@ -4073,6 +4080,7 @@ describe(
                 latestDeploymentId: null,
                 appEndpointDomain: "service-1.prisma.build",
                 createdAt,
+                logicalId: null,
               },
             ),
           );
@@ -4192,6 +4200,7 @@ describe(
                 host: undefined,
                 user: undefined,
                 password: undefined,
+                logicalId: null,
               },
             ),
           );
@@ -4271,6 +4280,7 @@ describe(
                   host: undefined,
                   user: undefined,
                   password: undefined,
+                  logicalId: null,
                 },
               ),
             )
@@ -4359,6 +4369,7 @@ describe(
                 host: "db.prisma.test",
                 user: "user",
                 password: undefined,
+                logicalId: null,
               },
               {
                 project: "project-1",
@@ -4371,6 +4382,239 @@ describe(
 
           expect(result.branchId).toBe("branch-1");
           expect(calls).toEqual([["getDatabase", "database-1"]]);
+        }).pipe(
+          Effect.provide(providerLayer(client)),
+          Effect.provide(managementApi(client).layer),
+        );
+      },
+      {
+        tags: [
+          "provider:prisma:app",
+          "provider:prisma:branch",
+          "provider:prisma:connection",
+          "provider:prisma:customdomain",
+          "provider:prisma:database",
+          "provider:prisma:deployment",
+          "provider:prisma:environmentvariable",
+          "provider:prisma:project",
+          "provider:prisma:sourcerepository",
+        ],
+      },
+    );
+
+    const logicalIdDatabase = (
+      id: string,
+      name: string,
+      logicalId: string | null,
+    ) => ({
+      id,
+      type: "database" as const,
+      url: `https://api.prisma.test/v1/databases/${id}`,
+      name,
+      status: "ready" as const,
+      createdAt,
+      isDefault: false,
+      defaultConnectionId: `connection-${id}`,
+      connections: [],
+      project: resourceRef("projects", "project-1", "app"),
+      region: { id: "us-east-1", name: "US East" },
+      source: { type: "empty" as const },
+      branchId: "branch-1",
+      logicalId,
+    });
+
+    it.effect(
+      "creates a database with its logical ID on the resolved branch",
+      () => {
+        const { client, calls } = makeClient();
+        const base = client as any;
+        const cloud = {
+          ...base,
+          listDatabases: (query: unknown) => {
+            calls.push(["listDatabases", query]);
+            return Effect.succeed([]);
+          },
+          createDatabase: (input: { logicalId?: string }) =>
+            base.createDatabase(input).pipe(
+              Effect.map((database: object) => ({
+                ...database,
+                logicalId: input.logicalId,
+              })),
+            ),
+        } as PrismaManagementClient;
+
+        return Effect.gen(function* () {
+          const provider = yield* PrismaDatabase.Provider;
+          const result = yield* provider.reconcile(
+            reconcileInput("Database", {
+              project: "project-1",
+              name: "main",
+              region: "us-east-1",
+              logicalId: "main-db",
+            }),
+          );
+
+          expect(result.logicalId).toBe("main-db");
+          expect(
+            calls.filter(
+              ([operation]) =>
+                operation === "listDatabases" || operation === "createDatabase",
+            ),
+          ).toEqual([
+            [
+              "listDatabases",
+              {
+                projectId: "project-1",
+                logicalId: "main-db",
+                branchId: "branch-1",
+              },
+            ],
+            [
+              "createDatabase",
+              {
+                projectId: "project-1",
+                name: "main",
+                region: "us-east-1",
+                isDefault: false,
+                logicalId: "main-db",
+              },
+            ],
+          ]);
+        }).pipe(
+          Effect.provide(providerLayer(cloud)),
+          Effect.provide(managementApi(cloud).layer),
+        );
+      },
+      {
+        tags: [
+          "provider:prisma:app",
+          "provider:prisma:branch",
+          "provider:prisma:connection",
+          "provider:prisma:customdomain",
+          "provider:prisma:database",
+          "provider:prisma:deployment",
+          "provider:prisma:environmentvariable",
+          "provider:prisma:project",
+          "provider:prisma:sourcerepository",
+        ],
+      },
+    );
+
+    it.effect(
+      "cold read owns the database with the logical ID and ignores a same-named one",
+      () => {
+        const named = logicalIdDatabase("database-named", "main", null);
+        const declared = logicalIdDatabase(
+          "database-declared",
+          "renamed-in-console",
+          "main-db",
+        );
+        const client = {
+          listDatabases: (query: { logicalId?: string }) =>
+            Effect.succeed(
+              [named, declared].filter(
+                (database) =>
+                  query.logicalId === undefined ||
+                  database.logicalId === query.logicalId,
+              ),
+            ),
+          listProjectDatabases: () => Effect.succeed([named]),
+        } as unknown as PrismaManagementClient;
+        const read = (logicalId?: string) =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.findProvider(PrismaDatabase);
+            return yield* provider.read!(
+              readInput("Database", {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                branchId: "branch-1",
+                ...(logicalId === undefined ? {} : { logicalId }),
+              }),
+            );
+          });
+
+        return Effect.gen(function* () {
+          const owned = yield* read("main-db");
+          expect(Unowned.is(owned)).toBe(false);
+          expect(owned?.databaseId).toBe("database-declared");
+          expect(owned?.logicalId).toBe("main-db");
+
+          expect(yield* read("other")).toBeUndefined();
+
+          const byName = yield* read();
+          expect(Unowned.is(byName)).toBe(true);
+          expect(byName?.databaseId).toBe("database-named");
+        }).pipe(
+          Effect.provide(providerLayer(client)),
+          Effect.provide(managementApi(client).layer),
+        );
+      },
+      {
+        tags: [
+          "provider:prisma:app",
+          "provider:prisma:branch",
+          "provider:prisma:connection",
+          "provider:prisma:customdomain",
+          "provider:prisma:database",
+          "provider:prisma:deployment",
+          "provider:prisma:environmentvariable",
+          "provider:prisma:project",
+          "provider:prisma:sourcerepository",
+        ],
+      },
+    );
+
+    it.effect(
+      "converges a database logical ID change in place",
+      () => {
+        const updates: unknown[] = [];
+        const database = logicalIdDatabase("database-1", "main", null);
+        const client = {
+          getDatabase: () => Effect.succeed(database),
+          updateDatabase: (_id: string, input: { logicalId?: string }) =>
+            Effect.sync(() => {
+              updates.push(input);
+              return { ...database, logicalId: input.logicalId };
+            }),
+        } as unknown as PrismaManagementClient;
+        const olds = {
+          project: "project-1",
+          name: "main",
+          region: "us-east-1" as const,
+          branchId: "branch-1",
+        };
+        const news = { ...olds, logicalId: "main-db" };
+        const output = {
+          databaseId: "database-1",
+          databaseName: "main",
+          projectId: "project-1",
+          status: "ready" as const,
+          region: "us-east-1",
+          isDefault: false,
+          branchId: "branch-1",
+          defaultConnectionId: "connection-database-1",
+          createdAt,
+          directConnectionString: Redacted.make("postgres://persisted"),
+          pooledConnectionString: undefined,
+          accelerateConnectionString: undefined,
+          host: "db.prisma.test",
+          user: "user",
+          password: undefined,
+          logicalId: null,
+        };
+
+        return Effect.gen(function* () {
+          const provider = yield* PrismaDatabase.Provider;
+          const diff = yield* provider.diff!(diffInput(olds, news, output));
+          const result = yield* provider.reconcile(
+            reconcileInput("Database", news, output, olds),
+          );
+
+          expect(diff).toEqual({ action: "update" });
+          expect(updates).toEqual([{ logicalId: "main-db" }]);
+          expect(result.databaseId).toBe("database-1");
+          expect(result.logicalId).toBe("main-db");
         }).pipe(
           Effect.provide(providerLayer(client)),
           Effect.provide(managementApi(client).layer),
