@@ -550,6 +550,7 @@ const api = (s: {
   marks?: CodeSpec["marks"];
   error?: CodeSpec["error"];
   quiet?: boolean;
+  emphasize?: string[];
   bundle?: BundlePanel;
   frames?: number;
   aside?: CodeSpec["aside"];
@@ -564,6 +565,7 @@ const api = (s: {
   marks: s.marks,
   error: s.error,
   quiet: s.quiet,
+  emphasize: s.emphasize,
   aside: s.aside,
   cross: s.cross,
   bundle: s.bundle,
@@ -2193,7 +2195,25 @@ export const steps: StepSpec[] = [
   // 4. How bindings work in Alchemy
   pick("Let's write the program again with Effect", "So let's write it with Effect"),
   pick("Resources are declared in construction, with yield*"),
-  pick("A binding is just another dependency to yield", "Using a resource is a binding, declared the same way"),
+  api({
+    title: "Translated directly, the need lands on fetch",
+    code: INFERRED,
+    emphasize: ["bucket.get("],
+    req: [],
+    fetchReq: [{ name: "R2.GetObject<Uploads>", note: "to read the bucket" }],
+    notes:
+      "Translate the imaginary language directly: fetch calls bucket.get, and its type needs R2.GetObject for Uploads. So the requirement lands on fetch.",
+  }),
+  api({
+    title: "But permissions are granted at deploy, and deploy runs construction",
+    code: INFERRED,
+    marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "runs per request, too late to grant anything", side: "right", tone: "bad" }],
+    req: [],
+    fetchReq: [{ name: "R2.GetObject<Uploads>", state: "bad", note: "to read the bucket" }],
+    notes:
+      "But whatever grants s3:GetObject has to run when the Worker is deployed, and that's construction. fetch only runs once requests arrive, long after the deploy.",
+  }),
+  pick("A binding is just another dependency to yield", "So declare it in construction, and get back a client"),
   pick("A queue works the same way"),
   pick("Then we hand it a Layer for each binding it needs"),
   pick("Each one is a binding layer, and it has two faces"),
