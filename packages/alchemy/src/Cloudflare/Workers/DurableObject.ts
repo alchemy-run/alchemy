@@ -1446,11 +1446,21 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(
-                typeof w === "string" ? w : w.workerName,
-                undefined,
-                classProps?.errors,
-              ),
+              typeof w === "string"
+                ? binding(w, undefined, classProps?.errors)
+                : // Compare `w` against the Worker actually hosting this DO,
+                  // resolved the same way `binding()` itself does it. A
+                  // same-Worker reference (e.g. `Counter.from(HostWorker)`
+                  // from inside `HostWorker`'s own constructor) must bind
+                  // locally (no `scriptName`) like `make()` does — only a
+                  // genuinely different Worker is cross-script.
+                  Effect.flatMap(Worker, (host) =>
+                    binding(
+                      w === host ? undefined : w.workerName,
+                      undefined,
+                      classProps?.errors,
+                    ),
+                  ),
             ),
           );
         };
