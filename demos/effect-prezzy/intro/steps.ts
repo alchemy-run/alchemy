@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { BundlePanel, Drill, MiniGraph, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import type { BundlePanel, Drill, MiniGraph, PhaseTimeline, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
 import CLIENTS from "./bundle-clients.json" with { type: "json" };
 import { demo } from "./demo.ts";
 
@@ -57,6 +57,8 @@ export interface CodeSpec {
   panel?: { title: string; items: PanelItem[] };
   /** A drawing beside the code that evolves with it. */
   diagram?: MiniGraph;
+  /** The two phases over time, drawn where the diagram goes. */
+  timeline?: PhaseTimeline;
   /** A value passed down a call chain, drawn beside the code. */
   drill?: Drill;
   /** The code's requirements (Effect's Req), listed beside it. */
@@ -370,14 +372,10 @@ const program = (): StepSpec[] => [
   lang({
     title: "So a cloud program is actually a language with two phases",
     src: { code: VERSIONED },
-    diagram: {
-      nodes: GRAPH(["versioning: on"], ENV),
-      edges: BINDINGS,
-      frame: { label: "construction", tone: "construct" },
-      incoming: { to: "api", label: "runtime · each request", tone: "runtime" },
-    },
+    timeline: { resources: [C.bucket, C.queue, C.api], requests: 5 },
+    frames: 60,
     notes:
-      "Construction is declarative: it runs once, at deploy time, and builds the architecture: the resources and bindings. Runtime is imperative: the function body runs on every request, using what construction declared.",
+      "Two phases, one after the other. Construction runs once, at deploy: it creates the bucket, the queue and the function, and they live on. Then runtime: the function body runs on every request, reading the bucket and sending to the queue, using what construction made.",
   }),
   lang({
     title: "One for construction, containing the resource declarations",

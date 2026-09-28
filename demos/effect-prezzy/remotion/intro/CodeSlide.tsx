@@ -4,6 +4,7 @@ import { hand, mono, sans } from "../fonts.ts";
 import { brand, vscode } from "../theme.ts";
 import { BundleView } from "./Bundle.tsx";
 import { DrillView } from "./Drill.tsx";
+import { TimelineView } from "./Timeline.tsx";
 import { ReqView, reqHeight } from "./Req.tsx";
 import { graphAnchor, MiniGraphView } from "./MiniGraph.tsx";
 import { Arrow, boxPath, circlePath, drawProgress, stroke, strikePath, TONE, underlinePath } from "./draw.tsx";
@@ -31,7 +32,7 @@ const lineText = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 const layout = (step: CodeStep, area: Area = AREA) => {
   const width =
     area.width -
-    (step.diagram
+    (step.diagram || step.timeline
       ? DIAGRAM_WIDTH + 60
       : step.panel || step.drill || step.req || step.bundle || (step.error && !step.error.below)
         ? PANEL_WIDTH + 60
@@ -528,6 +529,7 @@ export const CodeSlide = ({
           <MarkView key={i} mark={mark} g={g} step={step} index={i} progress={sameMark(mark) ? 1 : drawProgress(local, marksStart + i * 4, 9)} />
         ))}
       </svg>
+      {step.timeline ? <TimelineView timeline={step.timeline} local={local} delay={marksStart} /> : null}
       {step.diagram ? (
         <MiniGraphView
           graph={step.diagram}

@@ -265,6 +265,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     error,
     panel: spec.panel,
     diagram: spec.diagram,
+    timeline: spec.timeline,
     drill: spec.drill,
     req: spec.req,
     bundle: spec.bundle,

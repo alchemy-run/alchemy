@@ -91,6 +91,13 @@ export interface ReqPanel {
   parts?: { label: string; items: ReqItem[] }[];
 }
 
+/** Construction creates the resources once; then requests arrive, over and over. */
+export interface PhaseTimeline {
+  /** Rows, top to bottom; the last is the function that runs per request. */
+  resources: { title: string; color: string }[];
+  requests: number;
+}
+
 /** A value threaded down a call chain, drawn beside the code. */
 export interface Drill {
   /** Small heading above the chain. */
@@ -159,6 +166,8 @@ export interface CodeStep {
   error?: CodeError;
   panel?: { title: string; items: PanelItem[] };
   diagram?: MiniGraph;
+  /** The two phases over time, drawn where the diagram goes. */
+  timeline?: PhaseTimeline;
   drill?: Drill;
   req?: ReqPanel;
   bundle?: BundlePanel;
