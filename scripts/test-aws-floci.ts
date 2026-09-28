@@ -246,6 +246,9 @@ if (dryRun) {
 process.env.ALCHEMY_TEST_DEV = "1";
 process.env.AWS_ENDPOINT_URL = "http://localhost:4566";
 for (const gate of flociOptInGates) process.env[gate] ??= "1";
+// One test process deploys many functions at once; each rolldown build holds
+// its whole module graph in native memory.
+process.env.ALCHEMY_BUNDLE_CONCURRENCY ??= "2";
 for (const [name, value] of Object.entries(flociFixedValues)) {
   process.env[name] ??= value;
 }

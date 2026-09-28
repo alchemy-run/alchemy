@@ -35,10 +35,10 @@ export const RpcServerBun = RpcServer.layerServer(
           return new Response("Upgrade failed", { status: 400 });
         },
         websocket: {
-          // Bun closes sockets idle for 120s by default. The parent link
-          // carries no messages and a session can wait minutes on one
-          // provider call; losing either tears the sidecar down. A dead peer
-          // still closes the socket at the TCP level.
+          // Bun closes sockets idle for 120s by default. A session can wait
+          // minutes on one provider call, and losing the parent link tears
+          // the sidecar down; the parent also sends heartbeats on its link.
+          // A dead peer still closes the socket at the TCP level.
           idleTimeout: 0,
           open: (ws) => {
             if (ws.data && ws.data.type === "parent") {

@@ -178,7 +178,17 @@ export const make = Effect.fn(function* ({
       publish({ channel: "stdout", line }),
     );
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(new URL("/parent", url))),
+      Effect.sync(() => {
+        const ws = new WebSocket(new URL("/parent", url));
+        // Keep the parent link active so no idle timer on either end can
+        // close it; the sidecar ignores messages on this link.
+        const heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
+        }, 30_000);
+        heartbeat.unref?.();
+        ws.addEventListener("close", () => clearInterval(heartbeat));
+        return ws;
+      }),
       (ws) => Effect.sync(() => ws.close()),
     );
     return {
