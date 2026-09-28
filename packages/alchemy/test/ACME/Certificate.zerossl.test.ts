@@ -80,5 +80,16 @@ test.provider.skipIf(!enabled)(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:zone",
+      "provider:zerossl",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

@@ -1,8 +1,3 @@
-import {
-  NODE_SERVE_ENTRY_FILE_NAME,
-  relativeClientDirExpression,
-  writeNodeServeEntry,
-} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -24,6 +19,7 @@ import {
   type WebsiteAssetsProps,
   staticConfigFromAssets,
 } from "./FrameworkSite.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 const DEFAULT_PORT = 3000;
 
@@ -203,6 +199,11 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           ? ("spa" as const)
           : ("none" as const);
 
+    const {
+      NODE_SERVE_ENTRY_FILE_NAME,
+      relativeClientDirExpression,
+      writeNodeServeEntry,
+    } = yield* loadFrontendCore;
     const servePath = path.join(
       path.dirname(outdir),
       NODE_SERVE_ENTRY_FILE_NAME,

@@ -39,6 +39,7 @@ import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
 import * as Nextjs from "./Nextjs.ts";
+import * as Runner from "./Runner.ts";
 
 const packageVersion: string = createRequire(import.meta.url)(
   "../../package.json",
@@ -116,7 +117,6 @@ type WorkerWiring = Omit<
 /** The subset of alchemy's `DevContext` this provider consumes. */
 export interface DevContext extends SourceContext {
   readonly worker: {
-    readonly name: string;
     readonly bindings: NonNullable<WorkerWiring["bindings"]>;
     readonly durableObjectNamespaces: NonNullable<
       WorkerWiring["durableObjectNamespaces"]
@@ -135,7 +135,11 @@ export interface DevContext extends SourceContext {
   readonly runtimeContext: unknown;
 }
 
-export type SourceDevHandle = { readonly mode: "server"; readonly url: URL };
+export type SourceDevHandle = {
+  readonly mode: "server";
+  readonly url: URL;
+  readonly serviceBinding?: "http";
+};
 
 export type SourceError = SourceProviderError | PlatformError;
 
@@ -193,11 +197,13 @@ export interface NextjsSourceOptions {
   readonly root?: string | undefined;
   /** Rebuild-scope configuration (which files bust the build memo). */
   readonly memo?: NextjsMemoOptions | undefined;
-  /** Path of the OpenNext config, relative to the project root. @default "open-next.config.ts" */
+  /** Optional explicit config; otherwise discover `open-next.config.ts`, falling back to generated defaults. */
   readonly configPath?: string | undefined;
+  /** Resource-selected cache adapters. Defaults to the read-only static-assets cache. */
+  readonly cache?: "static-assets" | "kv" | undefined;
   /**
-   * The command the OpenNext pipeline runs to build the Next.js app. A
-   * `buildCommand` in the project's `open-next.config.ts` takes precedence.
+   * The command the OpenNext pipeline runs to build the Next.js app.
+   * Takes precedence over an explicitly supplied OpenNext config.
    * @default "npx next build"
    */
   readonly buildCommand?: string | undefined;
@@ -420,11 +426,27 @@ const hashInputTree = Effect.fn(function* (
         .pipe(Effect.flatMap(sha256Hex));
     }
   }
+  const configPath = yield* Runner.resolveConfigPath({
+    appDir: root,
+    configPath: options.configPath,
+  }).pipe(Effect.mapError(frameworkError));
+  const configHash =
+    configPath === undefined
+      ? undefined
+      : yield* fs.readFile(configPath).pipe(Effect.flatMap(sha256Hex));
   return yield* sha256Hex(
     stableStringify({
       version: packageVersion,
+      config: {
+        path:
+          configPath === undefined
+            ? undefined
+            : path.relative(root, configPath).replaceAll("\\", "/"),
+        hash: configHash,
+      },
       options: {
         configPath: options.configPath,
+        cache: options.cache,
         buildCommand: options.buildCommand,
         skipNextBuild: options.skipNextBuild,
         minify: options.minify,
@@ -540,9 +562,9 @@ const assetsConfigOf = (
     ? (ctx.assets as Record<string, unknown>)
     : undefined;
 
-const frameworkError = (
-  cause: FrameworkCore.FrameworkError,
-): SourceProviderError =>
+const frameworkError = (cause: {
+  readonly message: string;
+}): SourceProviderError =>
   new SourceProviderError({
     provider: PROVIDER,
     message: cause.message,
@@ -576,6 +598,7 @@ export interface NextjsBuildChildConfig {
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly configPath: string | undefined;
+  readonly cache: "static-assets" | "kv" | undefined;
   readonly buildCommand: string | undefined;
   readonly skipNextBuild: boolean | undefined;
   readonly minify: boolean | undefined;
@@ -592,6 +615,7 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
       },
       nextjs: {
         configPath: config.configPath,
+        cache: config.cache,
         buildCommand: config.buildCommand,
         skipNextBuild: config.skipNextBuild,
         minify: config.minify,
@@ -612,6 +636,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
     },
     nextjs: {
       configPath: options.configPath,
+      cache: options.cache,
       buildCommand: options.buildCommand,
       skipNextBuild: options.skipNextBuild,
       minify: options.minify,
@@ -641,6 +666,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           configPath: options.configPath,
+          cache: options.cache,
           buildCommand: options.buildCommand,
           skipNextBuild: options.skipNextBuild,
           minify: options.minify,
@@ -710,7 +736,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
-            name: ctx.worker.name,
+            name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
             hyperdrives: ctx.worker.hyperdrives,
@@ -725,6 +751,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       return {
         mode: "server",
         url: new URL(server.url),
+        serviceBinding: options.dev?.mode === "hmr" ? "http" : undefined,
       } satisfies SourceDevHandle;
     }),
   };

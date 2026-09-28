@@ -300,7 +300,7 @@ const routeCoverageHarness = () => {
   return { layer, captured };
 };
 
-describe("PrismaClient", () => {
+describe("PrismaClient", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it("extracts canonical endpoint secrets and parses direct credentials", () => {
     const secrets = extractConnectionSecrets({
       id: "connection-1",

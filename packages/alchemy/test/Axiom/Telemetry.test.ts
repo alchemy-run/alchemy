@@ -79,5 +79,15 @@ test.provider.skipIf(!hasAxiomCreds)(
 
       yield* stack.destroy();
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:axiom",
+      "provider:axiom:apitoken",
+      "provider:axiom:dataset",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

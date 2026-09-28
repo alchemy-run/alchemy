@@ -74,7 +74,8 @@ jobs:
       - name: Build packages
         run: pnpm build:pkg
 
-      # Keep the directory lists in sync with the `build:pkg` script.
+      # The @distilled.cloud list is alchemy's dependency set, which `build:pkg`
+      # derives with `--filter=alchemy...`; keep the @alchemy.run list in sync.
       - name: Pack packages
         id: pack
         run: >-
@@ -83,7 +84,7 @@ jobs:
           --rebuild-all-path 'scripts/copy-package-files.ts'
           --group 'alchemy=./packages/alchemy'
           --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
-          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,cloudflare,fly-io,github,hetzner,neon,prisma,planetscale,railway,stripe,zerossl}'
+          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,cloudflare,doppler,fly-io,github,hetzner,infisical,neon,prisma,planetscale,railway,stripe,zerossl}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'

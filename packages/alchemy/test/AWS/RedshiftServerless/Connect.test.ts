@@ -28,6 +28,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:redshiftserverless", "live"] },
 );
 
 let baseUrl: string;
@@ -38,6 +39,14 @@ let baseUrl: string;
 // afterAll.
 describe.skipIf(!process.env.AWS_TEST_REDSHIFT)(
   "RedshiftServerless.Connect",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:redshiftserverless",
+      "live",
+    ],
+  },
   () => {
     beforeAll(
       Effect.gen(function* () {

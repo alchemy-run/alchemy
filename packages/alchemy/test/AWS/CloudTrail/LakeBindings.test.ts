@@ -143,5 +143,13 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       yield* stack.destroy();
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudtrail",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

@@ -53,5 +53,17 @@ test(
     expect(body.dnsNames).toEqual([NAME]);
     expect(body.hasKey).toBe(true);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "provider:zerossl",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

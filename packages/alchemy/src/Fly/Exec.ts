@@ -38,6 +38,7 @@ export interface ExecRequest {
  * ```
  *
  * @binding
+ * @product Sprite
  */
 export interface Exec extends Binding.Service<
   Exec,

@@ -86,7 +86,18 @@ test.provider(
       if (Result.isFailure(revokedAgain))
         expect(revokedAgain.failure._tag).toBe("AcmeAlreadyRevoked");
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -118,7 +129,18 @@ test.provider(
       expect(second.accountUrl).not.toBe(first.accountUrl);
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -145,5 +167,14 @@ test.provider(
       expect(JSON.stringify(result)).toContain("ACME.DnsSolverNotRegistered");
       yield* stack.destroy();
     }),
-  { timeout: 60_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "live",
+    ],
+    timeout: 60_000,
+  },
 );

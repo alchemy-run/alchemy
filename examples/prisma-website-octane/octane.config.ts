@@ -1,8 +1,6 @@
-import { node } from "@alchemy.run/frontend-frameworks/octane/node-adapter";
 import { defineConfig, RenderRoute, ServerRoute } from "@octanejs/vite-plugin";
 
 export default defineConfig({
-  adapter: node(),
   router: {
     routes: [
       new ServerRoute({

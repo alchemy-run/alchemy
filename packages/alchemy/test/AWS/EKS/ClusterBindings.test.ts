@@ -129,5 +129,8 @@ test.provider.skipIf(
       }).pipe(Effect.ensuring(slowStack.destroy().pipe(Effect.orDie)));
     }),
   // cluster create (~10 min) + probes + delete (~10 min) in one test.
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:aws", "provider:aws:eks", "provider:aws:lambda", "live"],
+    timeout: 2_400_000,
+  },
 );

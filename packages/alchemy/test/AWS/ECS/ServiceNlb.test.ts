@@ -163,5 +163,8 @@ test.provider.skipIf(!!process.env.FAST)(
         );
       expect(targetGroupGone).toBe(true);
     }),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 900_000,
+  },
 );

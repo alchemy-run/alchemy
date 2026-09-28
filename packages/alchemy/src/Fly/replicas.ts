@@ -21,7 +21,12 @@ import {
   type MachineCheck,
 } from "./Deployment.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
+import {
+  classifyDeploymentState,
+  validProtocol2Generation,
+} from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
+import { regionOfReplica } from "./Region.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
   MachineGuest,
@@ -95,13 +100,17 @@ export interface ReplicaSet {
   machineIds: string[];
   name: string;
   baseName?: string;
+  /** Region of replica 0. */
   region: string;
+  /** Regions the replicas run in, in replica order. */
+  regions: string[];
   state: string;
   instanceId: string | undefined;
   privateIp: string | undefined;
   imageRef: MachineImageRef | undefined;
   guest: MachineGuest | undefined;
-  url: string | undefined;
+  /** Observed proxy services published by replica 0. */
+  services: FlyMachineService[] | undefined;
   count: number;
   mounts: MountedDisk[];
   replicas: Replica[];
@@ -1011,14 +1020,19 @@ export const toReplicaSet = (
     name: primary?.name ?? baseName,
     baseName,
     region: primary?.region ?? "",
+    regions: [
+      ...new Set(
+        replicas
+          .map((replica) => replica.region)
+          .filter((region) => region.length > 0),
+      ),
+    ],
     state: primary?.state ?? "",
     instanceId: primary?.instanceId,
     privateIp: primary?.privateIp,
     imageRef: primary?.imageRef,
     guest: primary?.guest,
-    url: hasPublishedService(services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
+    services,
     count: replicas.length,
     mounts: primary?.mounts ?? [],
     replicas,
@@ -1142,7 +1156,11 @@ export interface ReconcileReplicasInput {
   type: FlyAlchemyType;
   appName: string;
   baseName: string;
-  region: string;
+  /**
+   * Regions to run in. `count` is the total replica count; replica `i`
+   * runs in `regions[i % regions.length]`.
+   */
+  regions: readonly string[];
   count: number;
   disks: DiskSpec[];
   skipLaunch?: boolean;
@@ -1259,32 +1277,47 @@ const reconcileLeasedReplicas = Effect.fn(function* (
   );
   for (const [index] of scaleDown) byIndex.delete(index);
 
+  // Volumes are regional: one group per disk and region, sized to the
+  // replicas that run there.
+  const replicasIn = (region: string) =>
+    Array.from({ length: input.count }, (_, index) => index).filter(
+      (index) => regionOfReplica(input.regions, index) === region,
+    ).length;
   const groups: Array<{
     disk: DiskSpec;
     name: string;
-    volumes: FlyVolume[];
-    extras: FlyVolume[];
+    byRegion: Map<string, { volumes: FlyVolume[]; extras: FlyVolume[] }>;
   }> = [];
   for (const [diskIndex, disk] of input.disks.entries()) {
     const name = yield* volumeGroupName(input.id, disk);
     const preferIds = (input.preferVolumeIds ?? [])
       .map((replica) => replica[diskIndex])
       .filter((id): id is string => id !== undefined && id.length > 0);
-    const ensured = yield* ensureVolumeGroup({
-      appName: input.appName,
-      name,
-      region: input.region,
-      count: input.count,
-      disk,
-      preferIds,
-    });
-    groups.push({ disk, name, ...ensured });
+    const byRegion = new Map<
+      string,
+      { volumes: FlyVolume[]; extras: FlyVolume[] }
+    >();
+    for (const region of input.regions) {
+      byRegion.set(
+        region,
+        yield* ensureVolumeGroup({
+          appName: input.appName,
+          name,
+          region,
+          count: replicasIn(region),
+          disk,
+          preferIds,
+        }),
+      );
+    }
+    groups.push({ disk, name, byRegion });
   }
 
   const usedVolumeIds = new Set<string>();
   const live: FlyMachine[] = [];
   for (let index = 0; index < input.count; index++) {
     const name = replicaMachineName(input.baseName, index, input.count);
+    const region = regionOfReplica(input.regions, index);
     const metadata = {
       ...alchemy,
       [alchemyMetadataKeys.replica]: String(index),
@@ -1300,7 +1333,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     const mounts: FlyMachineMount[] = [];
     for (const [diskIndex, group] of groups.entries()) {
       const volume = pickVolume(
-        group.volumes,
+        group.byRegion.get(region)?.volumes ?? [],
         usedVolumeIds,
         prefer[diskIndex],
       );
@@ -1316,12 +1349,19 @@ const reconcileLeasedReplicas = Effect.fn(function* (
     }
     const config = buildConfig({ index, mounts, metadata });
     let current = byIndex.get(index);
+    // Fly cannot move a Machine between regions. Machine names are unique
+    // per App, so retire the old replica before creating it in its region.
+    if (current !== undefined && current.region !== region) {
+      yield* retireMachines(input.appName, [current], false, leases);
+      byIndex.delete(index);
+      current = undefined;
+    }
     if (current === undefined) {
       const created = yield* machines
         .createMachine({
           app_name: input.appName,
           name,
-          region: input.region,
+          region,
           config,
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
@@ -1450,7 +1490,9 @@ const reconcileLeasedReplicas = Effect.fn(function* (
   );
 
   for (const group of groups) {
-    for (const extra of group.extras) {
+    for (const extra of [...group.byRegion.values()].flatMap(
+      (placed) => placed.extras,
+    )) {
       const volumeId = extra.id;
       if (volumeId === undefined || usedVolumeIds.has(volumeId)) continue;
       yield* deleteVolume(input.appName, volumeId);
@@ -1459,7 +1501,9 @@ const reconcileLeasedReplicas = Effect.fn(function* (
 
   const volumesById = new Map<string, FlyVolume>();
   for (const group of groups) {
-    for (const volume of group.volumes) {
+    for (const volume of [...group.byRegion.values()].flatMap(
+      (placed) => placed.volumes,
+    )) {
       if (volume.id !== undefined) volumesById.set(volume.id, volume);
     }
   }
@@ -1574,6 +1618,17 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       const count = Number(
         group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
       );
+      if (
+        group.some(
+          (machine) => classifyDeploymentState(machine).protocol === "invalid",
+        )
+      )
+        return false;
+      const protocol2 = group.some(
+        (machine) =>
+          machine.config?.metadata?.[alchemyMetadataKeys.protocol] === "2",
+      );
+      if (protocol2 && !validProtocol2Generation(group)) return false;
       return (
         Number.isSafeInteger(count) &&
         count > 0 &&
@@ -1589,7 +1644,8 @@ export const observeReplicaSet = Effect.fn(function* (input: {
             metadata?.[alchemyMetadataKeys.phase] === "active" &&
             machine.cordoned === false &&
             (metadata[alchemyMetadataKeys.protocol] === undefined ||
-              (metadata[alchemyMetadataKeys.protocol] === "1" &&
+              ((metadata[alchemyMetadataKeys.protocol] === "1" ||
+                metadata[alchemyMetadataKeys.protocol] === "2") &&
                 metadata[alchemyMetadataKeys.restored] === "true" &&
                 (metadata[alchemyMetadataKeys.role] === "idle" ||
                   (machine.instance_id !== undefined &&
@@ -1604,7 +1660,11 @@ export const observeReplicaSet = Effect.fn(function* (input: {
         Number(b[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0) -
         Number(a[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0),
     );
-  const listed = (committed[0]?.[1] ?? groups.get(undefined) ?? []).sort(
+  const legacy = (groups.get(undefined) ?? []).filter((machine) => {
+    const { protocol } = classifyDeploymentState(machine);
+    return protocol === "legacy" || protocol === "1";
+  });
+  const listed = (committed[0]?.[1] ?? legacy).sort(
     (a, b) => replicaIndexOf(a) - replicaIndexOf(b),
   );
   const rolloutPending = owned.some((machine) => !listed.includes(machine));
@@ -1636,6 +1696,13 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     return {
       ...toReplicaSet([], input.appName, input.baseName ?? ""),
       region: owned[0]?.region ?? "",
+      regions: [
+        ...new Set(
+          owned
+            .map((machine) => machine.region ?? "")
+            .filter((region) => region.length > 0),
+        ),
+      ],
       rolloutPending: true,
     };
   return undefined;

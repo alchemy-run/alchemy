@@ -158,7 +158,17 @@ for (const scenario of scenarios) {
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
         yield* assertAppGone(app.appName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-    { timeout: 300_000 },
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:bucket",
+        "provider:fly:machine",
+        "provider:fly:service",
+        "live",
+      ],
+      timeout: 300_000,
+    },
   );
 }
 
@@ -236,7 +246,16 @@ test.provider(
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
       yield* assertAppGone(created.app.appName);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:bucket",
+      "provider:fly:machine",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 test.provider(
@@ -314,5 +333,15 @@ test.provider(
       yield* stack.destroy();
       yield* assertAppGone(app.appName);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)), Effect.scoped),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:bucket",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

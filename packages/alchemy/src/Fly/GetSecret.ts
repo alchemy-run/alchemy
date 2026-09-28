@@ -40,6 +40,7 @@ import type { Secret } from "./Secret.ts";
  * ```
  *
  * @binding
+ * @product Secret
  */
 export interface GetSecret extends Binding.Service<
   GetSecret,

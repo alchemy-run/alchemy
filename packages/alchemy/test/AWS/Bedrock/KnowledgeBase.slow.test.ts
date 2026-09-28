@@ -122,7 +122,10 @@ test.provider.skipIf(gated)(
       yield* stack.destroy();
       yield* assertKbGone(result.knowledgeBaseId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:bedrock", "provider:aws:s3", "live"],
+    timeout: 600_000,
+  },
 );
 
 // Runtime coverage for the KB-scoped bindings (document ingestion, ingestion
@@ -223,5 +226,14 @@ test.provider.skipIf(gated)(
 
       yield* stack.destroy();
     }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:bedrock",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

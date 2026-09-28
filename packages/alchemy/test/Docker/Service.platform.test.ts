@@ -104,5 +104,8 @@ test.provider(
       );
       expect(imageGone).toBe(true);
     }),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:docker", "provider:docker:service", "local"],
+    timeout: 420_000,
+  },
 );

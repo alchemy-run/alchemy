@@ -76,7 +76,15 @@ test(
     // would deliver the stream's attributes as a plain object.
     expect(body).toMatchObject({ mode: "async", sent: true, kind: "function" });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -92,7 +100,15 @@ test(
       kind: "function",
     });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -135,5 +151,13 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

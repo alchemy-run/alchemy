@@ -77,5 +77,13 @@ test.provider.skipIf(!runLive)(
       }
     }).pipe(logLevel),
   // One Prisma Compute deploy alone can take the full 600s.
-  { timeout: 1_200_000 },
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:compute",
+      "provider:prisma:project",
+      "live",
+    ],
+    timeout: 1_200_000,
+  },
 );

@@ -26,6 +26,7 @@ import { WriteSecret, type WriteSecretClient } from "./WriteSecret.ts";
  * ```
  *
  * @layer
+ * @product Secret
  * @provides Fly.WriteSecret
  */
 export const WriteSecretHttp = Layer.effect(

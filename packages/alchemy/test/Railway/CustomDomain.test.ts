@@ -198,7 +198,16 @@ test.provider(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:customdomain",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!TEST_DOMAIN)(
@@ -251,5 +260,14 @@ test.provider.skipIf(!TEST_DOMAIN)(
       );
       expect(domainGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:customdomain",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

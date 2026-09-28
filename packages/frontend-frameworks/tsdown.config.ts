@@ -5,6 +5,17 @@ export default defineConfig([
     cwd: ".",
     entry: {
       "core/index": "src/core/index.ts",
+      "astro/neon": "src/astro/neon.ts",
+      "nextjs/neon": "src/nextjs/neon.ts",
+      "nuxt/neon": "src/nuxt/neon.ts",
+      "octane/neon": "src/octane/neon.ts",
+      "react-router/neon": "src/react-router/neon.ts",
+      "solidstart/neon": "src/solidstart/neon.ts",
+      "tanstack-start/neon": "src/tanstack-start/neon.ts",
+      "sveltekit/neon": "src/sveltekit/neon.ts",
+      "vite/neon": "src/vite/neon.ts",
+      "waku/neon": "src/waku/neon.ts",
+      "vocs/neon": "src/vocs/neon.ts",
       // Standalone child-process entries (spawned by BuildChild.ts /
       // DevChild.ts, never imported) — must keep their own stable files at
       // dist/core/.

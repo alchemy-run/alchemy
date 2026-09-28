@@ -343,6 +343,7 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * ```
  *
  * @resource
+ * @product Sandbox
  */
 export const Sandbox: typeof SandboxResource = Object.assign(
   (
@@ -699,7 +700,7 @@ export type ExecResult = ExecSandboxResponse;
  * ```
  *
  * @binding
- * @product Railway
+ * @product Sandbox
  */
 export interface Exec extends Binding.Service<
   Exec,
@@ -723,6 +724,7 @@ export interface ExecClient {
  * HTTP / GraphQL implementation of {@link Exec}.
  *
  * @layer
+ * @product Sandbox
  * @provides Railway.Sandbox.Exec
  */
 export const ExecHttp = Layer.effect(

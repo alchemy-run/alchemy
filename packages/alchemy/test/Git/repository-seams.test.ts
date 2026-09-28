@@ -84,7 +84,7 @@ export const ReposWithLogging = Layer.effect(
   })),
 );
 
-describe("Repository seams", () => {
+describe("Repository seams", { tags: ["unit", "local"] }, () => {
   it.effect("a decorated namespace observes every commitPush", () =>
     Effect.gen(function* () {
       const fakeStub = {

@@ -220,5 +220,14 @@ test.provider(
         );
       expect(gone).toBe(true);
     }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:eventbridge",
+      "provider:aws:lambda",
+      "provider:aws:sqs",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
