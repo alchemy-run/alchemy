@@ -105,6 +105,83 @@ kubectl --context kind-alchemy port-forward service/web 9898:9898
 A `LoadBalancer` Service would wait about three minutes for an
 address that never arrives.
 
+## Expose services on localhost
+
+To reach a service without `port-forward`, forward a host port to the
+node with `config`. This maps `localhost:8080` to port 30080 on the
+node:
+
+```typescript
+const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+  name: "alchemy",
+  config: {
+    nodes: [
+      {
+        role: "control-plane",
+        extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
+      },
+    ],
+  },
+});
+```
+
+Then give the service a `NodePort` Service on that port. A Deployment
+labels its pods `app.kubernetes.io/name: <name>`, so a
+[Manifest](/kubernetes/objects/manifests) can select them:
+
+```typescript
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  name: "web",
+  image: "ghcr.io/stefanprodan/podinfo:6.15.0",
+  port: 9898,
+  serviceType: "ClusterIP",
+});
+
+yield* Kubernetes.Manifest("WebNodePort", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: { name: "web-nodeport", namespace: web.namespace },
+    spec: {
+      type: "NodePort",
+      selector: { "app.kubernetes.io/name": web.deploymentName },
+      ports: [{ port: 9898, targetPort: 9898, nodePort: 30080 }],
+    },
+  },
+});
+```
+
+`curl localhost:8080` now reaches podinfo. The same approach puts an
+ingress controller or Gateway implementation on ports 80 and 443:
+map those ports in `config`, then install the controller with a
+[Helm chart](/kubernetes/objects/helm-charts), configured for kind.
+
+## Configure the cluster
+
+`config` takes any
+[kind cluster configuration](https://kind.sigs.k8s.io/docs/user/configuration/),
+written as an object: `nodes` with their `extraPortMappings`,
+`extraMounts`, and labels, `networking`, `featureGates`, and so on.
+Alchemy adds the `kind` and `apiVersion` header and the containerd
+setting its registry needs. The cluster's name always comes from
+`name`.
+
+Worker nodes pull from the registry too:
+
+```typescript
+const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+  name: "alchemy",
+  config: {
+    nodes: [{ role: "control-plane" }, { role: "worker" }, { role: "worker" }],
+  },
+});
+```
+
+kind can't change a running cluster, so changing `config` replaces
+the cluster.
+
 ## Choose a Kubernetes version
 
 `nodeImage` selects the kind node image, and with it the Kubernetes
@@ -139,7 +216,8 @@ their images to the new port.
 
 ## Updates and replacement
 
-- Changing `name`, `nodeImage`, or `kubeconfig` replaces the cluster.
+- Changing `name`, `nodeImage`, `kubeconfig`, or `config` replaces
+  the cluster.
   Alchemy deletes the cluster and creates a new one. Everything
   deployed to it is recreated on the new cluster.
 - Changing `registryPort` moves the registry to the new port.

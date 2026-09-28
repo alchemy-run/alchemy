@@ -7,13 +7,14 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import type { Connection, ContainerRegistry } from "./Connection.ts";
 import { applyObject, connectCluster } from "./internal/client.ts";
+import { kindClusterConfig } from "./internal/kind.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface LocalClusterProps {
@@ -42,6 +43,65 @@ export interface LocalClusterProps {
    * @default `$KUBECONFIG` or `~/.kube/config`
    */
   kubeconfig?: string;
+  /**
+   * Extra [kind cluster configuration](https://kind.sigs.k8s.io/docs/user/configuration/):
+   * nodes and their `extraPortMappings`, `networking`, `featureGates`, and
+   * so on. Alchemy adds the `kind`/`apiVersion` header and the containerd
+   * patch its image registry needs; the cluster name comes from `name`.
+   * kind can't reconfigure a running cluster, so changing `config`
+   * replaces the cluster.
+   */
+  config?: KindClusterConfig;
+}
+
+/**
+ * A [kind `Cluster` config](https://kind.sigs.k8s.io/docs/user/configuration/)
+ * without its `kind`/`apiVersion` header. The common fields are typed; any
+ * other field kind accepts is passed through.
+ */
+export interface KindClusterConfig {
+  /** The cluster's nodes. Defaults to a single control-plane node. */
+  nodes?: KindNode[];
+  /** Cluster networking: pod and service subnets, API server address, CNI. */
+  networking?: Record<string, unknown>;
+  /** Kubernetes feature gates, e.g. `{ InPlacePodVerticalScaling: true }`. */
+  featureGates?: Record<string, boolean>;
+  /** API server `--runtime-config` entries. */
+  runtimeConfig?: Record<string, string>;
+  /** kubeadm config patches applied to every node. */
+  kubeadmConfigPatches?: string[];
+  /**
+   * containerd config patches. Alchemy appends its own for the image
+   * registry.
+   */
+  containerdConfigPatches?: string[];
+  [key: string]: unknown;
+}
+
+/** A node in a {@link KindClusterConfig}. */
+export interface KindNode {
+  role: "control-plane" | "worker";
+  /** Node image for this node, overriding `nodeImage`. */
+  image?: string;
+  /** Node labels. */
+  labels?: Record<string, string>;
+  /** Host ports forwarded to the node container. */
+  extraPortMappings?: {
+    containerPort: number;
+    hostPort: number;
+    listenAddress?: string;
+    protocol?: "TCP" | "UDP" | "SCTP";
+  }[];
+  /** Host paths mounted into the node container. */
+  extraMounts?: {
+    hostPath: string;
+    containerPath: string;
+    readOnly?: boolean;
+    propagation?: "None" | "HostToContainer" | "Bidirectional";
+  }[];
+  /** kubeadm config patches for this node. */
+  kubeadmConfigPatches?: string[];
+  [key: string]: unknown;
 }
 
 export interface LocalCluster extends Resource<
@@ -117,6 +177,22 @@ export interface LocalCluster extends Resource<
  * );
  * ```
  *
+ * ### Kind Configuration
+ * **Example:** Forward a host port to a NodePort
+ * ```typescript
+ * const cluster = yield* Kubernetes.LocalCluster("Cluster", {
+ *   name: "alchemy",
+ *   config: {
+ *     nodes: [
+ *       {
+ *         role: "control-plane",
+ *         extraPortMappings: [{ containerPort: 30080, hostPort: 8080 }],
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
  * ### Registry Port
  * **Example:** Two local clusters
  * ```typescript
@@ -145,19 +221,6 @@ const DockerBin = Config.String("DOCKER_BIN").pipe(
 
 const REGISTRY_IMAGE = "registry:3";
 const DEFAULT_REGISTRY_PORT = 5001;
-
-/**
- * kind cluster config enabling containerd's per-registry `hosts.toml`
- * directory — the default on kind v0.27+ node images, kept for older ones
- * (https://kind.sigs.k8s.io/docs/user/local-registry/).
- */
-const KIND_CONFIG = `kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry]
-    config_path = "/etc/containerd/certs.d"
-`;
 
 interface CommandResult {
   exitCode: number;
@@ -336,6 +399,7 @@ export const LocalClusterProvider = () =>
         name: string;
         nodeImage: string | undefined;
         kubeconfig: string | undefined;
+        config: KindClusterConfig | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
         if (!(yield* clusterExists(options.name))) {
@@ -346,7 +410,10 @@ export const LocalClusterProvider = () =>
             prefix: "alchemy-kind-",
           });
           const configFile = path.join(dir, "kind.yaml");
-          yield* fs.writeFileString(configFile, KIND_CONFIG);
+          yield* fs.writeFileString(
+            configFile,
+            JSON.stringify(kindClusterConfig(options.config), null, 2),
+          );
           yield* kind([
             "create",
             "cluster",
@@ -480,7 +547,8 @@ export const LocalClusterProvider = () =>
           if (
             (news.name !== undefined && oldName !== newName) ||
             olds?.nodeImage !== news.nodeImage ||
-            olds?.kubeconfig !== news.kubeconfig
+            olds?.kubeconfig !== news.kubeconfig ||
+            !deepEqual(olds?.config, news.config, { stripNullish: true })
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
@@ -514,6 +582,7 @@ export const LocalClusterProvider = () =>
             name,
             nodeImage: news.nodeImage,
             kubeconfig: news.kubeconfig,
+            config: news.config,
             session,
           });
           yield* ensureRegistry({ id, name, registryPort, session });

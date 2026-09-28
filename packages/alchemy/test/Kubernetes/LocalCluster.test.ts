@@ -1,5 +1,9 @@
 import * as Kubernetes from "@/Kubernetes";
 import { connectCluster, readObject } from "@/Kubernetes/internal/client.ts";
+import {
+  kindClusterConfig,
+  REGISTRY_CONTAINERD_PATCH,
+} from "@/Kubernetes/internal/kind.ts";
 import { imagePlatformOf } from "@/Kubernetes/internal/workload.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -59,12 +63,72 @@ test.provider(
       });
       expect(reimaged?.action).toBe("replace");
 
+      const ports = [{ containerPort: 30080, hostPort: 8080 }];
+      const reconfigured = yield* provider.diff!({
+        ...base,
+        olds: { name: "dev" },
+        news: {
+          name: "dev",
+          config: {
+            nodes: [{ role: "control-plane", extraPortMappings: ports }],
+          },
+        },
+      });
+      expect(reconfigured?.action).toBe("replace");
+
+      const sameConfig = yield* provider.diff!({
+        ...base,
+        olds: {
+          name: "dev",
+          config: {
+            nodes: [{ role: "control-plane", extraPortMappings: ports }],
+          },
+        },
+        news: {
+          name: "dev",
+          config: {
+            nodes: [{ extraPortMappings: ports, role: "control-plane" }],
+          },
+        },
+      });
+      expect(sameConfig).toBeUndefined();
+
       const moved = yield* provider.diff!({
         ...base,
         olds: { name: "dev" },
         news: { name: "dev", registryPort: 5002 },
       });
       expect(moved).toBeUndefined();
+    }),
+  { tags },
+);
+
+test.provider(
+  "user kind config is kept and the registry patch is appended",
+  () =>
+    Effect.sync(() => {
+      expect(kindClusterConfig(undefined)).toEqual({
+        kind: "Cluster",
+        apiVersion: "kind.x-k8s.io/v1alpha4",
+        containerdConfigPatches: [REGISTRY_CONTAINERD_PATCH],
+      });
+      const config = kindClusterConfig({
+        nodes: [
+          {
+            role: "control-plane",
+            extraPortMappings: [{ containerPort: 80, hostPort: 8080 }],
+          },
+          { role: "worker" },
+        ],
+        containerdConfigPatches: ["# user patch"],
+        kind: "Ignored",
+      });
+      expect(config.kind).toBe("Cluster");
+      expect(config.nodes).toHaveLength(2);
+      expect(config.containerdConfigPatches).toEqual([
+        "# user patch",
+        REGISTRY_CONTAINERD_PATCH,
+      ]);
     }),
   { tags },
 );

@@ -311,10 +311,17 @@ same deployments. See [CI](/environments/ci) for running
 Kubernetes has no state backend of its own, so pick one of:
 
 - **`Alchemy.localState()`.** State lives on disk under `.alchemy/`
-  next to your code. This is fine for trying things out alone.
-- **A cloud state store.** `Cloudflare.state()` or `AWS.state()`
-  shares state with your team and CI. See
-  [State Store](/state-store).
+  next to your code. This is fine for trying things out alone, but CI
+  and teammates can't see it.
+- **`postgresState()`.** State lives in a Postgres database you
+  already run, such as a managed database from your Kubernetes
+  provider. It locks each stage while a deploy runs. See
+  [Postgres state store](/state-store#postgres-state-store).
+- **`Cloudflare.state()` or `AWS.state()`.** State lives in your
+  Cloudflare or AWS account. See [State Store](/state-store).
+- **Your own store.** Implement the state service over S3-compatible
+  storage, Redis, or anything else. See
+  [Custom state store](/state-store/custom-state-store).
 
 Each resource stores its cluster connection in state so
 `alchemy destroy` can reach the cluster later, even after the code
