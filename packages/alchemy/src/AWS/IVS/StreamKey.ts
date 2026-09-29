@@ -133,7 +133,12 @@ export const StreamKeyProvider = () =>
               : undefined;
           if (streamKey === undefined) return undefined;
           const attrs = yield* toAttrs(streamKey);
-          return (yield* hasAlchemyTags(id, toTagRecord(streamKey.tags)))
+          const tags = toTagRecord(streamKey.tags);
+          // CreateChannel auto-provisions an untagged key on the channel we
+          // manage; that default key is ours to adopt, not a foreign one.
+          const isChannelDefaultKey =
+            output?.streamKeyArn === undefined && Object.keys(tags).length === 0;
+          return isChannelDefaultKey || (yield* hasAlchemyTags(id, tags))
             ? attrs
             : Unowned(attrs);
         }),

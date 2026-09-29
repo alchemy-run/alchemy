@@ -19,10 +19,11 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CodePipelineBindings");
 
 // A fresh Lambda role can remain unauthorized by CodePipeline after the
-// function itself is active.
+// function itself is active — for more than three minutes when a full AWS
+// run is churning IAM, even though the inline policy is already in place.
 const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(90),
+  Schedule.fixed("5 seconds"),
+  Schedule.recurs(120),
 ]);
 
 let baseUrl: string;
@@ -182,7 +183,7 @@ describe.sequential(
           Effect.retry({ schedule: readinessPolicy }),
         );
       }),
-      { timeout: 300_000 },
+      { timeout: 780_000 },
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {

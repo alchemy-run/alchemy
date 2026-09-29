@@ -31,7 +31,7 @@ let deployed = false;
 
 const deployNetwork = Effect.gen(function* () {
   yield* vpcLease.acquire;
-  yield* networkStack.destroy();
+  yield* networkStack.destroy().pipe(Effect.onError(() => vpcLease.release));
   return yield* networkStack.deploy(
     Effect.gen(function* () {
       const network = yield* AWS.EC2.Network("Network", {
@@ -57,6 +57,10 @@ const deployNetwork = Effect.gen(function* () {
         subnetGroupName: subnetGroup.subnetGroupName,
       } as unknown as ProvisionedNetwork;
     }),
+  ).pipe(
+    // A failed or interrupted deploy must hand the VPC slot back; otherwise
+    // every later VPC-leasing suite in the run waits on it forever.
+    Effect.onError(() => vpcLease.release),
   );
 });
 
@@ -109,7 +113,9 @@ export const shareProvisionedNetwork = (hooks: {
     options?: { timeout?: number },
   ) => void;
 }) => {
-  hooks.beforeAll(acquireProvisionedNetwork, { timeout: 180_000 });
+  // Includes queueing for a VPC capacity lease, which EC2 suites (Client VPN
+  // in particular) can hold for many minutes during a full AWS run.
+  hooks.beforeAll(acquireProvisionedNetwork, { timeout: 1_200_000 });
   hooks.afterAll(releaseProvisionedNetwork, { timeout: 180_000 });
 };
 
