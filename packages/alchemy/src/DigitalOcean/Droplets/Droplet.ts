@@ -350,8 +350,12 @@ const ACTION_COMPLETED = "completed";
 const ACTION_TIMED_OUT = "timed-out";
 const DROPLET_MISSING = "missing";
 
+const hasPublicIpv4 = (droplet: ApiDroplet) =>
+  droplet.networks.v4?.some((network) => network.type === "public") ?? false;
+
+// A droplet can report `active` before its public address is assigned.
 const isActive = (droplet: ApiDroplet) =>
-  droplet.status === "active" && !droplet.locked;
+  droplet.status === "active" && !droplet.locked && hasPublicIpv4(droplet);
 
 /** Actions are rejected while a droplet is locked or still provisioning. */
 const acceptsActions = (droplet: ApiDroplet) =>

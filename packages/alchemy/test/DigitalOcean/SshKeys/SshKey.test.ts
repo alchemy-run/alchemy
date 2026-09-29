@@ -6,6 +6,7 @@ import * as Test from "@/Test/Alchemy";
 import { getSshKey } from "@distilled.cloud/digitalocean";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { logLevel, outOfBand, skipLive } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -45,6 +46,17 @@ test.provider(
   { tags: ["provider:digitalocean", "provider:digitalocean:sshkey", "local"] },
 );
 
+// GET can answer NotFound for a while after POST.
+const readSshKey = (sshKeyId: number) =>
+  getSshKey({ ssh_key_identifier: String(sshKeyId) }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      schedule: Schedule.spaced("1 second"),
+      times: 30,
+    }),
+    outOfBand,
+  );
+
 const isGone = (sshKeyId: number) =>
   getSshKey({ ssh_key_identifier: String(sshKeyId) }).pipe(
     Effect.map(() => false),
@@ -70,9 +82,7 @@ test.provider.skipIf(skipLive)(
       expect(created.publicKey).toEqual(PUBLIC_KEY);
       expect(created.fingerprint).toMatch(/^([0-9a-f]{2}:)+[0-9a-f]{2}$/);
 
-      const remote = yield* getSshKey({
-        ssh_key_identifier: String(created.sshKeyId),
-      }).pipe(outOfBand);
+      const remote = yield* readSshKey(created.sshKeyId);
       expect(remote.ssh_key.name).toEqual(KEY_NAME);
 
       const renamed = yield* stack.deploy(
@@ -109,9 +119,7 @@ test.provider.skipIf(skipLive)(
         )
         .pipe(Effect.flip);
       expect(error).toBeInstanceOf(OwnedBySomeoneElse);
-      const untouched = yield* getSshKey({
-        ssh_key_identifier: String(created.sshKeyId),
-      }).pipe(outOfBand);
+      const untouched = yield* readSshKey(created.sshKeyId);
       expect(untouched.ssh_key.name).toEqual(RENAMED_KEY_NAME);
 
       const replaced = yield* stack.deploy(
