@@ -183,6 +183,7 @@ export type CloudAgent = Resource<
  * ```
  *
  * @resource
+ * @product Cloud Agent
  */
 export const CloudAgent = Resource<CloudAgent>("Railway.CloudAgent");
 

@@ -140,6 +140,7 @@ export interface RemoteImage extends Resource<
  * ```
  *
  * @resource
+ * @product Image
  */
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 

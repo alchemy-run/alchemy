@@ -45,5 +45,6 @@ describe("Prisma optional peers", (it) => {
         expect(result.success).toBe(true);
         expect(result.logs.filter((log) => log.level === "error")).toEqual([]);
       }),
+    { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
   );
 });

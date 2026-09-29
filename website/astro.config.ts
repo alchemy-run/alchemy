@@ -5,16 +5,25 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "@alchemy.run/vite-plugin-copy-editor";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
+import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
+import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
- * hub's "Resources" group and its reference URLs belong to the hub tab
+ * hub's "API Reference" group and its reference URLs belong to the hub tab
  * (see docs-tabs.ts). The Reference tab is a directory — its sidebar is
  * just the list of providers, each linking to its hub.
  */
@@ -37,6 +46,7 @@ function providersSidebarEntry() {
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
+      { label: "Kubernetes", link: "/kubernetes" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -45,11 +55,10 @@ function providersSidebarEntry() {
 }
 
 /**
- * A cloud hub's "Resources" section: that provider's slice of the generated
- * reference tree below Guides, expanded one level (categories/services show,
- * everything inside them stays collapsed) so each hub is self-sufficient.
+ * A cloud hub's "API Reference" section: that provider's slice of the generated
+ * alphabetical list of reference pages below Guides.
  * A hub that fronts several provider namespaces (e.g. SQL + Drizzle) passes
- * them all and gets one merged Resources group.
+ * them all and gets one merged API Reference group.
  *
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
@@ -72,7 +81,7 @@ function providerResourcesEntry(...providers: string[]) {
           collapsed: true,
           items: entryItems(provider),
         }));
-  return { label: "Resources", collapsed: false, items };
+  return { label: "API Reference", collapsed: false, items };
 }
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {
@@ -123,6 +132,34 @@ function providerApiReferenceEntry(...providers: string[]) {
  * the directory layout but normalizing extensions to `.md`. This lets the worker
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
+/**
+ * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
+ * Generated reference pages are edited through their JSDoc instead.
+ */
+const markdownCopy: MarkdownFilesOptions = {
+  root: fileURLToPath(new URL(".", import.meta.url)),
+  exclude: /\/src\/content\/docs\/providers\//,
+  style: JSDOC_COPY_STYLE,
+};
+
+function markdownCopyEditing(): AstroIntegration {
+  return {
+    name: "markdown-copy-editing",
+    hooks: {
+      "astro:config:setup": ({ command, config }) => {
+        if (command !== "dev") return;
+        const processor = config.markdown.processor as
+          | { name: string; options?: { mdastPlugins?: unknown[] } }
+          | undefined;
+        if (processor?.name !== "satteri" || !processor.options?.mdastPlugins) {
+          return;
+        }
+        processor.options.mdastPlugins.unshift(markdownBlocks(markdownCopy));
+      },
+    },
+  };
+}
+
 function copyMarkdownSources(): AstroIntegration {
   return {
     name: "copy-markdown-sources",
@@ -164,7 +201,10 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.copyFile(full, target);
+              await fs.writeFile(
+                target,
+                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
+              );
             }),
           );
         }
@@ -196,8 +236,10 @@ export default defineConfig({
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
+  devToolbar: { enabled: false },
   trailingSlash: "ignore",
   integrations: [
+    markdownCopyEditing(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
@@ -222,6 +264,7 @@ export default defineConfig({
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
+        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -233,7 +276,7 @@ export default defineConfig({
         {
           icon: "discord",
           label: "Discord",
-          href: "https://discord.gg/jwKw8dBJdN",
+          href: "/discord",
         },
       ],
       editLink: {
@@ -357,6 +400,12 @@ export default defineConfig({
                   link: "/environments/custom-auth-provider",
                 },
                 { label: "Secrets & Config", link: "/environments/secrets" },
+                {
+                  label: "Secret providers",
+                  link: "/environments/secret-providers",
+                },
+                { label: "Doppler", link: "/environments/doppler" },
+                { label: "Infisical", link: "/environments/infisical" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -580,6 +629,10 @@ export default defineConfig({
                 { label: "D1", link: "/cloudflare/data/d1" },
                 { label: "KV", link: "/cloudflare/data/kv" },
                 { label: "R2", link: "/cloudflare/data/r2" },
+                {
+                  label: "R2 presigned URLs",
+                  link: "/cloudflare/data/r2-presigned-urls",
+                },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
@@ -962,6 +1015,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Connect Services",
+                  link: "/fly/compute/connecting-services",
+                },
                 {
                   label: "Blue/green deployments",
                   link: "/fly/compute/deployments",
@@ -1462,6 +1519,72 @@ export default defineConfig({
           ],
         },
         {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "kubernetes/tutorial" } }],
+            },
+            {
+              label: "Clusters",
+              items: [
+                {
+                  label: "Connecting to clusters",
+                  link: "/kubernetes/clusters/connecting",
+                },
+                {
+                  label: "Container registries",
+                  link: "/kubernetes/clusters/registries",
+                },
+                { label: "Local clusters", link: "/kubernetes/clusters/local" },
+                { label: "Amazon EKS", link: "/kubernetes/clusters/eks" },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/clusters/cluster-adapters",
+                },
+              ],
+            },
+            {
+              label: "Workloads",
+              items: [
+                {
+                  label: "Deployments",
+                  link: "/kubernetes/workloads/deployments",
+                },
+                {
+                  label: "Jobs & CronJobs",
+                  link: "/kubernetes/workloads/jobs",
+                },
+                {
+                  label: "Container images",
+                  link: "/kubernetes/workloads/images",
+                },
+                {
+                  label: "Configuration & bindings",
+                  link: "/kubernetes/workloads/bindings",
+                },
+                {
+                  label: "How objects are managed",
+                  link: "/kubernetes/workloads/object-lifecycle",
+                },
+              ],
+            },
+            {
+              label: "Objects",
+              items: [
+                { label: "Manifests", link: "/kubernetes/objects/manifests" },
+                {
+                  label: "Helm charts",
+                  link: "/kubernetes/objects/helm-charts",
+                },
+              ],
+            },
+            providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
@@ -1539,7 +1662,21 @@ export default defineConfig({
     mdx(),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      copyEditor({
+        handlers: {
+          jsdoc: jsdocCopyHandler(),
+          md: markdownFiles(markdownCopy),
+        },
+        markdownStyles: { [JSDOC_COPY_STYLE]: jsdocMarkdownStyle },
+      }),
+      tailwindcss(),
+    ],
+    server: {
+      // Dev-only: allow sharing the dev server through cloudflared quick
+      // tunnels (random *.trycloudflare.com hostnames).
+      allowedHosts: [".trycloudflare.com"],
+    },
     ssr: {
       // Sätteri (Astro 7's markdown processor) loads a platform-native
       // binding via CJS require. Bundling its JS loader into the prerender

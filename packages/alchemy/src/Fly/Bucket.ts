@@ -246,6 +246,7 @@ export type Bucket = Resource<
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Bucket = Resource<Bucket>("Fly.Bucket");
 
@@ -934,7 +935,12 @@ const secretsFromBoundEnv = (
  */
 export const attachBucketSecrets = Effect.fn(function* (
   appName: string,
-  attached: readonly { name: string; id?: string }[],
+  attached: readonly {
+    name: string;
+    id?: string;
+    /** Credentials from the bound Bucket's attributes. */
+    values?: Record<string, string>;
+  }[],
   boundEnv: Record<string, string> = {},
 ) {
   if (appName.length === 0) return undefined;
@@ -949,7 +955,16 @@ export const attachBucketSecrets = Effect.fn(function* (
   for (const item of attached) {
     const name = item.name;
     const id = item.id;
-    const fallbackValues = { ...fromEnv };
+    const fallbackValues: Record<string, string> = {
+      ...fromEnv,
+      ...item.values,
+    };
+    if (
+      fallbackValues.AWS_ENDPOINT_URL === undefined &&
+      fallbackValues.AWS_ENDPOINT_URL_S3 !== undefined
+    ) {
+      fallbackValues.AWS_ENDPOINT_URL = fallbackValues.AWS_ENDPOINT_URL_S3;
+    }
     if (fallbackValues.BUCKET_NAME === undefined && name.length > 0) {
       fallbackValues.BUCKET_NAME = name;
     }

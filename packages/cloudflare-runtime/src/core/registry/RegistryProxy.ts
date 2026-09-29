@@ -168,17 +168,32 @@ export const RegistryProxyLive = Layer.effect(
                       detail: { proxyPort },
                     });
                   }
-                  yield* registry.subscribe(subscribed).pipe(
-                    Stream.runForEach((targets) =>
-                      http.post(`http://127.0.0.1:${proxyPort}/`, {
+                  // A replacement process starts with the original module
+                  // snapshot. Restore current targets before announcing it as
+                  // ready, then subscribe afresh for subsequent changes.
+                  const update = (targets: ResolvedTargetMap) =>
+                    HttpClient.filterStatusOk(http)
+                      .post(`http://127.0.0.1:${proxyPort}/`, {
                         body: HttpBody.jsonUnsafe(targets),
-                      }),
-                    ),
-                    Effect.forkScoped,
-                  );
+                      })
+                      .pipe(
+                        Effect.mapError(
+                          (cause) =>
+                            new SystemError({
+                              subtag: "RegistryProxyUpdate",
+                              message:
+                                "Failed to update the registry proxy targets.",
+                              cause,
+                            }),
+                        ),
+                      );
+                  yield* registry.read(subscribed).pipe(Effect.flatMap(update));
+                  yield* registry
+                    .subscribe(subscribed)
+                    .pipe(Stream.runForEach(update), Effect.forkScoped);
                 }),
               ],
-              { concurrency: "unbounded" },
+              { concurrency: "unbounded", discard: true },
             ),
           api: {
             publish: (entry) =>

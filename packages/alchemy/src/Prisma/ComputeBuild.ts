@@ -1812,7 +1812,10 @@ const packageCliCommand = Effect.fn(function* (
       (process.platform === "win32" || (stat.mode & 0o111) !== 0)
     ) {
       const argText = args.map(shellQuote).join(" ");
-      return `${shellQuote(candidate)}${argText.length > 0 ? ` ${argText}` : ""}`;
+      // Package-manager shims resolve dependencies relative to their own path.
+      // Resolve symlinked node_modules directories before invoking the shim.
+      const executablePath = yield* fs.realPath(candidate);
+      return `${shellQuote(executablePath)}${argText.length > 0 ? ` ${argText}` : ""}`;
     }
   }
   return yield* Effect.fail(new Error(missingMessage));

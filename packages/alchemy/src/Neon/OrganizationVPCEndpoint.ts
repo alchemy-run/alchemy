@@ -71,6 +71,7 @@ export interface OrganizationVPCEndpoint extends Resource<
  * ```
  *
  * @resource
+ * @product Organization
  */
 export const OrganizationVPCEndpoint = Resource<OrganizationVPCEndpoint>(
   "Neon.OrganizationVPCEndpoint",

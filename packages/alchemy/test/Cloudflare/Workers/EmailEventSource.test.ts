@@ -96,7 +96,16 @@ test.provider(
         { type: "literal", field: "to", value: INBOX },
       ]);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:email",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.skipIf(skipRoundTrip)(
@@ -169,7 +178,15 @@ test.skipIf(skipRoundTrip)(
       expect(msg.receivedAt).toBeGreaterThanOrEqual(resetAt);
     }
   }).pipe(logLevel),
-  { timeout: 360_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:email",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 360_000,
+  },
 );
 
 // The catch-all form: `email({ zone })` with no matchers. Cloudflare
@@ -218,5 +235,14 @@ test.provider(
         );
       expect(strays).toEqual([]);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:email",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

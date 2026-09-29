@@ -21,6 +21,7 @@ import { makeHttpSpriteBinding } from "./SpriteHttp.ts";
  * ```
  *
  * @layer
+ * @product Sprite
  * @provides Fly.Exec
  */
 export const ExecHttp = Layer.effect(

@@ -69,5 +69,5 @@ test.provider(
         yield* removeIsolatedProject(project);
       }
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 300_000 },
 );

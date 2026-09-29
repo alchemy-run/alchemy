@@ -72,6 +72,7 @@ export interface AIGateway {
  * ```
  *
  * @resource
+ * @product AI Gateway
  * @category AI Gateway
  */
 export const AIGateway = Effect.fn(function* (

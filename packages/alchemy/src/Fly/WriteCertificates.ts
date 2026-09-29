@@ -45,6 +45,7 @@ import type { App } from "./App.ts";
  * ```
  *
  * @binding
+ * @product Certificate
  */
 export interface WriteCertificates extends Binding.Service<
   WriteCertificates,

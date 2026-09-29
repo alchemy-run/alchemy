@@ -313,7 +313,7 @@ export interface Container extends Resource<
  * ```
  *
  * @resource
- * @resource
+ * @product Container
  */
 export const Container = Resource<Container>("Docker.Container");
 

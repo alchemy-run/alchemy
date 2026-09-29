@@ -90,5 +90,8 @@ test(
       expect(body.initFetches).toBe(1);
     }
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

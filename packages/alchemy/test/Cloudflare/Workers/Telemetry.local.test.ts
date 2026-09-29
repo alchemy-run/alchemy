@@ -117,7 +117,10 @@ test.provider(
       yield* stack.destroy();
       expect(collector.completedRequests.value).toBe(4);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
 );
 
 for (const scenario of [
@@ -259,6 +262,9 @@ for (const scenario of [
         expect(workerBatch.aborted).toBe(false);
         yield* stack.destroy();
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+      timeout: 120_000,
+    },
   );
 }

@@ -26,5 +26,8 @@ test.provider(
       yield* browserRoundtrip(String(server.url), "vocs");
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:website", "local"],
+    timeout: 120_000,
+  },
 );

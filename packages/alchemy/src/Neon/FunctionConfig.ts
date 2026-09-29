@@ -7,7 +7,7 @@ import type { FunctionBinding, FunctionProps } from "./Function.ts";
 
 export class FunctionConfigurationError extends Data.TaggedError(
   "FunctionConfigurationError",
-)<{ message: string }> {}
+)<{ message: string; cause?: unknown }> {}
 
 const injected = new Set([
   "NEON_API_KEY",

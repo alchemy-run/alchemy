@@ -30,6 +30,7 @@ export type BucketEventSourceService = <R = never>(
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface BucketEventSource extends Binding.Service<
   BucketEventSource,

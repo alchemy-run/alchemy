@@ -227,6 +227,7 @@ type ProjectAttributes = Project["Attributes"];
  * @see https://neon.tech/docs/manage/projects/
  *
  * @resource
+ * @product Project
  */
 export const Project = Resource<Project>("Neon.Project");
 

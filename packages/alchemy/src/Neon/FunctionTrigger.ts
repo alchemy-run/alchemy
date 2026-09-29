@@ -91,6 +91,7 @@ export interface FunctionTrigger extends Resource<
  * ```
  *
  * @resource
+ * @product Function
  */
 export const FunctionTrigger = Resource<FunctionTrigger>(
   "Neon.FunctionTrigger",

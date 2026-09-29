@@ -51,6 +51,8 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
   exportTypes: ExportTypes,
+  /** See `RuntimeWorker.onRestart`. */
+  onRestart?: () => void,
 ) => {
   const scope = Scope.makeUnsafe();
   const proxySharedSecret = crypto.randomUUID();
@@ -60,6 +62,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     server,
     exportTypes,
     proxySharedSecret,
+    onRestart,
   ).pipe(
     // `provideMerge`: the assets layer's construction reads `Loopback` (and
     // friends) from the runtime context, so the context must feed the layer,
@@ -199,6 +202,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   exportTypes: ExportTypes,
   proxySharedSecret: string,
+  onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
@@ -207,6 +211,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   return yield* runtime.start({
     name,
     proxySharedSecret,
+    onRestart,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],

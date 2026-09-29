@@ -31,67 +31,71 @@ const collect = (pages: ReadonlyArray<Page>) => {
   );
 };
 
-describe("listAllPages", () => {
-  it.effect("follows links.pages.next until a page has no next link", () =>
-    Effect.gen(function* () {
-      const { items, queries } = yield* collect([
-        {
-          items: itemsOf(1, PAGE_SIZE),
-          links: { pages: { next: "?page=2" } },
-        },
-        { items: itemsOf(2, 50), links: { pages: {} } },
-      ]);
-      expect(items).toEqual(itemsOf(1, 250));
-      expect(queries).toEqual([
-        { page: 1, per_page: PAGE_SIZE },
-        { page: 2, per_page: PAGE_SIZE },
-      ]);
-    }),
-  );
-
-  it.effect("stops at a full page without a next link", () =>
-    Effect.gen(function* () {
-      const { items, queries } = yield* collect([
-        { items: itemsOf(1, PAGE_SIZE), links: {} },
-      ]);
-      expect(items).toHaveLength(PAGE_SIZE);
-      expect(queries).toHaveLength(1);
-    }),
-  );
-
-  it.effect("stops at a short page with no envelope", () =>
-    Effect.gen(function* () {
-      const { items, queries } = yield* collect([
-        { items: itemsOf(1, PAGE_SIZE - 1) },
-      ]);
-      expect(items).toHaveLength(PAGE_SIZE - 1);
-      expect(queries).toHaveLength(1);
-    }),
-  );
-
-  it.effect("stops at an empty page even when it has a next link", () =>
-    Effect.gen(function* () {
-      const { queries } = yield* collect([
-        { items: [], links: { pages: { next: "?page=2" } } },
-      ]);
-      expect(queries).toHaveLength(1);
-    }),
-  );
-
-  it.effect(
-    "fails with DigitalOceanPageOverflow when the list never ends",
-    () =>
+describe(
+  "listAllPages",
+  { tags: ["unit", "provider:digitalocean", "local"] },
+  () => {
+    it.effect("follows links.pages.next until a page has no next link", () =>
       Effect.gen(function* () {
-        const endless = (_: PageQuery) =>
-          Effect.succeed<Page>({
-            items: [1],
-            links: { pages: { next: "?page=next" } },
-          });
-        const error = yield* Effect.flip(
-          listAllPages(endless, (page) => page.items),
-        );
-        expect(error).toBeInstanceOf(DigitalOceanPageOverflow);
-        expect(error.pages).toEqual(500);
+        const { items, queries } = yield* collect([
+          {
+            items: itemsOf(1, PAGE_SIZE),
+            links: { pages: { next: "?page=2" } },
+          },
+          { items: itemsOf(2, 50), links: { pages: {} } },
+        ]);
+        expect(items).toEqual(itemsOf(1, 250));
+        expect(queries).toEqual([
+          { page: 1, per_page: PAGE_SIZE },
+          { page: 2, per_page: PAGE_SIZE },
+        ]);
       }),
-  );
-});
+    );
+
+    it.effect("stops at a full page without a next link", () =>
+      Effect.gen(function* () {
+        const { items, queries } = yield* collect([
+          { items: itemsOf(1, PAGE_SIZE), links: {} },
+        ]);
+        expect(items).toHaveLength(PAGE_SIZE);
+        expect(queries).toHaveLength(1);
+      }),
+    );
+
+    it.effect("stops at a short page with no envelope", () =>
+      Effect.gen(function* () {
+        const { items, queries } = yield* collect([
+          { items: itemsOf(1, PAGE_SIZE - 1) },
+        ]);
+        expect(items).toHaveLength(PAGE_SIZE - 1);
+        expect(queries).toHaveLength(1);
+      }),
+    );
+
+    it.effect("stops at an empty page even when it has a next link", () =>
+      Effect.gen(function* () {
+        const { queries } = yield* collect([
+          { items: [], links: { pages: { next: "?page=2" } } },
+        ]);
+        expect(queries).toHaveLength(1);
+      }),
+    );
+
+    it.effect(
+      "fails with DigitalOceanPageOverflow when the list never ends",
+      () =>
+        Effect.gen(function* () {
+          const endless = (_: PageQuery) =>
+            Effect.succeed<Page>({
+              items: [1],
+              links: { pages: { next: "?page=next" } },
+            });
+          const error = yield* Effect.flip(
+            listAllPages(endless, (page) => page.items),
+          );
+          expect(error).toBeInstanceOf(DigitalOceanPageOverflow);
+          expect(error.pages).toEqual(500);
+        }),
+    );
+  },
+);

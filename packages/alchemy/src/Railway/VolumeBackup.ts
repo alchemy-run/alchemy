@@ -283,6 +283,7 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const VolumeBackup: typeof VolumeBackupResource = Object.assign(
   (

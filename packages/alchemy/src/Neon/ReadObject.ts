@@ -36,6 +36,7 @@ export interface ReadObjectClient<T> {
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface ReadObject extends Binding.Service<
   ReadObject,

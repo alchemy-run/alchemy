@@ -122,7 +122,7 @@ const expectCertRequestError = (error: unknown, message: RegExp) => {
   expect((error as { message: string }).message).toMatch(message);
 };
 
-describe("Alchemy.CertRequest", () => {
+describe("Alchemy.CertRequest", { tags: ["unit", "local"] }, () => {
   test.provider("generates a verifiable ec CSR with CN and SAN", (stack) =>
     Effect.gen(function* () {
       const attrs = yield* stack.deploy(

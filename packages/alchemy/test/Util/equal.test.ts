@@ -1,7 +1,7 @@
 import { setEquals } from "@/Util/equal";
 import { describe, expect, test } from "alchemy-test";
 
-describe("setEquals", () => {
+describe("setEquals", { tags: ["unit", "local"] }, () => {
   test("ignores order", () => {
     expect(setEquals([1, 2, 3], [3, 1, 2])).toBe(true);
     expect(setEquals(["a", "b"], ["b", "a"])).toBe(true);

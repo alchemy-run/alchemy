@@ -160,5 +160,15 @@ test(
     expect(push?.phases?.chunks ?? 0).toBeGreaterThanOrEqual(4);
     yield* Effect.logInfo(`lastPush: ${JSON.stringify(push)}`);
   }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

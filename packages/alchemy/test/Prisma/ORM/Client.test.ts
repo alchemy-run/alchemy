@@ -84,7 +84,17 @@ test.provider(
       );
       yield* stack.destroy();
     }),
-  { timeout: HOOK_TIMEOUT },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: HOOK_TIMEOUT,
+  },
 );
 
 test.provider(
@@ -177,7 +187,17 @@ test.provider(
       );
       yield* stack.destroy();
     }),
-  { timeout: HOOK_TIMEOUT },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: HOOK_TIMEOUT,
+  },
 );
 
 const fixtureConfig = Effect.gen(function* () {
@@ -481,7 +501,17 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: HOOK_TIMEOUT },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: HOOK_TIMEOUT,
+  },
 );
 
 test.provider(
@@ -657,5 +687,15 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: HOOK_TIMEOUT },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "provider:prisma",
+      "provider:prisma:orm",
+      "live",
+    ],
+    timeout: HOOK_TIMEOUT,
+  },
 );

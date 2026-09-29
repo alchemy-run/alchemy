@@ -99,5 +99,6 @@ layer(NodeServices.layer)("Bundle namespace initialization", (it) => {
           yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
         }
       }),
+    { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
   );
 });

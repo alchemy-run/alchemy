@@ -127,25 +127,30 @@ const diffInput = (olds: FirewallProps, news: FirewallProps) => ({
   },
 });
 
-test.provider("diff ignores rule order", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Firewall);
-    const unchanged = yield* provider.diff!(
-      diffInput(
-        {
-          name: FIREWALL_NAME,
-          tags: ["alchemy-test"],
-          inboundRules: WEB_RULES,
-        },
-        {
-          name: FIREWALL_NAME,
-          tags: ["alchemy-test"],
-          inboundRules: [...WEB_RULES].reverse(),
-        },
-      ),
-    );
-    expect(unchanged).toBeUndefined();
-  }),
+test.provider(
+  "diff ignores rule order",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Firewall);
+      const unchanged = yield* provider.diff!(
+        diffInput(
+          {
+            name: FIREWALL_NAME,
+            tags: ["alchemy-test"],
+            inboundRules: WEB_RULES,
+          },
+          {
+            name: FIREWALL_NAME,
+            tags: ["alchemy-test"],
+            inboundRules: [...WEB_RULES].reverse(),
+          },
+        ),
+      );
+      expect(unchanged).toBeUndefined();
+    }),
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:firewall", "local"],
+  },
 );
 
 test.provider(
@@ -168,6 +173,9 @@ test.provider(
       );
       expect(restored).toEqual({ action: "update" });
     }),
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:firewall", "local"],
+  },
 );
 
 const isGone = (firewallId: string) =>
@@ -232,7 +240,10 @@ test.provider.skipIf(skipLive)(
 
       expect(yield* isGone(created.firewallId)).toBe(true);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:firewall", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider.skipIf(skipLive)(
@@ -262,7 +273,10 @@ test.provider.skipIf(skipLive)(
 
       expect(yield* isGone(created.firewallId)).toBe(true);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:firewall", "live"],
+    timeout: 300_000,
+  },
 );
 
 test.provider.skipIf(skipLive)(
@@ -319,5 +333,8 @@ test.provider.skipIf(skipLive)(
 
       expect(yield* isGone(first.firewallId)).toBe(true);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:firewall", "live"],
+    timeout: 300_000,
+  },
 );

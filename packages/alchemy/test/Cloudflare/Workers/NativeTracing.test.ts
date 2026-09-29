@@ -106,45 +106,56 @@ const tracesBind = (
     { sid: "Cloudflare.Telemetry", data: { observability: { traces } } },
   ] as unknown as Bindings;
 
-describe("resolveObservability", () => {
-  unit("omitted props + bound traces keep default logs", () => {
-    const resolved = resolveObservability({}, tracesBind({ enabled: true }));
-    expect(resolved.enabled).toBe(true);
-    expect(resolved.logs?.enabled).toBe(true);
-    expect(resolved.logs?.invocationLogs).toBe(true);
-    expect(resolved.traces?.enabled).toBe(true);
-  });
+describe(
+  "resolveObservability",
+  {
+    tags: [
+      "unit",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+  },
+  () => {
+    unit("omitted props + bound traces keep default logs", () => {
+      const resolved = resolveObservability({}, tracesBind({ enabled: true }));
+      expect(resolved.enabled).toBe(true);
+      expect(resolved.logs?.enabled).toBe(true);
+      expect(resolved.logs?.invocationLogs).toBe(true);
+      expect(resolved.traces?.enabled).toBe(true);
+    });
 
-  unit("explicit traces.enabled false wins over the bind", () => {
-    const resolved = resolveObservability(
-      { observability: { enabled: true, traces: { enabled: false } } },
-      tracesBind({ enabled: true, persist: true }),
-    );
-    expect(resolved.traces?.enabled).toBe(false);
-    expect(resolved.traces?.persist).toBeUndefined();
-  });
+    unit("explicit traces.enabled false wins over the bind", () => {
+      const resolved = resolveObservability(
+        { observability: { enabled: true, traces: { enabled: false } } },
+        tracesBind({ enabled: true, persist: true }),
+      );
+      expect(resolved.traces?.enabled).toBe(false);
+      expect(resolved.traces?.persist).toBeUndefined();
+    });
 
-  unit("fills traces when news.observability exists without traces", () => {
-    const resolved = resolveObservability(
-      {
-        observability: {
-          enabled: true,
-          logs: { enabled: true, invocationLogs: true, persist: true },
+    unit("fills traces when news.observability exists without traces", () => {
+      const resolved = resolveObservability(
+        {
+          observability: {
+            enabled: true,
+            logs: { enabled: true, invocationLogs: true, persist: true },
+          },
         },
-      },
-      tracesBind({ enabled: true, headSamplingRate: 1 }),
-    );
-    expect(resolved.logs?.persist).toBe(true);
-    expect(resolved.traces?.enabled).toBe(true);
-    expect(resolved.traces?.headSamplingRate).toBe(1);
-  });
+        tracesBind({ enabled: true, headSamplingRate: 1 }),
+      );
+      expect(resolved.logs?.persist).toBe(true);
+      expect(resolved.traces?.enabled).toBe(true);
+      expect(resolved.traces?.headSamplingRate).toBe(1);
+    });
 
-  unit("no bind returns default logs", () => {
-    const resolved = resolveObservability({}, []);
-    expect(resolved.traces).toBeUndefined();
-    expect(resolved.logs?.invocationLogs).toBe(true);
-  });
-});
+    unit("no bind returns default logs", () => {
+      const resolved = resolveObservability({}, []);
+      expect(resolved.traces).toBeUndefined();
+      expect(resolved.logs?.invocationLogs).toBe(true);
+    });
+  },
+);
 
 test.provider(
   "Cloudflare.Telemetry() enables traces without clobbering default logs",
@@ -175,7 +186,16 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -206,7 +226,16 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -231,7 +260,16 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -268,7 +306,16 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 const FANOUT_SPANS = [
@@ -444,7 +491,16 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 480_000,
+  },
 );
 
 test.provider(
@@ -539,5 +595,14 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

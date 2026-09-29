@@ -165,6 +165,7 @@ test.provider(
       expect(meta.to).toEqual(contract.contractHash);
       expect(contract.migrations).toEqual(dirs);
     }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );
 
 test.provider(
@@ -187,6 +188,7 @@ test.provider(
       // explicit --from would happily re-plan from empty every run).
       expect(yield* readPackageDirs(ws.migrationsDir)).toHaveLength(1);
     }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );
 
 test.provider(
@@ -220,6 +222,7 @@ test.provider(
       expect(newMeta.from).toEqual(initialMeta.to);
       expect(newMeta.to).toEqual(drifted.contractHash);
     }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );
 
 test.provider(
@@ -259,18 +262,22 @@ test.provider(
       expect(dts).not.toContain("@internal/");
       expect(dts).toContain("@prisma/orm-postgres/");
     }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );
 
-test.provider("list returns [] (non-listable local build artifact)", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list returns [] (non-listable local build artifact)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Prisma.Contract);
-    const all = yield* provider.list();
-    expect(all).toEqual([]);
+      const provider = yield* Provider.findProvider(Prisma.Contract);
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );
 
 test.provider(
@@ -302,4 +309,5 @@ test.provider(
         expect(String(result.failure)).toContain("migration.ts");
       }
     }),
+  { tags: ["provider:prisma", "provider:prisma:orm", "live"] },
 );

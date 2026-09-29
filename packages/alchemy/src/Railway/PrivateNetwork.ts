@@ -247,6 +247,7 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * ```
  *
  * @resource
+ * @product Networking
  */
 export const PrivateNetwork: typeof PrivateNetworkResource = Object.assign(
   (
@@ -668,6 +669,7 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * :::
  *
  * @resource
+ * @product Networking
  */
 export const PrivateNetworkEndpoint: typeof PrivateNetworkEndpointResource =
   Object.assign(

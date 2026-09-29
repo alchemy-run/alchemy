@@ -54,6 +54,7 @@ const asRedactedUrl = (
  * ```
  *
  * @layer
+ * @product Postgres
  * @provides Fly.ConnectPostgres
  */
 export const ConnectPostgresHttp = Layer.effect(

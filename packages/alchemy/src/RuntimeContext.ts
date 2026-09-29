@@ -41,6 +41,18 @@ export interface BaseRuntimeContext {
 }
 
 /**
+ * Keys a Platform's Init captured through {@link BaseRuntimeContext.set}
+ * (`yield* Config.x(...)`, `yield* output`). `Platform.make` attaches the
+ * runtime context to the resource and merges these values into its
+ * `props.env`.
+ */
+export const capturedEnvKeys = (resource: unknown): string[] => {
+  const ctx = (resource as { RuntimeContext?: Partial<BaseRuntimeContext> })
+    ?.RuntimeContext;
+  return ctx?.env ? Object.keys(ctx.env) : [];
+};
+
+/**
  * Canonicalize a logical key into a key that is safe to use as the name of an
  * environment variable / binding (`[a-zA-Z][a-zA-Z0-9_]*`).
  *

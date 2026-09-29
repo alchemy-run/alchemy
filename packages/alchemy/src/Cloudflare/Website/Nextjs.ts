@@ -99,6 +99,13 @@ export interface NextjsProps<
   assets?: AssetsConfig;
 }
 
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type NextjsInput<Bindings extends WorkerBindingProps> = InputProps<
+  NextjsProps<Bindings>,
+  "dev" | "isr" | "env" | "compatibility" | "assets" | "openNext"
+>;
+
 /**
  * A Cloudflare Worker deployed from a Next.js project.
  *
@@ -266,8 +273,8 @@ export const Nextjs: {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
-        | InputProps<NextjsProps<Bindings>>
-        | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
+        | NextjsInput<Bindings>
+        | Effect.Effect<NextjsInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
         [
@@ -279,8 +286,8 @@ export const Nextjs: {
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
-      | InputProps<NextjsProps<Bindings>>
-      | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
+      | NextjsInput<Bindings>
+      | Effect.Effect<NextjsInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
       [
@@ -290,9 +297,19 @@ export const Nextjs: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | NextjsInput<Bindings>
+    | Effect.Effect<NextjsInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nextjs(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | NextjsInput<Bindings>
+          | Effect.Effect<NextjsInput<Bindings>, never, Req>,
+      ) => effectClass(Nextjs(id, propsEff))
     : Worker(
         id,
         Effect.map(
@@ -334,8 +351,8 @@ export const Nextjs: {
             // leave asset-path rewriting off. Users can still override.
             assets: {
               runWorkerFirst: true,
-              htmlHandling: "none",
-              notFoundHandling: "none",
+              htmlHandling: "none" as const,
+              notFoundHandling: "none" as const,
               ...props?.assets,
             },
             source: {

@@ -78,6 +78,7 @@ for (const cancellation of ["abort", "body"] as const)
         );
         expect(closed).toBe(true);
       }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 for (const cancellation of ["abort", "body"] as const)
@@ -154,53 +155,59 @@ for (const cancellation of ["abort", "body"] as const)
           ),
         );
       }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 for (const outcome of ["complete", "error"] as const)
-  test.live(`Function bridge finalizes a streamed ${outcome} once`, () =>
-    Effect.gen(function* () {
-      const runtime = yield* Effect.sync(() =>
-        makeFunctionRuntimeContext("Completion"),
-      );
-      const events: string[] = [];
-      yield* runtime.route(
-        "/",
-        Effect.gen(function* () {
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              events.push("request");
-            }),
-          );
-          return HttpServerResponse.stream(
-            (outcome === "complete"
-              ? Stream.make(new Uint8Array([1, 2, 3]))
-              : Stream.fail(new Error("stream failure"))
-            ).pipe(
-              Stream.ensuring(
-                Effect.sync(() => {
-                  events.push("stream");
-                }),
+  test.live(
+    `Function bridge finalizes a streamed ${outcome} once`,
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Effect.sync(() =>
+          makeFunctionRuntimeContext("Completion"),
+        );
+        const events: string[] = [];
+        yield* runtime.route(
+          "/",
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                events.push("request");
+              }),
+            );
+            return HttpServerResponse.stream(
+              (outcome === "complete"
+                ? Stream.make(new Uint8Array([1, 2, 3]))
+                : Stream.fail(new Error("stream failure"))
+              ).pipe(
+                Stream.ensuring(
+                  Effect.sync(() => {
+                    events.push("stream");
+                  }),
+                ),
               ),
-            ),
-            { status: 201, headers: { "x-stream-test": "preserved" } },
-          );
-        }),
-      );
-      const bridge = yield* Effect.sync(() =>
-        makeFunctionBridge(Effect.succeed({ RuntimeContext: runtime })),
-      );
-      const request = yield* Effect.sync(
-        () => new Request("https://function.test/"),
-      );
-      const response = yield* Effect.tryPromise(() => bridge.fetch(request));
-      expect(response.status).toBe(201);
-      expect(response.headers.get("x-stream-test")).toBe("preserved");
-      const result = yield* Effect.tryPromise(() =>
-        response.arrayBuffer(),
-      ).pipe(Effect.exit);
-      expect(result._tag).toBe(outcome === "complete" ? "Success" : "Failure");
-      expect(events).toEqual(["stream", "request"]);
-    }),
+              { status: 201, headers: { "x-stream-test": "preserved" } },
+            );
+          }),
+        );
+        const bridge = yield* Effect.sync(() =>
+          makeFunctionBridge(Effect.succeed({ RuntimeContext: runtime })),
+        );
+        const request = yield* Effect.sync(
+          () => new Request("https://function.test/"),
+        );
+        const response = yield* Effect.tryPromise(() => bridge.fetch(request));
+        expect(response.status).toBe(201);
+        expect(response.headers.get("x-stream-test")).toBe("preserved");
+        const result = yield* Effect.tryPromise(() =>
+          response.arrayBuffer(),
+        ).pipe(Effect.exit);
+        expect(result._tag).toBe(
+          outcome === "complete" ? "Success" : "Failure",
+        );
+        expect(events).toEqual(["stream", "request"]);
+      }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 for (const cancellation of ["close", "abort"] as const)
@@ -266,6 +273,7 @@ for (const cancellation of ["close", "abort"] as const)
         });
         expect(count).toBe(1);
       }),
+    { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
   );
 
 test.effect(
@@ -306,4 +314,5 @@ test.effect(
       expect(finalized).toBe(1);
       expect(consumed).toBe(0);
     }),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );

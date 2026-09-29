@@ -117,7 +117,6 @@ type WorkerWiring = Omit<
 /** The subset of alchemy's `DevContext` this provider consumes. */
 export interface DevContext extends SourceContext {
   readonly worker: {
-    readonly name: string;
     readonly bindings: NonNullable<WorkerWiring["bindings"]>;
     readonly durableObjectNamespaces: NonNullable<
       WorkerWiring["durableObjectNamespaces"]
@@ -136,7 +135,11 @@ export interface DevContext extends SourceContext {
   readonly runtimeContext: unknown;
 }
 
-export type SourceDevHandle = { readonly mode: "server"; readonly url: URL };
+export type SourceDevHandle = {
+  readonly mode: "server";
+  readonly url: URL;
+  readonly serviceBinding?: "http";
+};
 
 export type SourceError = SourceProviderError | PlatformError;
 
@@ -733,7 +736,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
-            name: ctx.worker.name,
+            name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
             hyperdrives: ctx.worker.hyperdrives,
@@ -748,6 +751,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       return {
         mode: "server",
         url: new URL(server.url),
+        serviceBinding: options.dev?.mode === "hmr" ? "http" : undefined,
       } satisfies SourceDevHandle;
     }),
   };

@@ -50,6 +50,7 @@ test.provider(
         ).toBeUndefined();
       }
     }),
+  { tags: ["provider:neon", "provider:neon:dataapi", "live"] },
 );
 
 test.provider(
@@ -120,7 +121,16 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -178,7 +188,16 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -237,7 +256,17 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -303,5 +332,15 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

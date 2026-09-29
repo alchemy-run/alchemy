@@ -160,5 +160,15 @@ test(
     expect(back.stdout.trim().split("\n").pop()).toBe(head.stdout.trim());
     yield* Effect.logInfo(`objects: ${JSON.stringify(repo.objects)}`);
   }),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

@@ -21,263 +21,278 @@ const { test } = Test.make({
   state: inMemoryState(),
 });
 
-test.provider("diff pulls again unless alwaysPull is disabled", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Docker.RemoteImage);
-    const output = {
-      imageRef: "nginx:alpine",
-      imageId: "sha256:0",
-      createdAt: 0,
-      name: "nginx",
-      tag: "alpine",
-    };
-
-    const pinned = yield* provider.diff!({
-      id: "nginx",
-      fqn: "nginx",
-      instanceId: "instance",
-      olds: { name: "nginx", tag: "alpine", alwaysPull: false },
-      news: { name: "nginx", tag: "alpine", alwaysPull: false },
-      oldBindings: [],
-      newBindings: [],
-      output,
-    });
-    expect(pinned).toBeUndefined();
-
-    const refreshed = yield* provider.diff!({
-      id: "nginx",
-      fqn: "nginx",
-      instanceId: "instance",
-      olds: { name: "nginx", tag: "alpine", alwaysPull: false },
-      news: { name: "nginx", tag: "alpine" },
-      oldBindings: [],
-      newBindings: [],
-      output,
-    });
-    expect(refreshed).toEqual({ action: "update" });
-  }),
-);
-
-test.provider("diff pulls again when Docker context changes", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Docker.RemoteImage);
-    const output = {
-      imageRef: "nginx:alpine",
-      imageId: "sha256:0",
-      createdAt: 0,
-      name: "nginx",
-      tag: "alpine",
-    };
-
-    const changed = yield* provider.diff!({
-      id: "nginx",
-      fqn: "nginx",
-      instanceId: "instance",
-      olds: {
-        name: "nginx",
-        tag: "alpine",
-        alwaysPull: false,
-        context: "default",
-      },
-      news: {
-        name: "nginx",
-        tag: "alpine",
-        alwaysPull: false,
-        context: "remote-build",
-      },
-      oldBindings: [],
-      newBindings: [],
-      output,
-    });
-    expect(changed).toEqual({ action: "update" });
-  }),
-);
-
-describe("Docker.RemoteImage", { concurrent: false }, () => {
-  test.provider("pulls a Docker image reference", (stack) =>
+test.provider(
+  "diff pulls again unless alwaysPull is disabled",
+  () =>
     Effect.gen(function* () {
-      const image = yield* stack.deploy(
-        Docker.RemoteImage("remote-nginx", {
+      const provider = yield* Provider.findProvider(Docker.RemoteImage);
+      const output = {
+        imageRef: "nginx:alpine",
+        imageId: "sha256:0",
+        createdAt: 0,
+        name: "nginx",
+        tag: "alpine",
+      };
+
+      const pinned = yield* provider.diff!({
+        id: "nginx",
+        fqn: "nginx",
+        instanceId: "instance",
+        olds: { name: "nginx", tag: "alpine", alwaysPull: false },
+        news: { name: "nginx", tag: "alpine", alwaysPull: false },
+        oldBindings: [],
+        newBindings: [],
+        output,
+      });
+      expect(pinned).toBeUndefined();
+
+      const refreshed = yield* provider.diff!({
+        id: "nginx",
+        fqn: "nginx",
+        instanceId: "instance",
+        olds: { name: "nginx", tag: "alpine", alwaysPull: false },
+        news: { name: "nginx", tag: "alpine" },
+        oldBindings: [],
+        newBindings: [],
+        output,
+      });
+      expect(refreshed).toEqual({ action: "update" });
+    }),
+  { tags: ["provider:docker", "provider:docker:remoteimage", "local"] },
+);
+
+test.provider(
+  "diff pulls again when Docker context changes",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Docker.RemoteImage);
+      const output = {
+        imageRef: "nginx:alpine",
+        imageId: "sha256:0",
+        createdAt: 0,
+        name: "nginx",
+        tag: "alpine",
+      };
+
+      const changed = yield* provider.diff!({
+        id: "nginx",
+        fqn: "nginx",
+        instanceId: "instance",
+        olds: {
           name: "nginx",
           tag: "alpine",
           alwaysPull: false,
-        }),
-      );
-      expect(image.imageRef).toBe("nginx:alpine");
-      expect(image.imageId.length).toBeGreaterThan(0);
+          context: "default",
+        },
+        news: {
+          name: "nginx",
+          tag: "alpine",
+          alwaysPull: false,
+          context: "remote-build",
+        },
+        oldBindings: [],
+        newBindings: [],
+        output,
+      });
+      expect(changed).toEqual({ action: "update" });
     }),
-  );
+  { tags: ["provider:docker", "provider:docker:remoteimage", "local"] },
+);
 
-  test.provider("pulls then re-tags under a new repository", (stack) =>
-    Effect.gen(function* () {
-      const docker = yield* Docker.Docker;
-      const targetName = "alchemy-test-hello";
-      const targetTag = "retagged";
-      const targetRef = `${targetName}:${targetTag}`;
-      // RemoteImage.delete is a no-op, so reclaim the re-tagged image here.
-      yield* Effect.addFinalizer(() =>
-        docker.image.remove([targetRef], true).pipe(Effect.ignore),
-      );
+describe(
+  "Docker.RemoteImage",
+  {
+    tags: ["provider:docker", "provider:docker:remoteimage", "local"],
+    concurrent: false,
+  },
+  () => {
+    test.provider("pulls a Docker image reference", (stack) =>
+      Effect.gen(function* () {
+        const image = yield* stack.deploy(
+          Docker.RemoteImage("remote-nginx", {
+            name: "nginx",
+            tag: "alpine",
+            alwaysPull: false,
+          }),
+        );
+        expect(image.imageRef).toBe("nginx:alpine");
+        expect(image.imageId.length).toBeGreaterThan(0);
+      }),
+    );
 
-      const image = yield* stack.deploy(
-        Docker.RemoteImage("retagged-hello", {
-          name: "hello-world",
-          tag: "latest",
-          targetName,
-          targetTag,
-        }),
-      );
-      expect(image.imageRef).toBe(targetRef);
-      expect(image.name).toBe(targetName);
-      expect(image.tag).toBe(targetTag);
-      expect(image.imageId.length).toBeGreaterThan(0);
+    test.provider("pulls then re-tags under a new repository", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const targetName = "alchemy-test-hello";
+        const targetTag = "retagged";
+        const targetRef = `${targetName}:${targetTag}`;
+        // RemoteImage.delete is a no-op, so reclaim the re-tagged image here.
+        yield* Effect.addFinalizer(() =>
+          docker.image.remove([targetRef], true).pipe(Effect.ignore),
+        );
 
-      const inspected = yield* docker.image.inspect(targetRef);
-      expect(inspected.Id.length).toBeGreaterThan(0);
-    }),
-  );
+        const image = yield* stack.deploy(
+          Docker.RemoteImage("retagged-hello", {
+            name: "hello-world",
+            tag: "latest",
+            targetName,
+            targetTag,
+          }),
+        );
+        expect(image.imageRef).toBe(targetRef);
+        expect(image.name).toBe(targetName);
+        expect(image.tag).toBe(targetTag);
+        expect(image.imageId.length).toBeGreaterThan(0);
 
-  test.provider("pulls a private image with inline credentials", (stack) =>
-    Effect.gen(function* () {
-      const docker = yield* Docker.Docker;
-      const client = yield* HttpClient.HttpClient;
-      const port = yield* findAvailablePort();
-      const registryName = "alchemy-test-auth-registry";
-      const host = `localhost:${port}`;
-      const targetName = `${host}/alchemy-private-hello`;
-      const targetTag = "v1";
-      const targetRef = `${targetName}:${targetTag}`;
-      const credentials = {
-        server: host,
-        username: "alchemy",
-        password: Redacted.make("registry-secret"),
-      };
+        const inspected = yield* docker.image.inspect(targetRef);
+        expect(inspected.Id.length).toBeGreaterThan(0);
+      }),
+    );
 
-      yield* Effect.addFinalizer(() =>
-        Effect.all([
-          docker.run(["rm", "-f", registryName]),
-          docker.image.remove(targetRef, true),
-        ]).pipe(Effect.ignore),
-      );
+    test.provider("pulls a private image with inline credentials", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const client = yield* HttpClient.HttpClient;
+        const port = yield* findAvailablePort();
+        const registryName = "alchemy-test-auth-registry";
+        const host = `localhost:${port}`;
+        const targetName = `${host}/alchemy-private-hello`;
+        const targetTag = "v1";
+        const targetRef = `${targetName}:${targetTag}`;
+        const credentials = {
+          server: host,
+          username: "alchemy",
+          password: Redacted.make("registry-secret"),
+        };
 
-      yield* docker.run([
-        "run",
-        "-d",
-        "--name",
-        registryName,
-        "-p",
-        `${port}:5000`,
-        "-e",
-        "REGISTRY_AUTH=htpasswd",
-        "-e",
-        "REGISTRY_AUTH_HTPASSWD_REALM=alchemy",
-        "-e",
-        "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
-        "-v",
-        `${registryHtpasswd}:/auth/htpasswd:ro`,
-        "registry:2",
-      ]);
+        yield* Effect.addFinalizer(() =>
+          Effect.all([
+            docker.run(["rm", "-f", registryName]),
+            docker.image.remove(targetRef, true),
+          ]).pipe(Effect.ignore),
+        );
 
-      // Wait for the registry HTTP API to start serving before pushing.
-      yield* client.get(`http://${host}/v2/`).pipe(
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("250 millis"),
-              Schedule.spaced("2 seconds"),
+        yield* docker.run([
+          "run",
+          "-d",
+          "--name",
+          registryName,
+          "-p",
+          `${port}:5000`,
+          "-e",
+          "REGISTRY_AUTH=htpasswd",
+          "-e",
+          "REGISTRY_AUTH_HTPASSWD_REALM=alchemy",
+          "-e",
+          "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
+          "-v",
+          `${registryHtpasswd}:/auth/htpasswd:ro`,
+          "registry:2",
+        ]);
+
+        // Wait for the registry HTTP API to start serving before pushing.
+        yield* client.get(`http://${host}/v2/`).pipe(
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.min([
+                Schedule.exponential("250 millis"),
+                Schedule.spaced("2 seconds"),
+              ]),
+              Schedule.recurs(20),
             ]),
-            Schedule.recurs(20),
-          ]),
-        }),
-      );
+          }),
+        );
 
-      const pushed = yield* stack.deploy(
-        Docker.RemoteImage("private-hello-push", {
-          name: "hello-world",
-          tag: "latest",
-          targetName,
-          targetTag,
-          registry: credentials,
-        }),
-      );
-      expect(pushed.imageRef).toBe(targetRef);
-      expect(pushed.repoDigest).toContain(`${targetName}@sha256:`);
+        const pushed = yield* stack.deploy(
+          Docker.RemoteImage("private-hello-push", {
+            name: "hello-world",
+            tag: "latest",
+            targetName,
+            targetTag,
+            registry: credentials,
+          }),
+        );
+        expect(pushed.imageRef).toBe(targetRef);
+        expect(pushed.repoDigest).toContain(`${targetName}@sha256:`);
 
-      yield* docker.image.remove(targetRef, true);
+        yield* docker.image.remove(targetRef, true);
 
-      const anonymousPull = yield* Effect.result(docker.image.pull(targetRef));
-      expect(Result.isFailure(anonymousPull)).toBe(true);
+        const anonymousPull = yield* Effect.result(
+          docker.image.pull(targetRef),
+        );
+        expect(Result.isFailure(anonymousPull)).toBe(true);
 
-      const pulled = yield* stack.deploy(
-        Docker.RemoteImage("private-hello-pull", {
-          name: targetName,
-          tag: targetTag,
-          pullRegistry: credentials,
-        }),
-      );
-      expect(pulled.imageRef).toBe(targetRef);
-      expect(pulled.imageId).toBe(pushed.imageId);
-    }),
-  );
+        const pulled = yield* stack.deploy(
+          Docker.RemoteImage("private-hello-pull", {
+            name: targetName,
+            tag: targetTag,
+            pullRegistry: credentials,
+          }),
+        );
+        expect(pulled.imageRef).toBe(targetRef);
+        expect(pulled.imageId).toBe(pushed.imageId);
+      }),
+    );
 
-  test.provider("pulls, re-tags, and pushes to a registry", (stack) =>
-    Effect.gen(function* () {
-      const docker = yield* Docker.Docker;
-      const client = yield* HttpClient.HttpClient;
-      const port = yield* findAvailablePort();
-      const registryName = "alchemy-test-registry";
-      const host = `localhost:${port}`;
-      const targetName = `${host}/alchemy-hello`;
-      const targetTag = "v1";
-      const targetRef = `${targetName}:${targetTag}`;
+    test.provider("pulls, re-tags, and pushes to a registry", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const client = yield* HttpClient.HttpClient;
+        const port = yield* findAvailablePort();
+        const registryName = "alchemy-test-registry";
+        const host = `localhost:${port}`;
+        const targetName = `${host}/alchemy-hello`;
+        const targetTag = "v1";
+        const targetRef = `${targetName}:${targetTag}`;
 
-      yield* Effect.addFinalizer(() =>
-        Effect.all([
-          docker.run(["rm", "-f", registryName]),
-          docker.image.remove(targetRef, true),
-        ]).pipe(Effect.ignore),
-      );
+        yield* Effect.addFinalizer(() =>
+          Effect.all([
+            docker.run(["rm", "-f", registryName]),
+            docker.image.remove(targetRef, true),
+          ]).pipe(Effect.ignore),
+        );
 
-      yield* docker.run([
-        "run",
-        "-d",
-        "--name",
-        registryName,
-        "-p",
-        `${port}:5000`,
-        "registry:2",
-      ]);
+        yield* docker.run([
+          "run",
+          "-d",
+          "--name",
+          registryName,
+          "-p",
+          `${port}:5000`,
+          "registry:2",
+        ]);
 
-      // Wait for the registry HTTP API to start serving before pushing.
-      yield* client.get(`http://${host}/v2/`).pipe(
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("250 millis"),
-              Schedule.spaced("2 seconds"),
+        // Wait for the registry HTTP API to start serving before pushing.
+        yield* client.get(`http://${host}/v2/`).pipe(
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.min([
+                Schedule.exponential("250 millis"),
+                Schedule.spaced("2 seconds"),
+              ]),
+              Schedule.recurs(20),
             ]),
-            Schedule.recurs(20),
-          ]),
-        }),
-      );
+          }),
+        );
 
-      const image = yield* stack.deploy(
-        Docker.RemoteImage("pushed-hello", {
-          name: "hello-world",
-          tag: "latest",
-          targetName,
-          targetTag,
-          registry: {
-            server: host,
-            username: "alchemy",
-            password: Redacted.make("ignored-by-insecure-registry"),
-          },
-        }),
-      );
+        const image = yield* stack.deploy(
+          Docker.RemoteImage("pushed-hello", {
+            name: "hello-world",
+            tag: "latest",
+            targetName,
+            targetTag,
+            registry: {
+              server: host,
+              username: "alchemy",
+              password: Redacted.make("ignored-by-insecure-registry"),
+            },
+          }),
+        );
 
-      expect(image.imageRef).toBe(targetRef);
-      expect(image.repoDigest).toBeDefined();
-      expect(image.repoDigest).toContain(`${targetName}@sha256:`);
-    }),
-  );
-});
+        expect(image.imageRef).toBe(targetRef);
+        expect(image.repoDigest).toBeDefined();
+        expect(image.repoDigest).toContain(`${targetName}@sha256:`);
+      }),
+    );
+  },
+);

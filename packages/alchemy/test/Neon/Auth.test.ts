@@ -88,7 +88,17 @@ test.provider(
       expect(gone).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:authtrusteddomain",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -142,7 +152,15 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -235,5 +253,15 @@ test.provider(
       expect(wrong.status).toBe(401);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:authtrusteddomain",
+      "provider:neon:branch",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

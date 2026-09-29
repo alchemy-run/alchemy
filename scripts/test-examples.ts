@@ -47,6 +47,7 @@ const examples = [
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-react-router",
   "./examples/cloudflare-website-sveltekit",
+  "./examples/cloudflare-website-service-bindings",
   "./examples/cloudflare-website-vite",
   "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",

@@ -81,7 +81,15 @@ test(
     expect(effect).toBeTypeOf("string");
     yield* assertSecret(effect);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:secretsstore",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // Style (2): the same Secret declared on the Worker `env` async binding. The
@@ -94,5 +102,13 @@ test(
     expect(async).toBeTypeOf("string");
     yield* assertSecret(async);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:secretsstore",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

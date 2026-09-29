@@ -72,243 +72,269 @@ const diff = (input: {
 
 const REPLACE = { action: "replace", deleteFirst: true };
 
-describe("Droplet diff", () => {
-  test.provider("replaceAfter replaces a droplet older than the limit", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: daysAgo(31) }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  test.provider("replaceAfter keeps a droplet younger than the limit", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: daysAgo(29) }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  test.provider("replaceAfter ignores an unreadable createdAt", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: "not-a-date" }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  test.provider("replaceAfter does not apply without prior props", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: undefined,
-        news: props,
-        output: observed({ createdAt: daysAgo(31) }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  test.provider(
-    "adoption replaces when create-time props differ from the droplet",
-    () =>
+describe(
+  "Droplet diff",
+  { tags: ["provider:digitalocean", "provider:digitalocean:droplet", "local"] },
+  () => {
+    test.provider("replaceAfter replaces a droplet older than the limit", () =>
       Effect.gen(function* () {
-        const news = { ...PROPS };
+        const props = { ...PROPS, replaceAfter: "30 days" as const };
         const result = yield* diff({
-          olds: news,
-          news,
-          output: observed({ region: "nyc3", createdAt: daysAgo(31) }),
+          olds: { ...props },
+          news: props,
+          output: observed({ createdAt: daysAgo(31) }),
         });
         expect(result).toEqual(REPLACE);
       }),
-  );
+    );
 
-  test.provider("a copy of the prior props still sees observed drift", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS },
-        output: observed({ sizeSlug: "s-2vcpu-4gb" }),
+    test.provider("replaceAfter keeps a droplet younger than the limit", () =>
+      Effect.gen(function* () {
+        const props = { ...PROPS, replaceAfter: "30 days" as const };
+        const result = yield* diff({
+          olds: { ...props },
+          news: props,
+          output: observed({ createdAt: daysAgo(29) }),
+        });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider("replaceAfter ignores an unreadable createdAt", () =>
+      Effect.gen(function* () {
+        const props = { ...PROPS, replaceAfter: "30 days" as const };
+        const result = yield* diff({
+          olds: { ...props },
+          news: props,
+          output: observed({ createdAt: "not-a-date" }),
+        });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider("replaceAfter does not apply without prior props", () =>
+      Effect.gen(function* () {
+        const props = { ...PROPS, replaceAfter: "30 days" as const };
+        const result = yield* diff({
+          olds: undefined,
+          news: props,
+          output: observed({ createdAt: daysAgo(31) }),
+        });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider(
+      "adoption replaces when create-time props differ from the droplet",
+      () =>
+        Effect.gen(function* () {
+          const news = { ...PROPS };
+          const result = yield* diff({
+            olds: news,
+            news,
+            output: observed({ region: "nyc3", createdAt: daysAgo(31) }),
+          });
+          expect(result).toEqual(REPLACE);
+        }),
+    );
+
+    test.provider("a copy of the prior props still sees observed drift", () =>
+      Effect.gen(function* () {
+        const result = yield* diff({
+          olds: { ...PROPS },
+          news: { ...PROPS },
+          output: observed({ sizeSlug: "s-2vcpu-4gb" }),
+        });
+        expect(result).toEqual(REPLACE);
+      }),
+    );
+
+    test.provider("adoption keeps a droplet that matches its props", () =>
+      Effect.gen(function* () {
+        const news = { ...PROPS, image: 100 };
+        const result = yield* diff({ olds: news, news, output: observed() });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider("a droplet without an image slug does not drift", () =>
+      Effect.gen(function* () {
+        const result = yield* diff({
+          olds: { ...PROPS },
+          news: { ...PROPS },
+          output: observed({ imageSlug: undefined }),
+        });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider("clearing withDropletAgent replaces", () =>
+      Effect.gen(function* () {
+        const result = yield* diff({
+          olds: { ...PROPS, withDropletAgent: undefined },
+          news: { ...PROPS, withDropletAgent: false },
+          output: observed(),
+        });
+        expect(result).toEqual(REPLACE);
+      }),
+    );
+
+    test.provider("omitting a defaulted boolean is not a change", () =>
+      Effect.gen(function* () {
+        const result = yield* diff({
+          olds: { ...PROPS, backups: false },
+          news: { ...PROPS, backups: undefined },
+          output: observed(),
+        });
+        expect(result).toBeUndefined();
+      }),
+    );
+
+    test.provider("name and tags update in place", () =>
+      Effect.gen(function* () {
+        const result = yield* diff({
+          olds: { ...PROPS, name: "a", tags: ["x"] },
+          news: { ...PROPS, name: "b", tags: ["x", "y"] },
+          output: observed(),
+        });
+        expect(result).toEqual({ action: "update" });
+      }),
+    );
+  },
+);
+
+describe(
+  "driftedReplacingProps",
+  {
+    tags: [
+      "unit",
+      "provider:digitalocean",
+      "provider:digitalocean:droplet",
+      "local",
+    ],
+  },
+  () => {
+    const cases: Array<{
+      name: string;
+      news: DropletProps;
+      droplet: DropletAttributes;
+      expected: string[];
+    }> = [
+      {
+        name: "matching droplet",
+        news: PROPS,
+        droplet: observed(),
+        expected: [],
+      },
+      {
+        name: "image given as a matching number",
+        news: { ...PROPS, image: 100 },
+        droplet: observed(),
+        expected: [],
+      },
+      {
+        name: "image given as a different number",
+        news: { ...PROPS, image: 101 },
+        droplet: observed(),
+        expected: ["image"],
+      },
+      {
+        name: "image slug unknown on the droplet",
+        news: PROPS,
+        droplet: observed({ imageSlug: undefined }),
+        expected: [],
+      },
+      {
+        name: "different image slug",
+        news: { ...PROPS, image: "debian-13-x64" },
+        droplet: observed(),
+        expected: ["image"],
+      },
+      {
+        name: "region and size differ",
+        news: { ...PROPS, region: "nyc3", size: "s-2vcpu-4gb" },
+        droplet: observed(),
+        expected: ["region", "size"],
+      },
+      {
+        name: "features enabled on the droplet but not desired",
+        news: PROPS,
+        droplet: observed({ features: ["backups", "ipv6", "monitoring"] }),
+        expected: ["backups", "ipv6", "monitoring"],
+      },
+      {
+        name: "features desired and enabled",
+        news: { ...PROPS, backups: true, ipv6: true, monitoring: true },
+        droplet: observed({ features: ["backups", "ipv6", "monitoring"] }),
+        expected: [],
+      },
+      {
+        name: "features unknown on state written by an older provider",
+        news: { ...PROPS, backups: true, monitoring: true },
+        droplet: observed({ features: undefined as unknown as string[] }),
+        expected: [],
+      },
+      {
+        name: "vpc only checked when desired",
+        news: PROPS,
+        droplet: observed({ vpcUuid: "vpc-1" }),
+        expected: [],
+      },
+      {
+        name: "different vpc",
+        news: { ...PROPS, vpcUuid: "vpc-2" },
+        droplet: observed({ vpcUuid: "vpc-1" }),
+        expected: ["vpcUuid"],
+      },
+    ];
+    for (const testCase of cases) {
+      it(testCase.name, () => {
+        expect(driftedReplacingProps(testCase.news, testCase.droplet)).toEqual(
+          testCase.expected,
+        );
       });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
+    }
+  },
+);
 
-  test.provider("adoption keeps a droplet that matches its props", () =>
-    Effect.gen(function* () {
-      const news = { ...PROPS, image: 100 };
-      const result = yield* diff({ olds: news, news, output: observed() });
-      expect(result).toBeUndefined();
-    }),
-  );
+describe(
+  "ownershipTag",
+  {
+    tags: [
+      "unit",
+      "provider:digitalocean",
+      "provider:digitalocean:droplet",
+      "local",
+    ],
+  },
+  () => {
+    it.effect("is stable and fits DigitalOcean's tag rules", () =>
+      Effect.gen(function* () {
+        const tag = yield* ownershipTag("stack", "stage", "id");
+        expect(tag).toEqual(yield* ownershipTag("stack", "stage", "id"));
+        expect(tag.startsWith("alchemy:")).toBe(true);
+        expect(tag).toMatch(/^[a-zA-Z0-9:_-]+$/);
+        expect(tag.length).toBeLessThanOrEqual(255);
+      }),
+    );
 
-  test.provider("a droplet without an image slug does not drift", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS },
-        output: observed({ imageSlug: undefined }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
+    it.effect("does not collide on names that differ only in punctuation", () =>
+      Effect.gen(function* () {
+        expect(yield* ownershipTag("api.prod", "s", "id")).not.toEqual(
+          yield* ownershipTag("api-prod", "s", "id"),
+        );
+      }),
+    );
 
-  test.provider("clearing withDropletAgent replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, withDropletAgent: undefined },
-        news: { ...PROPS, withDropletAgent: false },
-        output: observed(),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  test.provider("omitting a defaulted boolean is not a change", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, backups: false },
-        news: { ...PROPS, backups: undefined },
-        output: observed(),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  test.provider("name and tags update in place", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, name: "a", tags: ["x"] },
-        news: { ...PROPS, name: "b", tags: ["x", "y"] },
-        output: observed(),
-      });
-      expect(result).toEqual({ action: "update" });
-    }),
-  );
-});
-
-describe("driftedReplacingProps", () => {
-  const cases: Array<{
-    name: string;
-    news: DropletProps;
-    droplet: DropletAttributes;
-    expected: string[];
-  }> = [
-    {
-      name: "matching droplet",
-      news: PROPS,
-      droplet: observed(),
-      expected: [],
-    },
-    {
-      name: "image given as a matching number",
-      news: { ...PROPS, image: 100 },
-      droplet: observed(),
-      expected: [],
-    },
-    {
-      name: "image given as a different number",
-      news: { ...PROPS, image: 101 },
-      droplet: observed(),
-      expected: ["image"],
-    },
-    {
-      name: "image slug unknown on the droplet",
-      news: PROPS,
-      droplet: observed({ imageSlug: undefined }),
-      expected: [],
-    },
-    {
-      name: "different image slug",
-      news: { ...PROPS, image: "debian-13-x64" },
-      droplet: observed(),
-      expected: ["image"],
-    },
-    {
-      name: "region and size differ",
-      news: { ...PROPS, region: "nyc3", size: "s-2vcpu-4gb" },
-      droplet: observed(),
-      expected: ["region", "size"],
-    },
-    {
-      name: "features enabled on the droplet but not desired",
-      news: PROPS,
-      droplet: observed({ features: ["backups", "ipv6", "monitoring"] }),
-      expected: ["backups", "ipv6", "monitoring"],
-    },
-    {
-      name: "features desired and enabled",
-      news: { ...PROPS, backups: true, ipv6: true, monitoring: true },
-      droplet: observed({ features: ["backups", "ipv6", "monitoring"] }),
-      expected: [],
-    },
-    {
-      name: "features unknown on state written by an older provider",
-      news: { ...PROPS, backups: true, monitoring: true },
-      droplet: observed({ features: undefined as unknown as string[] }),
-      expected: [],
-    },
-    {
-      name: "vpc only checked when desired",
-      news: PROPS,
-      droplet: observed({ vpcUuid: "vpc-1" }),
-      expected: [],
-    },
-    {
-      name: "different vpc",
-      news: { ...PROPS, vpcUuid: "vpc-2" },
-      droplet: observed({ vpcUuid: "vpc-1" }),
-      expected: ["vpcUuid"],
-    },
-  ];
-  for (const testCase of cases) {
-    it(testCase.name, () => {
-      expect(driftedReplacingProps(testCase.news, testCase.droplet)).toEqual(
-        testCase.expected,
-      );
-    });
-  }
-});
-
-describe("ownershipTag", () => {
-  it.effect("is stable and fits DigitalOcean's tag rules", () =>
-    Effect.gen(function* () {
-      const tag = yield* ownershipTag("stack", "stage", "id");
-      expect(tag).toEqual(yield* ownershipTag("stack", "stage", "id"));
-      expect(tag.startsWith("alchemy:")).toBe(true);
-      expect(tag).toMatch(/^[a-zA-Z0-9:_-]+$/);
-      expect(tag.length).toBeLessThanOrEqual(255);
-    }),
-  );
-
-  it.effect("does not collide on names that differ only in punctuation", () =>
-    Effect.gen(function* () {
-      expect(yield* ownershipTag("api.prod", "s", "id")).not.toEqual(
-        yield* ownershipTag("api-prod", "s", "id"),
-      );
-    }),
-  );
-
-  it.effect("does not collide when the tuple boundaries move", () =>
-    Effect.gen(function* () {
-      expect(yield* ownershipTag("a:b", "c", "id")).not.toEqual(
-        yield* ownershipTag("a", "b:c", "id"),
-      );
-    }),
-  );
-});
+    it.effect("does not collide when the tuple boundaries move", () =>
+      Effect.gen(function* () {
+        expect(yield* ownershipTag("a:b", "c", "id")).not.toEqual(
+          yield* ownershipTag("a", "b:c", "id"),
+        );
+      }),
+    );
+  },
+);
 
 const droplet = (name: string, tags: string[]) =>
   Effect.gen(function* () {
@@ -368,7 +394,10 @@ test.provider.skipIf(skipLive)(
       );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: LIVE_TIMEOUT },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:droplet", "live"],
+    timeout: LIVE_TIMEOUT,
+  },
 );
 
 test.provider.skipIf(skipLive)(
@@ -400,5 +429,8 @@ test.provider.skipIf(skipLive)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: LIVE_TIMEOUT },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:droplet", "live"],
+    timeout: LIVE_TIMEOUT,
+  },
 );

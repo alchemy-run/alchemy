@@ -131,5 +131,8 @@ test.provider(
         yield* assertAppGone(target.appName);
       }
     }).pipe(sanitizeExecFailure),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 240_000,
+  },
 );

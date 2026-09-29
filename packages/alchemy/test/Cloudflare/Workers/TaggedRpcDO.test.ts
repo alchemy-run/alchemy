@@ -231,7 +231,15 @@ test(
       }),
     );
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -270,7 +278,15 @@ test(
     );
     expect(value).toBe(2);
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -298,7 +314,15 @@ test(
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -354,7 +378,15 @@ test(
     expect(d1.value).toBe(2);
     expect(dox.value).toBe(1);
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );
 
 test(
@@ -417,5 +449,13 @@ test(
       }),
     );
   }).pipe(logLevel),
-  { timeout: testTimeout },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:d1",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: testTimeout,
+  },
 );

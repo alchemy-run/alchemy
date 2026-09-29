@@ -20,26 +20,29 @@ const KEY_NAME = "alchemy-test-ssh-key";
 const RENAMED_KEY_NAME = "alchemy-test-ssh-key-renamed";
 const OTHER_KEY_NAME = "alchemy-test-ssh-key-other";
 
-test.provider("diff ignores surrounding whitespace in publicKey", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(SshKey);
-    const diff = yield* provider.diff!({
-      id: "TestKey",
-      fqn: "TestKey",
-      instanceId: "instance",
-      olds: { name: KEY_NAME, publicKey: PUBLIC_KEY },
-      news: { name: KEY_NAME, publicKey: `${PUBLIC_KEY}\n` },
-      oldBindings: [],
-      newBindings: [],
-      output: {
-        sshKeyId: 1,
-        name: KEY_NAME,
-        fingerprint: "00:00",
-        publicKey: PUBLIC_KEY,
-      },
-    });
-    expect(diff).toBeUndefined();
-  }),
+test.provider(
+  "diff ignores surrounding whitespace in publicKey",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(SshKey);
+      const diff = yield* provider.diff!({
+        id: "TestKey",
+        fqn: "TestKey",
+        instanceId: "instance",
+        olds: { name: KEY_NAME, publicKey: PUBLIC_KEY },
+        news: { name: KEY_NAME, publicKey: `${PUBLIC_KEY}\n` },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          sshKeyId: 1,
+          name: KEY_NAME,
+          fingerprint: "00:00",
+          publicKey: PUBLIC_KEY,
+        },
+      });
+      expect(diff).toBeUndefined();
+    }),
+  { tags: ["provider:digitalocean", "provider:digitalocean:sshkey", "local"] },
 );
 
 const isGone = (sshKeyId: number) =>
@@ -127,5 +130,8 @@ test.provider.skipIf(skipLive)(
 
       expect(yield* isGone(replaced.sshKeyId)).toBe(true);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:digitalocean", "provider:digitalocean:sshkey", "live"],
+    timeout: 180_000,
+  },
 );

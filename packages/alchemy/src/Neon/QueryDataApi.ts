@@ -56,6 +56,7 @@ export interface QueryDataApiClient {
  * ```
  *
  * @binding
+ * @product Data API
  */
 export interface QueryDataApi extends Binding.Service<
   QueryDataApi,

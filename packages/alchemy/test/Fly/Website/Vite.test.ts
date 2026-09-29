@@ -153,6 +153,14 @@ for (const bluegreen of [true, false]) {
         );
       }).pipe(logLevel),
     // Two real frontend/image builds, registry pushes, routing overlap and teardown.
-    { timeout: 720_000 },
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:machine",
+        "provider:fly:website",
+        "live",
+      ],
+      timeout: 720_000,
+    },
   );
 }
