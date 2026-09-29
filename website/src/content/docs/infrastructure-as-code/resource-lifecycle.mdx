@@ -1,16 +1,16 @@
 ---
 title: Resource Lifecycle
-description: How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
+description: How alchemy plans, applies, replaces, and destroys resources, and how to think about idempotency and recovery.
 ---
 
 import Terminal from "../../../components/Terminal.astro";
 import DAG from "../../../components/DAG.astro";
 
-Every [Resource](/infrastructure-as-code/resource) goes through the same lifecycle:
+Every [Resource](/infrastructure-as-code/resource) goes through the same lifecycle of
 **plan → reconcile → (replace) → delete**. The plan classifies each
-resource as create, update, replace, delete, or no-op, but the
-provider implements a single `reconcile` function that converges the
-cloud's actual state to what's declared — whether that's the first
+resource as create, update, replace, delete, or no-op. The provider
+implements one `reconcile` function that converges the cloud's actual
+state to the declared state. The same function handles the first
 provisioning, a routine update, or an adoption takeover. For the CLI
 flags that drive these operations, see the
 [CLI reference](/cli).
@@ -47,11 +47,11 @@ When you run `alchemy deploy`, alchemy first **plans** the change.
 It compares the desired state (what your code declares) against the
 last persisted state and classifies each resource:
 
-- **Create** (`+`) — declared in code, not in state
-- **Update** (`~`) — declared and persisted, but properties differ
-- **Replace** (`±`) — change requires destroy-and-recreate
-- **Delete** (`-`) — persisted but no longer declared
-- **No-op** (`•`) — unchanged
+- **Create** (`+`): declared in code, not in state
+- **Update** (`~`): declared and persisted, but properties differ
+- **Replace** (`±`): the change requires destroy-and-recreate
+- **Delete** (`-`): persisted but no longer declared
+- **No-op** (`•`): unchanged
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g], [y]1 to update[/y]
 
@@ -68,51 +68,51 @@ without applying it.
 
 ## Reconcile
 
-Whether a resource is being created for the first time, updated in
-place, or adopted from existing infrastructure, alchemy calls a
-single function: `provider.reconcile`.
+Alchemy calls one function, `provider.reconcile`, whether a resource
+is being created for the first time, updated in place, or adopted
+from existing infrastructure.
 
-Reconcile must be **convergent**: given the desired props, it
-observes live cloud state and brings it to that state regardless of
-starting point. It must also be safe to retry — a partial reconcile
-that crashed midway resumes correctly on the next run, because
-physical names are deterministic from `stack/stage/logical-id` and
-the reconciler finds the existing resource instead of duplicating
-it. The parameter contract (`news`/`output`/`olds`/`bindings`) and
-the observe → ensure → sync shape are the provider's concern — see
+Reconcile must be **convergent**. Given the desired props, it
+observes live cloud state and brings it to that state from any
+starting point. It must also be safe to retry. A partial reconcile
+that crashed midway resumes correctly on the next run. Physical
+names are deterministic from `stack/stage/logical-id`, so the
+reconciler finds the existing resource and does not duplicate it.
+The parameter contract (`news`/`output`/`olds`/`bindings`) and the
+observe → ensure → sync shape are the provider's concern. See
 [Provider › reconcile](/infrastructure-as-code/provider#reconcile).
 
-A second pass — **convergence** — re-runs `reconcile` for any
+A second pass, called **convergence**, re-runs `reconcile` for any
 resource whose inputs changed because an upstream output changed
 mid-deploy.
 
 ## Replace
 
-Some property changes can't be applied in place — for example,
-changing a DynamoDB table's partition key. The provider's `diff`
+Some property changes can't be applied in place, such as changing a
+DynamoDB table's partition key. For these, the provider's `diff`
 returns `{ action: "replace" }`, and alchemy:
 
 1. Creates a new resource with a new instance ID
 2. Updates downstream resources to reference the new resource
 3. Deletes the old resource
 
-Because new and old coexist briefly, dependents get a clean cutover
-without downtime.
+The new and old resources coexist briefly, so dependents get a clean
+cutover without downtime.
 
-Changing a **logical ID** also plans a replacement — if you merely
-renamed the resource, declare it with `renamedFrom` instead; see
+Changing a **logical ID** also plans a replacement. If you only
+renamed the resource, declare it with `renamedFrom` instead. See
 [Renaming Resources](/infrastructure-as-code/renaming).
 
 ## Delete
 
 `provider.delete` is called when a resource disappears from your
 code, when a replacement supersedes it, or when you run
-`alchemy destroy`. Like create, delete must be **idempotent**:
-deleting an already-gone resource is a success, not an error.
+`alchemy destroy`. Like create, delete must be **idempotent**.
+Deleting a resource that is already gone is a success, not an error.
 
-`alchemy destroy` is just a plan where every persisted resource is
-marked for deletion. Resources are removed in **reverse dependency
-order** — dependents go first.
+`alchemy destroy` is a plan where every persisted resource is marked
+for deletion. Resources are removed in **reverse dependency order**,
+so dependents go first.
 
 <Terminal content={`[u]Plan[/u]: [r]2 to delete[/r]
 
@@ -126,18 +126,19 @@ Proceed?
 
 ## Removal policy
 
-Each resource carries a **removal policy** that decides what happens
-to the physical cloud object when the resource is deleted — orphaned,
-destroyed, or superseded as a replacement's old generation:
+Each resource carries a **removal policy**. The policy decides what
+happens to the physical cloud object when the resource is deleted.
+This applies whether the resource is orphaned, destroyed, or
+superseded as a replacement's old generation:
 
 | Policy      | What the engine does                                     |
 | ----------- | -------------------------------------------------------- |
 | `destroy`   | Calls `provider.delete`, then drops the state row         |
 | `retain`    | Skips `provider.delete`, then drops the state row         |
 
-Under `retain`, alchemy forgets the resource either way — only the
-cloud object survives. Most resource types default to `destroy`; a few
-whose contents are irreplaceable default to `retain` (e.g.
+Alchemy forgets the resource under either policy. Under `retain`, only
+the cloud object survives. Most resource types default to `destroy`. A
+few whose contents are irreplaceable default to `retain` (e.g.
 [`GitHub.Repository`](/github/repository), `Cloudflare.Zone`).
 
 Set the policy by piping a declaration through `retain()` or
@@ -161,55 +162,56 @@ Effect.gen(function* () {
 ```
 
 The policy is a decoration, not a prop, so changing it produces no
-diff — the resource plans as a **no-op** and the plan reports no
-changes. The deploy still persists the new policy onto the state row
-(the orphan delete reads it from there, long after the declaration is
-gone), so a policy change takes effect from the very next deploy.
+diff. The resource plans as a **no-op** and the plan reports no
+changes. The deploy still persists the new policy onto the state row.
+The orphan delete reads the policy from there, long after the
+declaration is gone. A policy change therefore takes effect from the
+very next deploy.
 
 :::caution
 `retain` protects the resource from *alchemy*, not from the provider's
 own delete semantics. Deleting a resource still cascades however that
-cloud API cascades — e.g. deleting a bucket that a provider empties
-first destroys its objects. Retain a resource **before** the deploy
-that would remove it, and prefer moving irreplaceable data behind a
-retained resource.
+cloud API cascades. For example, deleting a bucket that a provider
+empties first destroys its objects. Retain a resource **before** the
+deploy that would remove it. Prefer moving irreplaceable data behind
+a retained resource.
 :::
 
 ## Idempotency and recovery
 
-State persistence can fail after the cloud operation succeeds — the
-network drops between "bucket created" and "state saved". Alchemy
-handles this by requiring `reconcile` and `delete` to be safe to
-retry:
+State persistence can fail after the cloud operation succeeds. For
+example, the network drops between "bucket created" and "state
+saved". Alchemy handles this by requiring `reconcile` and `delete` to
+be safe to retry:
 
-- **Reconcile**: deterministic physical names plus the observe-step
-  mean a retry finds the existing resource instead of creating a
-  duplicate, and re-syncs any aspect that drifted.
+- **Reconcile**: deterministic physical names and the observe step
+  let a retry find the existing resource without creating a
+  duplicate. The retry also re-syncs any aspect that drifted.
 - **Delete**: a missing resource is treated as already deleted.
 - **Read**: providers can implement `read` so alchemy can recover
-  state from the live cloud when persistence fails partway, and to
-  detect adoptable resources on a fresh state store.
+  state from the live cloud when persistence fails partway. `read`
+  also detects adoptable resources on a fresh state store.
 
 ## Adoption
 
-When planning a resource that has no prior state, the engine calls
-`provider.read` (if the provider implements it). This serves two
+When the engine plans a resource that has no prior state, it calls
+`provider.read` if the provider implements it. This serves two
 overlapping purposes:
 
-- **State recovery** — the resource was created on a previous
-  deploy, but state was lost between the cloud op succeeding and the
-  store persisting. `read` finds the live resource and the engine
-  rebuilds `created` state from its attributes.
-- **Adoption** — you're deploying against existing infrastructure
-  you didn't manage with Alchemy yet (or you wiped state
-  intentionally). `read` recognizes the resource and the engine
-  imports it into the new state.
+- **State recovery**: the resource was created on a previous deploy,
+  but state was lost between the cloud op succeeding and the store
+  persisting. `read` finds the live resource and the engine rebuilds
+  `created` state from its attributes.
+- **Adoption**: you are deploying against existing infrastructure
+  that you did not manage with Alchemy yet, or you wiped state on
+  purpose. `read` recognizes the resource and the engine imports it
+  into the new state.
 
-A resource `read` recognizes as ours is adopted silently. One that
-exists but *isn't* ours fails with `OwnedBySomeoneElse` — re-running
-with `--adopt` (or scoping the effect with `adopt(true)`) unlocks
-the takeover. How providers signal ownership through `read`'s
-return value is part of the provider contract — see
+The engine silently adopts a resource that `read` recognizes as ours.
+A resource that exists but *isn't* ours fails with
+`OwnedBySomeoneElse`. Re-run with `--adopt`, or scope the effect with
+`adopt(true)`, to allow the takeover. The provider contract defines
+how providers signal ownership through `read`'s return value. See
 [Provider › read](/infrastructure-as-code/provider#read). For the CLI flag, see
 [Adopting Resources](/cli/adopting-resources).
 
@@ -219,7 +221,8 @@ return value is part of the provider contract — see
   retried automatically with backoff.
 - **Non-retryable errors** (validation, authorization) fail
   immediately and surface in the plan output.
-- **Partial failures** are safe to re-run thanks to idempotency.
+- **Partial failures** are safe to re-run because operations are
+  idempotent.
 
 ## Driving the lifecycle from the CLI
 
@@ -240,11 +243,11 @@ type by a [Provider](/infrastructure-as-code/provider).
 
 ## Where next
 
-- [Renaming Resources](/infrastructure-as-code/renaming) — migrate state
+- [Renaming Resources](/infrastructure-as-code/renaming): migrate state
   across a logical ID change instead of replacing. Next page.
-- [Providers](/infrastructure-as-code/provider) — the object that implements
+- [Providers](/infrastructure-as-code/provider): the object that implements
   `reconcile`, `delete`, `diff`, and `read` for a resource type.
-- [CLI](/cli) — the commands and flags that drive the
+- [CLI](/cli): the commands and flags that drive the
   lifecycle.
-- [State Store](/state-store) — where the persisted state
+- [State Store](/state-store): where the persisted state
   behind the plan lives.

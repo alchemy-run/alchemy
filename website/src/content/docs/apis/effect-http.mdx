@@ -1,32 +1,32 @@
 ---
 title: Effect HTTP
-description: Schema-validated REST endpoints with an rpc-like typed interface — for trust boundaries where consumers want a plain HTTP client.
+description: Schema-validated REST endpoints with an rpc-like typed interface. Use them at trust boundaries where consumers want a plain HTTP client.
 sidebar:
   order: 4
 ---
 
-Effect HTTP (`effect/unstable/httpapi`) is the same idea as
-[Effect RPC](/apis/effect-rpc): define a Schema, construct handler
-Layers, return an `HttpEffect` from `fetch`, call it through an
-rpc-like typed interface. The difference is what goes on the wire —
-real HTTP endpoints, with URLs, path params, query strings, headers,
-bodies, and content types.
+Effect HTTP (`effect/unstable/httpapi`) works like
+[Effect RPC](/apis/effect-rpc). You define a Schema, construct handler
+Layers, return an `HttpEffect` from `fetch`, and call it through an
+rpc-like typed interface. The difference is what goes on the wire.
+Effect HTTP serves real HTTP endpoints, with URLs, path params, query
+strings, headers, bodies, and content types.
 
-The use case is the same trust boundary — data that needs validating
-and sanitizing on the way in, exposed to a web app or an external
-service. Choose Effect HTTP over Effect RPC when your consumers
+Use it at the same trust boundary, where data needs
+validating and sanitizing on the way in, exposed to a web app or an
+external service. Choose Effect HTTP over Effect RPC when your consumers
 aren't Effect (or TypeScript) programs and want a plain HTTP client.
-The cost is also the same: every request pays for a schema decode
+The cost is also the same. Every request pays for a schema decode
 and encode, so it's equally discouraged for internal
-service-to-service calls — that's what
-[schemaless RPC](/apis/schemaless) is for.
+service-to-service calls. Use [schemaless RPC](/apis/schemaless) for
+those.
 
 ## The pieces
 
-Four files. Three are the API — domain model, endpoint
-declarations, and the host that serves them (a Cloudflare Worker or
-Lambda Function) — and the fourth is a client that derives
-everything from the second:
+There are four files. The domain model, the endpoint declarations,
+and the host that serves them (a Cloudflare Worker or Lambda
+Function) make up the API. The fourth is a client that
+derives everything from the second:
 
 ```sh
 src/
@@ -36,7 +36,7 @@ src/
 └── ApiClient.ts   # typed client derived from ApiSchema — no codegen, no string URLs
 ```
 
-The load-bearing file is `src/ApiSchema.ts`: the server implements
+The load-bearing file is `src/ApiSchema.ts`. The server implements
 it, every typed client is derived from it, and plain HTTP consumers
 get its validation for free.
 
@@ -63,14 +63,14 @@ export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
 ```
 
 `Schema.Class` gives you a runtime-validated class with an inferred
-TypeScript type — one definition imported by both sides — and
+TypeScript type. Both sides import the one definition.
 `httpApiStatus: 404` maps the tagged error to a real 404 over plain
 HTTP instead of a generic 500.
 
 ## Endpoints
 
-`src/ApiSchema.ts` declares the contract — endpoints, a group, and
-the API value:
+`src/ApiSchema.ts` declares the contract. It holds the endpoints, a
+group, and the API value:
 
 ```typescript
 // src/ApiSchema.ts
@@ -98,14 +98,13 @@ export class TasksGroup extends HttpApiGroup.make("Tasks")
 export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}
 ```
 
-Endpoints are pure declarations of `(method, path, schemas)`: the
-`/:id` path parameter declared under `params` is what makes
-`params.id` a typed `string` in both the handler and the client,
-request bodies are decoded against the `payload` Schema before your
-handler runs (anything that doesn't match gets an automatic 400 with
-a structured validation error), and `TaskApi` is a plain value —
-importable by the server and every client without dragging any
-runtime code across.
+Endpoints are pure declarations of `(method, path, schemas)`. The
+`/:id` path parameter declared under `params` makes `params.id` a
+typed `string` in both the handler and the client. Request bodies
+are decoded against the `payload` Schema before your handler runs.
+Anything that doesn't match gets an automatic 400 with a structured
+validation error. `TaskApi` is a plain value, so the server and
+every client can import it without dragging any runtime code across.
 
 ## Handlers
 
@@ -136,14 +135,14 @@ const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
 );
 ```
 
-`HttpApiBuilder.group` *constructs* a handler Layer — it runs
-nothing, which is what makes it safe at Construction/plan time
-([Phases](/infrastructure-as-effects/phases)) — and each
-handler receives the typed request its endpoint declared:
-`params.id` and `payload.title` are `string`s, the handler must
-return a `Task`, and the only allowed failure is `TaskNotFound` — a
-wrong shape or an undeclared error is a compile error, not a runtime
-surprise.
+`HttpApiBuilder.group` *constructs* a handler Layer. It runs
+nothing, which makes it safe at Construction/plan time
+([Phases](/infrastructure-as-effects/phases)). Each handler receives
+the typed request its endpoint declared. `params.id` and
+`payload.title` are `string`s, the handler must return a `Task`, and
+the only allowed failure is `TaskNotFound`. A wrong shape or an
+undeclared error fails at compile time, before it can surface at
+runtime.
 
 ## Serve it
 
@@ -167,17 +166,17 @@ return {
 ```
 
 `HttpRouter.toHttpEffect` builds the Layer once at boot and yields
-the request handler — the same `{ fetch }` shape a Worker or a
+the request handler. This is the same `{ fetch }` shape a Worker or a
 Lambda Function with `functionUrl: true` serves. The `platform` Layers are
-the host-specific part of the wiring — see
+the host-specific part of the wiring. See
 [Workers](/cloudflare/apis/effect-http-api) and
 [Lambda](/aws/apis/effect-http-api) for the exact set, plus storage
 bindings and deploy (and CORS, on Workers).
 
 ## Plain HTTP for everyone else
 
-Deploy it and the payoff over Effect RPC is immediate: the wire
-format is ordinary REST, so consumers need nothing but an HTTP
+Once you deploy it, the advantage over Effect RPC is immediate. The
+wire format is ordinary REST, so consumers need nothing but an HTTP
 client.
 
 ```sh
@@ -191,14 +190,14 @@ curl https://<your-api-url>/<id>
 ```
 
 Invalid payloads get automatic 400 responses with structured
-validation errors, and a missing task comes back as a real 404 — the
-`httpApiStatus` declared on `TaskNotFound` — in any language, with
-any HTTP library, against the same validated contract.
+validation errors. A missing task comes back as a real 404, from the
+`httpApiStatus` declared on `TaskNotFound`. This holds in any
+language, with any HTTP library, against the same validated contract.
 
 ## A typed client
 
 For consumers that *are* Effect programs, the same `TaskApi` value
-drives a fully typed client — no codegen, no string URLs:
+drives a typed client with no codegen and no string URLs:
 
 ```typescript
 // src/ApiClient.ts
@@ -221,24 +220,25 @@ const program = Effect.gen(function* () {
 });
 ```
 
-Request keys mirror the declarations — `payload` for bodies,
-`params` for path parameters — and `client.Tasks.getTask` returns
-`Effect<Task, TaskNotFound | HttpClientError>`: the 404 arrives as a
-typed value you pattern-match on, not a status code you interpret.
-The client can also ride a Binding instead of a URL — see the
+Request keys mirror the declarations. `payload` is for bodies and
+`params` is for path parameters. `client.Tasks.getTask` returns
+`Effect<Task, TaskNotFound | HttpClientError>`, so the 404 arrives as
+a typed value you pattern-match on. There is no status code to
+interpret.
+The client can also use a Binding instead of a URL. See the
 [Durable Object bridge](/cloudflare/apis/effect-http-api#bridge-the-do-into-a-typed-client)
 on the Workers page.
 
 ## Where next
 
-- [Effect HTTP on Workers](/cloudflare/apis/effect-http-api) — full
-  Worker wiring: R2 storage, the `HttpPlatform` stub, CORS, and the
+- [Effect HTTP on Workers](/cloudflare/apis/effect-http-api): full
+  Worker wiring, including R2 storage, the `HttpPlatform` stub, CORS, and the
   DO sub-API bridge.
-- [Effect HTTP on Lambda](/aws/apis/effect-http-api) — full Lambda
-  wiring: DynamoDB bindings, IAM, and a typed end-to-end test.
-- [Effect RPC](/apis/effect-rpc) — same trust boundary, leaner wire
+- [Effect HTTP on Lambda](/aws/apis/effect-http-api): full Lambda
+  wiring, including DynamoDB bindings, IAM, and a typed end-to-end test.
+- [Effect RPC](/apis/effect-rpc): same trust boundary, leaner wire
   protocol, for consumers that are Effect programs.
-- [Schemaless RPC](/apis/schemaless) — the default for internal
-  calls: typed clients with no schema and no per-request validation.
-- [REST API (API Gateway v1)](/aws/apis/api-gateway) — put API
+- [Schemaless RPC](/apis/schemaless): the default for internal
+  calls, with typed clients, no schema, and no per-request validation.
+- [REST API (API Gateway v1)](/aws/apis/api-gateway): put API
   Gateway in front instead of a Function URL.

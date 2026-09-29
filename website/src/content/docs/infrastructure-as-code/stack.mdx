@@ -11,7 +11,7 @@ deploys.
 
 ## Defining a Stack
 
-A Stack is just an Effect that you `export default` from a TypeScript
+A Stack is an Effect that you `export default` from a TypeScript
 file:
 
 ```typescript
@@ -31,15 +31,15 @@ export default Alchemy.Stack(
 
 `Alchemy.Stack` takes three arguments:
 
-1. **Name** — identifies this stack in state storage
-2. **Options** — `providers` and `state`, both required (see
-   [State Store](/state-store) for the available state layers)
-3. **Effect** — a generator that declares resources and returns outputs
+1. **Name**: identifies this stack in state storage.
+2. **Options**: `providers` and `state`, both required. See
+   [State Store](/state-store) for the available state layers.
+3. **Effect**: a generator that declares resources and returns outputs.
 
 :::note[`alchemy.run.ts` is a convention]
-The CLI looks for `alchemy.run.ts` by default, but **any TypeScript
-file with a default-exported Stack works**. Pass the path as the
-first positional argument:
+The CLI looks for `alchemy.run.ts` by default. Any TypeScript file
+with a default-exported Stack works. Pass the path as the first
+positional argument:
 
 ```sh
 alchemy deploy --config infra/my-stack.ts
@@ -52,9 +52,9 @@ syntax.
 
 ## Multiple providers
 
-A stack is not limited to one cloud. Providers are Effect Layers, so
-to deploy resources from several providers in a single stack, merge
-their layers with `Layer.mergeAll`:
+A stack can deploy to more than one cloud. Providers are Effect
+Layers. To deploy resources from several providers in a single stack,
+merge their layers with `Layer.mergeAll`:
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -83,11 +83,11 @@ export default Alchemy.Stack(
 );
 ```
 
-The type system tracks which providers the stack's resources need —
-declaring an AWS resource without `AWS.providers()` in the merged
+The type system tracks which providers the stack's resources need.
+Declaring an AWS resource without `AWS.providers()` in the merged
 layer is a compile-time error.
 
-`state` is independent of `providers`: pick one state layer no
+`state` is independent of `providers`. Pick one state layer no
 matter how many clouds the stack deploys to.
 
 See [Providers](/infrastructure-as-code/provider#multiple-providers)
@@ -96,8 +96,8 @@ for more on provider layers.
 ## Stack outputs
 
 The value returned from the generator becomes the **stack output**.
-After a deploy, outputs are printed to the console and available
-programmatically in tests.
+After a deploy, the CLI prints outputs to the console. Outputs are
+also available programmatically in tests.
 
 ```typescript
 Effect.gen(function* () {
@@ -117,10 +117,10 @@ The CLI renders them after every successful deploy:
 
 ## Stages
 
-Every deploy targets a **stage** — an isolated instance of the stack
-like `dev_sam`, `staging`, or `prod`. The stage defaults to
-`dev_$USER`, so each developer gets their own environment
-automatically. State and physical names are namespaced by stage.
+Every deploy targets a **stage**. A stage is an isolated instance of
+the stack, like `dev_sam`, `staging`, or `prod`. The stage defaults
+to `dev_$USER`, so each developer gets their own environment. State
+and physical names are namespaced by stage.
 
 ```sh
 # Each stage = its own state file + its own physical names.
@@ -132,14 +132,14 @@ $ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
 # never touches the others.
 ```
 
-For naming patterns, isolation, and per-stage configuration see
-[Stages](/environments/stages). Credentials per environment are managed
-via [Profiles](/environments/profiles).
+See [Stages](/environments/stages) for naming patterns, isolation,
+and per-stage configuration. Manage credentials per environment with
+[Profiles](/environments/profiles).
 
 ## Accessing the Stack
 
-Inside a resource or layer, you can access the current Stack's
-metadata via the `Stack` service:
+Inside a resource or layer, read the current Stack's metadata from
+the `Stack` service:
 
 ```typescript
 import { Stack } from "alchemy/Stack";
@@ -159,10 +159,10 @@ Effect.gen(function* () {
 ### `Stack.useSync` for module-scope resources
 
 When you declare a resource at module scope (outside any
-`Effect.gen`), there is no `yield*` available to read the `Stack`
-service. But a Resource's props can themselves be an Effect —
-`Stack.useSync` builds one that computes props from the current
-stack, useful for parameterizing names by stage:
+`Effect.gen`), you cannot use `yield*` to read the `Stack` service.
+A Resource's props can be an Effect. `Stack.useSync` builds one that
+computes props from the current stack. Use it to parameterize names
+by stage:
 
 ```typescript
 import * as Axiom from "alchemy/Axiom";
@@ -217,20 +217,20 @@ export default Alchemy.Stack(
 );
 ```
 
-`yield* Backend` defaults to the **current stage** — `sam`
-frontend reads `sam` backend, `pr-42` reads `pr-42`. Use
-`Backend.stage.<name>` to pin to a specific stage instead.
+`yield* Backend` defaults to the current stage. The `sam` frontend
+reads the `sam` backend, and `pr-42` reads `pr-42`. Use
+`Backend.stage.<name>` to pin a specific stage.
 
 See [References](/infrastructure-as-code/references) for the underlying
 operators and [Monorepo](/project-structure/monorepo) for the
 end-to-end walkthrough (package layout, schema sharing, deploy
 ordering).
 
-A stack is just the container — the things it deploys are
+A stack is the container. The things it deploys are
 [Resources](/infrastructure-as-code/resource).
 
 ## Where next
 
-- [Resources](/infrastructure-as-code/resource) — the named entities a stack deploys.
-- [Stages](/environments/stages) — naming, isolation, per-stage configuration.
-- [Monorepo](/project-structure/monorepo) — one stack or many across packages.
+- [Resources](/infrastructure-as-code/resource): the named entities a stack deploys.
+- [Stages](/environments/stages): naming, isolation, per-stage configuration.
+- [Monorepo](/project-structure/monorepo): one stack or many across packages.
