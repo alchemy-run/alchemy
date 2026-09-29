@@ -97,5 +97,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 180_000 },
 );

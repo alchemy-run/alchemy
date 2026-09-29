@@ -23,7 +23,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:displayvideo", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -96,5 +99,8 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(leftover.status?.entityStatus).toEqual("ENTITY_STATUS_ARCHIVED");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:displayvideo", "live"],
+    timeout: 90_000,
+  },
 );

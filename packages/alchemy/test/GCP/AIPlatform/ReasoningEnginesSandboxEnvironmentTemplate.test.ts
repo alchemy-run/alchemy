@@ -55,7 +55,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 30_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -120,5 +123,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.template.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 120_000,
+  },
 );

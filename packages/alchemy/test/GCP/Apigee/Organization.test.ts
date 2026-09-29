@@ -48,7 +48,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle || !runOrgLifecycle)(
@@ -101,5 +101,5 @@ test.provider.skipIf(!runLifecycle || !runOrgLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );

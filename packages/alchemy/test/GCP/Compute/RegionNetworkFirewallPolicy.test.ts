@@ -68,7 +68,7 @@ test.provider(
       expect(error._tag).toBe("NotFound");
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -202,5 +202,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
 );

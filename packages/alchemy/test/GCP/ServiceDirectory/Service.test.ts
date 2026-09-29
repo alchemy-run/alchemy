@@ -103,5 +103,8 @@ test.provider(
       const gone = yield* waitUntilGone(created.api.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],
+    timeout: 90_000,
+  },
 );

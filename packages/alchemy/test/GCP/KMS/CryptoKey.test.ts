@@ -31,6 +31,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
     }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"] },
 );
 
 test.provider(
@@ -103,7 +104,7 @@ test.provider(
       expect(released.labels?.["alchemy-released"]).toEqual("true");
       expect(released.labels?.["alchemy-id"]).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );
 
 const roundTrip = (name: string, text: string) =>
@@ -177,7 +178,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -237,5 +238,5 @@ test.provider(
       });
       expect(released.labels?.["alchemy-released"]).toEqual("true");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 180_000 },
 );

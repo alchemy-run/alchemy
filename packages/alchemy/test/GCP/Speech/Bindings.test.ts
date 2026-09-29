@@ -82,5 +82,5 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:speech", "live"], timeout: 90_000 },
 );

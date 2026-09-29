@@ -48,6 +48,7 @@ test(
       ),
     ).toEqual("https://run.us-east1.rep.googleapis.com/");
   }),
+  { tags: ["unit", "provider:gcp", "provider:gcp:region", "local"] },
 );
 
 const credentialWithRegion = (region: string | undefined) =>
@@ -89,6 +90,7 @@ test(
       ),
     ).toEqual("europe-west1");
   }),
+  { tags: ["unit", "provider:gcp", "provider:gcp:region", "local"] },
 );
 
 test.provider(
@@ -122,7 +124,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:gcp",
+      "provider:gcp:cloudtasks",
+      "provider:gcp:secretmanager",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 const withoutOverride = Test.make({ providers: GCP.providers() });
@@ -146,5 +156,8 @@ withoutOverride.test.provider(
       expect(out.queue).toContain("/locations/us-central1/");
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"],
+    timeout: 120_000,
+  },
 );

@@ -133,7 +133,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -235,5 +238,8 @@ test.provider.skipIf(!runLifecycle)(
         stack.destroy().pipe(Effect.andThen(deleteParentApi), Effect.ignore),
       ),
     ),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
+    timeout: 180_000,
+  },
 );

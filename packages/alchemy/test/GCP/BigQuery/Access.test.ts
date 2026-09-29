@@ -178,5 +178,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 240_000 },
 );

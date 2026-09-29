@@ -84,7 +84,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -117,7 +120,10 @@ test.provider(
       const gone = yield* waitUntilConnectionGone(connection.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -219,5 +225,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilRepositoryGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+    timeout: 90_000,
+  },
 );

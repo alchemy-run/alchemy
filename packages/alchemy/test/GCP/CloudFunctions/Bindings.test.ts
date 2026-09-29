@@ -99,5 +99,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudfunctions", "live"],
+    timeout: 180_000,
+  },
 );

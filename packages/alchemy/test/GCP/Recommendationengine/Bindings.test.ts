@@ -57,5 +57,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
+    timeout: 90_000,
+  },
 );

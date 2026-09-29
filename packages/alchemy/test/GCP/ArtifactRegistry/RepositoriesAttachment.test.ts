@@ -174,5 +174,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(updated.attachment.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
+    timeout: 180_000,
+  },
 );

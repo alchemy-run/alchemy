@@ -120,5 +120,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "live"],
+    timeout: 120_000,
+  },
 );

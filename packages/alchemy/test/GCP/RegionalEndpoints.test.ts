@@ -29,5 +29,8 @@ test.provider(
       expect(live.name).toEqual(repo.name);
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
+    timeout: 180_000,
+  },
 );

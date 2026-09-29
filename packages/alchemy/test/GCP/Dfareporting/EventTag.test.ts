@@ -37,7 +37,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:dfareporting", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_DFAREPORTING)(
@@ -62,7 +65,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_DFAREPORTING)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:dfareporting", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runAdvertiserLifecycle)(
@@ -122,5 +128,8 @@ test.provider.skipIf(!runAdvertiserLifecycle)(
       const gone = yield* waitUntilGone(created.profileId, created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:dfareporting", "live"],
+    timeout: 90_000,
+  },
 );

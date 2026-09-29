@@ -47,7 +47,7 @@ test.provider(
       });
       expect(Array.isArray(page.databases ?? [])).toEqual(true);
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -124,5 +124,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 180_000,
+  },
 );

@@ -45,7 +45,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -89,7 +92,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -127,5 +133,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+    timeout: 240_000,
+  },
 );

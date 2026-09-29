@@ -114,7 +114,7 @@ test.provider.skipIf(!dockerAvailable)(
 
       expect(yield* subscriptionStatus(subscriptions[0]!)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 },
 );
 
 test.provider.skipIf(!dockerAvailable)(
@@ -149,5 +149,5 @@ test.provider.skipIf(!dockerAvailable)(
 
       expect(yield* subscriptionStatus(subscriptions[0]!)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 },
 );

@@ -45,7 +45,7 @@ test.provider(
         "TooManyRequests",
       ]).toContain(error._tag);
     }).pipe(logLevel),
-  { timeout: 30_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 30_000 },
 );
 
 test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
@@ -104,5 +104,5 @@ test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 120_000 },
 );

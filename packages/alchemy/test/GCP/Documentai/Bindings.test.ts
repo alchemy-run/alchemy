@@ -147,7 +147,10 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(out.processor.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+    timeout: 120_000,
+  },
 );
 
 const invoiceSchema: GCP.Documentai.DocumentSchemaSpec = {
@@ -254,5 +257,8 @@ test.provider.skipIf(!!process.env.FAST)(
         );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+    timeout: 120_000,
+  },
 );

@@ -203,5 +203,5 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* deleteVm();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
 );

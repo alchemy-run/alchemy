@@ -98,7 +98,7 @@ test.provider(
       yield* waitUntilObjectGone(bucketName, "home.html");
       yield* waitUntilBucketGone(bucketName);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -177,7 +177,7 @@ test.provider(
       yield* stack.destroy();
       yield* waitUntilBucketGone(bucketName);
     }).pipe(Effect.scoped, logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -214,5 +214,5 @@ test.provider(
       yield* stack.destroy();
       yield* waitUntilBucketGone(created.bucketName);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 180_000 },
 );

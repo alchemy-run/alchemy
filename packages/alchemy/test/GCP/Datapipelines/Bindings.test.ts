@@ -77,5 +77,8 @@ test.provider.skipIf(!runBindings)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datapipelines", "live"],
+    timeout: 120_000,
+  },
 );

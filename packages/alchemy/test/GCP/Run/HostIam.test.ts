@@ -177,5 +177,5 @@ test.provider(
         expect(gone).toEqual("gone");
       }
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 240_000 },
 );

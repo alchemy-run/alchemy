@@ -41,7 +41,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudidentity", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
@@ -62,7 +65,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudidentity", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runMembershipLifecycle)(
@@ -124,5 +130,8 @@ test.provider.skipIf(!runMembershipLifecycle)(
       const gone = yield* waitUntilGone(created.membership.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudidentity", "live"],
+    timeout: 90_000,
+  },
 );

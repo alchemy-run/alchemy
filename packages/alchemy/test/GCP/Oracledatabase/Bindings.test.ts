@@ -87,7 +87,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 120_000,
+  },
 );
 
 const SSH_KEY =
@@ -237,7 +240,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -314,7 +320,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -374,7 +383,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -452,7 +464,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -515,7 +530,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -594,7 +612,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -667,5 +688,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+    timeout: 180_000,
+  },
 );

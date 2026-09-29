@@ -56,7 +56,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_STORAGE_POOL)(
@@ -81,7 +81,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_STORAGE_POOL)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -146,5 +146,5 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

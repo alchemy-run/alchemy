@@ -209,5 +209,5 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(replaced.scaler.autoscalerName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 120_000 },
 );

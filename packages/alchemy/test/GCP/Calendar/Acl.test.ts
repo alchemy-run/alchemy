@@ -43,7 +43,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:calendar", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_CALENDAR)(
@@ -66,7 +66,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_CALENDAR)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:calendar", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -127,5 +127,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.calendarId, created.ruleId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:calendar", "live"], timeout: 90_000 },
 );

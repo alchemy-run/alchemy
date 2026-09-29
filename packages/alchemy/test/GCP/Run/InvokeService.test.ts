@@ -133,5 +133,5 @@ test.provider.skipIf(!dockerAvailable)(
         expect(gone).toEqual("gone");
       }
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
 );

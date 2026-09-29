@@ -131,7 +131,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.subscription.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -232,5 +232,5 @@ test.provider(
       expect(yield* waitUntilGone(out.subscription)).toEqual("gone");
       expect(yield* waitUntilGone(out.inbox)).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 240_000 },
 );

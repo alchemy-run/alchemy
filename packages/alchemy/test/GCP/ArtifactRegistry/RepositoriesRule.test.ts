@@ -99,5 +99,8 @@ test.provider(
       const gone = yield* waitUntilGone(created.rule.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
+    timeout: 90_000,
+  },
 );

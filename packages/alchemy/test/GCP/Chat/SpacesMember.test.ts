@@ -35,7 +35,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:chat", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_CHAT)(
@@ -54,7 +54,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_CHAT)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:chat", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runMemberLifecycle)(
@@ -111,5 +111,5 @@ test.provider.skipIf(!runMemberLifecycle)(
       const gone = yield* waitUntilGone(created.member.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:chat", "live"], timeout: 90_000 },
 );

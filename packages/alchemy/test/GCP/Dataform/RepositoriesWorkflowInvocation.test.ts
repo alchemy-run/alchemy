@@ -25,7 +25,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 90_000 },
 );
 
 const writeWorkspaceFile = (workspace: string, path: string, text: string) =>
@@ -146,5 +146,5 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataform", "live"], timeout: 180_000 },
 );

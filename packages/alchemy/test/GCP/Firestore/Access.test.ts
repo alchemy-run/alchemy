@@ -103,6 +103,7 @@ describe("Values codec", () => {
       expect(encodeFields({ skipped: undefined })).toEqual({});
       expect(encodeValue(undefined)).toEqual({ nullValue: "NULL_VALUE" });
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 
   test(
@@ -125,6 +126,7 @@ describe("Values codec", () => {
         emptyMap: {},
       });
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 
   test(
@@ -135,6 +137,7 @@ describe("Values codec", () => {
       expect(fieldPath("a.b")).toEqual("`a.b`");
       expect(fieldPath("tick`")).toEqual("`tick\\``");
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 });
 
@@ -268,5 +271,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+    timeout: 240_000,
+  },
 );

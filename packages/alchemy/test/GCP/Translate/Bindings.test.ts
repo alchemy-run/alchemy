@@ -122,7 +122,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:translate", "live"], timeout: 90_000 },
 );
 
 const runModelBindings =
@@ -188,7 +188,10 @@ test.provider.skipIf(!runModelBindings)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:translate", "live"],
+    timeout: 120_000,
+  },
 );
 
 const runGlossaryBindings =
@@ -233,5 +236,5 @@ test.provider.skipIf(!runGlossaryBindings)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:translate", "live"], timeout: 90_000 },
 );

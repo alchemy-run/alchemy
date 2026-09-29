@@ -53,7 +53,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
@@ -130,5 +133,8 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
       const gone = yield* waitUntilGone(created.testCase.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );

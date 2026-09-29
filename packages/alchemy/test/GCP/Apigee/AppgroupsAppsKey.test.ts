@@ -46,7 +46,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -120,5 +120,5 @@ test.provider.skipIf(!runLifecycle)(
         .deleteOrganizationsAppgroups({ name: groupParent })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:apigee", "live"], timeout: 90_000 },
 );

@@ -159,5 +159,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.forwardingRuleName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, Effect.ensuring(deleteTargetPool().pipe(Effect.ignore))),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

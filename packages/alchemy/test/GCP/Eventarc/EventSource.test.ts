@@ -97,5 +97,5 @@ test.provider.skipIf(!dockerAvailable)(
         (after.triggers ?? []).some((item) => item.name === trigger?.name),
       ).toEqual(false);
     }).pipe(logLevel),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:eventarc", "live"], timeout: 900_000 },
 );

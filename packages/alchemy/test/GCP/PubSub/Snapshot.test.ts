@@ -151,5 +151,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.snapshot.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 90_000 },
 );

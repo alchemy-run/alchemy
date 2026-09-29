@@ -61,7 +61,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(entitled)(
@@ -89,7 +89,7 @@ test.provider.skipIf(entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!entitled)(
@@ -217,5 +217,5 @@ test.provider.skipIf(!entitled)(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );

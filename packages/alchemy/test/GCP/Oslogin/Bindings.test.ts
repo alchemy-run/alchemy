@@ -75,5 +75,9 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000, exclusive: true },
+  {
+    tags: ["provider:gcp", "provider:gcp:oslogin", "live"],
+    timeout: 90_000,
+    exclusive: true,
+  },
 );

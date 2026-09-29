@@ -48,7 +48,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
@@ -145,5 +148,8 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
       const gone = yield* waitUntilGone(created.range.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+    timeout: 180_000,
+  },
 );

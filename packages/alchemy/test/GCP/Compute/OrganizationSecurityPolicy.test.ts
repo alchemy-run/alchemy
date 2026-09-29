@@ -49,7 +49,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_ORG_SECURITY_POLICY)(
@@ -78,7 +78,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_SECURITY_POLICY)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -145,5 +145,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.securityPolicyId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

@@ -218,7 +218,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -305,5 +308,8 @@ test.provider.skipIf(!runLifecycle)(
       yield* deleteService(sourceService.name ?? "");
       yield* deleteService(targetService.name ?? "");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+    timeout: 90_000,
+  },
 );

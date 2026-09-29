@@ -28,7 +28,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:securityposture", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -156,5 +159,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const postureGone = yield* waitUntilPostureGone(created.posture.name);
       expect(postureGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:securityposture", "live"],
+    timeout: 120_000,
+  },
 );

@@ -55,7 +55,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
@@ -126,5 +126,5 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
       const gone = yield* waitUntilGone(created.notificationEndpointName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

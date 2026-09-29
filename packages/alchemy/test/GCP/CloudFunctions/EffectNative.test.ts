@@ -114,5 +114,8 @@ test.provider.skipIf(!!process.env.FAST)(
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:cloudfunctions", "live"],
+    timeout: 900_000,
+  },
 );

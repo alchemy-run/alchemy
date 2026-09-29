@@ -134,7 +134,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 120_000 },
 );
 
 class ServiceNotReady extends Data.TaggedError("ServiceNotReady")<{
@@ -272,7 +272,7 @@ test.provider.skipIf(!dockerAvailable)(
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 420_000 },
 );
 
 test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
@@ -307,7 +307,7 @@ test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 1_500_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 1_500_000 },
 );
 
 test.provider(
@@ -352,5 +352,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 180_000 },
 );

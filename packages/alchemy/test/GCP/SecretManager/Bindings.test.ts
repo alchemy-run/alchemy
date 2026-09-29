@@ -48,7 +48,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(
@@ -92,5 +95,8 @@ test.provider.skipIf(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+    timeout: 90_000,
+  },
 );

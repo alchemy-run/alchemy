@@ -46,7 +46,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:blogger", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_BLOGGER)(
@@ -69,7 +69,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_BLOGGER)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:blogger", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -122,5 +122,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.blogId, created.pageId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:blogger", "live"], timeout: 90_000 },
 );

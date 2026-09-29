@@ -40,6 +40,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
     }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"] },
 );
 
 test.provider(
@@ -182,5 +183,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.endpoint.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],
+    timeout: 90_000,
+  },
 );

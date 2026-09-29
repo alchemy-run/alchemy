@@ -42,7 +42,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:merchantapireviews", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(runProductReviewLifecycle)(
@@ -70,7 +73,10 @@ test.provider.skipIf(runProductReviewLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:merchantapireviews", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runProductReviewLifecycle)(
@@ -137,5 +143,8 @@ test.provider.skipIf(!runProductReviewLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:merchantapireviews", "live"],
+    timeout: 90_000,
+  },
 );

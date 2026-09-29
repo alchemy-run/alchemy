@@ -35,7 +35,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:adexchangebuyer2", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_ADEXCHANGEBUYER2)(
@@ -57,7 +60,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_ADEXCHANGEBUYER2)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:adexchangebuyer2", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runAccountsLifecycle)(
@@ -112,5 +118,8 @@ test.provider.skipIf(!runAccountsLifecycle)(
       const gone = yield* waitUntilGone(updated.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:adexchangebuyer2", "live"],
+    timeout: 90_000,
+  },
 );

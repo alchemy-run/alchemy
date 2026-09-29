@@ -42,6 +42,7 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
     }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"] },
 );
 
 test.provider(
@@ -122,5 +123,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 90_000 },
 );

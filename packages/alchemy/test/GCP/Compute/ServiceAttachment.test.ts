@@ -322,5 +322,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel, Effect.ensuring(deleteProducer().pipe(Effect.ignore))),
-  { timeout: 360_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
 );

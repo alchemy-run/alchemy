@@ -79,7 +79,7 @@ test.provider(
       }
       expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
     }).pipe(logLevel),
-  { timeout: 60_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
 
 test.provider.skipIf(!runLifecycle || !parentPrefix)(
@@ -125,5 +125,5 @@ test.provider.skipIf(!runLifecycle || !parentPrefix)(
       const gone = yield* waitUntilGone(created.project, created.prefixName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );

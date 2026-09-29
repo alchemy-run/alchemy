@@ -40,7 +40,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:factchecktools", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider(
@@ -76,7 +79,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:factchecktools", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -146,5 +152,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:factchecktools", "live"],
+    timeout: 90_000,
+  },
 );

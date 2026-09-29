@@ -95,5 +95,5 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       const gone = yield* waitUntilGone(created.zone.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 240_000 },
 );

@@ -75,5 +75,5 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.link.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 180_000 },
 );

@@ -77,5 +77,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datastore", "live"],
+    timeout: 240_000,
+  },
 );

@@ -51,5 +51,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:container", "live"],
+    timeout: 2_400_000,
+  },
 );

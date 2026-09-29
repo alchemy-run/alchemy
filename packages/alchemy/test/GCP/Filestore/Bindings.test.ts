@@ -43,7 +43,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -81,7 +84,10 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -119,5 +125,8 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 120_000,
+  },
 );

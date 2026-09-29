@@ -383,5 +383,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.packetMirroringName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, Effect.ensuring(deleteCollector().pipe(Effect.ignore))),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
 );

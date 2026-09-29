@@ -62,5 +62,8 @@ test.provider.skipIf(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:developerconnect", "live"],
+    timeout: 120_000,
+  },
 );
