@@ -13,6 +13,8 @@
  *
  * The live suite is gated behind AWS_TEST_HOSTED_ZONE=<zone-name> because it
  * needs a real Route 53 hosted zone (the shared testing account has none).
+ * Under the floci runner (ALCHEMY_TEST_DEV=1) the zone must exist in the
+ * emulator, and HTTP checks go through the distribution's local edge port.
  */
 import * as AWS from "@/AWS";
 import { Certificate, CertificateProvider } from "@/AWS/ACM/Certificate.ts";
@@ -371,6 +373,13 @@ function certificateProviderForDiff() {
 
 const testZone = process.env.AWS_TEST_HOSTED_ZONE;
 
+// Under the floci runner the emulator serves each distribution's edge on a
+// local plain-HTTP port (`distribution.url`, as in StaticSite.test.ts), and
+// the test's hostnames resolve to nothing through system DNS. The edge port
+// forwards the viewer's Host header untouched to the viewer-request function,
+// so emulated requests hit that port and carry the hostname as `Host`.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
 describe.skipIf(!testZone)(
   "AWS.Website Router hostname binding (live)",
   {
@@ -485,14 +494,26 @@ describe.skipIf(!testZone)(
           // Manual-redirect fetch (the platform HttpClient follows redirects,
           // which would hide the 301s under test). Retries ride out DNS/cert/
           // edge propagation on freshly-created hostnames.
+          const edgeUrl = (deployed.router.distribution.url as string).replace(
+            /\/+$/,
+            "",
+          );
           const fetchManual = (url: string) =>
             Effect.tryPromise(async (signal) => {
-              const response = await fetch(url, {
-                signal,
-                redirect: "manual",
-                cache: "no-store",
-                headers: { "cache-control": "no-cache" },
-              });
+              const viewer = new URL(url);
+              const response = await fetch(
+                runEmulated
+                  ? `${edgeUrl}${viewer.pathname}${viewer.search}`
+                  : url,
+                {
+                  signal,
+                  redirect: "manual",
+                  cache: "no-store",
+                  headers: runEmulated
+                    ? { "cache-control": "no-cache", host: viewer.host }
+                    : { "cache-control": "no-cache" },
+                },
+              );
               return {
                 status: response.status,
                 location: response.headers.get("location"),

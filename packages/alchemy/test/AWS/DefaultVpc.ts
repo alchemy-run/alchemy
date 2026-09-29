@@ -58,8 +58,13 @@ export const getDefaultVpcNetwork = Effect.gen(function* () {
   const vpc = yield* getDefaultVpc;
   const [subnets, groups] = yield* Effect.all(
     [
+      // Only the default-for-AZ subnets: other tests add subnets to the
+      // default VPC concurrently, and those can share one Availability Zone.
       EC2.describeSubnets({
-        Filters: [{ Name: "vpc-id", Values: [vpc.vpcId] }],
+        Filters: [
+          { Name: "vpc-id", Values: [vpc.vpcId] },
+          { Name: "default-for-az", Values: ["true"] },
+        ],
       } as any),
       EC2.describeSecurityGroups({
         Filters: [

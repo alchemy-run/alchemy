@@ -15,6 +15,7 @@ export {
   exclusiveOf,
   it,
   layer,
+  registerFileCleanup,
   registerHook,
   registerTest,
   retryOf,

@@ -32,8 +32,25 @@ import * as Schedule from "effect/Schedule";
  * roles with that AWS-mandated name.
  */
 
-/** Fixed CIDRs of the DMS test VPCs (see the two test files). */
-const VPC_CIDRS = ["10.91.0.0/16", "10.92.0.0/16"];
+/**
+ * A DMS test VPC, identified by its deterministic CIDR and its Alchemy logical
+ * ID. The reaper matches both: other suites reuse these CIDRs (the ElastiCache
+ * provisioned network is also 10.92.0.0/16), and the DMS files run
+ * concurrently, so a CIDR-only match deletes another test's live VPC.
+ */
+export interface DmsTestVpc {
+  readonly cidr: string;
+  readonly logicalId: string;
+}
+
+export const DMS_SUBNET_GROUP_VPC: DmsTestVpc = {
+  cidr: "10.91.0.0/16",
+  logicalId: "DmsVpc",
+};
+export const DMS_REPLICATION_INSTANCE_VPC: DmsTestVpc = {
+  cidr: "10.92.0.0/16",
+  logicalId: "DmsInstVpc",
+};
 
 class OrphanStillPresent extends Data.TaggedError("OrphanStillPresent")<{
   readonly kind: string;
@@ -50,13 +67,19 @@ const dependencyRelease = Schedule.max([
   Schedule.recurs(12),
 ]);
 
-const findTestVpcIds = ec2
-  .describeVpcs({ Filters: [{ Name: "cidr", Values: VPC_CIDRS }] })
-  .pipe(
-    Effect.map((response) =>
-      (response.Vpcs ?? []).flatMap((vpc) => (vpc.VpcId ? [vpc.VpcId] : [])),
-    ),
-  );
+const findTestVpcIds = (vpc: DmsTestVpc) =>
+  ec2
+    .describeVpcs({
+      Filters: [
+        { Name: "cidr", Values: [vpc.cidr] },
+        { Name: "tag:alchemy::id", Values: [vpc.logicalId] },
+      ],
+    })
+    .pipe(
+      Effect.map((response) =>
+        (response.Vpcs ?? []).flatMap((vpc) => (vpc.VpcId ? [vpc.VpcId] : [])),
+      ),
+    );
 
 /** Count replication instances still placed in the given VPCs. */
 const countInstancesIn = (vpcIds: ReadonlySet<string>) =>
@@ -365,17 +388,19 @@ const reapVpc = Effect.fn(function* (vpcId: string) {
 });
 
 /**
- * Delete every leftover DMS fixture resource, in dependency order.
+ * Delete every leftover DMS fixture resource in the given test VPC, in
+ * dependency order.
  * Idempotent: a run against a clean account is a single `describeVpcs`.
  *
  * Requires the AWS provider environment (available inside `test.provider`
  * bodies; wrap with `Core.withProviders` elsewhere).
  */
-export const reapDmsOrphans = Effect.gen(function* () {
-  const vpcIdList = yield* findTestVpcIds;
-  if (vpcIdList.length === 0) return;
-  const vpcIds: ReadonlySet<string> = new Set(vpcIdList);
-  yield* reapReplicationInstances(vpcIds);
-  yield* reapSubnetGroups(vpcIds);
-  yield* Effect.forEach(vpcIdList, reapVpc, { discard: true });
-});
+export const reapDmsOrphans = (vpc: DmsTestVpc) =>
+  Effect.gen(function* () {
+    const vpcIdList = yield* findTestVpcIds(vpc);
+    if (vpcIdList.length === 0) return;
+    const vpcIds: ReadonlySet<string> = new Set(vpcIdList);
+    yield* reapReplicationInstances(vpcIds);
+    yield* reapSubnetGroups(vpcIds);
+    yield* Effect.forEach(vpcIdList, reapVpc, { discard: true });
+  });

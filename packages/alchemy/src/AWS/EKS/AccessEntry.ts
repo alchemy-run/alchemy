@@ -135,18 +135,39 @@ export const AccessEntryProvider = () =>
       const perCluster = yield* Effect.forEach(
         clusterNames,
         (clusterName) =>
-          eks.listAccessEntries.items({ clusterName }).pipe(
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.flatMap((principalArns) =>
-              Effect.forEach(
-                principalArns,
-                (principalArn) =>
-                  readAccessEntry({ clusterName, principalArn }),
-                { concurrency: 5 },
-              ),
-            ),
-          ),
+          Effect.gen(function* () {
+            const cluster = yield* eks
+              .describeCluster({ name: clusterName })
+              .pipe(
+                Effect.map((response) => response.cluster),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            // CONFIG_MAP clusters have no access entries, and EKS rejects
+            // ListAccessEntries on them.
+            if (
+              cluster === undefined ||
+              (cluster.accessConfig?.authenticationMode ?? "CONFIG_MAP") ===
+                "CONFIG_MAP"
+            ) {
+              return [];
+            }
+            const principalArns = yield* eks.listAccessEntries
+              .items({ clusterName })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed([] as string[]),
+                ),
+              );
+            return yield* Effect.forEach(
+              principalArns,
+              (principalArn) => readAccessEntry({ clusterName, principalArn }),
+              { concurrency: 5 },
+            );
+          }),
         { concurrency: 5 },
       );
 

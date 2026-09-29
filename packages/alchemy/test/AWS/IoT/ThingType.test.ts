@@ -1,8 +1,10 @@
+import { DestroyError } from "@/Apply";
 import * as AWS from "@/AWS";
 import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
 import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/aws/iot";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -109,8 +111,21 @@ describe.sequential(
           // First destroy removes the Thing and deprecates its type, then exits
           // on the provider's bounded nonterminal error instead of blocking for
           // AWS's mandatory five-minute window. State remains for re-entry.
+          // Destroy aggregates delete failures into a DestroyError.
           const pending = yield* Effect.flip(stack.destroy());
-          expect(pending).toBeInstanceOf(ThingTypeDeletionTimedOut);
+          expect(pending).toBeInstanceOf(DestroyError);
+          const timedOut =
+            pending instanceof DestroyError
+              ? pending.failures.map((failure) =>
+                  Cause.findErrorOption(failure.cause),
+                )
+              : [];
+          expect(timedOut).toHaveLength(1);
+          const cause = timedOut[0];
+          expect(cause?._tag).toBe("Some");
+          if (cause?._tag === "Some") {
+            expect(cause.value).toBeInstanceOf(ThingTypeDeletionTimedOut);
+          }
           yield* assertThingGone(created.thingName);
 
           const deprecated = yield* iot.describeThingType({

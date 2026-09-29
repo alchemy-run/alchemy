@@ -61,7 +61,7 @@ describe(
                 allocatedStorage: 20,
                 vpcSubnetIds: subnetIds,
                 vpcSecurityGroupIds: securityGroupIds,
-                password: Redacted.make("alchemy-super-secret-pw-1"),
+                password: Redacted.make("alchemySuperSecretPw1"),
                 tags: { Environment: "test" },
               });
             }),

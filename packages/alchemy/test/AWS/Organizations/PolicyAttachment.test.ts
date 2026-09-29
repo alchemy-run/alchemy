@@ -7,13 +7,16 @@ import {
 } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // `list()` enumerates every (policyId, targetId) attachment by fanning out over
 // all policy types (listPolicies per type) and listing each policy's targets
@@ -42,7 +45,7 @@ test.provider(
 //
 // An interrupted first deploy persists the attachment as `status: "creating"`
 // with no attributes — and the Output-valued props (`policyId` from the Policy
-// resource, `targetId` from the RootPolicyType resource) do not survive the
+// resource, `targetId` from the Root or RootPolicyType resource) do not survive the
 // state round-trip: they deserialize as `undefined`. Plan's creating-recovery
 // branch then calls `provider.read` with those junk props, which crashed in
 // `listTargetsForPolicy({ PolicyId: undefined })` and wedged the stack.
@@ -118,15 +121,35 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
 
       yield* stack.destroy();
 
+      const scpEnabled = organizations
+        .listRoots({})
+        .pipe(
+          Effect.map((page) =>
+            (page.Roots ?? []).some((root) =>
+              (root.PolicyTypes ?? []).some(
+                (summary) =>
+                  summary.Type === "SERVICE_CONTROL_POLICY" &&
+                  summary.Status === "ENABLED",
+              ),
+            ),
+          ),
+        );
+      // Own the SCP policy type only if it was disabled before the test:
+      // destroying an adopted enablement would detach every SCP in the
+      // organization.
+      const ownScpType = !(yield* scpEnabled);
+
       const deployStack = (includeAttachment: boolean) =>
         stack.deploy(
           Effect.gen(function* () {
             // Import-style resource — adopts the single organization root.
             const root = yield* Root("WedgedRoot", {});
-            const scpType = yield* RootPolicyType("WedgedScpType", {
-              rootId: root.rootId,
-              policyType: "SERVICE_CONTROL_POLICY",
-            });
+            const targetId = ownScpType
+              ? (yield* RootPolicyType("WedgedScpType", {
+                  rootId: root.rootId,
+                  policyType: "SERVICE_CONTROL_POLICY",
+                })).rootId
+              : root.rootId;
             // Allow-all SCP — attaching it alongside the AWS-managed
             // FullAWSAccess policy changes nothing about effective access.
             const policy = yield* Policy("WedgedScp", {
@@ -143,29 +166,20 @@ test.provider.skipIf(!process.env.AWS_ORG_MANAGEMENT_ACCOUNT)(
             return yield* PolicyAttachment("WedgedAttachment", {
               // Both identity props are Output-valued — the #736 shape.
               policyId: policy.policyId,
-              // Thread the RootPolicyType's output so the attachment plans
-              // after SERVICE_CONTROL_POLICY is enabled on the root.
-              targetId: scpType.rootId,
+              // When the test owns the policy type, thread its output so the
+              // attachment plans after SERVICE_CONTROL_POLICY is enabled.
+              targetId,
             });
           }),
         );
 
-      // Stage 1: enable the policy type + create the SCP, WITHOUT the
+      // Stage 1: enable the policy type (if owned) + create the SCP, WITHOUT the
       // attachment. `enablePolicyType` completes asynchronously
       // (PENDING_ENABLE), and `attachPolicy` rejects with the typed
       // `PolicyTypeNotEnabledException` until it lands — so wait (bounded)
       // for ENABLED before deploying the attachment.
       yield* deployStack(false);
-      yield* organizations.listRoots({}).pipe(
-        Effect.map((page) =>
-          (page.Roots ?? []).some((root) =>
-            (root.PolicyTypes ?? []).some(
-              (summary) =>
-                summary.Type === "SERVICE_CONTROL_POLICY" &&
-                summary.Status === "ENABLED",
-            ),
-          ),
-        ),
+      yield* scpEnabled.pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
           until: (enabled) => enabled,

@@ -1,20 +1,17 @@
 import * as AWS from "@/AWS";
-import type { SecurityGroupId } from "@/AWS/EC2/SecurityGroup.ts";
-import type { SubnetId } from "@/AWS/EC2/Subnet.ts";
-import type { VpcId } from "@/AWS/EC2/Vpc.ts";
 import * as Core from "@/Test/Core";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { makeEc2VpcCapacityLease } from "../EC2/VpcCapacity.ts";
+import {
+  getProvisionedNetwork,
+  provisionedNetworkState as state,
+  type ProvisionedNetwork,
+} from "./ProvisionedNetwork.ts";
 
-export interface ProvisionedNetwork {
-  vpcId: VpcId;
-  privateSubnetIds: SubnetId[];
-  securityGroupId: SecurityGroupId;
-  subnetGroupName: string;
-}
+export { getProvisionedNetwork, type ProvisionedNetwork };
 
 const testOptions = { providers: AWS.providers() };
 const networkStack = Core.scratchStack(
@@ -24,8 +21,6 @@ const networkStack = Core.scratchStack(
 );
 const vpcLease = makeEc2VpcCapacityLease(1);
 
-let ready = Deferred.makeUnsafe<ProvisionedNetwork, unknown>();
-let started = false;
 let holders = 0;
 let deployed = false;
 
@@ -63,39 +58,30 @@ const deployNetwork = Effect.gen(function* () {
 /** First caller deploys the shared VPC; everyone else waits for it. */
 export const acquireProvisionedNetwork = Effect.gen(function* () {
   holders += 1;
-  if (started) {
-    return yield* Deferred.await(ready);
+  if (state.started) {
+    return yield* Deferred.await(state.ready);
   }
-  started = true;
+  state.started = true;
   const attrs = yield* deployNetwork.pipe(
     Effect.tapError((error) =>
       Effect.gen(function* () {
-        started = false;
-        yield* Deferred.fail(ready, error);
-        ready = Deferred.makeUnsafe();
+        state.started = false;
+        yield* Deferred.fail(state.ready, error);
+        state.ready = Deferred.makeUnsafe();
       }),
     ),
   );
   deployed = true;
-  yield* Deferred.succeed(ready, attrs);
+  yield* Deferred.succeed(state.ready, attrs);
   return attrs;
 });
-
-/** Resolved IDs of the process-wide provisioned-cache VPC. */
-export const getProvisionedNetwork = Effect.suspend(() =>
-  started
-    ? Deferred.await(ready).pipe(Effect.orDie)
-    : Effect.die(
-        "provisioned network was not acquired; call shareProvisionedNetwork in the test file",
-      ),
-);
 
 export const releaseProvisionedNetwork = Effect.suspend(() => {
   holders = Math.max(0, holders - 1);
   if (holders > 0 || !deployed) return Effect.void;
   deployed = false;
-  started = false;
-  ready = Deferred.makeUnsafe();
+  state.started = false;
+  state.ready = Deferred.makeUnsafe();
   return networkStack.destroy().pipe(Effect.ensuring(vpcLease.release));
 });
 

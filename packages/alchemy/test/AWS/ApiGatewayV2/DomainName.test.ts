@@ -32,11 +32,14 @@ test.provider.skipIf(!!process.env.FAST)(
 // Full lifecycle. SKIPPED by default: an API Gateway v2 custom domain
 // requires a validated REGIONAL ACM certificate for a domain you own (ACM
 // issuance needs DNS/email validation, which CI cannot complete). Set
-// AWS_TEST_APIGATEWAY_DOMAIN_NAME (a domain you own) and
+// AWS_TEST_APIGATEWAYV2_DOMAIN_NAME (a domain you own) and
 // AWS_TEST_APIGATEWAY_CERT_ARN (a validated regional ACM cert in this
-// region) to run it on an entitled account unchanged — the same env vars
-// the v1 DomainName test uses.
-const domainName = process.env.AWS_TEST_APIGATEWAY_DOMAIN_NAME;
+// region) to run it on an entitled account unchanged. The domain must differ
+// from the v1 test's AWS_TEST_APIGATEWAY_DOMAIN_NAME: API Gateway v1 and v2
+// share one custom-domain namespace and the two files run concurrently, so a
+// shared name would make both tests adopt and delete the same domain. A
+// wildcard cert covering both names can be shared via the cert var.
+const domainName = process.env.AWS_TEST_APIGATEWAYV2_DOMAIN_NAME;
 const certificateArn = process.env.AWS_TEST_APIGATEWAY_CERT_ARN;
 
 test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(

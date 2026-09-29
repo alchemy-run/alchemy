@@ -1,17 +1,17 @@
 import * as AWS from "@/AWS";
-import { CisScanConfiguration } from "@/AWS/Inspector2/CisScanConfiguration.ts";
 import { Filter } from "@/AWS/Inspector2/Filter.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // The findings-filter APIs work regardless of Inspector enablement, so the
-// Filter lifecycle always runs live.
+// Filter lifecycle always runs live and may overlap the enablement tests in
+// Enabler.test.ts. The CIS scan tests live there because the CIS APIs depend
+// on the account/region enablement singleton.
 test.provider(
   "lifecycle: findings filter create, update, destroy",
   (stack) =>
@@ -90,119 +90,6 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* inspector2.listFilters({ arns: [created.arn] });
       expect(gone.filters).toHaveLength(0);
-    }),
-  {
-    tags: ["provider:aws", "provider:aws:inspector2", "live"],
-    timeout: 120_000,
-  },
-);
-
-// The CIS scan APIs are hard-gated on Inspector enablement — a disabled
-// account gets a typed AccessDeniedException ("Invoking account is not
-// enabled."). This ungated probe pins that behavior; the full lifecycle
-// below only runs against an Inspector-enabled account.
-test.provider(
-  "CIS scan APIs reject a non-enabled account (typed)",
-  () =>
-    Effect.gen(function* () {
-      const account = (yield* inspector2.batchGetAccountStatus({}))
-        .accounts?.[0];
-      if (account?.state?.status === "ENABLED") {
-        yield* Effect.logInfo(
-          "Inspector is enabled in this account — CIS APIs are accessible, probe not applicable",
-        );
-        return;
-      }
-      const result = yield* Effect.result(
-        inspector2.listCisScanConfigurations({}),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("AccessDeniedException");
-      }
-    }),
-  { tags: ["provider:aws", "provider:aws:inspector2", "live"] },
-);
-
-// Full CIS scan configuration lifecycle — requires Inspector to be enabled
-// (INSPECTOR2_TEST_CIS=1 on an enabled account).
-test.provider.skipIf(!process.env.INSPECTOR2_TEST_CIS)(
-  "lifecycle: CIS scan configuration create, update, destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const deploy = (props: {
-        securityLevel: "LEVEL_1" | "LEVEL_2";
-        timeOfDay: string;
-      }) =>
-        stack.deploy(
-          Effect.gen(function* () {
-            const cis = yield* CisScanConfiguration("NightlyCis", {
-              securityLevel: props.securityLevel,
-              schedule: {
-                daily: {
-                  startTime: { timeOfDay: props.timeOfDay, timezone: "UTC" },
-                },
-              },
-              targets: {
-                accountIds: ["SELF"],
-                targetResourceTags: { AlchemyCisTest: ["true"] },
-              },
-              tags: { env: "test" },
-            });
-            return {
-              scanConfigurationArn: cis.scanConfigurationArn,
-              scanName: cis.scanName,
-              securityLevel: cis.securityLevel,
-            };
-          }),
-        );
-
-      const created = yield* deploy({
-        securityLevel: "LEVEL_1",
-        timeOfDay: "02:00",
-      });
-      expect(created.scanConfigurationArn).toContain("scan-configuration");
-      expect(created.securityLevel).toBe("LEVEL_1");
-
-      const byArn = () =>
-        inspector2
-          .listCisScanConfigurations({
-            filterCriteria: {
-              scanConfigurationArnFilters: [
-                { comparison: "EQUALS", value: created.scanConfigurationArn },
-              ],
-            },
-          })
-          .pipe(Effect.map((r) => r.scanConfigurations?.[0]));
-
-      const live = yield* byArn();
-      expect(live?.securityLevel).toBe("LEVEL_1");
-      expect(live?.schedule?.daily?.startTime.timeOfDay).toBe("02:00");
-
-      // Canonical list() coverage.
-      const provider = yield* Provider.findProvider(CisScanConfiguration);
-      const all = yield* provider.list();
-      expect(
-        all.some(
-          (c) => c.scanConfigurationArn === created.scanConfigurationArn,
-        ),
-      ).toBe(true);
-
-      // Update in place — the ARN is stable.
-      const updated = yield* deploy({
-        securityLevel: "LEVEL_2",
-        timeOfDay: "03:30",
-      });
-      expect(updated.scanConfigurationArn).toBe(created.scanConfigurationArn);
-      expect(updated.securityLevel).toBe("LEVEL_2");
-      const liveUpdated = yield* byArn();
-      expect(liveUpdated?.schedule?.daily?.startTime.timeOfDay).toBe("03:30");
-
-      // Destroy — the configuration is gone.
-      yield* stack.destroy();
-      expect(yield* byArn()).toBeUndefined();
     }),
   {
     tags: ["provider:aws", "provider:aws:inspector2", "live"],

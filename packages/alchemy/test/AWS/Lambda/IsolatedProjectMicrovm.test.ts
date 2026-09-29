@@ -28,7 +28,9 @@ const logLevel = Effect.provideService(
 const HOOK_TIMEOUT = 1_500_000;
 const TEST_TIMEOUT = 300_000;
 
-// Same gate as MicrovmImage.test.ts: builds are asynchronous (minutes).
+// Same gate as the AWS-only blocks in MicrovmImage.test.ts: builds are
+// asynchronous (minutes). No Cloudflare leg, so no
+// LAMBDA_TEST_MICROVM_CLOUDFLARE gate.
 const skip = !process.env.LAMBDA_TEST_MICROVM;
 
 // Live proof that the MicroVM bootstrap boots when the image's `main` lives

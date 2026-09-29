@@ -47,6 +47,9 @@ export default EKSClusterTestFunction.make(
         endpointPublicAccess: true,
         endpointPrivateAccess: true,
       },
+      // ListAccessEntries requires the access-entry API; CONFIG_MAP-only
+      // clusters reject it with InvalidRequestException.
+      accessConfig: { authenticationMode: "API_AND_CONFIG_MAP" },
     });
 
     const describeCluster = yield* EKS.DescribeCluster(cluster);

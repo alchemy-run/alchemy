@@ -1,6 +1,5 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,9 +10,13 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import OrganizationsTestFunctionLive, {
   OrganizationsTestFunction,
 } from "./handler";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
 const testOptions = { providers: AWS.providers() };
-const { test, beforeAll, afterAll } = Test.make(testOptions);
+const { test, beforeAll, afterAll } = OrganizationLease.make(
+  testOptions,
+  "shared",
+);
 const sharedStack = Core.scratchStack(testOptions, "OrganizationsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well

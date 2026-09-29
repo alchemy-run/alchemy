@@ -2,11 +2,15 @@ import * as AWS from "@/AWS";
 import { DelegatedAdministrator } from "@/AWS/Organizations";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as organizations from "@distilled.cloud/aws/organizations";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make(
+  { providers: AWS.providers() },
+  "shared",
+);
 
 // Read-only `list()` test (AWS account/region-scoped collection with a
 // per-account service fan-out). Resolve the provider from context via the
@@ -41,131 +45,159 @@ test.provider(
 // entitled account runs it unchanged. Off a management account
 // `registerDelegatedAdministrator` rejects with
 // `AWSOrganizationsNotInUseException` / `AccessDeniedException`, so this is
-// skipped by default.
-const memberAccountId = process.env.AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID;
+// skipped by default. On the emulator the organization lease provisions the
+// member account when AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is unset.
 const servicePrincipal =
   process.env.AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL ??
   "config.amazonaws.com";
 
-test.provider.skipIf(!memberAccountId)(
-  "list contains the deployed delegated administrator",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+// Destroying the test's resource deregisters the account, so refuse to take
+// over a registration that existed before the test.
+const resolveUnregisteredMember = Effect.gen(function* () {
+  const accountId = yield* OrganizationLease.delegatedAdminAccountId;
+  const services = yield* organizations
+    .listDelegatedServicesForAccount({ AccountId: accountId })
+    .pipe(
+      Effect.map((response) => response.DelegatedServices ?? []),
+      Effect.catchTag("AccountNotRegisteredException", () =>
+        Effect.succeed<organizations.DelegatedService[]>([]),
+      ),
+    );
+  if (services.some((item) => item.ServicePrincipal === servicePrincipal)) {
+    return yield* Effect.fail(
+      new Error(
+        `account ${accountId} is already a delegated administrator for ${servicePrincipal}`,
+      ),
+    );
+  }
+  return accountId;
+});
 
-      const admin = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* DelegatedAdministrator("ListDelegatedAdmin", {
-            accountId: memberAccountId!,
-            servicePrincipal,
-          });
-        }),
-      );
+// Both lifecycles own the same (account, principal) registration, so they
+// must not overlap.
+describe.sequential("delegated administrator lifecycle", () => {
+  test.provider.skipIf(!OrganizationLease.canProvideDelegatedAdminAccount)(
+    "list contains the deployed delegated administrator",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const memberAccountId = yield* resolveUnregisteredMember;
 
-      const provider = yield* Provider.findProvider(DelegatedAdministrator);
-      const all = yield* provider.list();
-
-      expect(
-        all.some(
-          (item) =>
-            item.accountId === admin.accountId &&
-            item.servicePrincipal === admin.servicePrincipal,
-        ),
-      ).toBe(true);
-
-      yield* stack.destroy();
-    }),
-  { tags: ["provider:aws", "provider:aws:organizations", "live"] },
-);
-
-// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
-//
-// An interrupted first deploy persists the registration as
-// `status: "creating"` with no attributes — and the Output-valued props
-// (`accountId` typically comes from an `Account` resource) do not survive
-// the state round-trip: they deserialize as `undefined`. Plan's
-// creating-recovery branch then calls `provider.read` with those junk olds,
-// which pre-fix crashed in
-// `listDelegatedServicesForAccount({ AccountId: undefined })`
-// (`ParseError: Expected string, got undefined`) and wedged the stack.
-//
-// Simulate exactly that state row after a real deploy and assert the next
-// deploy recovers: `read` reports "not found", the engine re-drives the
-// create, and reconcile observes the existing registration before
-// registering — SAME (accountId, servicePrincipal) identity, no duplicate.
-//
-// Same gating as the lifecycle test above: requires an org MANAGEMENT
-// account plus a member account to register (a management account cannot
-// delegate itself — `ConstraintViolationException`), so this is skipped
-// unless AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is set.
-test.provider.skipIf(!memberAccountId)(
-  "recovers a half-created delegated administrator whose creating-state lost Output-valued props (#736)",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const deployAdmin = () =>
-        stack.deploy(
+        const admin = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* DelegatedAdministrator("WedgedDelegatedAdmin", {
-              accountId: memberAccountId!,
+            return yield* DelegatedAdministrator("ListDelegatedAdmin", {
+              accountId: memberAccountId,
               servicePrincipal,
             });
           }),
         );
 
-      const created = yield* deployAdmin();
+        const provider = yield* Provider.findProvider(DelegatedAdministrator);
+        const all = yield* provider.list();
 
-      // Rewrite the registration's persisted row into the wedged shape an
-      // interrupted deploy leaves behind: `creating`, no attributes, and
-      // every Output-valued prop lost in the round-trip.
-      const state = yield* yield* State;
-      const stage = stack.stage;
-      const fqns = yield* state.list({ stack: stack.name, stage });
-      const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
-      );
-      const wedged = rows.find(
-        (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.Organizations.DelegatedAdministrator",
-      );
-      if (!wedged) {
-        return yield* Effect.die(
-          new Error(
-            "no AWS.Organizations.DelegatedAdministrator state row found after deploy",
+        expect(
+          all.some(
+            (item) =>
+              item.accountId === admin.accountId &&
+              item.servicePrincipal === admin.servicePrincipal,
           ),
+        ).toBe(true);
+
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:aws", "provider:aws:organizations", "live"] },
+  );
+
+  // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
+  //
+  // An interrupted first deploy persists the registration as
+  // `status: "creating"` with no attributes — and the Output-valued props
+  // (`accountId` typically comes from an `Account` resource) do not survive
+  // the state round-trip: they deserialize as `undefined`. Plan's
+  // creating-recovery branch then calls `provider.read` with those junk olds,
+  // which pre-fix crashed in
+  // `listDelegatedServicesForAccount({ AccountId: undefined })`
+  // (`ParseError: Expected string, got undefined`) and wedged the stack.
+  //
+  // Simulate exactly that state row after a real deploy and assert the next
+  // deploy recovers: `read` reports "not found", the engine re-drives the
+  // create, and reconcile observes the existing registration before
+  // registering — SAME (accountId, servicePrincipal) identity, no duplicate.
+  //
+  // Same gating as the lifecycle test above: requires an org MANAGEMENT
+  // account plus a member account to register (a management account cannot
+  // delegate itself — `ConstraintViolationException`), so this is skipped
+  // unless AWS_ORG_DELEGATED_ADMIN_ACCOUNT_ID is set or the emulator provides one.
+  test.provider.skipIf(!OrganizationLease.canProvideDelegatedAdminAccount)(
+    "recovers a half-created delegated administrator whose creating-state lost Output-valued props (#736)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const memberAccountId = yield* resolveUnregisteredMember;
+
+        const deployAdmin = () =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* DelegatedAdministrator("WedgedDelegatedAdmin", {
+                accountId: memberAccountId,
+                servicePrincipal,
+              });
+            }),
+          );
+
+        const created = yield* deployAdmin();
+
+        // Rewrite the registration's persisted row into the wedged shape an
+        // interrupted deploy leaves behind: `creating`, no attributes, and
+        // every Output-valued prop lost in the round-trip.
+        const state = yield* yield* State;
+        const stage = stack.stage;
+        const fqns = yield* state.list({ stack: stack.name, stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state
+            .get({ stack: stack.name, stage, fqn })
+            .pipe(Effect.map((row) => ({ fqn, row }))),
         );
-      }
-      yield* state.set({
-        stack: stack.name,
-        stage,
-        fqn: wedged.fqn,
-        value: {
-          ...wedged.row,
-          status: "creating",
-          attr: undefined,
-          props: {
-            ...wedged.row.props,
-            accountId: undefined,
-            servicePrincipal: undefined,
+        const wedged = rows.find(
+          (r): r is { fqn: string; row: ResourceState } =>
+            isResourceState(r.row) &&
+            r.row.resourceType === "AWS.Organizations.DelegatedAdministrator",
+        );
+        if (!wedged) {
+          return yield* Effect.die(
+            new Error(
+              "no AWS.Organizations.DelegatedAdministrator state row found after deploy",
+            ),
+          );
+        }
+        yield* state.set({
+          stack: stack.name,
+          stage,
+          fqn: wedged.fqn,
+          value: {
+            ...wedged.row,
+            status: "creating",
+            attr: undefined,
+            props: {
+              ...wedged.row.props,
+              accountId: undefined,
+              servicePrincipal: undefined,
+            },
           },
-        },
-      });
+        });
 
-      // Before the fix this failed in plan: `read` called
-      // `listDelegatedServicesForAccount({ AccountId: undefined })` with the
-      // junk olds.
-      const recovered = yield* deployAdmin();
-      expect(recovered.accountId).toEqual(created.accountId);
-      expect(recovered.servicePrincipal).toEqual(created.servicePrincipal);
+        // Before the fix this failed in plan: `read` called
+        // `listDelegatedServicesForAccount({ AccountId: undefined })` with the
+        // junk olds.
+        const recovered = yield* deployAdmin();
+        expect(recovered.accountId).toEqual(created.accountId);
+        expect(recovered.servicePrincipal).toEqual(created.servicePrincipal);
 
-      yield* stack.destroy();
-    }),
-  {
-    tags: ["provider:aws", "provider:aws:organizations", "live"],
-    timeout: 240_000,
-  },
-);
+        yield* stack.destroy();
+      }),
+    {
+      tags: ["provider:aws", "provider:aws:organizations", "live"],
+      timeout: 240_000,
+    },
+  );
+});

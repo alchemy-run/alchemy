@@ -268,15 +268,9 @@ const rootCommand = Command.make(
       const stats = yield* fs
         .stat(logFile)
         .pipe(Effect.orElseSucceed(() => undefined));
-      const contents = yield* fs
-        .readFileString(logFile)
-        .pipe(Effect.orElseSucceed(() => ""));
-      const lines = contents === "" ? 0 : contents.split("\n").length;
       const kb = stats === undefined ? 0 : Number(stats.size) / 1024;
       yield* Effect.sync(() => {
-        process.stdout.write(
-          `\nFull log: ${logFile} (${lines} lines, ${kb.toFixed(1)} KB)\n`,
-        );
+        process.stdout.write(`\nFull log: ${logFile} (${kb.toFixed(1)} KB)\n`);
       });
     });
 
