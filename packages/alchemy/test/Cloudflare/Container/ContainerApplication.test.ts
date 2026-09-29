@@ -1767,6 +1767,62 @@ describe.concurrent(
       { timeout: 900_000 },
     );
 
+    test.provider(
+      "Container.ref reads a container application deployed by another stack",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const owner = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return {
+                app: yield* Cloudflare.Container("RefTarget", {
+                  image: "mendhak/http-https-echo:41",
+                }).Application,
+              };
+            }),
+          );
+
+          // A second stack reaches the application only through `ref`.
+          const consumer = {
+            stage: scratch.stage,
+            stack: Stack(
+              `${scratch.name}-consumer`,
+              {
+                providers: Layer.fresh(Cloudflare.providers()),
+                state: scratch.state,
+              },
+              Effect.gen(function* () {
+                const app = yield* Cloudflare.Container.ref("RefTarget", {
+                  stack: scratch.name,
+                });
+                return {
+                  applicationId: app.applicationId,
+                  applicationName: app.applicationName,
+                  image: app.configuration.image,
+                };
+              }),
+            ),
+          };
+          const referenced = yield* Deploy.deploy(consumer).pipe(
+            Effect.ensuring(Destroy.destroy(consumer).pipe(Effect.orDie)),
+          );
+          expect(referenced).toEqual({
+            applicationId: owner.app.applicationId,
+            applicationName: owner.app.applicationName,
+            image: owner.app.configuration.image,
+          });
+
+          // Destroying the referencing stack leaves the application running.
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          expect((yield* live(accountId, owner.app.applicationId)).image).toBe(
+            owner.app.configuration.image,
+          );
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
     // State written before #1282 carries only `hash.image`, and its live
     // application runs the mutable `<repo>:<sourceHash>` tag. On the first
     // reconcile after upgrading, the provider resolves that tag's digest

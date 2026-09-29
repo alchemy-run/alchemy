@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { relations, Users } from "./schema.ts";
-import { API_PORT, Db, MIGRATE_TOKEN, Site } from "./shared.ts";
+import { API_PORT, Db, MIGRATE_TOKEN } from "./shared.ts";
 
 /**
  * HTTP Service that binds Managed Postgres via {@link Fly.ConnectPostgres}
@@ -19,7 +19,6 @@ import { API_PORT, Db, MIGRATE_TOKEN, Site } from "./shared.ts";
 export default class Api extends Fly.Service<Api>()(
   "Api",
   {
-    app: Site,
     main: import.meta.url,
     region: "iad",
     port: API_PORT,

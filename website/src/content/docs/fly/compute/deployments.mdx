@@ -10,12 +10,9 @@ import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export const app = Fly.App("App");
-
 export default class Api extends Fly.Service<Api>()(
   "Api",
   {
-    app,
     main: import.meta.url,
     deploy: { strategy: "bluegreen" },
   },
@@ -35,7 +32,11 @@ Machine or service readiness checks that cover every critical component.
 Container health checks and `dependsOn` govern startup; they do not replace
 Alchemy's deployment readiness checks.
 
+A Machine runs in a [`Fly.App`](/fly/compute/apps) you declare:
+
 ```typescript
+const app = yield* Fly.App("Previews");
+
 const preview = yield* Fly.Machine("Preview", {
   app,
   deploy: { strategy: "bluegreen" },
@@ -65,26 +66,25 @@ install a signal handler in your images.
 
 ## Put the Service in your stack
 
-Allocate a public IP and return the Service URL for your clients:
+Return the Service URL for your clients:
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-import Api, { app } from "./api.ts";
+import Api from "./api.ts";
 
 export default Alchemy.Stack(
   "Site",
   { providers: Fly.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    yield* Fly.IpAssignment("PublicIp", { app, type: "shared_v4" });
     const api = yield* Api;
     return { url: api.url };
   }),
 );
 ```
 
-Use `api.url` rather than a Machine ID or private IP in client configuration. The App URL survives a rollout; the underlying Machines are replaced.
+Use `api.url` rather than a Machine ID or private IP in client configuration. The Service's App and its URL survive a rollout; the underlying Machines are replaced.
 
 ## Deploy a new response
 
@@ -211,13 +211,11 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { app } from "./api.ts";
 import { runJobs } from "./jobs.ts";
 
 export default class Jobs extends Fly.Service<Jobs>()(
   "Jobs",
   {
-    app,
     main: import.meta.url,
     services: [],
     checks: { ready: { type: "http", port: 3000, path: "/" } },
@@ -239,7 +237,7 @@ export default class Jobs extends Fly.Service<Jobs>()(
 ) {}
 ```
 
-`services: []` keeps the worker off the public proxy. Fly can still call its named check on port 3000 before Alchemy retires the old worker.
+`services: []` keeps the worker off the proxy; the worker runs in its own App. Fly can still call its named check on port 3000 before Alchemy retires the old worker.
 
 ## Close your queue worker on shutdown
 
@@ -280,7 +278,7 @@ With the 60-second budget above, unfinished jobs can still be cut off at 54 seco
 Import `Jobs` in `alchemy.run.ts`:
 
 ```diff lang="typescript" title="alchemy.run.ts"
- import Api, { app } from "./api.ts";
+import Api from "./api.ts";
 +import Jobs from "./jobs-service.ts";
 ```
 
@@ -367,11 +365,11 @@ After changing `API_KEY` in your deployment environment, run:
 alchemy deploy
 ```
 
-Alchemy prepares the Service-bound secret before starting replacements. Keep both versions compatible with the new credential during overlap: the App vault is shared, and a failed rollout does not restore its old values.
+Alchemy prepares the Service-bound secret before starting replacements. Keep both versions compatible with the new credential during overlap: both generations read the Service's App vault, and a failed rollout does not restore its old values.
 
 ## Require a secret version in a raw Machine
 
-If you rotate an App secret outside the Service deployment and Fly reports version 42, declare that minimum on your existing `Fly.Machine` resource:
+If you rotate an App secret outside the deployment and Fly reports version 42, declare that minimum on your existing `Fly.Machine` resource in that App:
 
 ```diff lang="typescript"
  const worker = Fly.Machine("Worker", {

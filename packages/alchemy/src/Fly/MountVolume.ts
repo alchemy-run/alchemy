@@ -111,6 +111,31 @@ export interface ServiceBinding {
    * as Outputs (`yield* postgres.connectionUri`), not bind env.
    */
   postgres?: { clusterId: string; variableName?: string };
+  /**
+   * Another Service this one calls, recorded by `Fly.bindService` and
+   * `Fly.bindEndpoint`. Service reconcile checks the target is reachable
+   * from this Service's network and, for an endpoint, that the port is
+   * published.
+   */
+  target?: BoundTarget;
+}
+
+/** A Service bound by `Fly.bindService` or `Fly.bindEndpoint`. */
+export interface BoundTarget {
+  /** Logical id of the bound Service. */
+  service: string;
+  /** Fly App the bound Service runs in. */
+  appName: string;
+  /** Private network of that App. `undefined` for the default network. */
+  network: string | undefined;
+  /** The bound Service's private address; `undefined` when it publishes nothing. */
+  privateUrl: string | undefined;
+  /** The bound Service's caller token. */
+  rpcToken?: import("effect/Redacted").Redacted<string>;
+  /** Port `Fly.bindEndpoint` targets; the binding port for `bindService`. */
+  port?: number;
+  /** Ports the bound Service publishes, for `Fly.bindEndpoint`. */
+  endpoints?: Array<{ port: number; handlers: string[] }>;
 }
 
 /**

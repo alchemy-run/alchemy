@@ -8,6 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fetchFrom, httpService, nginx } from "./fixtures/flycast.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -188,42 +189,6 @@ const tags = [
   "provider:fly:machine",
   "live",
 ];
-
-const nginx = {
-  region: "iad",
-  image: "nginx:alpine",
-  guest: { cpus: 1, memoryMb: 256 },
-};
-
-/** Publish nginx over plain HTTP on port 80, the only port Flycast serves. */
-const httpService = {
-  protocol: "tcp",
-  internalPort: 80,
-  ports: [{ port: 80, handlers: ["http"] }],
-  autostart: true,
-  autostop: "off" as const,
-};
-
-/** Fetch `url` from inside a Machine until nginx answers. */
-const fetchFrom = (
-  caller: { appName: string; machineId: string },
-  url: string,
-) =>
-  machines
-    .execMachine({
-      app_name: caller.appName,
-      machine_id: caller.machineId,
-      command: ["sh", "-c", `wget -qO- -T 5 ${url} || true`],
-      timeout: 15,
-    })
-    .pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("3 seconds"),
-        times: 20,
-        until: (result) => result.stdout?.includes("Welcome to nginx") === true,
-      }),
-      Effect.map((result) => result.stdout ?? ""),
-    );
 
 test.provider(
   "private_v6, v6, and shared_v4 on one App keep distinct addresses",
