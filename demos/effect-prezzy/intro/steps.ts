@@ -2186,7 +2186,6 @@ export const steps: StepSpec[] = [
   pick("So a cloud program is actually a language with two phases"),
   pick("Now creating a bucket at runtime is a compile error"),
   pick("And inferring permissions becomes a kind of type checking"),
-  pick("…just as a compiler infers a type from a function's body"),
 
   // 3. Effect already models this
   ...typedFetch,
