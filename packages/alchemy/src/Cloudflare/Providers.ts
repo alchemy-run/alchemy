@@ -1,6 +1,7 @@
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { CertRequest, CertRequestProvider } from "../CertRequest.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
@@ -189,6 +190,7 @@ export const providers = () =>
       Calls.TurnKey,
       Certificate.Certificate,
       CertificateAuthorities.HostnameAssociation,
+      CertRequest,
       ClientCertificate.ClientCertificate,
       CloudConnector.Rules,
       CloudforceOne.ScanConfig,
@@ -648,6 +650,7 @@ export const providers = () =>
         LoadBalancer.MonitorGroupProvider(),
         LoadBalancer.PoolProvider(),
         Command.providers(),
+        CertRequestProvider(),
         KeyPairProvider(),
         RandomProvider(),
         // DNS-01 solver for `ACME.Certificate` over this account's zones.

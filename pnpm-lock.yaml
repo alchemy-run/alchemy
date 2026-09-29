@@ -6654,6 +6654,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/digitalocean':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/digitalocean
       '@distilled.cloud/doppler':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/doppler
