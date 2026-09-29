@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import * as Command from "@/Command/index.ts";
+import * as Drift from "@/Drift";
 import * as Provider from "@/Provider";
 import * as Output from "@/Output";
 import { Stack } from "@/Stack";
@@ -140,6 +141,81 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "live"] },
+    );
+
+    test.provider(
+      "zero-traffic upload receipts do not cause drift or hide live changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, traffic?: number) =>
+            Cloudflare.Worker("ReceiptWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: false,
+              version: traffic === undefined ? undefined : { traffic },
+            });
+
+          // Establish a compatible live deployment before uploading the
+          // candidate; a greenfield gradual rollout takes 100% of traffic.
+          const stable = yield* stack.deploy(program("stable"));
+          const beforeUpload = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: stable.workerName,
+          });
+          expect(beforeUpload.deployments[0]).toBeDefined();
+
+          const candidate = yield* stack.deploy(program("candidate", 0));
+          expect(candidate.workerName).toEqual(stable.workerName);
+          expect(candidate.versionId).toBeDefined();
+          expect(candidate.deploymentId).toBeUndefined();
+          const uploaded = yield* workers.getScriptVersion({
+            accountId,
+            scriptName: candidate.workerName,
+            versionId: candidate.versionId!,
+          });
+          expect(uploaded.id).toEqual(candidate.versionId);
+
+          const detectDrift = () =>
+            Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const unchanged = yield* detectDrift();
+          expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(
+            candidate.versionId,
+          );
+
+          const afterRead = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: candidate.workerName,
+          });
+          expect(afterRead.deployments[0]).toEqual(beforeUpload.deployments[0]);
+          expect(
+            afterRead.deployments[0]?.versions.some(
+              (version) => version.versionId === candidate.versionId,
+            ),
+          ).toBe(false);
+
+          // Change real script settings outside Alchemy. Keeping the upload
+          // receipt must not mask genuine drift in the live configuration.
+          yield* workers.updateScriptSubdomain({
+            accountId,
+            scriptName: candidate.workerName,
+            enabled: true,
+            previewsEnabled: false,
+          });
+          const changed = yield* detectDrift();
+          expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(
+            candidate.versionId,
+          );
+          expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
     );
 
     test.provider(

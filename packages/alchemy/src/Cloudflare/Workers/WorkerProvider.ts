@@ -5572,6 +5572,18 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
+            // This is the last gradual-rollout upload receipt, not the active
+            // traffic deployment. Preserve it only while that version exists.
+            const uploadedVersionId = output?.versionId
+              ? yield* workers.getScriptVersion({
+                  accountId,
+                  scriptName: workerName,
+                  versionId: output.versionId,
+                }).pipe(
+                  Effect.map(() => output.versionId),
+                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                )
+              : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
             const observeCrons = shouldObserveWorkerCrons(olds, output);
@@ -5689,6 +5701,7 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
