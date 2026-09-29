@@ -32,8 +32,14 @@ const waitUntilGone = (name: string) =>
     .getProjectsLocationsSchemaRegistriesContextsSubjectsVersions({ name })
     .pipe(
       Effect.as("found" as const),
-      Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
-        Effect.succeed("gone" as const),
+      // Once the parent registry is deleted too, the path itself is invalid.
+      Effect.catchTag(
+        [
+          "NotFound",
+          "SchemaRegistryRequiresCluster",
+          "SchemaRegistryPathNotFound",
+        ],
+        () => Effect.succeed("gone" as const),
       ),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
