@@ -93,7 +93,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             ]);
             expect(yield* projectRoles).not.toContain("roles/dataproc.viewer");
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -117,7 +120,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             // dataproc.jobs.create is checked on the project.
             expect(yield* projectRoles).toEqual(["roles/dataproc.editor"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

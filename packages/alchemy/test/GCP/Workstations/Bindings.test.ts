@@ -134,7 +134,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               { role: "roles/workstations.viewer", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -151,7 +154,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.machineType).toEqual("e2-standard-2");
             expect(yield* configRoles()).toEqual(["roles/workstations.viewer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -170,7 +176,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               "roles/workstations.viewer",
             );
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -190,7 +199,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               "roles/workstations.user",
             );
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 900_000,
+        },
       );
     });
 
@@ -211,7 +223,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               "roles/workstations.user",
             );
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -232,7 +247,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               "roles/workstations.viewer",
             ]);
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workstations", "live"],
+          timeout: 900_000,
+        },
       );
     });
   },

@@ -106,7 +106,10 @@ describe.skipIf(!dockerAvailable)(
               (yield* projectRoles).map((grant) => grant.role),
             ).not.toContain("roles/containeranalysis.notes.viewer");
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:containeranalysis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -136,7 +139,10 @@ describe.skipIf(!dockerAvailable)(
               },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:containeranalysis", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

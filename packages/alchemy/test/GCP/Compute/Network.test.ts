@@ -113,5 +113,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.project, created.networkName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
 );

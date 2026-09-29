@@ -72,7 +72,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/cloudkms.cryptoKeyEncrypter",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:kms", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

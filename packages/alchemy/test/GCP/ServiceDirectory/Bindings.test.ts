@@ -115,7 +115,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* hostRolesOnNamespace).toEqual([]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -143,7 +146,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/servicedirectory.viewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

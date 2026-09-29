@@ -100,7 +100,10 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
       yield* deleteDataset(dataset);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:translate", "live"],
+    timeout: 180_000,
+  },
 );
 
 // Training a model needs a dataset with imported sentence pairs and takes
@@ -140,5 +143,8 @@ test.provider.skipIf(!runModelLifecycle)(
       const gone = yield* waitUntilGone(model.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 12 * 60 * 60_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:translate", "live"],
+    timeout: 12 * 60 * 60_000,
+  },
 );

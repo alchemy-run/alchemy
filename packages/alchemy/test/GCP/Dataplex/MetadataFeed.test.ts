@@ -80,5 +80,5 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.feed.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

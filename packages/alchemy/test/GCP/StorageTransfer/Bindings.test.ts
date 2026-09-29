@@ -182,7 +182,10 @@ describe.skipIf(!dockerAvailable)(
               condition: undefined,
             });
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storagetransfer", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -221,7 +224,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/storagetransfer.viewer", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storagetransfer", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

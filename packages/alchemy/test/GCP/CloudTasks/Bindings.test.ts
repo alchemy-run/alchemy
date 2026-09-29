@@ -85,7 +85,10 @@ describe.skipIf(!dockerAvailable)(
               .sort();
             expect(roles).toEqual(["roles/cloudtasks.enqueuer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

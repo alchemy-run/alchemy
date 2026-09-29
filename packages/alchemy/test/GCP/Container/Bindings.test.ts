@@ -102,7 +102,10 @@ describe.skipIf(!dockerAvailable || !slow)(
             expect(live.endpoint).toEqual(actual.endpoint);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:container", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -120,7 +123,10 @@ describe.skipIf(!dockerAvailable || !slow)(
             expect(live.config?.spot).toEqual(true);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:container", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -137,7 +143,10 @@ describe.skipIf(!dockerAvailable || !slow)(
             expect(live.config?.machineType).toEqual("e2-medium");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:container", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

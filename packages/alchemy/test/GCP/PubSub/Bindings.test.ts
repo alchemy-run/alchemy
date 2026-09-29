@@ -159,7 +159,10 @@ describe.skipIf(!dockerAvailable)(
             });
             expect(rolesOf(policy, member)).toEqual(["roles/pubsub.publisher"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -183,7 +186,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/pubsub.subscriber",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -220,7 +226,10 @@ describe.skipIf(!dockerAvailable)(
             });
             expect(rolesOf(policy, member)).toEqual(["roles/pubsub.publisher"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -243,7 +252,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/pubsub.subscriber",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -267,7 +279,10 @@ describe.skipIf(!dockerAvailable)(
             });
             expect(rolesOf(policy, member)).toEqual(["roles/pubsub.viewer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -297,7 +312,10 @@ describe.skipIf(!dockerAvailable)(
                 .map((binding) => [binding.role, binding.condition]),
             ).toEqual([["roles/pubsub.viewer", undefined]]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

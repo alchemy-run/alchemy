@@ -99,5 +99,5 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
       const gone = yield* waitUntilGone(created.partition.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

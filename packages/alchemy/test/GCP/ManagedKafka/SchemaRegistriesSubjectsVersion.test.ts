@@ -117,5 +117,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.version.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withKafkaClusterSlot),
-  { timeout: 10_800_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+    timeout: 10_800_000,
+    retry: 0,
+  },
 );

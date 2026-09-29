@@ -99,7 +99,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/recaptchaenterprise.agent", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:recaptchaenterprise", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

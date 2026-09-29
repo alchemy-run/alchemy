@@ -145,7 +145,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             });
             yield* expectDocsGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -162,7 +165,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(doc.fields?.name?.stringValue).toEqual("Seeded");
             yield* expectDocsGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -178,7 +184,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             ).toBeUndefined();
             yield* expectDocsGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -201,7 +210,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               "roles/datastore.viewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -230,7 +242,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               "roles/datastore.user",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -257,7 +272,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               "roles/datastore.user",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

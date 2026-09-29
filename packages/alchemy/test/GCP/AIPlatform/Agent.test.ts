@@ -68,7 +68,10 @@ test.provider.skipIf(runLifecycle)(
       );
       expect(error._tag).toEqual("AgentServiceV1Unsupported");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(

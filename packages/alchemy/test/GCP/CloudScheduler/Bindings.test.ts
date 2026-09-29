@@ -96,7 +96,10 @@ describe.skipIf(!dockerAvailable)(
             expect((yield* getJob(jobs.paused)).state).toEqual("PAUSED");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -115,7 +118,10 @@ describe.skipIf(!dockerAvailable)(
             expect((yield* getJob(jobs.resumed)).state).toEqual("ENABLED");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -137,7 +143,10 @@ describe.skipIf(!dockerAvailable)(
             expect(after.lastAttemptTime).toBeDefined();
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

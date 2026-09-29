@@ -284,7 +284,10 @@ describe.skipIf(skip).sequential(
             ),
           ).toEqual([]);
         }),
-      { timeout: 120_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:container", "live"],
+        timeout: 120_000,
+      },
     );
 
     test.provider(
@@ -326,7 +329,10 @@ describe.skipIf(skip).sequential(
           );
           expect(missing.status).toBe(404);
         }),
-      { timeout: 600_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:container", "live"],
+        timeout: 600_000,
+      },
     );
 
     test.provider(
@@ -368,7 +374,10 @@ describe.skipIf(skip).sequential(
           expect(read.status).toBe(200);
           expect(read.text).toBe(JOB_MARKER_BODY);
         }),
-      { timeout: 720_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:container", "live"],
+        timeout: 720_000,
+      },
     );
 
     test.provider(
@@ -430,7 +439,11 @@ describe.skipIf(skip).sequential(
             ),
           ).toEqual([]);
         }),
-      { timeout: 1_200_000, retry: 0 },
+      {
+        tags: ["provider:gcp", "provider:gcp:container", "live"],
+        timeout: 1_200_000,
+        retry: 0,
+      },
     );
   },
 );

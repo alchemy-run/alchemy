@@ -85,88 +85,109 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
     afterAll(sharedStack.destroy(), { timeout: 600_000 });
 
     describe("GetTopic", () => {
-      test.provider("reads the topic", (_stack) =>
-        Effect.gen(function* () {
-          const live = yield* expectProbe<pubsublite.Topic>(
-            baseUrl,
-            "getTopic",
-          );
-          expect(live.name).toEqual(names.topic);
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "reads the topic",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<pubsublite.Topic>(
+              baseUrl,
+              "getTopic",
+            );
+            expect(live.name).toEqual(names.topic);
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
 
     describe("GetPartitions", () => {
-      test.provider("reads the partition count", (_stack) =>
-        Effect.gen(function* () {
-          const live = yield* expectProbe<pubsublite.TopicPartitions>(
-            baseUrl,
-            "getPartitions",
-          );
-          expect(live.partitionCount).toEqual("1");
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "reads the partition count",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<pubsublite.TopicPartitions>(
+              baseUrl,
+              "getPartitions",
+            );
+            expect(live.partitionCount).toEqual("1");
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
 
     describe("ComputeHeadCursor", () => {
-      test.provider("computes the head cursor of partition 0", (_stack) =>
-        Effect.gen(function* () {
-          const head = yield* expectProbe<pubsublite.ComputeHeadCursorResponse>(
-            baseUrl,
-            "computeHeadCursor",
-          );
-          expect(head.headCursor?.offset ?? "0").toEqual("0");
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "computes the head cursor of partition 0",
+        (_stack) =>
+          Effect.gen(function* () {
+            const head =
+              yield* expectProbe<pubsublite.ComputeHeadCursorResponse>(
+                baseUrl,
+                "computeHeadCursor",
+              );
+            expect(head.headCursor?.offset ?? "0").toEqual("0");
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
 
     describe("GetSubscription", () => {
-      test.provider("reads the subscription", (_stack) =>
-        Effect.gen(function* () {
-          const live = yield* expectProbe<pubsublite.Subscription>(
-            baseUrl,
-            "getSubscription",
-          );
-          expect(live.name).toEqual(names.subscription);
-          expect(live.topic).toEqual(names.topic);
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "reads the subscription",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<pubsublite.Subscription>(
+              baseUrl,
+              "getSubscription",
+            );
+            expect(live.name).toEqual(names.subscription);
+            expect(live.topic).toEqual(names.topic);
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
 
     describe("CommitCursor", () => {
-      test.provider("commits the partition 0 cursor", (_stack) =>
-        Effect.gen(function* () {
-          yield* expectProbe(baseUrl, "commitCursor");
-          const cursors =
-            yield* pubsublite.listCursorProjectsLocationsSubscriptionsCursors({
-              parent: names.subscription,
-            });
-          expect(
-            (cursors.partitionCursors ?? []).map((cursor) => ({
-              partition: cursor.partition,
-              offset: cursor.cursor?.offset,
-            })),
-          ).toEqual([{ partition: "0", offset: COMMITTED_OFFSET }]);
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "commits the partition 0 cursor",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "commitCursor");
+            const cursors =
+              yield* pubsublite.listCursorProjectsLocationsSubscriptionsCursors(
+                {
+                  parent: names.subscription,
+                },
+              );
+            expect(
+              (cursors.partitionCursors ?? []).map((cursor) => ({
+                partition: cursor.partition,
+                offset: cursor.cursor?.offset,
+              })),
+            ).toEqual([{ partition: "0", offset: COMMITTED_OFFSET }]);
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
 
     describe("GetReservation", () => {
-      test.provider("reads the reservation", (_stack) =>
-        Effect.gen(function* () {
-          const live = yield* expectProbe<pubsublite.Reservation>(
-            baseUrl,
-            "getReservation",
-          );
-          expect(live.name).toEqual(names.reservation);
-          expect(live.throughputCapacity).toEqual("4");
-          expect(yield* hostProjectGrants).toEqual(expectedGrants);
-        }),
+      test.provider(
+        "reads the reservation",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<pubsublite.Reservation>(
+              baseUrl,
+              "getReservation",
+            );
+            expect(live.name).toEqual(names.reservation);
+            expect(live.throughputCapacity).toEqual("4");
+            expect(yield* hostProjectGrants).toEqual(expectedGrants);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsublite", "live"] },
       );
     });
   },

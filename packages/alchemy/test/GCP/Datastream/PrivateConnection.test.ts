@@ -87,5 +87,8 @@ test.provider.skipIf(!runSlowLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+    timeout: 900_000,
+  },
 );

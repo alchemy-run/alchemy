@@ -106,7 +106,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.uid).toEqual(expected.uid);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -127,7 +130,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.uid).toEqual(expected.uid);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -153,7 +159,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.ipAddress).toEqual(expected.ipAddress);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -173,7 +182,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.uid).toEqual(expected.uid);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -190,7 +202,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.databaseRoles).toContain("alloydbsuperuser");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

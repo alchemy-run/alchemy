@@ -167,5 +167,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.backup.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
 );

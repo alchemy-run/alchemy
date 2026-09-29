@@ -162,5 +162,9 @@ test.provider.skipIf(!runSlowLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   // The Cloud SQL destination profile provisions an instance (20–40 minutes).
-  { timeout: 3_600_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
 );

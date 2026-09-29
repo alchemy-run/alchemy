@@ -101,7 +101,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.targetLanguageCode).toEqual("es");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -118,7 +121,10 @@ describe.skipIf(!dockerAvailable)(
             );
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -134,7 +140,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.name).toEqual(modelName);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -151,7 +160,10 @@ describe.skipIf(!dockerAvailable)(
             expect(out.translations?.[0]?.translatedText).toBeTruthy();
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -168,7 +180,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.termsPair?.targetTerm?.text).toEqual("hola");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

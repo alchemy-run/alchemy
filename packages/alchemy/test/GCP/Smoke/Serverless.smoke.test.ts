@@ -321,7 +321,10 @@ describe.sequential(
           const anonymous = yield* HttpClient.get(outputs.workerUrl);
           expect([401, 403]).toContain(anonymous.status);
         }),
-      { timeout: 120_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 120_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -381,7 +384,10 @@ describe.sequential(
           );
           expect(missing.status).toBe(404);
         }),
-      { timeout: 180_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 180_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -432,7 +438,10 @@ describe.sequential(
           );
           expect(tampered.status).toBe(403);
         }),
-      { timeout: 300_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 300_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -457,7 +466,10 @@ describe.sequential(
             name,
           });
         }),
-      { timeout: 360_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 360_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -490,7 +502,10 @@ describe.sequential(
             });
           expect(subscriptions.length).toBeGreaterThan(0);
         }),
-      { timeout: 360_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 360_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -513,7 +528,10 @@ describe.sequential(
           expect(marker.body).toEqual(SCHEDULE_BODY);
           expect(String(marker.scheduleTime)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         }),
-      { timeout: 360_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 360_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -551,7 +569,10 @@ describe.sequential(
           expect(marker.execution).toEqual(executionId);
           expect(marker.ranAt).toBeInstanceOf(Date);
         }),
-      { timeout: 480_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 480_000,
+      },
     );
 
     test.provider.skipIf(skip)(
@@ -649,7 +670,10 @@ describe.sequential(
             );
           }
         }),
-      { timeout: 600_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:smoke", "live"],
+        timeout: 600_000,
+      },
     );
   },
 );

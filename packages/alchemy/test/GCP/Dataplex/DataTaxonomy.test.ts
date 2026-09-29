@@ -44,7 +44,7 @@ test.provider(
       );
       expect(error._tag).toEqual("InternalServerError");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );
 
 // Data taxonomies are sunset: creates fail with InternalServerError (probe
@@ -105,5 +105,5 @@ test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

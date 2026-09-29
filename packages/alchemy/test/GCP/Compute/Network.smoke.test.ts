@@ -301,7 +301,10 @@ describe.skipIf(!!process.env.FAST).sequential(
             "default-internet-gateway",
           );
         }),
-      { timeout: 60_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 60_000,
+      },
     );
 
     test.provider(
@@ -336,7 +339,10 @@ describe.skipIf(!!process.env.FAST).sequential(
             { IPProtocol: "tcp", ports: ["443"] },
           ]);
         }),
-      { timeout: 60_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 60_000,
+      },
     );
 
     test.provider(
@@ -374,7 +380,10 @@ describe.skipIf(!!process.env.FAST).sequential(
           expect(address.addressType).toBe("EXTERNAL");
           expect(address.status).toBe("IN_USE");
         }),
-      { timeout: 60_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 60_000,
+      },
     );
 
     test.provider(
@@ -398,7 +407,10 @@ describe.skipIf(!!process.env.FAST).sequential(
           const response = yield* HttpClient.get(outputs.functionUrl);
           expect([403, 404]).toContain(response.status);
         }),
-      { timeout: 60_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 60_000,
+      },
     );
 
     test.provider(
@@ -443,7 +455,10 @@ describe.skipIf(!!process.env.FAST).sequential(
           // tcp:80 falls through to the deny-all egress rule.
           expect(probe.port80Blocked).toBe("true");
         }),
-      { timeout: 300_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 300_000,
+      },
     );
 
     test.provider(
@@ -551,7 +566,10 @@ describe.skipIf(!!process.env.FAST).sequential(
               .pipe(Effect.as(false), Effect.catchTag("NotFound", notFound)),
           );
         }),
-      { timeout: 600_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 600_000,
+      },
     );
   },
 );

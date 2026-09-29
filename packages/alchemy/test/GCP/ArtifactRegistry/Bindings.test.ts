@@ -124,7 +124,10 @@ describe.skipIf(!dockerAvailable)(
             expect(roles).toEqual(["roles/artifactregistry.reader"]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual([]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

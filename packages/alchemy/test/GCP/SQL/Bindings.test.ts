@@ -159,7 +159,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
                 .map((binding) => binding.role),
             ).toEqual(["roles/secretmanager.secretAccessor"]);
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:sql", "live"],
+          timeout: 900_000,
+        },
       );
     });
 
@@ -178,7 +181,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.values).toEqual([userName, "42"]);
             yield* expectRole("roles/cloudsql.instanceUser");
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:sql", "live"],
+          timeout: 900_000,
+        },
       );
     });
 
@@ -201,7 +207,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.connectionName).toEqual(live.connectionName);
             yield* expectRole("roles/cloudsql.viewer");
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:sql", "live"],
+          timeout: 900_000,
+        },
       );
     });
 
@@ -222,7 +231,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               condition: undefined,
             });
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:sql", "live"],
+          timeout: 900_000,
+        },
       );
     });
 
@@ -246,7 +258,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               ]),
             );
           }),
-        { timeout: 900_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:sql", "live"],
+          timeout: 900_000,
+        },
       );
     });
   },

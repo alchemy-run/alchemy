@@ -93,7 +93,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             );
             expect(roles).toEqual([]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

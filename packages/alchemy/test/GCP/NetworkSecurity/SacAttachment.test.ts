@@ -96,7 +96,11 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 2_400_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -156,5 +160,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.attachment.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 1_200_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+    timeout: 1_200_000,
+    retry: 0,
+  },
 );

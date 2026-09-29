@@ -119,5 +119,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 360_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
 );

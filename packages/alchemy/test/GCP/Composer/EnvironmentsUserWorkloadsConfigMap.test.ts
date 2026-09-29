@@ -149,5 +149,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   // Create (~45 min) + update + delete; a timed-out lifecycle is not retried.
-  { timeout: 5_400_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:composer", "live"],
+    timeout: 5_400_000,
+    retry: 0,
+  },
 );

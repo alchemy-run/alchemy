@@ -88,7 +88,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 600_000,
+  },
 );
 
 // Set GCP_TEST_AIPLATFORM_DATASET_VERSION on a project where this succeeds to run the full lifecycle.

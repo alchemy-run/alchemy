@@ -229,5 +229,9 @@ test.provider.skipIf(!runLifecycle)(
         stack.destroy().pipe(Effect.andThen(deleteParentApi), Effect.ignore),
       ),
     ),
-  { timeout: 900_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
+    timeout: 900_000,
+    retry: 0,
+  },
 );

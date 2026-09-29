@@ -176,7 +176,10 @@ describe.skipIf(!dockerAvailable)(
             expect(datasetRoles).toEqual(["roles/bigquery.dataViewer"]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -196,7 +199,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/bigquery.dataEditor",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -217,7 +223,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/bigquery.dataViewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -238,7 +247,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -255,7 +267,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/bigquery.dataEditor",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -277,7 +292,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

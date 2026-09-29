@@ -205,5 +205,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.route.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 1_800_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+    timeout: 1_800_000,
+    retry: 0,
+  },
 );

@@ -129,5 +129,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   // Create 5–15 minutes, label patch, delete a few minutes.
-  { timeout: 2_400_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:sql", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
 );

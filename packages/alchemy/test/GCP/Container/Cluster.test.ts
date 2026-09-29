@@ -160,5 +160,9 @@ test.provider.skipIf(!runLifecycle)(
       }),
     ).pipe(logLevel),
   // Create ~6 min, logging update ~5 min, delete ~5 min.
-  { timeout: 1_800_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:container", "live"],
+    timeout: 1_800_000,
+    retry: 0,
+  },
 );

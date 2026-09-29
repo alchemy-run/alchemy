@@ -126,5 +126,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   // Provisioning the worker pool takes several minutes; so does teardown.
-  { timeout: 2_400_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
 );

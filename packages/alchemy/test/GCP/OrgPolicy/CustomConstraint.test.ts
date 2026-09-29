@@ -101,7 +101,7 @@ test.provider.skipIf(runLifecycle)(
       expect(error._tag).toEqual("Forbidden");
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(

@@ -45,7 +45,10 @@ test.provider.skipIf(runFirewall)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:recaptchaenterprise", "live"],
+    timeout: 60_000,
+  },
 );
 
 test.provider.skipIf(!runFirewall)(

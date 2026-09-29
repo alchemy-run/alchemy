@@ -82,7 +82,10 @@ describe.skipIf(!dockerAvailable || !linkEnabled)(
             });
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:developerconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -96,7 +99,10 @@ describe.skipIf(!dockerAvailable || !linkEnabled)(
             });
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:developerconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -114,7 +120,10 @@ describe.skipIf(!dockerAvailable || !linkEnabled)(
             expect(refs.refNames?.length).toBeGreaterThan(0);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:developerconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

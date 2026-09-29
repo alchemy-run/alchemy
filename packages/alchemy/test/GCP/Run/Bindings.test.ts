@@ -91,7 +91,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/run.viewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:run", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -114,7 +117,10 @@ describe.skipIf(!dockerAvailable)(
               });
             expect(rolesOf(policy)).toEqual(["roles/run.viewer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:run", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -147,7 +153,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/run.jobsExecutorWithOverrides",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:run", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -171,7 +180,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/run.invoker",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:run", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

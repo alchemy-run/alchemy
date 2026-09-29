@@ -88,7 +88,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.processingUnits).toEqual(100);
             expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -112,7 +115,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/spanner.databaseReader",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -137,7 +143,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* instanceRoles).toEqual(["roles/spanner.viewer"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:spanner", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

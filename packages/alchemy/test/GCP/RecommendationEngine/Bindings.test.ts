@@ -84,7 +84,10 @@ describe.skipIf(!dockerAvailable || !entitled || !!process.env.FAST)(
                 .map((binding) => [binding.role, binding.condition]),
             ).toEqual([["roles/automlrecommendations.viewer", undefined]]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

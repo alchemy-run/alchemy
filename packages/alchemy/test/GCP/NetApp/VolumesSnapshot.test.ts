@@ -156,5 +156,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.snapshot.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
 );

@@ -96,6 +96,7 @@ describe("Values codec", () => {
       expect(encodeFields({ skipped: undefined })).toEqual({});
       expect(encodeValue(undefined)).toEqual({ nullValue: "NULL_VALUE" });
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 
   test(
@@ -118,6 +119,7 @@ describe("Values codec", () => {
         emptyMap: {},
       });
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 
   test(
@@ -128,5 +130,6 @@ describe("Values codec", () => {
       expect(fieldPath("a.b")).toEqual("`a.b`");
       expect(fieldPath("tick`")).toEqual("`tick\\``");
     }),
+    { tags: ["unit", "provider:gcp", "provider:gcp:firestore", "local"] },
   );
 });

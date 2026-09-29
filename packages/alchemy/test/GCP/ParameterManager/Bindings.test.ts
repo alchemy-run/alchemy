@@ -91,7 +91,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(parameterName),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:parametermanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -112,7 +115,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(versionName),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:parametermanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -145,7 +151,10 @@ describe.skipIf(!dockerAvailable)(
             expect(grants.filter(([, expression]) => !expression)).toEqual([]);
             expect(grants).toHaveLength(3);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:parametermanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

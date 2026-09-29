@@ -106,7 +106,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(environment.uuid).toEqual(live.uuid);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -145,7 +148,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(polled.exitInfo?.exitCode ?? 0).toEqual(0);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -163,7 +169,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(configMap.data).toEqual({ LOG_LEVEL: "INFO" });
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -181,7 +190,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(Object.keys(secret.data ?? {})).toEqual(["password"]);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

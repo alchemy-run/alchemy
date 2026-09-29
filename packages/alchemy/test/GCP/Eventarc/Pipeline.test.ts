@@ -121,5 +121,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.pipeline.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+    timeout: 2_400_000,
+  },
 );

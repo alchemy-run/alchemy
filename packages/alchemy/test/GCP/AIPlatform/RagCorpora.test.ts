@@ -77,7 +77,10 @@ test.provider.skipIf(runLifecycle)(
       expect(error._tag).toEqual("BadRequest");
       expect(String(error.message)).toContain("Spanner mode");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(

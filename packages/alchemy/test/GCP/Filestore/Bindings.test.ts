@@ -116,7 +116,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.fileShares?.[0]?.name).toEqual("share1");
             expect(yield* hostProjectRoles(hostAccount)).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -134,7 +137,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.sourceFileShare).toEqual("share1");
             expect(yield* hostProjectRoles(hostAccount)).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },
@@ -193,7 +199,10 @@ describe.skipIf(!dockerAvailable || !runSnapshot)(
               expectedRoles,
             );
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

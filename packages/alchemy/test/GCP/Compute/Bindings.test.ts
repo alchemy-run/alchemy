@@ -127,7 +127,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(live.status).toEqual(expected.status);
             yield* expectInstanceGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -151,7 +154,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(seen.status).toEqual("TERMINATED");
             yield* expectInstanceGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -174,7 +180,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(seen.status).toEqual("RUNNING");
             yield* expectInstanceGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

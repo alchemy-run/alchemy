@@ -116,7 +116,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               { role: "roles/transcoder.editor", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:transcoder", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

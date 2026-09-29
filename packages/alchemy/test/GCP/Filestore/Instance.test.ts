@@ -118,5 +118,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 2_700_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 2_700_000,
+    retry: 0,
+  },
 );

@@ -48,7 +48,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel, quotaTolerant),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -111,5 +114,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, quotaTolerant),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+    timeout: 120_000,
+  },
 );

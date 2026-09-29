@@ -92,5 +92,8 @@ test.provider.skipIf(!runSlowLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 1_500_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+    timeout: 1_500_000,
+  },
 );

@@ -61,7 +61,10 @@ describe(
 
           yield* stack.destroy();
         }),
-      { timeout: 180_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:website", "live"],
+        timeout: 180_000,
+      },
     );
   },
 );

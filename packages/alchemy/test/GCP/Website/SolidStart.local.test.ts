@@ -61,7 +61,10 @@ describe(
 
           yield* stack.destroy();
         }),
-      { timeout: 120_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:website", "live"],
+        timeout: 120_000,
+      },
     );
 
     test.provider.skipIf(!runDevSsr)(
@@ -104,7 +107,10 @@ describe(
 
           yield* stack.destroy();
         }),
-      { timeout: 120_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:website", "live"],
+        timeout: 120_000,
+      },
     );
   },
 );

@@ -150,7 +150,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
 
             yield* expectScopedGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:datastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -173,7 +176,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
 
             yield* expectScopedGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:datastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -195,7 +201,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
 
             yield* expectScopedGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:datastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

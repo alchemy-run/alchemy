@@ -100,7 +100,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.name).toEqual(out.name);
             yield* expectSpeechClientOnly;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -122,7 +125,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.name).toEqual(out.name);
             yield* expectSpeechClientOnly;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -140,7 +146,10 @@ describe.skipIf(!dockerAvailable)(
             expect(out.totalBilledTime).toMatch(/^\d+(\.\d+)?s$/);
             yield* expectSpeechClientOnly;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

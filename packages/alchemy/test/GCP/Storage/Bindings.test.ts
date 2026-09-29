@@ -127,7 +127,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectViewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -161,7 +164,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectUser",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -199,7 +205,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectUser",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -224,7 +233,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectViewer",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -251,7 +263,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectUser",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -281,7 +296,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/storage.objectUser",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -333,7 +351,10 @@ describe.skipIf(!dockerAvailable)(
                 .map((binding) => binding.role),
             ).toEqual(["roles/iam.serviceAccountTokenCreator"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:storage", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -225,5 +225,9 @@ test.provider.skipIf(!runLifecycle)(
       }),
     ).pipe(logLevel),
   // Host create ~6 min, pool create/update ~5 min, host delete ~5 min.
-  { timeout: 1_800_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:container", "live"],
+    timeout: 1_800_000,
+    retry: 0,
+  },
 );

@@ -98,7 +98,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.expirationTime).toEqual(expect.any(String));
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -115,7 +118,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.expirationTime).toEqual(expect.any(String));
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -137,7 +143,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.refNames).toEqual(expected.refNames);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudbuild", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

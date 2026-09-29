@@ -79,7 +79,10 @@ describe.skipIf(!dockerAvailable || !retailEnabled)(
             expect(searched.attributionToken).toEqual(expect.any(String));
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:retail", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -96,7 +99,10 @@ describe.skipIf(!dockerAvailable || !retailEnabled)(
             expect(predicted.validateOnly).toEqual(true);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:retail", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

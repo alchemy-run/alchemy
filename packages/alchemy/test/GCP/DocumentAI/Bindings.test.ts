@@ -107,7 +107,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(processor.displayName).toEqual(live.displayName);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -124,7 +127,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(processed.text).toContain("Hello");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -146,7 +152,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(schema.labels).toEqual(live.labels);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -177,7 +186,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             );
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:documentai", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

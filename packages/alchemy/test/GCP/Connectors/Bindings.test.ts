@@ -88,7 +88,10 @@ describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/connectors.invoker"]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:connectors", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

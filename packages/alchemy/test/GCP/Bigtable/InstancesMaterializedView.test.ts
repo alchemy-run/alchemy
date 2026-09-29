@@ -134,5 +134,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.view.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 480_000 },
 );

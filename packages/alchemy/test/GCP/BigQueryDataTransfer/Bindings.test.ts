@@ -101,7 +101,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/bigquery.admin", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigquerydatatransfer", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

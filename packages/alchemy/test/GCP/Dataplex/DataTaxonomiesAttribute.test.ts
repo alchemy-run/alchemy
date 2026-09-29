@@ -103,5 +103,5 @@ test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
       const gone = yield* waitUntilGone(created.attribute.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

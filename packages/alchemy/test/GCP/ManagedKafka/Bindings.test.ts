@@ -137,7 +137,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.state).toEqual(direct.state);
             yield* expectScopedGrant("roles/managedkafka.viewer", clusterName);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -154,7 +157,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.partitionCount).toEqual(direct.partitionCount);
             yield* expectScopedGrant("roles/managedkafka.viewer", topicName);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -174,7 +180,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.kafkaCluster).toEqual(direct.kafkaCluster);
             yield* expectScopedGrant("roles/managedkafka.viewer", connectName);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -199,7 +208,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             });
             expect(grants).toHaveLength(4);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

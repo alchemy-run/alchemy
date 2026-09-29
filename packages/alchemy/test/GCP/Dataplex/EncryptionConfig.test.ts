@@ -56,7 +56,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -104,5 +104,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withDataplexSlot),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

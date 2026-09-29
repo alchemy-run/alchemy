@@ -119,7 +119,10 @@ describe.skipIf(!dockerAvailable)(
 
             expect(yield* projectRoles).toEqual(expectedProjectRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:datapipelines", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -143,7 +146,10 @@ describe.skipIf(!dockerAvailable)(
 
             expect(yield* projectRoles).toEqual(expectedProjectRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:datapipelines", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

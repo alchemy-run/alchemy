@@ -158,5 +158,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.association.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+    timeout: 90_000,
+  },
 );

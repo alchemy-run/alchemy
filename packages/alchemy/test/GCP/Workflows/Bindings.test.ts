@@ -105,7 +105,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/workflows.invoker", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:workflows", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

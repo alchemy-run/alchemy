@@ -122,5 +122,8 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:developerconnect", "live"],
+    timeout: 300_000,
+  },
 );

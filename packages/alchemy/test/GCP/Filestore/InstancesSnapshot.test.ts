@@ -78,7 +78,11 @@ test.provider.skipIf(hasEnterpriseQuota || !!process.env.FAST)(
     }).pipe(logLevel),
   // If quota is ever granted the deploy creates a real instance; the budget
   // lets the final destroy remove it instead of abandoning teardown.
-  { timeout: 2_700_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 2_700_000,
+    retry: 0,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -158,5 +162,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.snapshot.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 2_700_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 2_700_000,
+    retry: 0,
+  },
 );

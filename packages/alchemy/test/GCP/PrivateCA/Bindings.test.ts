@@ -94,7 +94,10 @@ describe.skipIf(!dockerAvailable)(
             expect(pems[0]).toContain("BEGIN CERTIFICATE");
             yield* expectPoolGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:privateca", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -112,7 +115,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.state).toEqual("ENABLED");
             yield* expectPoolGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:privateca", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

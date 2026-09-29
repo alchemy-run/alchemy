@@ -95,5 +95,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 600_000 },
 );

@@ -109,5 +109,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.entity.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+    timeout: 600_000,
+  },
 );

@@ -82,7 +82,10 @@ describe.skipIf(!dockerAvailable || !memcacheEnabled)(
               { role: "roles/memcache.viewer", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

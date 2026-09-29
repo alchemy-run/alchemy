@@ -102,5 +102,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   // Provisioning a management server takes up to ~30 minutes, deletion more.
-  { timeout: 3_600_000, retry: 0 },
+  {
+    tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
 );

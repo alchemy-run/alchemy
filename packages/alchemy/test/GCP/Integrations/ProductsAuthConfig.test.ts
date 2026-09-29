@@ -81,7 +81,10 @@ test.provider.skipIf(runProductAuthLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
 );
 
 test.provider.skipIf(!runProductAuthLifecycle)(

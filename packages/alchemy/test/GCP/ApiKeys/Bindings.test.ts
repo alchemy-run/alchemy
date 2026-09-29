@@ -88,7 +88,10 @@ describe.skipIf(!dockerAvailable)(
               },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:apikeys", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -118,5 +118,8 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+    timeout: 600_000,
+  },
 );

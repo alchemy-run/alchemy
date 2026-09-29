@@ -95,7 +95,14 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
-        { timeout: 600_000 },
+        {
+          tags: [
+            "provider:gcp",
+            "provider:gcp:rapidmigrationassessment",
+            "live",
+          ],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -111,7 +118,14 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
-        { timeout: 600_000 },
+        {
+          tags: [
+            "provider:gcp",
+            "provider:gcp:rapidmigrationassessment",
+            "live",
+          ],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -127,7 +141,14 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
-        { timeout: 600_000 },
+        {
+          tags: [
+            "provider:gcp",
+            "provider:gcp:rapidmigrationassessment",
+            "live",
+          ],
+          timeout: 600_000,
+        },
       );
     });
   },

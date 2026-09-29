@@ -80,7 +80,7 @@ test.provider.skipIf(privateServiceAccess)(
       );
       expect(error._tag).toEqual("PrivateServiceAccessNotEnabled");
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:memcache", "live"], timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -148,5 +148,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 1_800_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+    timeout: 1_800_000,
+  },
 );

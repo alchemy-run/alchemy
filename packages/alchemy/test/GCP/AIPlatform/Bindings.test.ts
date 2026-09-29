@@ -134,7 +134,10 @@ describe.skipIf(!dockerAvailable)(
             expect(out.modelVersion).toContain("gemini-2.5-flash");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -154,7 +157,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.displayName).toEqual(expected.displayName);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -183,7 +189,10 @@ describe.skipIf(!dockerAvailable)(
             expect(expected).toEqual("ReasoningEngineNotRunning");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -200,7 +209,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.displayName).toEqual("alchemy-binding-pipeline");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -224,7 +236,10 @@ describe.skipIf(!dockerAvailable)(
             expect(pipeline.state).toEqual("PIPELINE_STATE_CANCELLED");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -246,7 +261,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.displayName).toContain("code");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -268,7 +286,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.displayName).toContain("browser");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -290,7 +311,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.state).toEqual("STATE_PAUSED");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -312,7 +336,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.state).toEqual("STATE_RUNNING");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

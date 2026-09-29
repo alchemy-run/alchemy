@@ -134,7 +134,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/secretmanager.secretVersionAdder",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+          timeout: 600_000,
+        },
       );
 
       test.provider(
@@ -159,7 +162,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/secretmanager.secretVersionAdder",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -189,7 +195,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/secretmanager.secretAccessor",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -217,7 +226,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/secretmanager.secretVersionManager",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -252,7 +264,10 @@ describe.skipIf(!dockerAvailable)(
               "roles/secretmanager.secretVersionManager",
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

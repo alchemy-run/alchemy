@@ -42,7 +42,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:gcp", "provider:gcp:ces", "live"], timeout: 300_000 },
 );
 
 test.provider(
@@ -121,5 +121,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.tool.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:gcp", "provider:gcp:ces", "live"], timeout: 300_000 },
 );

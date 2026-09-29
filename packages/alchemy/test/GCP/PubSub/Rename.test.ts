@@ -53,5 +53,5 @@ test.provider(
       ).toEqual("found");
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 180_000 },
 );

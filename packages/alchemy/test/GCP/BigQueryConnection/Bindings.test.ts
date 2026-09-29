@@ -109,7 +109,10 @@ describe.skipIf(!dockerAvailable)(
             expect(roles).toEqual(["roles/bigquery.connectionUser"]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual([]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryconnection", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

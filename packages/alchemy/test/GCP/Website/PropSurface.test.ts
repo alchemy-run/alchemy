@@ -95,8 +95,12 @@ describe(
         }),
     ];
 
-    it("pins the GCP.Website prop surface at the type level", () => {
-      expect(_pins.length).toBeGreaterThan(0);
-    });
+    it(
+      "pins the GCP.Website prop surface at the type level",
+      () => {
+        expect(_pins.length).toBeGreaterThan(0);
+      },
+      { tags: ["provider:gcp", "provider:gcp:website", "live"] },
+    );
   },
 );

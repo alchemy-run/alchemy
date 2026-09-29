@@ -79,5 +79,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.project, created.policyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 900_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 900_000 },
 );

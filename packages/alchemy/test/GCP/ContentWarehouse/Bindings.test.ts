@@ -118,7 +118,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(schema.updateTime).toEqual(live.updateTime);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -137,7 +140,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(document.plainText).toEqual("hello binding");
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -159,7 +165,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(rules.rules?.length).toEqual(live.rules?.length);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -181,7 +190,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             ]);
             yield* expectProjectGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

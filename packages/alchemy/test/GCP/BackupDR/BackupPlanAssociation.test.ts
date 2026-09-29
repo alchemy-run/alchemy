@@ -114,5 +114,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { tags: ["provider:gcp", "provider:gcp:backupdr", "live"], timeout: 300_000 },
 );

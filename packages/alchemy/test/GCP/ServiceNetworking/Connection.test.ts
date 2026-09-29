@@ -171,5 +171,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.connection.network);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:servicenetworking", "live"],
+    timeout: 600_000,
+  },
 );

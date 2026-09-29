@@ -102,7 +102,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.acceleratorType).toEqual("v2-8");
             yield* expectTpuViewerOnly;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -121,7 +124,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.name).toEqual(live.name);
             yield* expectTpuViewerOnly;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

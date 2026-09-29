@@ -99,7 +99,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(live.buildConfig?.entryPoint).toEqual("handler");
             yield* expectFunctionGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudfunctions", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -122,7 +125,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             );
             yield* expectFunctionGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudfunctions", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

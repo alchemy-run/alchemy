@@ -139,5 +139,8 @@ test.provider.skipIf(!process.env.GCP_TEST_FIREBASE_APP_HOSTING_BUILD)(
       const gone = yield* waitUntilGone(created.build.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firebaseapphosting", "live"],
+    timeout: 900_000,
+  },
 );

@@ -127,7 +127,10 @@ describe.skipIf(!dockerAvailable)(
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -147,7 +150,10 @@ describe.skipIf(!dockerAvailable)(
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -169,7 +175,10 @@ describe.skipIf(!dockerAvailable)(
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -194,7 +203,10 @@ describe.skipIf(!dockerAvailable)(
             expect(tag).toEqual(direct);
             expect(yield* hostProjectRoles).toEqual(expectedRoles);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

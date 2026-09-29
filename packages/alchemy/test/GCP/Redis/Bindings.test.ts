@@ -88,7 +88,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(aclName),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -109,7 +112,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(cacheName!),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -132,7 +138,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(cacheName!),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -151,7 +160,10 @@ describe.skipIf(!dockerAvailable)(
               scoped(cacheName!),
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -171,7 +183,10 @@ describe.skipIf(!dockerAvailable)(
               pong: "PONG",
             });
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -191,7 +206,10 @@ describe.skipIf(!dockerAvailable)(
             // project.
             expect(grants.filter(([, expression]) => !expression)).toEqual([]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:redis", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

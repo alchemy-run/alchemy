@@ -75,7 +75,10 @@ test.provider.skipIf(!runLifecycle || runBlueprintLifecycle)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:saasservicemanagement", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!runBlueprintLifecycle)(

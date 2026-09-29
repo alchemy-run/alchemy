@@ -96,7 +96,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(live.state).toEqual("READY");
             yield* expectInstanceGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -114,7 +117,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(live.defaultStorageType).toEqual("HDD");
             yield* expectInstanceGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -131,7 +137,10 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             expect(Object.keys(live.columnFamilies ?? {})).toEqual(["cf"]);
             yield* expectTableGrants;
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

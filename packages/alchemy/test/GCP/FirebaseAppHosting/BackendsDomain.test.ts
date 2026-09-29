@@ -165,5 +165,8 @@ test.provider.skipIf(!customDomain)(
       const gone = yield* waitUntilGone(created.domain.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:firebaseapphosting", "live"],
+    timeout: 420_000,
+  },
 );

@@ -136,5 +136,8 @@ test.provider.skipIf(!!process.env.FAST)(
       const gone = yield* waitUntilGone(created.group.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, withNetworkSlot),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+    timeout: 600_000,
+  },
 );

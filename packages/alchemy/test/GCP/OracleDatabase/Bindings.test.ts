@@ -118,7 +118,10 @@ const describeGet = <A extends { name?: string }>(options: {
           expect(out.name).toEqual(direct.name);
           yield* expectProjectGrant(options.role);
         }),
-      { timeout: 600_000 },
+      {
+        tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+        timeout: 600_000,
+      },
     );
   });
 
@@ -268,7 +271,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               expect(archive.subarray(0, 2).toString("latin1")).toEqual("PK");
               yield* expectProjectGrant(ADB_ADMIN);
             }),
-          { timeout: 600_000 },
+          {
+            tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+            timeout: 600_000,
+          },
         );
       });
 
@@ -281,7 +287,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               expect(yield* waitForDatabaseState("STOPPED")).toEqual("STOPPED");
               yield* expectProjectGrant(ADB_ADMIN);
             }),
-          { timeout: 900_000 },
+          {
+            tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+            timeout: 900_000,
+          },
         );
       });
 
@@ -296,7 +305,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               );
               yield* expectProjectGrant(ADB_ADMIN);
             }),
-          { timeout: 900_000 },
+          {
+            tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+            timeout: 900_000,
+          },
         );
       });
 
@@ -311,7 +323,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               );
               yield* expectProjectGrant(ADB_ADMIN);
             }),
-          { timeout: 900_000 },
+          {
+            tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
+            timeout: 900_000,
+          },
         );
       });
     });

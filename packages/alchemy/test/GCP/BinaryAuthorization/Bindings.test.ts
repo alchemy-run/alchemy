@@ -141,7 +141,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:binaryauthorization", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -174,7 +177,10 @@ describe.skipIf(!dockerAvailable)(
             ]);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:binaryauthorization", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -195,7 +201,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.etag).toEqual(expected.etag);
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:binaryauthorization", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -217,7 +226,10 @@ describe.skipIf(!dockerAvailable)(
             expect(live.verdict).toEqual(expect.any(String));
             expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:binaryauthorization", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

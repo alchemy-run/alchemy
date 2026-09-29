@@ -96,7 +96,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/firebaserules.admin", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaserules", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -124,7 +127,10 @@ describe.skipIf(!dockerAvailable)(
               { role: "roles/firebaserules.admin", condition: undefined },
             ]);
           }),
-        { timeout: 600_000 },
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaserules", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -77,7 +77,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.etag).toEqual(direct.etag);
             yield* expectModelGrant;
           }),
-        { timeout: 600_000 },
+        { tags: ["provider:gcp", "provider:gcp:ml", "live"], timeout: 600_000 },
       );
     });
 
@@ -99,7 +99,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(model.defaultVersion?.name).toEqual(versionName);
             yield* expectModelGrant;
           }),
-        { timeout: 600_000 },
+        { tags: ["provider:gcp", "provider:gcp:ml", "live"], timeout: 600_000 },
       );
     });
 
@@ -119,7 +119,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             expect(out.state).toEqual(direct.state);
             yield* expectModelGrant;
           }),
-        { timeout: 600_000 },
+        { tags: ["provider:gcp", "provider:gcp:ml", "live"], timeout: 600_000 },
       );
     });
   },
