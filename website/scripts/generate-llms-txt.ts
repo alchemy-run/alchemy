@@ -149,19 +149,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Project structure",
     intro:
-      "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
+      "File conventions for one stack, and monorepos with one stack or one per package.",
     pages: {
-      slugs: ["project-structure/file-layout", "project-structure/monorepo"],
+      slugs: [
+        "project-structure/file-layout",
+        "project-structure/monorepo-single-stack",
+        "project-structure/monorepo-multi-stack",
+      ],
     },
   },
   {
     heading: "Testing & observability",
     intro:
-      "Tests run against real clouds: the model, the end-to-end walkthrough, provider-lifecycle testing, and the harness reference.",
+      "Tests run against real clouds. Covers the testing walkthrough, provider-lifecycle testing, and the harness reference.",
     pages: {
       slugs: [
         "testing/index",
-        "testing/testing-a-stack",
         "testing/testing-providers",
         "testing/test-harness",
         "testing/observability",

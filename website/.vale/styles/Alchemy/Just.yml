@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is usually filler. Delete it unless it means 'only' or 'exactly'."
+link: https://github.com/alchemy-run/alchemy/blob/main/website/STYLE.md#no-marketing-language
+level: suggestion
+ignorecase: true
+tokens:
+  - just

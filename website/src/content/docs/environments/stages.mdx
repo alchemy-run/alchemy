@@ -1,63 +1,43 @@
 ---
 title: Stages
 description: Stages are isolated instances of a Stack, such as live_sam, dev_sam, staging, prod, or pr-42. Each has its own state and physical names.
-sidebar:
-  hidden: true
+type: explanation
 ---
 
-A **stage** is an isolated instance of a [Stack](/infrastructure-as-code/stack).
-Every deploy targets exactly one stage. Resources from different
-stages never overlap. With one program, Alchemy gives each developer
-their own sandbox, each PR its own preview, and production its own
-dedicated environment.
+A **stage** is an isolated instance of a [stack](/infrastructure-as-code/stack).
+Every deploy targets exactly one stage, and resources from different
+stages never overlap. One program gives each developer a sandbox, each
+PR a preview, and production its own environment.
 
 ## The default stage
 
-If you don't pass `--stage`, **`alchemy deploy`** uses **`live_$USER`**
-(e.g. `live_sam`) and **`alchemy dev`** uses **`dev_$USER`** (e.g.
-`dev_sam`). Each developer gets a personal cloud sandbox and a
-separate local-dev sandbox with no config, so a bare `alchemy
-dev` cannot replace resources you deployed. Existing default `alchemy
-dev` stacks keep the `dev_$USER` name. **`Test.make`** uses
-**`test_$USER`** the same way, so two people running the suite
-against one account don't collide.
+Without `--stage`, each command picks a per-user stage. Two developers
+in one account never collide, and a bare `alchemy dev` cannot replace
+resources you deployed.
 
 ```sh
 $ whoami
 sam
 
-$ alchemy deploy
-# deploys to stage `live_sam`
-
-$ alchemy dev
-# emulates locally as stage `dev_sam`
-
-$ alchemy destroy --stage dev_sam
-# tears down the local-dev stage
+$ alchemy deploy                 # stage live_sam
+$ alchemy dev                    # stage dev_sam, emulated locally
+$ alchemy destroy --stage dev_sam  # tears down the local-dev stage
 ```
 
-`--stage` and `$ALCHEMY_STAGE` still work on both commands. Pointing
-`alchemy dev` at the same stage as a deploy (`--stage prod`, or a
-shared `$ALCHEMY_STAGE`) is a live ⇄ local replacement of that stage.
+`Test.make` uses `test_$USER` the same way. `--stage` and
+`$ALCHEMY_STAGE` override the default on every command. See
+[CLI › Common options](/cli#common-options) for the full fallback order.
 
-The resolution order is:
-
-1. `--stage <name>` flag
-2. `$ALCHEMY_STAGE` environment variable (process env, `--env-file`, or `.env`)
-3. `live_${USER}` for deploy / destroy / plan / logs / drift
-   (`dev_${USER}` for `alchemy dev`)
-4. `live_unknown` / `dev_unknown` if no user is set
+Pointing `alchemy dev` at a deployed stage (`--stage prod`, or a shared
+`$ALCHEMY_STAGE`) replaces that stage's live resources with local ones.
 
 ## Common stage patterns
 
-| Stage             | Purpose                                              |
-| ----------------- | ---------------------------------------------------- |
-| `live_<user>`     | Per-developer cloud sandbox (`alchemy deploy` default) |
-| `dev_<user>`      | Per-developer local-dev sandbox (`alchemy dev` default) |
-| `test_<user>`     | Per-developer test sandbox (`Test.make` default)     |
-| `pr-<n>`          | Per-pull-request preview environment                 |
-| `staging`         | Shared pre-production                                |
-| `prod`            | Production                                           |
+Besides the per-user defaults, most teams use these stages:
+
+- `pr-<n>`: a preview environment per pull request.
+- `staging`: shared pre-production.
+- `prod`: production.
 
 Stage names must match `[a-z0-9][-_a-z0-9]*`.
 
@@ -71,26 +51,26 @@ alchemy destroy --stage pr-42
 
 Each stage gets its own:
 
-- **State file**: the persisted record of what's deployed
-- **Physical names**: `myapp-prod-bucket-abc123` vs
-  `myapp-live_sam-bucket-9b2c`
-- **Logs and metrics**: scoped per deployed function/worker
+- **State**: the persisted record of what's deployed.
+- **Physical names**: the stage is part of every generated name. See
+  [Resources › Physical name](/infrastructure-as-code/resource#physical-name)
+  for the pattern.
+- **Logs and metrics**: scoped per deployed Function or Worker.
 
-As a result, deploying or destroying one stage never touches
-another:
+Deploying or destroying one stage never touches another:
 
 ```sh
-$ alchemy deploy --stage live_sam    # -> myapp-live_sam-photos-a3f1
-$ alchemy deploy --stage pr-147      # -> myapp-pr_147-photos-9b2c
-$ alchemy deploy --stage prod        # -> myapp-prod-photos-7d4e
+$ alchemy deploy --stage live_sam    # -> myapp-photos-live-sam-<suffix>
+$ alchemy deploy --stage pr-147      # -> myapp-photos-pr-147-<suffix>
+$ alchemy deploy --stage prod        # -> myapp-photos-prod-<suffix>
 
 $ alchemy destroy --stage pr-147     # only removes pr-147 resources
 ```
 
 ## Per-stage configuration
 
-The `Stack` service exposes the current stage, so the same program
-can branch on it:
+The `Stack` service exposes the current stage, so one program can
+branch on it:
 
 ```typescript
 import { Stack } from "alchemy/Stack";
@@ -119,25 +99,14 @@ export class JobFunction extends AWS.Lambda.Function<JobFunction>()(
 
 ## Pull request previews
 
-A common CI pattern creates a fresh stage for every PR, comments the
-URL on the PR, and tears the stage down on merge.
-
-```yaml
-# .github/workflows/preview.yml
-- run: alchemy deploy --stage pr-${{ github.event.number }} --yes
-
-# on PR close:
-- run: alchemy destroy --stage pr-${{ github.event.number }} --yes
-```
-
-See the [CI guide](/environments/ci) for a complete example.
+CI can deploy a `pr-<n>` stage for every pull request and destroy it
+when the PR closes. See [CI](/environments/ci) for the full workflow.
 
 ## Stage vs profile
 
-Stages isolate what is deployed (state, physical names).
-[Profiles](/environments/profiles) isolate how alchemy authenticates
-to your cloud providers. The two are independent. You can pair a
-`prod` stage with a `prod` profile, or use the same credentials
+Stages isolate what is deployed. [Profiles](/environments/profiles)
+isolate which credentials Alchemy uses. The two are independent, so you
+can pair a `prod` stage with a `prod` profile or share credentials
 across many stages:
 
 ```sh
@@ -145,5 +114,9 @@ alchemy deploy --stage prod --profile prod
 alchemy deploy --stage pr-42 --profile default
 ```
 
-For the full set of CLI flags, see the
-[CLI reference](/cli#common-options).
+## Where next
+
+- [Profiles](/environments/profiles): connect cloud accounts and pick credentials per deploy.
+- [Secrets & Config](/environments/secrets): give each stage its own configuration values.
+- [CI](/environments/ci): deploy a preview stage per pull request.
+- [CLI](/cli#common-options): the `--stage` flag and its fallback order.

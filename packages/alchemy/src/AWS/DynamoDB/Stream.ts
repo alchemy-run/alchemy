@@ -18,6 +18,21 @@ export type StreamEvent<Data> = TableEvent<Data>;
  * the runtime-specific implementation layer (e.g. `Lambda.TableEventSource`)
  * on the Function.
  *
+ * ### Batching and Retries
+ * **Example:** Bound a Poison Record's Blast Radius
+ * ```typescript
+ * yield* DynamoDB.consumeTableChanges(
+ *   table,
+ *   {
+ *     streamViewType: "NEW_AND_OLD_IMAGES",
+ *     startingPosition: "TRIM_HORIZON",
+ *     bisectBatchOnFunctionError: true, // split a failing batch to isolate the bad record
+ *     maximumRetryAttempts: 3, // then stop retrying it
+ *   },
+ *   (stream) => Stream.runForEach(stream, (record) => Effect.log(record.eventName)),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface TableEventSource extends Binding.Service<
@@ -119,6 +134,20 @@ export interface StreamsProps extends TableEventSourceProps {
  *         Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb.Keys)}`),
  *       ),
  *     ),
+ * );
+ * ```
+ *
+ * @example Bound a poison record's blast radius
+ * ```typescript
+ * yield* DynamoDB.consumeTableChanges(
+ *   table,
+ *   {
+ *     streamViewType: "NEW_AND_OLD_IMAGES",
+ *     startingPosition: "TRIM_HORIZON",
+ *     bisectBatchOnFunctionError: true, // split a failing batch to isolate the bad record
+ *     maximumRetryAttempts: 3, // then stop retrying it
+ *   },
+ *   (stream) => Stream.runForEach(stream, (record) => Effect.log(record.eventName)),
  * );
  * ```
  *

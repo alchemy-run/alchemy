@@ -33,14 +33,14 @@ alchemy
    └─ cloudflare bootstrap|teardown|token|state logs
 ```
 
-Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
+Each command has its own page, including [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [provider check-env](/cli/provider), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
 
 ## Common options
 
 | Option              | Description                                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `--stage <name>`    | Stage to target. Falls back to `$ALCHEMY_STAGE`, then `live_$USER` (`dev_$USER` for `alchemy dev`). Must match `[a-z0-9]+([-_a-z0-9]+)*`. |
-| `--profile <name>`  | Auth profile from `~/.alchemy/profiles.json`. Overrides `$ALCHEMY_PROFILE`; defaults to `default`.                                      |
+| `--stage <name>`    | Stage to target. See the fallback order below. Must match `[a-z0-9]+([-_a-z0-9]+)*`. |
+| `--profile <name>`  | Auth profile from `~/.alchemy/profiles/<name>/`. Overrides `$ALCHEMY_PROFILE`. Defaults to `default`. |
 | `--env-file <path>` | File to load environment variables from. Defaults to `.env`.                                                                             |
 | `--yes`             | Yes to all prompts.                                                                                                                       |
 | `--no-input`        | Disable prompts and the interactive TUI. Commands that would need input fail instead of hanging.                                          |
@@ -48,9 +48,20 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 
 Use `--profile` with `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, or `state`.
 
-## The interactive TUI
+Without `--stage`, Alchemy picks the stage in this order:
 
-In an interactive terminal, `deploy`, `destroy`, and `plan` render a live TUI: the rendered plan, an arrow-key approval prompt, and per-resource apply progress that unmounts into the final output. Everywhere else the same commands emit plain line-oriented logs.
+1. `$ALCHEMY_STAGE`, read from the process environment, `--env-file`,
+   or `.env`.
+2. `live_$USER` for `deploy`, `destroy`, `plan`, `logs`, and `drift`, or
+   `dev_$USER` for `alchemy dev`. On Windows, `$USERNAME` stands in for
+   `$USER`.
+3. `live_unknown` or `dev_unknown` when no user is set.
+
+See [Stages](/environments/stages) for how stages isolate deployments.
+
+## Interactive mode
+
+In an interactive terminal, `deploy`, `destroy`, and `plan` render a live TUI with the rendered plan, an arrow-key approval prompt, and per-resource apply progress that unmounts into the final output. Everywhere else the same commands emit plain line-oriented logs.
 
 The `--no-input` flag and environment variables override the detection, in this order:
 

@@ -1,57 +1,42 @@
 ---
 title: Custom Auth Provider
 description: Add profile and CI credentials for a third-party API with a generated AuthProvider.
+type: how-to
 ---
 
-The [Custom Provider](/infrastructure-as-code/custom-provider) guide builds a
-Stripe `Product` provider whose lifecycle handlers need an API key. This guide
-builds a lazy `StripeCredentials` service backed by an Auth Provider. The key
-comes from the configured [Profile](/environments/profiles), from env vars in
-CI, or from a refreshable session. It never comes from props or hardcoded
-config. For a token-shaped credential, `makeStoredAuthProvider` generates the
-whole provider from a field list. The in-repo
+Let users connect your provider's account with `alchemy profile edit`
+instead of an env var. This guide starts from the Stripe provider in
+[Custom Provider](/infrastructure-as-code/custom-provider), whose
+[`StripeCredentials`](/infrastructure-as-code/custom-provider#credentials)
+service reads `STRIPE_API_KEY` through `fromEnv()`. You replace that
+layer with one backed by an [auth provider](/environments/auth-providers).
+
+For a token-shaped credential, `makeStoredAuthProvider` generates the
+whole auth provider from a field list. The in-repo
 [Neon provider](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/AuthProvider.ts)
 has this shape.
 
-For the profile method contract, CI resolver, registry, and lazy resolution,
-see [Auth Providers](/environments/auth-providers).
+:::note
+Alchemy already ships `alchemy/Stripe` with a `Stripe` auth provider,
+and this guide rebuilds it as an example. The registry is keyed by
+name, and a second registration overwrites the first, so a real
+integration needs a name no built-in provider uses.
+:::
 
-## Declare a lazy credentials service
+## Generate the auth provider
 
-The service value is an `Effect`, not a resolved struct:
-
-```typescript
-// src/stripe/Credentials.ts
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-
-export class StripeCredentials extends Context.Service<
-  StripeCredentials,
-  Effect.Effect<{ apiKey: Redacted.Redacted<string> }>
->()("StripeCredentials") {}
-```
-
-Provider Layers are built on every CLI invocation, before any Profile is
-configured, so nothing may resolve at Layer construction. Consumers run the
-Effect only when an operation executes. A session-backed implementation can
-put refresh logic inside it. Every built-in credentials service has this shape
-(`CloudflareEnvironment`, `AWSEnvironment`, the distilled SDK `Credentials`
-tags).
-
-## Generate the Auth Provider
-
-`makeStoredAuthProvider` turns a field list into a complete provider. It
-includes interactive prompts, flag-driven configuration
-(`--method stored --set apiKey=...`), schema-validated persistence at
-`~/.alchemy/credentials/{profile}/stripe-stored.json`, `login`/`logout`,
-structured `details` for `alchemy profile show`, and a typed `NeedsReauth`
-failure when the credential file is missing.
+`makeStoredAuthProvider` builds interactive prompts, flag-driven setup
+(`--method stored --set apiKey=...`), and the `details` that
+`alchemy profile show` renders. It stores the values in
+`~/.alchemy/profiles/{profile}/stripe.json`.
 
 ```typescript
 // src/stripe/AuthProvider.ts
 import { AuthError } from "alchemy/Auth/AuthProvider";
-import { makeStoredAuthProvider } from "alchemy/Auth/StoredAuthProvider";
+import {
+  makeStoredAuthProvider,
+  storedSecret,
+} from "alchemy/Auth/StoredAuthProvider";
 import { getEnvRedactedRequired } from "alchemy/Auth/Env";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -67,6 +52,8 @@ export type StripeResolvedCredentials = {
 export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
   makeStoredAuthProvider<StripeResolvedCredentials>({
     provider: STRIPE_AUTH_PROVIDER_NAME,
+    // One prompt and one --set key per field, stored under the same name
+    // next to method: "stored". validate applies to both paths.
     fields: [
       {
         name: "apiKey",
@@ -78,9 +65,11 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
     ],
     toResolved: (values, source) => ({
       type: "apiKey",
-      apiKey: Redacted.make(values.apiKey!),
+      // storedSecret wraps a string in Redacted, and passes Redacted through
+      apiKey: storedSecret(values.apiKey) ?? Redacted.make(""),
       source: { type: source },
     }),
+    // CI credentials, used instead of the profile
     readEnvironment: getEnvRedactedRequired("STRIPE_API_KEY").pipe(
       Effect.map((apiKey) => ({
         type: "apiKey" as const,
@@ -88,6 +77,7 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
         source: { type: "env" as const },
       })),
     ),
+    // Every variable readEnvironment consumes. Required when it is set.
     environment: [
       {
         name: "STRIPE_API_KEY",
@@ -99,25 +89,22 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
   });
 ```
 
-`fields` drive interactive prompts and `--set`. Each field name is also the
-property persisted in the credentials file, alongside `method: "stored"`
-(the `--method` value). Validation applies to both paths.
-The generated `storedSchema` validates credential reads and writes.
-`readEnvironment` resolves CI credentials, and `environment` documents
-the variables it consumes. Missing stored credentials appear as
-`NeedsReauth` in the profile UI.
+The generated `storedSchema` validates every credential read and write.
+An invalid or incomplete stored entry fails with an `AuthError` that
+tells you to run `alchemy profile edit --profile <profile> --reconfigure Stripe`.
+Registration fails if a provider sets `readEnvironment` without an
+`environment` declaration.
 
-## Bridge the Auth Provider to the credentials service
+## Bridge the auth provider to the credentials service
 
-`fromAuthProvider()` connects the two. It looks up the registered provider,
-loads (or interactively configures) the Profile's `{ method }`, runs `read`,
-and provides the result as the `StripeCredentials` Effect:
+`resolveProviderConfig` looks up the registered provider and returns its
+credentials as a lazy Effect. Provide that Effect as `StripeCredentials`,
+next to the `fromEnv()` layer from Custom Provider:
 
 ```typescript
 // src/stripe/Credentials.ts (additions)
-import { resolveProviderConfig } from "alchemy/Auth/Profile";
+import { resolveProviderConfig } from "alchemy/Auth";
 import type { StoredAuthConfig } from "alchemy/Auth/StoredAuthProvider";
-import * as Layer from "effect/Layer";
 import {
   STRIPE_AUTH_PROVIDER_NAME,
   type StripeResolvedCredentials,
@@ -132,104 +119,86 @@ export const fromAuthProvider = () =>
         StripeResolvedCredentials
       >(STRIPE_AUTH_PROVIDER_NAME);
 
+      // Return the Effect, not its result. Nothing resolves until a handler runs it.
       return yield* resolve.pipe(
         Effect.map((creds) => ({ apiKey: creds.apiKey })),
         Effect.orDie,
-        Effect.cached,
+        Effect.cached, // read and its file lock run at most once per process
       );
     }),
   );
 ```
 
-Outside CI, `resolveProviderConfig` applies the standard profile selection
-order. It then returns the stored config, or runs `configure` and persists the
-answer. In CI it bypasses profiles and returns `readEnvironment`. A missing
-explicit local Profile fails with a command to create it. The value returned
-to `Layer.effect` is the *Effect* (closed by `Effect.cached`), not its result.
-Nothing resolves until a handler runs it. Within one process, `read` and its
-file lock run at most once. Every built-in bridge (Neon, Planetscale,
-Cloudflare) has this shape. Credentials that expire should use
-`cacheUntilExpiry` from `alchemy/Auth/CredentialsCache` in place of
-`Effect.cached`. A long dev session then re-resolves and does not keep a dead
-token.
+`resolve` reads `STRIPE_API_KEY` in CI or whenever it is set, and the
+selected profile otherwise, as described in
+[Auth Providers › Where credentials come from](/environments/auth-providers#where-credentials-come-from).
+It never prompts. An unconfigured provider fails with the
+`alchemy profile edit --profile <profile> --add Stripe` command, and a
+missing explicit profile fails with a command to create it.
+
+For credentials that expire, use `cacheUntilExpiry` from
+`alchemy/Auth/CredentialsCache` in place of `Effect.cached`. A long dev
+session then re-resolves instead of keeping a dead token.
 
 ## Bundle into `providers()`
 
-Merge the auth machinery into the same `providers()` Layer that carries the
-resource providers. This mirrors
-[`Neon/Providers.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/Providers.ts):
+Swap `fromEnv()` for the auth provider in the `providers()` layer. This
+mirrors [`Neon/Providers.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Neon/Providers.ts):
 
-```typescript
-// src/stripe/Providers.ts
-import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Provider from "alchemy/Provider";
-import * as Layer from "effect/Layer";
-import { StripeAuth } from "./AuthProvider.ts";
-import * as Credentials from "./Credentials.ts";
-import { StripeProduct, StripeProductProvider } from "./Product.ts";
+```diff lang="typescript"
+ // src/stripe/Providers.ts
++import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
++import { ProfileStoreLive } from "alchemy/Auth/Profile";
+ import * as Provider from "alchemy/Provider";
+ import * as Layer from "effect/Layer";
++import { StripeAuth } from "./AuthProvider.ts";
+ import * as Credentials from "./Credentials.ts";
+ import { StripeProduct, StripeProductProvider } from "./Product.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Stripe",
-) {}
+ // ... Providers class unchanged
 
-export const providers = () =>
-  Layer.effect(Providers, Provider.collection([StripeProduct])).pipe(
-    Layer.provide(StripeProductProvider()),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
-    Layer.provideMerge(StripeAuth),
-    Layer.provideMerge(ProfileStoreLive),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
-  );
+ export const providers = () =>
+   Layer.effect(Providers, Provider.collection([StripeProduct])).pipe(
+     Layer.provide(StripeProductProvider()),
+-    Layer.provideMerge(Credentials.fromEnv()),
++    Layer.provideMerge(Credentials.fromAuthProvider()),
++    Layer.provideMerge(StripeAuth),           // registers "Stripe" with the CLI
++    Layer.provideMerge(ProfileStoreLive),     // file-system services for profiles
++    Layer.provideMerge(CredentialsStoreLive),
++    Layer.orDie,
+   );
 ```
 
-`StripeAuth` registers the provider so the alchemy CLI discovers it.
-`ProfileStoreLive` and `CredentialsStoreLive` give the auth machinery its
-file-system services. Providers that call APIs through an Effect `HttpClient`
-also merge `FetchHttpClient.layer` here, as Neon does.
+Providers that call APIs through an Effect `HttpClient` also merge
+`FetchHttpClient.layer` here, as Neon does. The handlers already
+double-yield `StripeCredentials`, so they need no change.
 
-## Consume it from a lifecycle handler
-
-Inside `reconcile` (or `delete`, `read`), double-yield the service. The first
-`yield*` gets the lazy Effect out of the service, and the second runs it:
-
-```typescript
-// src/stripe/Product.ts
-reconcile: Effect.fn(function* ({ news, output }) {
-  const { apiKey } = yield* yield* StripeCredentials;
-  const stripe = new Stripe(Redacted.value(apiKey));
-  // observe / ensure / sync — see the Custom Provider guide
-}),
-```
-
-The built-ins use the same idiom (`yield* AWSEnvironment.current`,
-`yield* yield* CloudflareEnvironment`). It demands credentials only when an
-operation runs and never at Layer construction.
+Profile commands always include Alchemy's built-in providers. They find
+yours by importing `alchemy.run.ts` when it exists, or the entrypoint
+passed with `--config <path>`. A missing `alchemy.run.ts` is ignored,
+but an error in an existing or explicit entrypoint fails the command.
 
 ## Try it
 
 ```sh
-alchemy deploy             # first run: prompts for credentials, saves them to the profile
+alchemy profile edit --add Stripe            # connect the account once
+alchemy deploy
 alchemy profile refresh --provider Stripe    # re-authenticate without changing the method
 alchemy profile edit --reconfigure Stripe    # replace the stored credentials interactively
 
 # non-interactive (agents, scripts): value from env, stdin, or a literal
-alchemy profile edit --add stripe --method stored --set apiKey=env:STRIPE_API_KEY
-op read op://vault/stripe/key | alchemy profile edit --add stripe --method stored --set apiKey=-
+alchemy profile edit --add Stripe --method stored --set apiKey=env:STRIPE_API_KEY
+op read op://vault/stripe/key | alchemy profile edit --add Stripe --method stored --set apiKey=-
 
-alchemy profile show       # renders your provider's details
+alchemy profile show                           # renders your provider's details
 alchemy provider check-env --provider stripe   # CI preflight for STRIPE_API_KEY
 ```
 
-In CI, profile resolution is bypassed. A pipeline only needs `STRIPE_API_KEY`
-set, and no profile file is created.
+In CI, a pipeline only needs `STRIPE_API_KEY` set, and no profile file
+is created.
 
 ## Where next
 
-- [Auth Providers](/environments/auth-providers) documents the profile contract,
-  CI resolver, registry, and lazy resolution.
-- [Custom Provider](/infrastructure-as-code/custom-provider) covers the
-  lifecycle handlers these credentials feed.
-- [Profiles](/environments/profiles) covers switching, inspecting, and storing
-  the per-provider config.
+- [Auth Providers](/environments/auth-providers): how credentials resolve, refresh, and lock.
+- [Custom Provider](/infrastructure-as-code/custom-provider): the lifecycle handlers these credentials feed.
+- [Profiles](/environments/profiles): switch, inspect, and store the per-provider config.
