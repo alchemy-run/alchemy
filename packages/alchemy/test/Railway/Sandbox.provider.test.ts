@@ -14,8 +14,8 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import { RailwayEnvironment } from "@/Railway/Environment.ts";
 import * as TestClock from "effect/testing/TestClock";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 const testLayer = (client: HttpClient.HttpClient) =>
   SandboxProvider().pipe(

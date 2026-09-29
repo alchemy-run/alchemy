@@ -1,7 +1,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64 } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "./Provider.ts";
 import { Resource } from "./Resource.ts";
@@ -200,7 +200,7 @@ const signatureAlgorithm = (keyType: SupportedKeyType): Uint8Array => {
 };
 
 const pemWrap = (der: Uint8Array): string => {
-  const lines = Encoding.encodeBase64(der).match(/.{1,64}/g) ?? [];
+  const lines = Base64.encode(der).match(/.{1,64}/g) ?? [];
   return `-----BEGIN CERTIFICATE REQUEST-----\n${lines.join("\n")}\n-----END CERTIFICATE REQUEST-----\n`;
 };
 

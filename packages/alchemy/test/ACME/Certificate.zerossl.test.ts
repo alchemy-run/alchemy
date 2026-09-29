@@ -7,7 +7,7 @@ import * as ZeroSsl from "@distilled.cloud/zerossl";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /**
  * ZeroSSL has no staging environment, so this runs against production

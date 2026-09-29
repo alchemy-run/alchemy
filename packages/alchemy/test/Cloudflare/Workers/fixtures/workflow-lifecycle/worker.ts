@@ -4,11 +4,11 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64Url } from "effect/encoding";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export class Journal extends Cloudflare.DurableObject<Journal>()(
   "LifecycleJournal",
@@ -107,7 +107,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             // Match the first attempt's primitive failure to exercise message spoofing.
             const body = yield* Effect.sync(
               () =>
-                `${Encoding.encodeBase64Url(
+                `${Base64Url.encode(
                   JSON.stringify({
                     workflow: JSON.stringify([
                       "WorkflowLifecycleStack",
@@ -126,7 +126,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             );
             return yield* Effect.sync(
               () =>
-                `[alchemy-workflow-failure:v1]${Encoding.encodeBase64Url(new Uint8Array(digest))}:${body}`,
+                `[alchemy-workflow-failure:v1]${Base64Url.encode(new Uint8Array(digest))}:${body}`,
             );
           })
         : undefined;

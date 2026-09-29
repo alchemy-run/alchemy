@@ -32,7 +32,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { dockerAvailable } from "../Local/fixtures/raw.ts";
 import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 import DevProbeFunctionLive, {

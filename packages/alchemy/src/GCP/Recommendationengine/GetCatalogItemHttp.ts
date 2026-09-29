@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { CatalogsCatalogItem } from "./CatalogsCatalogItem.ts";
 import { bindGcpHost } from "../Host.ts";
 import {

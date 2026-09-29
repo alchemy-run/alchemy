@@ -9,7 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   GCP_AUTH_PROVIDER_NAME,

@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import ExplicitNameWorkflowWorker, {
   EXPLICIT_WORKFLOW_NAME,
 } from "./fixtures/explicit-name-worker.ts";

@@ -30,7 +30,7 @@ import { DestroyError } from "@/Apply";
 import { AppDeletionAmbiguous } from "@/Fly/App";
 import * as Cause from "effect/Cause";
 import * as Fiber from "effect/Fiber";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { engineActor } from "./fixtures/actors.ts";
 import {
   transportProxy,
@@ -39,7 +39,7 @@ import {
 } from "./fixtures/transport.ts";
 import { readinessRoles, DeploymentRecoveryAmbiguous } from "@/Fly/bluegreen";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Exit from "effect/Exit";
 import {
   makeReadinessControl,
@@ -47,7 +47,7 @@ import {
 } from "./fixtures/http-readiness-control.ts";
 import { makeMachineLeases } from "@/Fly/leases";
 import * as Clock from "effect/Clock";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
 import { type MachineContainer, type MachineProps } from "@/Fly/Machine";
 import { ReplicaChecksNotPassing } from "@/Fly/replicas";

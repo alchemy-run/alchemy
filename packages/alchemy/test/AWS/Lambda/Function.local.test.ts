@@ -40,7 +40,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { fileURLToPath } from "node:url";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {

@@ -53,7 +53,7 @@ Add `/health` so you (and later, Fly checks) can probe the process:
 
 ```diff lang="typescript"
 // src/api.ts
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
 // ...
     return {
 -      fetch: Effect.succeed(HttpServerResponse.text("Hello from Fly!")),

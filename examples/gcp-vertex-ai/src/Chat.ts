@@ -1,7 +1,7 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 // Gemini 2.5 Flash on the `global` endpoint — cheap, fast, and routed to
 // any region with capacity. Any Gemini model id works here; pass

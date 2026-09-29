@@ -5,7 +5,7 @@ import * as kendra from "@distilled.cloud/aws/kendra";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import KendraTestFunctionLive, { KendraTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };

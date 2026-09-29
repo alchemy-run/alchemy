@@ -1,7 +1,7 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -17,8 +17,8 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Report.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import {
@@ -39,7 +39,7 @@ export interface RegistryCredentials {
 const RegistryAuth = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) => {
-      const decoded = Encoding.decodeBase64(value);
+      const decoded = Base64.decode(value);
       return Result.isSuccess(decoded) && decoded.success.indexOf(58) > 0;
     }),
   ),
@@ -62,7 +62,7 @@ const encodeRegistryAuth = (credentials: RegistryCredentials) => {
   const password = Redacted.isRedacted(credentials.password)
     ? Redacted.value(credentials.password)
     : credentials.password;
-  return Encoding.encodeBase64(`${credentials.username}:${password}`);
+  return Base64.encode(`${credentials.username}:${password}`);
 };
 
 // `network disconnect` reports a container that already left the network as

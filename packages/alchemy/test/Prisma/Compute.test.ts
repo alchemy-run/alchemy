@@ -27,10 +27,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
 import { fromApiToken } from "@distilled.cloud/prisma";
@@ -3843,7 +3843,7 @@ describe(
             [
               'import * as Prisma from "alchemy/Prisma";',
               'import * as Effect from "effect/Effect";',
-              'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+              'import * as HttpServerResponse from "effect/http/HttpServerResponse";',
               "",
               "export default Prisma.Compute(",
               '  "App",',
@@ -3998,7 +3998,7 @@ describe(
             [
               'import * as Prisma from "alchemy/Prisma";',
               'import * as Effect from "effect/Effect";',
-              'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+              'import * as HttpServerResponse from "effect/http/HttpServerResponse";',
               "",
               "export const Api = Prisma.Compute(",
               '  "App",',

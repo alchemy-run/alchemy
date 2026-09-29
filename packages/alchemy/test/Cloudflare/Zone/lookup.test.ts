@@ -6,7 +6,7 @@ import {
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 describe(
   "Cloudflare zone lookup",

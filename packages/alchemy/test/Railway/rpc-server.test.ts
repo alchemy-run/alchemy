@@ -8,8 +8,8 @@ import {
 } from "@/Railway/rpc-token.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpEffect from "effect/unstable/http/HttpEffect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 const TOKEN = "a".repeat(64);
 const PRIVATE_URL = "http://greeter.railway.internal:3000";

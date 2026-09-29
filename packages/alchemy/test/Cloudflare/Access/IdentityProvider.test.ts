@@ -13,7 +13,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import IdpLookupWorker from "./fixtures/idp-lookup-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });

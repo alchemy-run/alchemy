@@ -5,7 +5,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as RpcClient from "effect/rpc/RpcClient";
 import { CallerRpcs, TargetRpcs } from "./fixtures/rpc-worker-binding/group.ts";
 import Stack from "./fixtures/rpc-worker-binding/stack.ts";
 

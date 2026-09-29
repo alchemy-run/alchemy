@@ -28,7 +28,7 @@ import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";

@@ -1,6 +1,6 @@
 import { upgradeWebSocket } from "@neon/functions";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { FunctionRequest } from "./FunctionEnvironment.ts";
 import { FunctionUpgradeSockets } from "./FunctionUpgrade.ts";

@@ -12,7 +12,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, test as unit } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import NativeTracingWorker, {

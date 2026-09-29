@@ -7,8 +7,8 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Command, Flag } from "effect/unstable/cli";
-import * as Argument from "effect/unstable/cli/Argument";
+import { Command, Flag } from "effect/cli";
+import * as Argument from "effect/cli/Argument";
 
 import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";

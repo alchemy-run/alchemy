@@ -5,8 +5,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/unstable/cli/Argument";
-import * as Flag from "effect/unstable/cli/Flag";
+import * as Argument from "effect/cli/Argument";
+import * as Flag from "effect/cli/Flag";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { UserInputError } from "./errors.ts";
 

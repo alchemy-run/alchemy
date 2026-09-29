@@ -23,7 +23,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Test from "./VpcTest.ts";
 import { assertVpcGone } from "./Gone.ts";
 

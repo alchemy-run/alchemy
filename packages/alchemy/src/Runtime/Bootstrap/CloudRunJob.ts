@@ -11,7 +11,7 @@ import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Logger from "effect/Logger";
 import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";

@@ -3,9 +3,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Layer from "effect/Layer";
-import * as HttpServer from "effect/unstable/http/HttpServer";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as HttpServer from "effect/http/HttpServer";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as ChildProcess from "effect/process/ChildProcess";
 import {
   PlatformServices,
   runMain,

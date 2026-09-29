@@ -30,7 +30,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
+import type { HttpClient } from "effect/http/HttpClient";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -248,7 +248,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
@@ -345,7 +345,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";

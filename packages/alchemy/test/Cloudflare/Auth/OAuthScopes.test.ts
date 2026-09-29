@@ -16,7 +16,7 @@ import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 describe(
   "Cloudflare public OAuth client",

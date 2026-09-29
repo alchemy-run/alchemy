@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpServerResponse } from "effect/http";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,

@@ -2,7 +2,7 @@ import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { GetGoogleServiceAccount } from "./GetGoogleServiceAccount.ts";
 import type { TransferJob } from "./TransferJob.ts";
 import { bindGcpHost } from "../Host.ts";

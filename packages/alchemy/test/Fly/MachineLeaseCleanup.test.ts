@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
 

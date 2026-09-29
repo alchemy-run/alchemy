@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import { MANIFEST_FILE, ManifestJson, type Manifest } from "../Manifest.ts";
 import { PkgApi, type TarballRef } from "../Protocol.ts";
 

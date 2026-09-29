@@ -2,8 +2,8 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { DurableObjectState } from "./DurableObjectState.ts";
 
 export type RawWebSocket = cf.WebSocket;

@@ -28,9 +28,9 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
-import * as Argument from "effect/unstable/cli/Argument";
-import * as Command from "effect/unstable/cli/Command";
-import * as Flag from "effect/unstable/cli/Flag";
+import * as Argument from "effect/cli/Argument";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 
 import { parsePlan } from "./Plan.ts";
 

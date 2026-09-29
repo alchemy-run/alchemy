@@ -33,7 +33,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { spawnSync } from "node:child_process";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";

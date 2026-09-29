@@ -2,8 +2,8 @@ import * as RpcWebSocketClient from "alchemy/Cloudflare/RpcWebSocketClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as Socket from "effect/unstable/socket/Socket";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as Socket from "effect/socket/Socket";
 import { BrowserRpcs } from "./rpcs.ts";
 
 export class BrowserClient extends Context.Service<BrowserClient>()(

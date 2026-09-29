@@ -18,10 +18,10 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Headers from "effect/unstable/http/Headers";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Headers from "effect/http/Headers";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import type * as vite from "vite";
@@ -99,7 +99,7 @@ export const createDefaultContext = async (): Promise<
   );
 };
 
-const closeScope = async (scope: Scope.Scope) => {
+const closeScope = async (scope: Scope.Closeable) => {
   await Effect.runPromiseExit(
     Scope.closeUnsafe(scope, Exit.void) ?? Effect.void,
   );

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /**
  * Reads a `Config` value in Init (#1831). Changing the value must redeploy the
