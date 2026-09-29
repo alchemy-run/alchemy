@@ -19,7 +19,7 @@ const loop = (title: string, notes: string, lit?: LoopPart[], focus?: LoopPart[]
   notes,
   lit,
   focus: focus ?? lit,
-  frames: lit ? 20 : 60,
+  frames: 20,
 });
 
 /** A code step from the chat app in `snippets/chat/`. */
@@ -105,30 +105,86 @@ const card = (text: string, tone: Tone = "construct") => ({ text, tone });
 const WORKER = { snippet: "Chat.ts", file: "src/Chat.ts", group: "chat", fontSize: 22 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 25 };
 
-// ── act 0: the loop ──────────────────────────────────────────────────────
+// ── act 0: the loop, introduced one piece at a time ─────────────────────
+/** A map step that draws only `show`, everything lit. */
+const reveal = (title: string, notes: string, show: LoopPart[], focus?: LoopPart[]): LoopSpec => ({
+  kind: "loop",
+  title,
+  notes,
+  show,
+  focus,
+  frames: 30,
+});
+const MACHINE: LoopPart[] = ["edit", "types", "local", "live", "feedback"];
+const PULL: LoopPart[] = ["push", "pr", "prTest", "comment"];
+const MAIN: LoopPart[] = ["merge", "staging", "stagingTest", "prod"];
 const theLoop: StepSpec[] = [
+  {
+    kind: "slide",
+    layout: "title",
+    title: "The fastest feedback loop for agents",
+    eyebrow: "Alchemy",
+    heading: "The fastest feedback loop for agents",
+    subtitle: "One program and one test file, from an edit to production",
+    notes:
+      "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
+  },
+  {
+    kind: "slide",
+    layout: "section",
+    title: "Agents write code faster than we can check it",
+    heading: "Agents write code faster than we can check it",
+    subtitle: "Writing code is no longer the slow part",
+    notes:
+      "Agents are very good at writing code now. What slows them down, and what makes them wrong, is everything that comes after: finding out whether the code actually works.",
+  },
+  reveal(
+    "An agent can change your code in seconds",
+    "Here's the agent. It edits code in seconds, and it'll happily tell you it's done.",
+    ["edit"],
+  ),
+  reveal(
+    "Getting that change safely into production takes much longer",
+    "Over here is production. Between the two is everything that decides whether that edit was right. Each of those steps is feedback, and the agent can only move as fast as the slowest one it has to wait for.",
+    ["edit", "prod"],
+  ),
+  reveal(
+    "The type checker is the first thing that answers",
+    "The first check is the type checker. It answers in milliseconds, and it points at the exact line. Every failure goes back to the agent, which fixes it and tries again.",
+    ["edit", "types", "feedback", "prod"],
+    ["types"],
+  ),
+  reveal(
+    "Tests on emulated services answer in seconds",
+    "Next, tests that run the whole app on your machine, against emulated cloud services. Seconds, free, and the agent can run them after every change.",
+    ["edit", "types", "local", "feedback", "prod"],
+    ["local"],
+  ),
+  reveal(
+    "Tests against the real cloud catch what emulators miss",
+    "Then the same tests against the real cloud, in a stage of their own. Slower, but that's where permissions, networking and real service behavior show up.",
+    [...MACHINE, "prod"],
+    ["live"],
+  ),
+  reveal(
+    "A pull request gets its own copy of the app to test",
+    "When it's green locally, the agent opens a pull request. CI deploys a copy of the app just for that PR, runs the same tests, and comments with a link to try it.",
+    [...MACHINE, ...PULL, "prod"],
+    PULL,
+  ),
+  reveal(
+    "Merging runs the same tests again on staging",
+    "Merging deploys staging and runs the same tests one more time. Only a green staging goes to prod.",
+    [...MACHINE, ...PULL, ...MAIN],
+    ["merge", "staging", "stagingTest"],
+  ),
   loop(
     "This is every step between an edit and production",
-    "This talk is about one thing: how fast an agent can go from an edit to something it knows works in production. Here's the whole path. Edit, type-check, test on your machine, open a pull request, test that in the cloud, merge, test staging, ship to prod.",
-  ),
-  loop(
-    "The fastest feedback happens on your machine",
-    "The top lane is the inner loop. Types in milliseconds, tests against emulated services in seconds, and the same tests against the real cloud when it matters. The agent runs all of it by itself.",
-    ["edit", "types", "local", "live", "feedback"],
-  ),
-  loop(
-    "Every pull request gets its own copy of the app",
-    "Once the inner loop is green, the agent opens a pull request. CI deploys a copy of the app just for that PR, runs the same tests against it, and comments with a link.",
-    ["push", "pr", "prTest", "comment"],
-  ),
-  loop(
-    "And main runs the same tests against staging",
-    "Merging deploys staging and runs the same tests again. Only a green staging goes to prod. Staging is also what every pull request branches from.",
-    ["merge", "staging", "stagingTest", "prod"],
+    "That's the whole path. Three lanes: your machine, the pull request, and main.",
   ),
   loop(
     "Every failure goes straight back to the agent",
-    "At every step, a failure is feedback the agent can read and act on. The faster and more precise that feedback, the faster the agent converges. Let's build this loop, one step at a time.",
+    "At every step, a failure is feedback the agent can read and act on. The faster and more precise that feedback, the faster it converges on something that works. The rest of this talk builds each of these steps.",
     undefined,
     ["feedback"],
   ),

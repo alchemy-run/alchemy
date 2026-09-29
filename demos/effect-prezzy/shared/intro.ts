@@ -265,6 +265,8 @@ export interface LoopStep {
   kind: "loop";
   title: string;
   notes: string;
+  /** Parts drawn so far, for building the map up; omit to draw everything. */
+  show?: LoopPart[];
   lit?: LoopPart[];
   focus?: LoopPart[];
   frames: number;

@@ -57,77 +57,101 @@ const ELBOWS: { from: LoopPart; to: LoopPart; label: string }[] = [
 ];
 
 const DIM = 0.26;
+const isShown = (step: LoopStep | undefined, id: LoopPart) => !!step && (!step.show || step.show.includes(id));
 const isLit = (step: LoopStep | undefined, id: LoopPart) => !step || !step.lit || step.lit.includes(id);
 const glows = (step: LoopStep | undefined, id: LoopPart) => !!step?.focus?.includes(id);
+/** The feedback arc runs from the last check drawn on your machine back to the edit. */
+const arcFrom = (step: LoopStep | undefined): LoopPart | undefined =>
+  (["live", "local", "types"] as const).find((id) => isShown(step, id));
 
 /**
- * The whole loop, full screen. The first time it appears it draws itself in
- * order; after that, only what's lit and what glows changes between steps.
+ * The whole loop, full screen. Parts appear as they're introduced (`show`),
+ * drawing themselves in order; after that, only what's lit and what glows
+ * changes between steps.
  */
 export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopStep; local: number }) => {
-  const fresh = !prev;
   const t = interpolate(local, [0, 10], [0, 1], clamp);
   const level = (id: LoopPart) => {
     const now = isLit(step, id) ? 1 : DIM;
-    const then = fresh ? now : isLit(prev, id) ? 1 : DIM;
+    const then = !isShown(prev, id) ? now : isLit(prev, id) ? 1 : DIM;
     return then + (now - then) * t;
   };
   const glow = (id: LoopPart) => {
     const now = glows(step, id) ? 1 : 0;
-    const then = fresh ? 0 : glows(prev, id) ? 1 : 0;
+    const then = glows(prev, id) ? 1 : 0;
     return then + (now - then) * interpolate(local, [4, 14], [0, 1], clamp);
   };
-  // First appearance: lane by lane, node by node.
-  const order = (id: LoopPart) => NODES.findIndex((n) => n.id === id);
-  const appear = (id: LoopPart) => (fresh ? interpolate(local, [order(id) * 2, order(id) * 2 + 6], [0, 1], clamp) : 1);
-  const draw = (id: LoopPart) => (fresh ? drawProgress(local, order(id) * 2 + 4, 8) : 1);
+  // New parts appear one after another, in reading order.
+  const fresh = NODES.filter((n) => isShown(step, n.id) && !isShown(prev, n.id)).map((n) => n.id);
+  const order = (id: LoopPart) => fresh.indexOf(id);
+  const appear = (id: LoopPart) => {
+    if (!isShown(step, id)) return 0;
+    const k = order(id);
+    return k < 0 ? 1 : interpolate(local, [k * 2, k * 2 + 6], [0, 1], clamp);
+  };
+  const draw = (id: LoopPart) => {
+    const k = order(id);
+    return k < 0 ? 1 : drawProgress(local, k * 2 + 4, 8);
+  };
+  const linkShown = (a: LoopPart, b: LoopPart) => isShown(step, a) && isShown(step, b);
 
+  const from = arcFrom(step);
+  const feedbackOn = !!from && isShown(step, "feedback") && isShown(step, "edit");
+  const feedbackNew = feedbackOn && (!isShown(prev, "feedback") || arcFrom(prev) !== from);
   const feedbackLevel = level("feedback");
   const feedbackGlow = glow("feedback");
-  const a = pos("live");
+  const a = from ? pos(from) : pos("live");
   const b = pos("edit");
   const arcTop = ROWS[0]! - NODE.h / 2 - 110;
+  const feedbackColor = feedbackGlow > 0 ? "#7ee787" : TONE.bad;
 
   return (
     <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
-      {LANES.map((lane, i) => (
-        <g key={lane.label} opacity={fresh ? interpolate(local, [i * 8, i * 8 + 6], [0, 1], clamp) : 1}>
-          <text x={120} y={ROWS[i]! + 14} fontFamily={hand} fontWeight={700} fontSize={46} fill={lane.color}>
-            {lane.label}
-          </text>
-        </g>
-      ))}
+      {LANES.map((lane, i) => {
+        const inLane = NODES.filter((n) => n.row === i);
+        if (!inLane.some((n) => isShown(step, n.id))) return null;
+        const isNew = !inLane.some((n) => isShown(prev, n.id));
+        return (
+          <g key={lane.label} opacity={isNew ? interpolate(local, [0, 6], [0, 1], clamp) : 1}>
+            <text x={120} y={ROWS[i]! + 14} fontFamily={hand} fontWeight={700} fontSize={46} fill={lane.color}>
+              {lane.label}
+            </text>
+          </g>
+        );
+      })}
 
       {/* The feedback arc: every failure goes back to the agent. */}
-      <g opacity={(fresh ? drawProgress(local, 30, 10) : 1) * feedbackLevel}>
-        <path
-          d={`M ${a.x} ${a.y - NODE.h / 2 - 10} C ${a.x} ${arcTop}, ${b.x} ${arcTop}, ${b.x} ${b.y - NODE.h / 2 - 12}`}
-          fill="none"
-          stroke={feedbackGlow > 0 ? "#7ee787" : TONE.bad}
-          strokeWidth={3.5}
-          strokeDasharray="12 10"
-        />
-        <path
-          d={`M ${b.x - 11} ${b.y - NODE.h / 2 - 28} L ${b.x} ${b.y - NODE.h / 2 - 10} L ${b.x + 11} ${b.y - NODE.h / 2 - 28}`}
-          fill="none"
-          stroke={feedbackGlow > 0 ? "#7ee787" : TONE.bad}
-          strokeWidth={3.5}
-          strokeLinecap="round"
-        />
-        <text
-          x={(a.x + b.x) / 2}
-          y={arcTop + 18}
-          textAnchor="middle"
-          fontFamily={hand}
-          fontWeight={700}
-          fontSize={40}
-          fill={feedbackGlow > 0 ? "#7ee787" : TONE.bad}
-        >
-          every failure goes back to the agent
-        </text>
-      </g>
+      {feedbackOn ? (
+        <g opacity={(feedbackNew ? drawProgress(local, fresh.length * 2 + 4, 10) : 1) * feedbackLevel}>
+          <path
+            d={`M ${a.x} ${a.y - NODE.h / 2 - 10} C ${a.x} ${arcTop}, ${b.x} ${arcTop}, ${b.x} ${b.y - NODE.h / 2 - 12}`}
+            fill="none"
+            stroke={feedbackColor}
+            strokeWidth={3.5}
+            strokeDasharray="12 10"
+          />
+          <path
+            d={`M ${b.x - 11} ${b.y - NODE.h / 2 - 28} L ${b.x} ${b.y - NODE.h / 2 - 10} L ${b.x + 11} ${b.y - NODE.h / 2 - 28}`}
+            fill="none"
+            stroke={feedbackColor}
+            strokeWidth={3.5}
+            strokeLinecap="round"
+          />
+          <text
+            x={(a.x + b.x) / 2}
+            y={arcTop + 18}
+            textAnchor="middle"
+            fontFamily={hand}
+            fontWeight={700}
+            fontSize={40}
+            fill={feedbackColor}
+          >
+            every failure goes back to the agent
+          </text>
+        </g>
+      ) : null}
 
-      {LINKS.map(([from, to]) => {
+      {LINKS.filter(([from, to]) => linkShown(from, to)).map(([from, to]) => {
         const p = pos(from);
         const q = pos(to);
         const on = Math.min(level(from), level(to));
@@ -138,7 +162,7 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         );
       })}
 
-      {ELBOWS.map((elbow) => {
+      {ELBOWS.filter((e) => linkShown(e.from, e.to)).map((elbow) => {
         const p = pos(elbow.from);
         const q = pos(elbow.to);
         const midY = (p.y + NODE.h / 2 + q.y - NODE.h / 2) / 2;
@@ -163,7 +187,7 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         );
       })}
 
-      {NODES.map((n) => {
+      {NODES.filter((n) => isShown(step, n.id)).map((n) => {
         const { x, y } = pos(n.id);
         const q = appear(n.id);
         const g = glow(n.id);

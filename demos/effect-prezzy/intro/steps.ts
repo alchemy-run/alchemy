@@ -133,6 +133,8 @@ export interface LoopSpec {
   kind: "loop";
   title: string;
   notes?: string;
+  /** Parts drawn so far, for building the map up; omit to draw everything. */
+  show?: LoopPart[];
   /** Parts shown at full strength; the rest are dimmed. Omit to light everything. */
   lit?: LoopPart[];
   /** Parts that glow: what this step is about. */
