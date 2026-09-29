@@ -600,8 +600,13 @@ export const getSchemaVersion = (name: string, deleted = false) =>
           deleted,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            [
+              "NotFound",
+              "SchemaRegistryRequiresCluster",
+              "SchemaRegistryPathNotFound",
+            ],
+            () => Effect.succeed(undefined),
           ),
         );
 
@@ -614,8 +619,13 @@ export const getContextSchemaVersion = (name: string, deleted = false) =>
           deleted,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            [
+              "NotFound",
+              "SchemaRegistryRequiresCluster",
+              "SchemaRegistryPathNotFound",
+            ],
+            () => Effect.succeed(undefined),
           ),
         );
 

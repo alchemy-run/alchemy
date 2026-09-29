@@ -98,22 +98,25 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.AIPlatform.PersistentResource("Train", {
             persistentResourceId: created.persistentResourceId,
             location: "us-central1",
-            displayName: "alchemy-persistent-v2",
+            displayName: "alchemy-persistent",
             resourcePools: [
               {
                 id: "worker",
-                replicaCount: "1",
+                // Replica count is the only field that updates in place.
+                replicaCount: "2",
                 machineSpec: { machineType: "n1-standard-4" },
               },
             ],
-            labels: { env: "prod", role: "train" },
+            labels: { env: "test" },
           });
         }),
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.displayName).toEqual("alchemy-persistent-v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "train" });
+      const scaled = yield* aiplatform.getProjectsLocationsPersistentResources({
+        name: created.name,
+      });
+      expect(scaled.resourcePools?.[0]?.replicaCount).toEqual("2");
 
       yield* stack.destroy();
 

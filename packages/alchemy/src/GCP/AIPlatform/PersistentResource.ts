@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
@@ -92,10 +87,12 @@ export type PersistentResourceProps = {
   location?: string;
   /**
    * Display name (max 128 UTF-8 characters). Defaults to the resource id.
+   * Changing it replaces the resource.
    */
   displayName?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Changing them replaces the resource.
    */
   labels?: Record<string, string>;
   /**
@@ -313,13 +310,25 @@ export const PersistentResourceProvider = () =>
       const machineChanged =
         olds !== undefined &&
         machineKey(news.resourcePools) !== machineKey(olds.resourcePools);
+      // PATCH only accepts `resource_pools.replica_count`; `display_name` and
+      // `labels` are rejected ("Unrecognized path"), so changing them
+      // replaces the resource.
+      const displayNameChanged =
+        olds !== undefined &&
+        (news.displayName ?? "") !== (olds.displayName ?? "");
+      const labelsChanged =
+        olds !== undefined &&
+        JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
+          JSON.stringify(Object.entries(olds.labels ?? {}).sort());
       const replace =
         (previousId !== undefined &&
           nextId !== undefined &&
           nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (olds !== undefined && networkChanged) ||
-        machineChanged;
+        machineChanged ||
+        displayNameChanged ||
+        labelsChanged;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -444,10 +453,6 @@ export const PersistentResourceProvider = () =>
       }
 
       const observedName = current.name ?? name;
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayChanged = (current.displayName ?? "") !== displayName;
       // Reads fill in server defaults (disk spec, used replicas), and a pool's
       // machine spec is immutable (a change replaces), so only replica counts
       // are compared and patched.
@@ -467,22 +472,14 @@ export const PersistentResourceProvider = () =>
         replicaCounts(resourcePools),
       );
 
-      if (labelsChanged || displayChanged || poolsChanged) {
-        const updateMask = [
-          labelsChanged ? "labels" : undefined,
-          displayChanged ? "display_name" : undefined,
-          poolsChanged ? "resource_pools.replica_count" : undefined,
-        ].filter((field): field is string => field !== undefined);
+      // Display name and labels are create-only; `diff` replaces the resource
+      // when they change.
+      if (poolsChanged) {
         const patched =
           yield* aiplatform.patchProjectsLocationsPersistentResources({
             name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              displayName,
-              labels: desiredLabels,
-              resourcePools,
-            },
+            updateMask: "resource_pools.replica_count",
+            body: { name: observedName, resourcePools },
           });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);

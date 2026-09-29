@@ -429,7 +429,11 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            ["NotFound", "SchemaRegistryRequiresCluster"],
+            [
+              "NotFound",
+              "SchemaRegistryRequiresCluster",
+              "SchemaRegistryPathNotFound",
+            ],
             () => Effect.void,
           ),
         );
@@ -440,7 +444,11 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            ["NotFound", "SchemaRegistryRequiresCluster"],
+            [
+              "NotFound",
+              "SchemaRegistryRequiresCluster",
+              "SchemaRegistryPathNotFound",
+            ],
             () => Effect.void,
           ),
         );

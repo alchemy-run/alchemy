@@ -52,7 +52,7 @@ export type BackupProps = {
    */
   displayName?: string;
   /**
-   * User-provided description.
+   * User-provided description. Changing it replaces the backup.
    */
   description?: string;
   /**
@@ -138,8 +138,8 @@ export type Backup = Resource<
  * An on-demand AlloyDB backup of a cluster.
  *
  * Changing `backupId`, `location`, `clusterName`, `type`,
- * `encryptionConfig`, or `tags` replaces the backup. `displayName`,
- * `description`, `labels`, and `annotations` update in place.
+ * `encryptionConfig`, `tags`, or `description` replaces the backup.
+ * `displayName`, `labels`, and `annotations` update in place.
  *
  * Creating a backup typically takes several minutes and is skipIf-gated
  * in live tests behind `GCP_TEST_ALLOYDB`.
@@ -524,7 +524,11 @@ export const BackupProvider = () =>
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousKey !== nextKey ||
-        (news.tags !== undefined && previousTags !== nextTags);
+        (news.tags !== undefined && previousTags !== nextTags) ||
+        // PATCH accepts `description` but leaves it unchanged (observed live),
+        // so a new description replaces the backup.
+        (olds !== undefined &&
+          (news.description ?? "") !== (olds.description ?? ""));
 
       if (!replace) return undefined;
       return {
@@ -657,24 +661,15 @@ export const BackupProvider = () =>
         current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
         (observedDisplayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        news.description !== undefined &&
-        (current.description ?? "") !== news.description;
       const annotationsChanged =
         news.annotations !== undefined &&
         fingerprint(stringMapOf(current.annotations)) !==
           fingerprint(news.annotations);
 
-      if (
-        labelsChanged ||
-        displayNameChanged ||
-        descriptionChanged ||
-        annotationsChanged
-      ) {
+      if (labelsChanged || displayNameChanged || annotationsChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayNameChanged ? "displayName" : undefined,
-          descriptionChanged ? "description" : undefined,
           annotationsChanged ? "annotations" : undefined,
         ].filter((field): field is string => field !== undefined);
 
@@ -686,7 +681,6 @@ export const BackupProvider = () =>
               name,
               labels: desiredLabels,
               displayName: news.displayName,
-              description: news.description,
               annotations: news.annotations,
             },
           })

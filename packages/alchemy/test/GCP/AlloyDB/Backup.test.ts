@@ -137,7 +137,9 @@ test.provider.skipIf(!runLifecycle)(
             clusterName: instance.clusterName,
             backupId: created.backup.backupId,
             displayName: "alchemy-prod-backup",
-            description: "prod snapshot",
+            // Description is create-only (a change replaces the backup), so
+            // this step only changes fields that update in place.
+            description: "test snapshot",
             labels: { env: "prod", role: "backup" },
           });
           return { cluster, backup };
@@ -146,7 +148,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.backup.name).toEqual(created.backup.name);
       expect(updated.backup.displayName).toEqual("alchemy-prod-backup");
-      expect(updated.backup.description).toEqual("prod snapshot");
+      expect(updated.backup.description).toEqual("test snapshot");
       expect(updated.backup.labels).toMatchObject({
         env: "prod",
         role: "backup",
@@ -156,7 +158,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.backup.name,
       });
       // GCP omits displayName from backup reads; the attributes carry it.
-      expect(refetched.description).toEqual("prod snapshot");
+      expect(refetched.description).toEqual("test snapshot");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("backup");
 
