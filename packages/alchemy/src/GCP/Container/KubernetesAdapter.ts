@@ -31,6 +31,7 @@
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -160,7 +161,9 @@ type GkeAdapterDeps =
   | GcpEnvironment
   | HttpClient
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  // Hashing an unbundled Node image resolves installed packages.
+  | ChildProcessSpawner;
 
 const GSA_ANNOTATION = "iam.gke.io/gcp-service-account";
 
