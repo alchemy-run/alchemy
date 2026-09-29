@@ -1,7 +1,7 @@
 import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /** Bucket the function writes to from `fetch` and from topic deliveries. */
 export const Marker = GCP.Storage.Bucket("FnMarker", { forceDestroy: true });

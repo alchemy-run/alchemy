@@ -166,7 +166,7 @@ wired to an HTTP server listening on the Service's port:
 // src/api.ts
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
@@ -180,7 +180,7 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-`HttpServerResponse` is the same `effect/unstable/http` API used on
+`HttpServerResponse` is the same `effect/http` API used on
 every other Alchemy runtime — the handler you write here would run
 unchanged on Cloudflare Workers or AWS Lambda.
 

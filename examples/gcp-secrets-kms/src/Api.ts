@@ -1,7 +1,7 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { ApiKey, DataKey } from "./resources.ts";
 
 /** Constant-time comparison so response timing does not leak the key. */

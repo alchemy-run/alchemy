@@ -1,8 +1,8 @@
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { GcpEnvironment } from "../Environment.ts";

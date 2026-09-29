@@ -1,7 +1,7 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type { GcpOpContext } from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AdminReservation } from "./AdminReservation.ts";
 import type { AdminSubscription } from "./AdminSubscription.ts";
 import type { AdminTopic } from "./AdminTopic.ts";

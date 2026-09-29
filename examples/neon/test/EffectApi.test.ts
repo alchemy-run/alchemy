@@ -11,10 +11,10 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { AiError, LanguageModel, Response } from "effect/unstable/ai";
-import * as Sse from "effect/unstable/encoding/Sse";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { AiError, LanguageModel, Response } from "effect/ai";
+import * as Sse from "effect/encoding/Sse";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { chat } from "../src/ai/EffectApi.ts";
 
 const test = {

@@ -2,9 +2,9 @@ import * as Fly from "@/Fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import RpcOrders from "./rpc-orders.ts";
 import RpcUsers from "./rpc-users.ts";
 

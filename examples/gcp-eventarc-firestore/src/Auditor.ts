@@ -1,6 +1,6 @@
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { LOCATION, Shop } from "./resources.ts";
 
 /**

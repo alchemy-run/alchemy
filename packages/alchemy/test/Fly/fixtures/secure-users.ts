@@ -1,6 +1,6 @@
 import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export const SECURE_USERS_BODY = "users-on-the-stack-network";
 

@@ -2,7 +2,7 @@ import * as Http from "alchemy/Http";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { Api } from "./api.ts";
 import { CurrentUser } from "./current-user.ts";
 import { Authentication } from "./middleware.ts";

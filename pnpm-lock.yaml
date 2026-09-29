@@ -3026,13 +3026,13 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/fly-postgres:
     dependencies:
@@ -3678,13 +3678,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-cloud-run-api:
     dependencies:
@@ -3693,13 +3693,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-cloud-sql-drizzle:
     dependencies:
@@ -3708,19 +3708,19 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       '@effect/sql-pg':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       drizzle-orm:
         specifier: 1.0.0-rc.5-ab785fc
-        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260918.1)(@effect/sql-d1@4.0.0-rc.117(effect@4.0.0-rc.117))(@effect/sql-mysql2@4.0.0-rc.117(@types/node@26.2.0)(effect@4.0.0-rc.117))(@effect/sql-pg@4.0.0-rc.117(effect@4.0.0-rc.117))(@effect/sql-sqlite-do@4.0.0-rc.117(effect@4.0.0-rc.117))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.3)(bun-types@1.3.14)(effect@4.0.0-rc.117)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
+        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260918.1)(@effect/sql-d1@4.0.0-rc.118(effect@4.0.0-rc.118))(@effect/sql-mysql2@4.0.0-rc.118(@types/node@26.2.0)(effect@4.0.0-rc.118))(@effect/sql-pg@4.0.0-rc.118(effect@4.0.0-rc.118))(@effect/sql-sqlite-do@4.0.0-rc.118(effect@4.0.0-rc.118))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.3)(bun-types@1.3.14)(effect@4.0.0-rc.118)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
     devDependencies:
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
@@ -3733,13 +3733,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-event-pipeline:
     dependencies:
@@ -3748,13 +3748,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-eventarc-firestore:
     dependencies:
@@ -3763,13 +3763,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-gke:
     dependencies:
@@ -3778,13 +3778,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-memorystore-redis:
     dependencies:
@@ -3793,13 +3793,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-pubsub-fanout:
     dependencies:
@@ -3808,13 +3808,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-pubsub-worker:
     dependencies:
@@ -3823,13 +3823,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-scheduled-job:
     dependencies:
@@ -3838,13 +3838,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-secrets-kms:
     dependencies:
@@ -3853,13 +3853,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-service-to-service:
     dependencies:
@@ -3868,13 +3868,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-static-site:
     dependencies:
@@ -3883,13 +3883,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-storage-uploads:
     dependencies:
@@ -3898,13 +3898,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/gcp-vertex-ai:
     dependencies:
@@ -3913,13 +3913,13 @@ importers:
         version: link:../../submodules/distilled/packages/gcp
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)(redis@6.2.1)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)(redis@6.2.1)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
 
   examples/hetzner-app:
     dependencies:
@@ -8253,15 +8253,15 @@ importers:
         specifier: workspace:*
         version: link:../core
       effect:
-        specifier: 4.0.0-rc.117
-        version: 4.0.0-rc.117
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
     devDependencies:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../aws
       '@effect/platform-bun':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+        version: 4.0.0-rc.118(effect@4.0.0-rc.118)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.3.14
@@ -27592,7 +27592,7 @@ snapshots:
   '@libsql/isomorphic-ws@0.1.5':
     dependencies:
       '@types/ws': 8.18.1
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate

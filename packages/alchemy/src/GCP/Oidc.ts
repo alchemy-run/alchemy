@@ -1,7 +1,7 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
  * Verification of the Google-signed OIDC ID tokens that Pub/Sub push

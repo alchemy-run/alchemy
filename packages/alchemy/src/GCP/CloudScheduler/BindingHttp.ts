@@ -1,6 +1,6 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { Job } from "./Job.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";

@@ -2,7 +2,7 @@ import * as GCP from "@/GCP";
 import type { TopicMessage } from "@/GCP/PubSub/TopicEventSource.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /** Marker object a consumer writes for one delivered message. */
 export const markerFor = (messageId: string) => `markers/${messageId}.json`;

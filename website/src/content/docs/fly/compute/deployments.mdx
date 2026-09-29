@@ -8,7 +8,7 @@ Use blue/green when you want to start a checked replacement before stopping your
 ```typescript title="api.ts"
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
@@ -210,7 +210,7 @@ import * as Fly from "alchemy/Fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { runJobs } from "./jobs.ts";
 
 export default class Jobs extends Fly.Service<Jobs>()(
@@ -343,7 +343,7 @@ Use a distinct group for each stack and stage. This prevents a newer workflow fr
 When your API handler needs a credential, import Effect Config and your handler in `api.ts`:
 
 ```diff lang="typescript" title="api.ts"
- import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import * as Config from "effect/Config";
 +import { handleRequest } from "./handler.ts";
 ```
