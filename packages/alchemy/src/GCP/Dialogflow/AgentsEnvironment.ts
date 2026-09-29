@@ -23,6 +23,7 @@ import {
   sameText,
   updateMaskOf,
   waitForOperation,
+  retryQuota,
 } from "./internal.ts";
 
 export type EnvironmentVersionConfig = {
@@ -322,11 +323,11 @@ export const AgentsEnvironmentProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsEnvironments({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -178,13 +178,6 @@ export class DiskNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class DiskOperationFailed extends Data.TaggedError(
-  "GCP.Compute.DiskOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class DiskNotReady extends Data.TaggedError("GCP.Compute.DiskNotReady")<{
   diskName: string;
   status: string;
@@ -256,73 +249,6 @@ const getByName = (project: string, zone: string, disk: string) =>
   compute
     .getDisks({ project, zone, disk })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName === undefined) {
-      return yield* new DiskOperationFailed({
-        operation: "",
-        message: "zone operation is missing a name",
-      });
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-
-    const errors = current.error?.errors ?? [];
-    const codes = operationCodes(current);
-    if (
-      codes.includes("alreadyExists") ||
-      codes.includes("RESOURCE_ALREADY_EXISTS")
-    ) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new DiskOperationFailed({
-        operation: operationName,
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-      });
-    }
-    return current;
-  });
 
 const waitDiskReady = (project: string, zone: string, diskName: string) =>
   getByName(project, zone, diskName).pipe(
@@ -513,7 +439,9 @@ export const DiskProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitZoneOperation(env.project, zone, inserted);
+          yield* waitZoneOperation(env.project, zone, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitDiskReady(env.project, zone, diskName);
       }
@@ -612,14 +540,9 @@ export const DiskProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (deleted !== undefined) {
-        yield* waitZoneOperation(output.project, output.zone, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof DiskOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitZoneOperation(output.project, output.zone, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitDiskGone(output.project, output.zone, output.diskName);
     }),

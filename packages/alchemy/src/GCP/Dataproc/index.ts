@@ -1,5 +1,5 @@
 export * from "./AutoscalingPolicy.ts";
-export * from "./Batche.ts";
+export * from "./Batch.ts";
 export * from "./Cluster.ts";
 export * from "./GetCluster.ts";
 export * from "./GetClusterHttp.ts";

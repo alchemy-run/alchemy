@@ -1,5 +1,6 @@
 import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
@@ -14,18 +15,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Cloud Bigtable Admin API is disabled on the default testing project
-// (`Forbidden`: "Cloud Bigtable Admin API has not been used in project
-// 457525637530 before or it is disabled."). Set GCP_TEST_BIGTABLE=1 on an
-// entitled project to run the full lifecycle.
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+// Lifecycles provision a Bigtable instance; skipped with --fast.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesMaterializedViews({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -34,7 +30,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesMaterializedViews on a missing instance fails with Forbidden or NotFound",
+  "getProjectsInstancesMaterializedViews on a missing instance fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -46,7 +42,7 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/materializedViews/missing`,
         }),
       );
-      expect(error._tag).toBeOneOf(["Forbidden", "NotFound"]);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -79,8 +75,7 @@ test.provider.skipIf(!runLifecycle)(
           });
           const view = yield* GCP.Bigtable.InstancesMaterializedView("Counts", {
             instance: instance.name,
-            query:
-              "SELECT '*' AS _key, COUNT(*) AS row_count FROM `events` GROUP BY _key",
+            query: Output.interpolate`SELECT '*' AS _key, COUNT(*) AS row_count FROM \`${table.tableId}\` GROUP BY _key`,
           });
           return { instance, table, view };
         }),
@@ -119,8 +114,7 @@ test.provider.skipIf(!runLifecycle)(
           const view = yield* GCP.Bigtable.InstancesMaterializedView("Counts", {
             instance: instance.name,
             materializedViewId: created.view.materializedViewId,
-            query:
-              "SELECT '*' AS _key, COUNT(*) AS row_count FROM `events` GROUP BY _key",
+            query: Output.interpolate`SELECT '*' AS _key, COUNT(*) AS row_count FROM \`${table.tableId}\` GROUP BY _key`,
             deletionProtection: true,
           });
           return { instance, table, view };
@@ -140,5 +134,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.view.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 120_000 },
+  { timeout: 480_000 },
 );

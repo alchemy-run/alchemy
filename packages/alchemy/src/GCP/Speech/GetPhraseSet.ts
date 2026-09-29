@@ -15,6 +15,9 @@ export interface GetPhraseSetRequest extends Omit<
  * Bind this operation to a {@link PhraseSet} in a Function/Action init
  * phase. Provide {@link GetPhraseSetHttp}.
  *
+ * Grants `roles/speech.client` on the project because Speech-to-Text has no
+ * resource-level IAM.
+ *
  * ### Reading a Phrase Set
  * **Example:** Read the bound phrase set
  * ```typescript

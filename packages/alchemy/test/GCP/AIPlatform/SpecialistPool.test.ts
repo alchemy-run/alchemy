@@ -14,9 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Vertex AI data labeling is shut down: create fails with BadRequest
+// "Data labeling service is shutdown". Set GCP_TEST_AIPLATFORM_DATA_LABELING=1
+// on a project that still has access.
 const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+  !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_DATA_LABELING;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsSpecialistPools({ name }).pipe(
@@ -38,10 +40,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsSpecialistPools({
-          name: `projects/${project}/locations/us-central1/specialistPools/alchemy-pool-missing`,
+          name: `projects/${project}/locations/us-central1/specialistPools/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -49,6 +51,27 @@ test.provider(
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
     timeout: 90_000,
   },
+);
+
+test.provider.skipIf(runLifecycle)(
+  "createProjectsLocationsSpecialistPools is rejected because data labeling is shut down",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+      const error = yield* Effect.flip(
+        aiplatform.createProjectsLocationsSpecialistPools({
+          parent: `projects/${project}/locations/us-central1`,
+          body: {
+            displayName: "alchemy-pool-probe",
+            specialistManagerEmails: ["alchemy@example.com"],
+          },
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
+      expect(String(error.message)).toContain("shutdown");
+    }).pipe(logLevel),
+  { timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(

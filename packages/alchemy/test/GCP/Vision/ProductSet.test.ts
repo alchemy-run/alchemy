@@ -12,7 +12,6 @@ const waitUntilGone = (name: string) =>
   vision.getProjectsLocationsProductSets({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,10 +31,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/productSets/alchemy-missing-set`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Vision API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -78,8 +74,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.set.name,
       });
       expect(fetched.name).toEqual(created.set.name);
-      expect(fetched.displayName).toContain("[alchemy ");
-      expect(fetched.displayName).toContain("Summer");
+      expect(fetched.displayName).toEqual("Summer");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -106,7 +101,7 @@ test.provider.skipIf(!runLifecycle)(
       const fetchedUpdate = yield* vision.getProjectsLocationsProductSets({
         name: created.set.name,
       });
-      expect(fetchedUpdate.displayName).toContain("Fall");
+      expect(fetchedUpdate.displayName).toEqual("Fall");
 
       const members = yield* vision.listProjectsLocationsProductSetsProducts({
         name: created.set.name,

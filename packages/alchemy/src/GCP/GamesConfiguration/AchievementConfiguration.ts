@@ -8,27 +8,19 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  achievementOwnedByAlchemy,
-  achievementOwnershipText,
   DEFAULT_ACHIEVEMENT_TYPE,
   DEFAULT_INITIAL_STATE,
   DEFAULT_LOCALE,
   DEFAULT_POINT_VALUE,
   DEFAULT_STEPS_TO_UNLOCK,
-  findOwnedAchievement,
   getAchievement,
-  hasOwnershipMarker,
   ignoreMissing,
-  listOwnedAchievements,
-  MAX_ACHIEVEMENT_DESCRIPTION_LENGTH,
-  ownershipLabels,
-  publicText,
   sameBundle,
   sameNumber,
   sameText,
-  stampBundle,
   toDisplayName,
   withTranslation,
+  translationValue,
 } from "./internal.ts";
 
 export type AchievementConfigurationProps = {
@@ -66,9 +58,8 @@ export type AchievementConfigurationProps = {
    */
   name?: string;
   /**
-   * Default-locale description. Play Games configurations have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix on
-   * this description and stripped from attributes.
+   * Default-locale description.
+   * @default the name
    */
   description?: string;
   /**
@@ -104,9 +95,9 @@ export type AchievementConfiguration = Resource<
     initialState: string | undefined;
     /** Steps to unlock, for incremental achievements. */
     stepsToUnlock: number | undefined;
-    /** Default-locale name with the Alchemy ownership prefix stripped. */
+    /** Default-locale name. */
     name: string | undefined;
-    /** Default-locale description with the ownership prefix stripped. */
+    /** Default-locale description. */
     description: string | undefined;
     /** Default locale used for name and description. */
     locale: string | undefined;
@@ -126,13 +117,11 @@ export type AchievementConfiguration = Resource<
 /**
  * A Play Games Services achievement configuration.
  *
- * Achievement configurations have no labels field, so Alchemy stamps
- * ownership into the default-locale draft description for `list` / nuke.
- * `applicationId` and `achievementId` are identity — changing either
+ * Achievement configurations have no labels field and a server-assigned
+ * id, so only a recorded achievement can be read back. `applicationId` and `achievementId` are identity — changing either
  * replaces the configuration. `achievementType` is immutable after
  * create. Name, description, initial state, steps, and point value
- * update in place. `list` scans application ids from
- * `GCP_GAMESCONFIGURATION_APPLICATION_ID` (or `GCP_GAMES_APPLICATION_ID`).
+ * update in place.
  *
  * ### Creating an Achievement
  * **Example:** Standard achievement
@@ -165,11 +154,11 @@ export type AchievementConfiguration = Resource<
  * ### Updating an Achievement
  * **Example:** Change the description
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const achievement = yield* GCP.GamesConfiguration.AchievementConfiguration(
  *   "FirstWin",
  *   {
- *     applicationId: existing.applicationId,
- *     achievementId: existing.achievementId,
+ *     applicationId: "123456789012",
  *     name: "First Win",
  *     description: "Win a match",
  *   },
@@ -211,8 +200,8 @@ const toAttrs = (
   achievementType: achievement.achievementType,
   initialState: achievement.initialState,
   stepsToUnlock: achievement.stepsToUnlock,
-  name: publicText(achievement.draft?.name, locale),
-  description: publicText(achievement.draft?.description, locale),
+  name: translationValue(achievement.draft?.name, locale),
+  description: translationValue(achievement.draft?.description, locale),
   locale,
   pointValue: achievement.draft?.pointValue,
   token: achievement.token,
@@ -221,7 +210,6 @@ const toAttrs = (
 });
 
 const desiredBody = (input: {
-  labels: Record<string, string>;
   locale: string;
   name: string;
   description: string | undefined;
@@ -234,14 +222,11 @@ const desiredBody = (input: {
     DEFAULT_ACHIEVEMENT_TYPE;
   const draft = input.news.draft ?? {};
   const name = withTranslation(draft.name, input.locale, input.name);
-  const description = stampBundle(
-    input.labels,
-    draft.description,
-    input.description,
-    input.locale,
-    MAX_ACHIEVEMENT_DESCRIPTION_LENGTH,
-    true,
-  );
+  const description =
+    input.description !== undefined
+      ? withTranslation(draft.description, input.locale, input.description)
+      : (draft.description ??
+        withTranslation(undefined, input.locale, input.name));
   return {
     achievementType,
     initialState:
@@ -309,59 +294,36 @@ export const AchievementConfigurationProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const applicationId = olds?.applicationId ?? output?.applicationId ?? "";
+      // Server-assigned id: only a recorded achievement can be observed.
       const achievementId = olds?.achievementId ?? output?.achievementId ?? "";
-      let existing = yield* getAchievement(achievementId);
-      if (existing === undefined) {
-        existing = yield* findOwnedAchievement(id, applicationId);
-      }
+      const existing = yield* getAchievement(achievementId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(
         existing,
-        applicationId,
+        olds?.applicationId ?? output?.applicationId ?? "",
         env.project,
         olds?.locale ?? output?.locale,
       );
-      return (yield* achievementOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const achievements = yield* listOwnedAchievements();
-        return achievements
-          .filter((achievement) =>
-            hasOwnershipMarker(achievementOwnershipText(achievement)),
-          )
-          .map((achievement) =>
-            toAttrs(achievement, achievement.applicationId, env.project),
-          );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const applicationId = news.applicationId;
-      const labels = yield* ownershipLabels(id);
       const name = yield* toDisplayName(
         id,
-        news.name ?? publicText(news.draft?.name, news.locale),
+        news.name ?? translationValue(news.draft?.name, news.locale),
         output?.name,
       );
 
       let current = yield* getAchievement(
         news.achievementId ?? output?.achievementId ?? "",
       );
-      if (current === undefined) {
-        current = yield* findOwnedAchievement(id, applicationId);
-      }
 
       const locale = localeOf(news, current);
       const desired = desiredBody({
-        labels,
         locale,
         name,
         description: news.description,
@@ -370,17 +332,10 @@ export const AchievementConfigurationProvider = () =>
       });
 
       if (current === undefined) {
-        const created = yield* gamesConfiguration
-          .insertAchievementConfigurations({
-            applicationId,
-            body: desired,
-          })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedAchievement(id, applicationId),
-            ),
-          );
-        current = created ?? undefined;
+        current = yield* gamesConfiguration.insertAchievementConfigurations({
+          applicationId,
+          body: desired,
+        });
       }
 
       if (current === undefined) {
@@ -391,7 +346,6 @@ export const AchievementConfigurationProvider = () =>
       }
 
       const synced = desiredBody({
-        labels,
         locale,
         name,
         description: news.description,

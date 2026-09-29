@@ -108,7 +108,6 @@ export type ObservationJob = Resource<
  * **Example:** Enable collection
  * ```typescript
  * const job = yield* GCP.Apim.ObservationJob("Shadow", {
- *   observationJobId: existing.observationJobId,
  *   sources: [source.name],
  *   enabled: true,
  * });
@@ -147,11 +146,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : apim
         .getProjectsLocationsObservationJobs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>

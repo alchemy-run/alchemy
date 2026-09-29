@@ -9,6 +9,14 @@ import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
+// Product-scoped (`products/IP`) auth configs are rejected on a standard
+// project with Forbidden ("User is not authorized to create AuthConfig with
+// name … as they don't have membership of project {number}"), and product
+// Salesforce instances need one. Set GCP_TEST_INTEGRATIONS_PRODUCT_AUTH=1 on a
+// project entitled to the legacy product surface.
+const runProductAuthLifecycle =
+  !!process.env.GCP_TEST_INTEGRATIONS_PRODUCT_AUTH;
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -19,9 +27,7 @@ const waitUntilGone = (name: string) =>
     .getProjectsLocationsProductsSfdcInstancesSfdcChannels({ name })
     .pipe(
       Effect.as("found" as const),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",
@@ -41,7 +47,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/products/IP/sfdcInstances/alchemy-missing/sfdcChannels/missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -51,7 +57,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
+test.provider.skipIf(!runProductAuthLifecycle)(
   "create, update, and delete a product Salesforce channel",
   (stack) =>
     Effect.gen(function* () {

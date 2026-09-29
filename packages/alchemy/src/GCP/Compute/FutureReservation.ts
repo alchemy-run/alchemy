@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -68,7 +68,9 @@ export type FutureReservationProps = {
    */
   reservationName?: string;
   /**
-   * Auto-delete auto-created reservations at end time.
+   * Auto-delete auto-created reservations at end time. Compute requires this
+   * field on insert.
+   * @default false
    */
   autoDeleteAutoCreatedReservations?: boolean;
   /**
@@ -172,14 +174,6 @@ export class FutureReservationNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class FutureReservationOperationFailed extends Data.TaggedError(
-  "GCP.Compute.FutureReservationOperationFailed",
-)<{
-  futureReservationName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   const parts = value.replace(/\/+$/, "").split("/");
@@ -260,7 +254,8 @@ const toBody = (
   planningStatus: props.planningStatus ?? "DRAFT",
   namePrefix: props.namePrefix,
   reservationName: props.reservationName,
-  autoDeleteAutoCreatedReservations: props.autoDeleteAutoCreatedReservations,
+  autoDeleteAutoCreatedReservations:
+    props.autoDeleteAutoCreatedReservations ?? false,
   specificReservationRequired: props.specificReservationRequired,
   reservationMode: props.reservationMode,
   deploymentType: props.deploymentType,
@@ -330,60 +325,6 @@ const getByName = (project: string, zone: string, futureReservation: string) =>
   compute
     .getFutureReservations({ project, zone, futureReservation })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const failIfErrored = (
-  futureReservationName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new FutureReservationOperationFailed({
-        futureReservationName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  futureReservationName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(futureReservationName, current);
-  });
 
 const awaitResource = (
   project: string,
@@ -499,12 +440,9 @@ export const FutureReservationProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                futureReservationName,
-                operation,
-              ),
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -532,12 +470,7 @@ export const FutureReservationProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                futureReservationName,
-                operation,
-              ),
+              waitZoneOperation(env.project, zone, operation),
             ),
           );
         current = yield* getByName(env.project, zone, futureReservationName);
@@ -570,12 +503,9 @@ export const FutureReservationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.futureReservationName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

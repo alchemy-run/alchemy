@@ -22,13 +22,14 @@ const namesOf = (project: string) => {
   return { instanceParent, missingInstance, missingName };
 };
 
-const DISABLED_MESSAGE = "Looker (Google Cloud core) API has not been used";
+// Backups need an ACTIVE Looker instance, which bills hourly. Set
+// GCP_TEST_LOOKER_INSTANCE to its full resource name to run the lifecycle.
+const lookerInstance = process.env.GCP_TEST_LOOKER_INSTANCE?.trim();
 
 const waitUntilGone = (name: string) =>
   looker.getProjectsLocationsInstancesBackups({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -47,25 +48,15 @@ test.provider(
       const error = yield* Effect.flip(
         looker.getProjectsLocationsInstancesBackups({ name: missingName }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain(DISABLED_MESSAGE);
-      }
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* looker
-        .listProjectsLocationsInstancesBackups({
+      const listError = yield* Effect.flip(
+        looker.listProjectsLocationsInstancesBackups({
           parent: missingInstance,
           pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ instanceBackups: [] as const }),
-          ),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed({ instanceBackups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.instanceBackups ?? [])).toEqual(true);
+        }),
+      );
+      expect(listError._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -89,94 +80,20 @@ test.provider(
           }),
         ),
       );
-      expect([
-        "BadRequest",
-        "NotFound",
-        "Forbidden",
-        "GCP.Looker.OperationFailed",
-        "GCP.Looker.InstancesBackupFailed",
-        "GCP.Looker.InstancesBackupNotReady",
-        "GCP.Looker.InstancesBackupNotResolved",
-        "GCP.Looker.InstancesBackupInstanceMissing",
-      ]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain(DISABLED_MESSAGE);
-      }
+      // "parent resource not found for .../instances/alchemy-missing-looker"
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:looker", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(lookerInstance === undefined || !!process.env.FAST)(
   "create, refresh, and delete a Looker instance backup",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const { instanceParent, missingInstance, missingName } = namesOf(project);
+      const parent = lookerInstance!;
       yield* stack.destroy();
-
-      const access = yield* looker
-        .getProjectsLocationsInstancesBackups({ name: missingName })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
-          Effect.catchTag("Forbidden", (error) => {
-            console.log(
-              `looker get skip tag=${error._tag} message=${error.message}`,
-            );
-            return Effect.succeed(error);
-          }),
-        );
-      if (access !== "ok") {
-        expect(access._tag).toEqual("Forbidden");
-        expect(access.message).toContain(DISABLED_MESSAGE);
-        yield* stack.destroy();
-        return;
-      }
-
-      const instances = yield* looker
-        .listProjectsLocationsInstances({
-          parent: instanceParent,
-          pageSize: 50,
-        })
-        .pipe(
-          Effect.map((page) =>
-            (page.instances ?? []).filter(
-              (instance) =>
-                (instance.name ?? "").length > 0 &&
-                (instance.state ?? "").toUpperCase() === "ACTIVE",
-            ),
-          ),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed([] as looker.Instance[]),
-          ),
-        );
-
-      const parent = instances[0]?.name;
-      if (parent === undefined) {
-        const probe = yield* looker
-          .createProjectsLocationsInstancesBackups({
-            parent: missingInstance,
-            body: {},
-          })
-          .pipe(
-            Effect.map((operation) => ({
-              _tag: "created" as const,
-              name: operation.name,
-            })),
-            Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], (error) =>
-              Effect.succeed({
-                _tag: error._tag,
-                name: undefined as string | undefined,
-                message: error.message,
-              }),
-            ),
-          );
-        expect(["NotFound", "Forbidden", "BadRequest"]).toContain(probe._tag);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

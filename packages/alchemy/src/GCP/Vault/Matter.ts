@@ -106,8 +106,8 @@ export type Matter = Resource<
  * ### Updating a Matter
  * **Example:** Rename
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const matter = yield* GCP.Vault.Matter("Case", {
- *   matterId: existing.matterId,
  *   name: "Acme v Contoso 2026",
  *   description: "litigation hold",
  * });

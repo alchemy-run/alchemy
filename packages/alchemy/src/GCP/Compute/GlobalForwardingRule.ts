@@ -24,7 +24,7 @@ import {
   lastSegment,
   parseDescription,
 } from "./internal.ts";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_PROTOCOL = "TCP";
 const DEFAULT_SCHEME = "EXTERNAL";
@@ -261,14 +261,6 @@ export class GlobalForwardingRulePending extends Data.TaggedError(
   status: string;
 }> {}
 
-export class GlobalForwardingRuleOperationFailed extends Data.TaggedError(
-  "GCP.Compute.GlobalForwardingRuleOperationFailed",
-)<{
-  forwardingRuleName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
@@ -304,9 +296,7 @@ const ownedProxyNames = (project: string) =>
         Stream.filter((name) => name.length > 0),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed([] as string[]),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
       );
     const https = yield* compute.listTargetHttpsProxies
       .items({ project, maxResults: 500 })
@@ -315,9 +305,7 @@ const ownedProxyNames = (project: string) =>
         Stream.filter((name) => name.length > 0),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed([] as string[]),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
       );
     return new Set<string>([...http, ...https]);
   });
@@ -434,66 +422,10 @@ const toInsertBody = (
   return body;
 };
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  forwardingRuleName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new GlobalForwardingRuleOperationFailed({
-      forwardingRuleName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, forwardingRule: string) =>
   compute
     .getGlobalForwardingRules({ project, forwardingRule })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  forwardingRuleName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      yield* failIfOpError(operation, forwardingRuleName);
-      return;
-    }
-    const current =
-      operation.status === "DONE"
-        ? operation
-        : yield* waitGlobalOperations(
-            { project, operation: name },
-            { times: 15 },
-          );
-    yield* failIfOpError(current, forwardingRuleName);
-  });
 
 const awaitResource = (project: string, forwardingRuleName: string) =>
   getByName(project, forwardingRuleName).pipe(
@@ -671,7 +603,7 @@ export const GlobalForwardingRuleProvider = () =>
             Stream.map((rule) => toAttrs(rule, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as GlobalForwardingRule["Attributes"][]),
             ),
           );
@@ -701,7 +633,9 @@ export const GlobalForwardingRuleProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, forwardingRuleName).pipe(
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() =>
                   getByName(env.project, forwardingRuleName),
                 ),
@@ -740,7 +674,7 @@ export const GlobalForwardingRuleProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, forwardingRuleName),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -786,7 +720,7 @@ export const GlobalForwardingRuleProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, forwardingRuleName),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current =
@@ -810,7 +744,7 @@ export const GlobalForwardingRuleProvider = () =>
             })
             .pipe(
               Effect.flatMap((operation) =>
-                waitForOperation(env.project, operation, forwardingRuleName),
+                waitGlobalOperation(env.project, operation),
               ),
             );
         }).pipe(
@@ -836,7 +770,9 @@ export const GlobalForwardingRuleProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(env.project, operation, output.forwardingRuleName),
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

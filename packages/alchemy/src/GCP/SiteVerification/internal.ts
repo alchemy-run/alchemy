@@ -96,19 +96,13 @@ export const getWebResource = (id: string | undefined) => {
     ? Effect.succeed(undefined)
     : siteVerification
         .getWebResource({ id: pathId })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden", "Unauthorized"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 };
 
 export const listWebResources = () =>
   siteVerification.listWebResource({}).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag(["NotFound", "Forbidden", "Unauthorized"], () =>
-      emptyWebResources(),
-    ),
+    Effect.catchTag("NotFound", () => emptyWebResources()),
   );
 
 export const findWebResource = (
@@ -139,12 +133,7 @@ export const deleteWebResource = (id: string | undefined) => {
     ? Effect.void
     : siteVerification
         .deleteWebResource({ id: pathId })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "Forbidden", "Unauthorized"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
 };
 
 export const getWebResourceToken = (request: {

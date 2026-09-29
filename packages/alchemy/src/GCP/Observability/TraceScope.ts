@@ -105,11 +105,12 @@ export type TraceScope = Resource<
  * ```
  *
  * ### Updating a Trace Scope
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Change the description
  * ```typescript
  * const scope = yield* GCP.Observability.TraceScope("App", {
- *   traceScopeId: existing.traceScopeId,
- *   resourceNames: existing.resourceNames,
+ *   resourceNames: ["projects/my-project"],
  *   description: "all application traces",
  * });
  * ```
@@ -222,7 +223,7 @@ export const TraceScopeProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as ReturnType<typeof toAttrs>[]),
             ),
           );

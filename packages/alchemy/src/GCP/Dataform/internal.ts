@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import {
@@ -24,19 +25,6 @@ export class DataformStillExists extends Data.TaggedError(
   "GCP.Dataform.StillExists",
 )<{
   name: string;
-}> {}
-
-export class DataformOperationFailed extends Data.TaggedError(
-  "GCP.Dataform.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DataformOperationPending extends Data.TaggedError(
-  "GCP.Dataform.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -349,87 +337,38 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-const alreadyExists = (error: dataform.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: dataform.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: dataform.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait for a Dataform operation (folder tree deletes, repository moves).
+ * An operation that finished with `ALREADY_EXISTS` (6) is a lost create
+ * race; `notFoundOk` also accepts `NOT_FOUND` (5).
+ */
 export const waitForOperation = (
   operation: dataform.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    interval?: `${number} seconds`;
-    times?: number;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new DataformOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new DataformOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = dataform.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataform.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    const done = yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DataformOperationPending({ operation: name }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataform.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "2 seconds"),
-      }),
-    );
-    const error = done.error;
-    if (error && !isIgnorable(error, options)) {
-      return yield* new DataformOperationFailed({
-        operation: name,
-        message: error.message ?? "operation failed",
-      });
-    }
-    return done;
-  });
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      dataform
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<dataform.Operation>({ name, done: true })
+              : Effect.fail(error),
+          ),
+        ),
+    { budget: "10 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    Effect.asVoid,
+  );
 
 export const collectPages = <
   Page,
@@ -453,7 +392,7 @@ const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error) => error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound",
       () => emptyList<A>(),
     ),
   );

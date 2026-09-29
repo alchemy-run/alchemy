@@ -1,23 +1,15 @@
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   databaseNameOf,
   lastSegment,
-  listOwnedDatabaseNames,
   parseDatabaseName,
   toResourceId,
 } from "./internal.ts";
@@ -66,9 +58,7 @@ export type DocumentProps = {
    */
   documentId?: string;
   /**
-   * User fields. Alchemy ownership fields (`alchemy_stack`,
-   * `alchemy_stage`, `alchemy_id`) are merged in automatically and
-   * stripped from attributes.
+   * Document fields. Fields absent here are removed from the document.
    */
   fields?: Record<string, DocumentFieldValue>;
 };
@@ -93,7 +83,7 @@ export type Document = Resource<
     documentPath: string;
     /** Project id. */
     project: string;
-    /** User fields (Alchemy ownership fields stripped). */
+    /** Document fields. */
     fields: Record<string, DocumentFieldValue>;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -107,8 +97,9 @@ export type Document = Resource<
 /**
  * A Cloud Firestore document.
  *
- * Documents have no labels field, so Alchemy stamps ownership into
- * `alchemy_stack` / `alchemy_stage` / `alchemy_id` fields. Changing
+ * Documents have no labels field and Alchemy writes nothing but the given
+ * fields: `read` reports a document it finds without prior state as
+ * unowned (adopt it with `--adopt`). Changing
  * `database`, `collectionId`, `parentPath`, or `documentId` replaces
  * the document. User fields update in place via `documents.patch`.
  *
@@ -143,12 +134,6 @@ export class DocumentNotResolved extends Data.TaggedError(
 )<{
   name: string;
 }> {}
-
-const OWNERSHIP_FIELDS = new Set([
-  "alchemy_stack",
-  "alchemy_stage",
-  "alchemy_id",
-]);
 
 const databaseIdOf = (value: string | undefined, project: string) => {
   if (value === undefined || value.length === 0) return DEFAULT_DATABASE;
@@ -208,40 +193,14 @@ const userFields = (
 ): Record<string, DocumentFieldValue> => {
   const next: Record<string, DocumentFieldValue> = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
-    if (OWNERSHIP_FIELDS.has(key)) continue;
     next[key] = fieldOf(value);
   }
   return next;
 };
 
-const ownershipFromFields = (
-  fields: firestore.ValueMap | undefined,
-): Record<string, string> => {
-  const labels: Record<string, string> = {};
-  const stack = fields?.alchemy_stack?.stringValue;
-  const stage = fields?.alchemy_stage?.stringValue;
-  const id = fields?.alchemy_id?.stringValue;
-  if (stack) labels[alchemyLabelKeys.stack] = stack;
-  if (stage) labels[alchemyLabelKeys.stage] = stage;
-  if (id) labels[alchemyLabelKeys.id] = id;
-  return labels;
-};
-
-const desiredFields = (
-  news: DocumentProps,
-  labels: Record<string, string>,
-): firestore.ValueMap => {
-  const fields: firestore.ValueMap = {
-    alchemy_stack: { stringValue: labels[alchemyLabelKeys.stack] ?? "" },
-    alchemy_stage: { stringValue: labels[alchemyLabelKeys.stage] ?? "" },
-    alchemy_id: { stringValue: labels[alchemyLabelKeys.id] ?? "" },
-  };
-  for (const [key, value] of Object.entries(news.fields ?? {})) {
-    if (OWNERSHIP_FIELDS.has(key)) continue;
-    fields[key] = value;
-  }
-  return fields;
-};
+const desiredFields = (news: DocumentProps): firestore.ValueMap => ({
+  ...(news.fields ?? {}),
+});
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
@@ -268,25 +227,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : firestore
         .getProjectsDatabasesDocuments({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
-
-const listAt = (parent: string, collectionId: string) =>
-  parent.length === 0 || collectionId.length === 0
-    ? Effect.succeed([] as firestore.Document[])
-    : firestore.listProjectsDatabasesDocuments
-        .pages({ parent, collectionId, pageSize: 300 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.documents ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed([] as firestore.Document[]),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const DocumentProvider = () =>
   Provider.succeed(Document, {
@@ -349,36 +290,9 @@ export const DocumentProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const labels = ownershipFromFields(existing.fields);
-      return (yield* hasAlchemyLabels(id, tagRecord(labels)))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const owned = yield* listOwnedDatabaseNames(env.project);
-        const defaultName = databaseNameOf(env.project, DEFAULT_DATABASE);
-        const databases = Array.from(new Set([...owned, defaultName]));
-        const pages = yield* Effect.forEach(
-          databases,
-          (databaseName) =>
-            listAt(`${databaseName}/documents`, DEFAULT_COLLECTION).pipe(
-              Effect.map((documents) =>
-                documents
-                  .filter((document) =>
-                    Object.keys(ownershipFromFields(document.fields)).some(
-                      (key) => key.startsWith("alchemy-"),
-                    ),
-                  )
-                  .map((document) => toAttrs(document, env.project)),
-              ),
-            ),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -401,8 +315,7 @@ export const DocumentProvider = () =>
         collectionId,
         documentId,
       );
-      const labels = yield* createInternalLabels(id);
-      const fields = desiredFields(news, labels);
+      const fields = desiredFields(news);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -425,7 +338,11 @@ export const DocumentProvider = () =>
       if (jsonOf(current.fields) !== jsonOf(fields)) {
         current = yield* firestore.patchProjectsDatabasesDocuments({
           name: current.name ?? name,
-          "updateMask.fieldPaths": Object.keys(fields),
+          // Masking observed fields too removes the ones no longer desired.
+          "updateMask.fieldPaths": Object.keys({
+            ...current.fields,
+            ...fields,
+          }),
           body: { fields },
         });
       }

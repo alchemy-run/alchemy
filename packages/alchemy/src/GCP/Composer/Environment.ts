@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -19,7 +20,9 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
-const MAX_NAME_LENGTH = 64;
+// Composer rejects 64-character ids (even on GET) despite documenting
+// "a letter followed by up to 63" characters.
+const MAX_NAME_LENGTH = 63;
 
 /**
  * Composer rejects `locations/-` (`Unexpected location: -`). Nuke walks
@@ -98,7 +101,7 @@ export type EnvironmentProps = {
    * Environment id (the `{environment}` segment of
    * `projects/{project}/locations/{location}/environments/{environment}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Must start with a lowercase letter, be 1-64 characters,
+   * and logical id. Must start with a lowercase letter, be 1-63 characters,
    * and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it
    * replaces the environment.
    */
@@ -116,8 +119,14 @@ export type EnvironmentProps = {
   labels?: Record<string, string>;
   /**
    * Configuration for software, nodes, workloads, size, networking, and
-   * related settings. Node network/subnetwork, encryption, private-IP,
-   * python version, and storage bucket are immutable.
+   * related settings. Node network/subnetwork, service account, encryption,
+   * private-IP, python version, and storage bucket are immutable.
+   *
+   * New environments require an explicit `nodeConfig.serviceAccount` —
+   * Composer rejects creates without one (`Composer environment service
+   * account is required to be explicitly specified`). The account needs
+   * `roles/composer.worker` (or broader) on the project. Changing it
+   * replaces the environment.
    */
   config?: EnvironmentConfig;
   /**
@@ -169,14 +178,19 @@ export type Environment = Resource<
 /**
  * A Cloud Composer environment (Managed Apache Airflow).
  *
- * Changing `environmentId`, `location`, node network/subnetwork, encryption,
- * private-IP settings, python version, or the storage bucket replaces the
- * environment. Labels, PyPI packages, Airflow config overrides, env vars,
+ * Changing `environmentId`, `location`, node network/subnetwork, node
+ * service account, encryption, private-IP settings, python version, or the
+ * storage bucket replaces the environment. Labels, PyPI packages, Airflow config overrides, env vars,
  * image version, workloads, and environment size update in place — one
  * update type per Composer patch, applied sequentially.
  *
- * Provisioning typically takes 20–40 minutes. Polls the LRO via
+ * Provisioning typically takes 20–45 minutes. Polls the LRO via
  * `getProjectsLocationsOperations` (Composer has no wait long-poll).
+ *
+ * New environments must name their service account explicitly in
+ * `config.nodeConfig.serviceAccount`; Composer no longer falls back to the
+ * default Compute Engine account. The account needs `roles/composer.worker`
+ * (or broader) on the project. Changing it replaces the environment.
  *
  * ### Creating an Environment
  * **Example:** Generated name, Composer 3 small
@@ -184,6 +198,9 @@ export type Environment = Resource<
  * const airflow = yield* GCP.Composer.Environment("Airflow", {
  *   config: {
  *     environmentSize: "ENVIRONMENT_SIZE_SMALL",
+ *     nodeConfig: {
+ *       serviceAccount: "composer-env@my-project.iam.gserviceaccount.com",
+ *     },
  *     softwareConfig: { imageVersion: "composer-3-airflow-2" },
  *   },
  * });
@@ -197,6 +214,9 @@ export type Environment = Resource<
  *   labels: { env: "prod" },
  *   config: {
  *     environmentSize: "ENVIRONMENT_SIZE_SMALL",
+ *     nodeConfig: {
+ *       serviceAccount: "composer-env@my-project.iam.gserviceaccount.com",
+ *     },
  *     softwareConfig: {
  *       imageVersion: "composer-3-airflow-2",
  *       pypiPackages: { numpy: "==2.1.0" },
@@ -242,19 +262,6 @@ export class EnvironmentFailed extends Data.TaggedError(
 )<{
   name: string;
   state: string | undefined;
-}> {}
-
-export class EnvironmentOperationFailed extends Data.TaggedError(
-  "GCP.Composer.EnvironmentOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class EnvironmentOperationPending extends Data.TaggedError(
-  "GCP.Composer.EnvironmentOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class EnvironmentStillExists extends Data.TaggedError(
@@ -546,87 +553,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsEnvironments({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: composer.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: composer.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: composer.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: composer.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new EnvironmentOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new EnvironmentOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = composer.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies composer.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new EnvironmentOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new EnvironmentOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Composer.EnvironmentOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+// Environment creates run 20-30 minutes, deletes 10-20.
+const waitForOperation = (operation: composer.Operation) =>
+  waitForGcpOperation(
+    operation,
+    (name) => composer.getProjectsLocationsOperations({ name }),
+    { budget: "45 minutes", interval: "15 seconds" },
+  );
 
 const waitUntilRunning = (name: string) =>
   getByName(name).pipe(
@@ -655,8 +588,8 @@ const waitUntilRunning = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Composer.EnvironmentNotResolved" ||
         error._tag === "GCP.Composer.EnvironmentNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 240,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -669,8 +602,8 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -692,8 +625,8 @@ const listOwnedAt = (project: string, location: string) =>
       Stream.map((environment) => toAttrs(environment, project, location)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
+      // A location Composer does not serve has no environments.
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateConfig = (
@@ -1072,7 +1005,12 @@ export const EnvironmentProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilRunning(name);
       }
@@ -1135,7 +1073,12 @@ export const EnvironmentProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): the environment was already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(output.name);
     }),

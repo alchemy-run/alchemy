@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForSqlOperation } from "./operations.ts";
 
 const DEFAULT_DATABASE_VERSION = "MYSQL_8_0";
 const DEFAULT_TIER = "db-f1-micro";
@@ -252,21 +253,6 @@ export class InstanceFailed extends Data.TaggedError("GCP.SQL.InstanceFailed")<{
   state: string;
 }> {}
 
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.SQL.InstanceOperationFailed",
-)<{
-  operation: string;
-  code: string;
-  message: string;
-}> {}
-
-export class InstanceOperationPending extends Data.TaggedError(
-  "GCP.SQL.InstanceOperationPending",
-)<{
-  operation: string;
-  status: string;
-}> {}
-
 export class InstanceStillExists extends Data.TaggedError(
   "GCP.SQL.InstanceStillExists",
 )<{
@@ -354,28 +340,6 @@ const primaryIp = (instance: sqladmin.DatabaseInstance) =>
   instance.ipAddresses?.find((item) => item.type === "PRIMARY")?.ipAddress ??
   instance.ipAddresses?.[0]?.ipAddress;
 
-const operationNameOf = (operation: sqladmin.Operation) =>
-  lastSegment(operation.name) || lastSegment(operation.selfLink);
-
-const operationErrors = (operation: sqladmin.Operation) =>
-  operation.error?.errors ?? [];
-
-const isAlreadyExists = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return (
-      code.includes("ALREADY_EXISTS") || message.includes("already exists")
-    );
-  });
-
-const isNotFoundOp = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return code.includes("NOT_FOUND") || message.includes("not found");
-  });
-
 const toAttrs = (
   instance: sqladmin.DatabaseInstance,
   project: string,
@@ -426,87 +390,9 @@ const waitForOperation = (
   operation: sqladmin.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const operationName = operationNameOf(operation);
-    if (operation.status === "DONE") {
-      if (isAlreadyExists(operation) || isNotFoundOp(operation)) {
-        return operation;
-      }
-      const errors = operationErrors(operation);
-      if (errors.length > 0) {
-        return yield* new InstanceOperationFailed({
-          operation: operationName,
-          code: errors[0]?.code ?? "UNKNOWN",
-          message:
-            errors
-              .map((item) => item.message ?? item.code ?? "unknown")
-              .join("; ") || "Cloud SQL operation failed",
-        });
-      }
-      return operation;
-    }
-    if (operationName.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        code: "UNKNOWN",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = sqladmin.getOperations({
-      project,
-      operation: operationName,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name: operationName,
-                status: "DONE",
-              } satisfies sqladmin.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        (current) =>
-          new InstanceOperationPending({
-            operation: operationName,
-            status: current.status ?? "PENDING",
-          }),
-      ),
-      Effect.flatMap((current) => {
-        if (isAlreadyExists(current) || isNotFoundOp(current)) {
-          return Effect.succeed(current);
-        }
-        const errors = operationErrors(current);
-        return errors.length > 0
-          ? Effect.fail(
-              new InstanceOperationFailed({
-                operation: operationName,
-                code: errors[0]?.code ?? "UNKNOWN",
-                message:
-                  errors
-                    .map((item) => item.message ?? item.code ?? "unknown")
-                    .join("; ") || "Cloud SQL operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.SQL.InstanceOperationPending",
-        ...LONG_OPERATION_POLL,
-      }),
-    );
+  waitForSqlOperation(project, operation, {
+    budget: "30 minutes",
+    notFoundOk: true,
   });
 
 const waitUntilExists = (project: string, instanceName: string) =>
@@ -718,7 +604,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

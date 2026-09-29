@@ -12,6 +12,7 @@ import { WriteRedis } from "./WriteRedis.ts";
 export const WriteRedisHttp = Layer.effect(
   WriteRedis,
   makeRedisBinding({
+    tag: "GCP.Redis.WriteRedis",
     makeClient: makeWrite,
   }),
 );

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 export const MIN_NAME_LENGTH = 4;
@@ -23,19 +24,6 @@ export type GclbObservationSource = {
   /** VPC networks whose load balancers are observed. Currently one. */
   pscNetworkConfigs: PscNetworkConfig[];
 };
-
-export class ApimOperationFailed extends Data.TaggedError(
-  "GCP.Apim.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ApimOperationPending extends Data.TaggedError(
-  "GCP.Apim.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Apim.NotResolved",
@@ -258,87 +246,34 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const alreadyExists = (error: apim.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: apim.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: apim.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait for a API Management long-running operation. Observation jobs and
+ * sources settle within minutes.
+ * `ALREADY_EXISTS` (a concurrent create won) always succeeds;
+ * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
+ * already been garbage-collected (deletes).
+ */
 export const waitForOperation = (
   operation: apim.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new ApimOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new ApimOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = apim.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<apim.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ApimOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => !current.error || isIgnorable(current.error, options),
-        (current) =>
-          new ApimOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Apim.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "3 seconds"),
-      }),
-    );
-  });
+  waitForLongRunning(
+    operation,
+    (name) => apim.getProjectsLocationsOperations({ name }),
+    { budget: "10 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    Effect.catchIf(
+      (error) => options?.notFoundOk === true && error._tag === "NotFound",
+      () => Effect.void,
+    ),
+  );
 
 export const waitUntilExists = <A, E, R>(
   get: Effect.Effect<A, E, R>,
@@ -429,15 +364,25 @@ export const collectPages = <Page, A, E, R>(
     Effect.map((chunk) => Array.from(chunk)),
   );
 
-export const listAtLocation = <A, E, R>(
+/**
+ * List across every location via the `locations/-` wildcard, falling back to
+ * the default region where the API rejects the wildcard. A missing parent
+ * (`NotFound`) lists as empty; any other error fails.
+ */
+export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
   project: string,
   region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
-    Effect.catch(() =>
-      list(`projects/${project}/locations/${region}`).pipe(
-        Effect.orElseSucceed((): A[] => []),
-      ),
+    Effect.catchIf(
+      (error) => error._tag === "NotFound" || error._tag === "BadRequest",
+      () =>
+        list(`projects/${project}/locations/${region}`).pipe(
+          Effect.catchIf(
+            (error) => error._tag === "NotFound",
+            () => Effect.succeed<A[]>([]),
+          ),
+        ),
     ),
   );

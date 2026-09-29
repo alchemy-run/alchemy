@@ -238,7 +238,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toPipelineRequest = (
@@ -315,7 +314,6 @@ export const ScheduleProvider = () =>
             option._tag === "Some" ? option.value : undefined,
           ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
         );
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
@@ -360,7 +358,6 @@ export const ScheduleProvider = () =>
               option._tag === "Some" ? option.value : undefined,
             ),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
           );
       }
 

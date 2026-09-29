@@ -8,6 +8,11 @@ import { PauseJob } from "./PauseJob.ts";
 /**
  * HTTP implementation of {@link PauseJob}.
  *
+ * Grants `roles/cloudscheduler.admin` on the project because it is the
+ * only predefined role with `cloudscheduler.jobs.pause`, and Cloud Scheduler
+ * supports neither per-job IAM policies nor IAM Conditions on
+ * `resource.name`.
+ *
  * @layer
  * @provides GCP.CloudScheduler.PauseJob
  */
@@ -23,7 +28,6 @@ export const PauseJobHttp: Layer.Layer<
     scheduler.PauseProjectsLocationsJobsError
   >({
     tag: "GCP.CloudScheduler.PauseJob",
-    // Only cloudscheduler.admin has jobs.pause; no resource-level IAM.
     iam: { role: "roles/cloudscheduler.admin" },
     operation: scheduler.pauseProjectsLocationsJobs,
   }),

@@ -9,7 +9,6 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deleteJob,
-  encodeOwnership,
   encodeOwnershipLine,
   findOwnedJob,
   getJob,
@@ -97,9 +96,8 @@ export type TenantsJobProps = {
    */
   title?: string;
   /**
-   * Job description (max 100,000 characters). Cloud Talent jobs have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
-   * prefix and stripped from attributes.
+   * Job description (max 100,000 characters), shown to job seekers as
+   * given. Defaults to the title.
    */
   description?: string;
   /**
@@ -264,8 +262,9 @@ export type TenantsJob = Resource<
 /**
  * A Cloud Talent Solution job posting.
  *
- * Jobs have no labels field, so Alchemy stamps ownership into
- * `description` and `requisitionId` for `list` / nuke. Parent tenant,
+ * Jobs have no labels field, so Alchemy stamps ownership into the
+ * client-side `requisitionId` for `list` / nuke (never into the
+ * seeker-visible title or description). Parent tenant,
  * company, and job id are identity — changing any of them replaces the
  * job. Title, description, addresses, and related fields update in
  * place. A company cannot be deleted while it still has jobs.
@@ -284,12 +283,14 @@ export type TenantsJob = Resource<
  * ```
  *
  * ### Updating a Job
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Promote the posting
  * ```typescript
  * const job = yield* GCP.Jobs.TenantsJob("Engineer", {
  *   parent: tenant.name,
  *   company: company.name,
- *   jobId: existing.jobId,
  *   title: "Staff Software Engineer",
  *   description: "Build Cloud Talent integrations.",
  *   promotionValue: 1,
@@ -455,11 +456,12 @@ export const TenantsJobProvider = () =>
         requisition,
         MAX_REQUISITION_ID_LENGTH,
       );
-      const description = encodeOwnership(
-        ownership,
-        news.description ?? output?.description ?? title,
-        MAX_DESCRIPTION_LENGTH,
-      );
+      // Shown to job seekers, so no ownership marker (requisitionId has it).
+      const description = (
+        news.description ??
+        output?.description ??
+        title
+      ).slice(0, MAX_DESCRIPTION_LENGTH);
       const name = output?.name ?? jobNameOf(parent, news.jobId ?? "");
 
       let current = yield* getJob(name);

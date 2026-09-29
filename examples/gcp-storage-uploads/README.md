@@ -48,12 +48,10 @@ roles are granted on the project under an IAM Condition that names the
 
 ## Deploy
 
-Requires Docker (the services are built from `main`) and GCP credentials
-(`GOOGLE_PROJECT_ID` plus `GOOGLE_APPLICATION_CREDENTIALS` or
-`GOOGLE_ACCESS_TOKEN`).
+Requires Docker (the services are built from `main`). Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
 
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 ```sh
@@ -70,7 +68,7 @@ redelivers them, so metadata shows up late rather than never.
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, uploads a text file and a random binary, reads both
@@ -82,7 +80,7 @@ bucket, database, and services are gone.
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```
 
 The bucket uses `forceDestroy: true`, so destroy removes its objects too.

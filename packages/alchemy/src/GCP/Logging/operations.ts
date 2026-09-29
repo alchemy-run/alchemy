@@ -1,26 +1,11 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-
-export class LoggingOperationFailed extends Data.TaggedError(
-  "GCP.Logging.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class LoggingOperationPending extends Data.TaggedError(
-  "GCP.Logging.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-const isNotFoundStatus = (error: logging.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
+import {
+  waitForOperation as waitForLongRunning,
+  type LongRunningOperation,
+} from "../Operation.ts";
 
 const getOperation = (name: string) =>
   name.includes("/billingAccounts/") || name.startsWith("billingAccounts/")
@@ -33,88 +18,15 @@ const getOperation = (name: string) =>
           ? logging.getProjectsLocationsOperations({ name })
           : logging.getLocationsOperations({ name });
 
-export const waitForOperation = (
-  operation: logging.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new LoggingOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new LoggingOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const lookup = getOperation(name);
-    const resolved =
-      options?.notFoundOk === true
-        ? lookup.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<logging.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : lookup.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new LoggingOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (
-          error &&
-          !(options?.notFoundOk === true && isNotFoundStatus(error))
-        ) {
-          return Effect.fail(
-            new LoggingOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Logging.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
-
 export const deleteBucketLinks = (bucketName: string) =>
-  logging
-    .listLocationsBucketsLinks({
-      parent: bucketName,
-      pageSize: 100,
-    })
+  logging.listLocationsBucketsLinks
+    .pages({ parent: bucketName, pageSize: 100 })
     .pipe(
-      Effect.flatMap((page) =>
+      Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
+      Stream.runCollect,
+      Effect.flatMap((links) =>
         Effect.forEach(
-          page.links ?? [],
+          links,
           (link) => {
             const name = link.name;
             if (name === undefined) return Effect.void;
@@ -126,7 +38,7 @@ export const deleteBucketLinks = (bucketName: string) =>
           { concurrency: 4 },
         ),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+      Effect.catchTag("NotFound", () => Effect.void),
       Effect.asVoid,
     );
 
@@ -145,3 +57,34 @@ export const listProjectBuckets = () =>
         Effect.map((chunk) => Array.from(chunk)),
       );
   });
+
+/** Linked-dataset creation and bucket analytics upgrades take several minutes. */
+const OPERATION_BUDGET = "15 minutes";
+
+/**
+ * Wait for a long-running operation. ALREADY_EXISTS (code 6) means a
+ * concurrent create won the race; reconcile observes the resource next.
+ */
+export const waitForOperation = (operation: LongRunningOperation) =>
+  waitForLongRunning(operation, getOperation, {
+    budget: OPERATION_BUDGET,
+  }).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
+
+/**
+ * Wait for a delete operation. A vanished operation or NOT_FOUND (code 5)
+ * means the resource is already gone.
+ */
+export const waitForDeleteOperation = (operation: LongRunningOperation) =>
+  waitForOperation(operation).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "NotFound" ||
+        (error._tag === "GCP.OperationFailed" && error.code === 5),
+      () => Effect.succeed(operation),
+    ),
+  );

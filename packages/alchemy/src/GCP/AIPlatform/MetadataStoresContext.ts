@@ -27,6 +27,8 @@ import {
 } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 
+const DEFAULT_SCHEMA_TITLE = "system.Experiment";
+
 export type MetadataStoresContextProps = {
   /**
    * Parent MetadataStore resource name
@@ -52,7 +54,9 @@ export type MetadataStoresContextProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Schema title registered in the MetadataStore.
+   * Schema title registered in the MetadataStore. Vertex AI rejects
+   * entries without one.
+   * @default "system.Experiment"
    */
   schemaTitle?: string;
   /**
@@ -178,7 +182,7 @@ const listContexts = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.contexts ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Context[]),
       ),
     );
@@ -191,7 +195,7 @@ const listStores = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.metadataStores ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
       ),
     );
@@ -319,7 +323,7 @@ export const MetadataStoresContextProvider = () =>
               displayName,
               description: news.description,
               labels: desiredLabels,
-              schemaTitle: news.schemaTitle,
+              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
               schemaVersion: news.schemaVersion,
               metadata: news.metadata,
             },
@@ -337,7 +341,8 @@ export const MetadataStoresContextProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
       const schemaTitleChanged =
-        (current.schemaTitle ?? "") !== (news.schemaTitle ?? "");
+        (current.schemaTitle ?? "") !==
+        (news.schemaTitle ?? DEFAULT_SCHEMA_TITLE);
       const schemaVersionChanged =
         (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
       const metadataChanged =
@@ -370,7 +375,7 @@ export const MetadataStoresContextProvider = () =>
               displayName,
               description: news.description,
               labels: desiredLabels,
-              schemaTitle: news.schemaTitle,
+              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
               schemaVersion: news.schemaVersion,
               metadata: news.metadata,
               etag: current.etag,

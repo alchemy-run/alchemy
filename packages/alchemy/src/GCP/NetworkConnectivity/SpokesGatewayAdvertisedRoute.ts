@@ -70,6 +70,7 @@ export type SpokesGatewayAdvertisedRouteProps = {
   description?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Immutable — changing them replaces the route.
    */
   labels?: Record<string, string>;
 };
@@ -117,9 +118,9 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * A route a Network Connectivity Center gateway spoke advertises to a
  * hub (or other recipient).
  *
- * Changing `parent`, `gatewayAdvertisedRouteId`, or `ipRange` replaces
- * the route. Description, labels, `priority`, and `recipient` update in
- * place.
+ * Changing `parent`, `gatewayAdvertisedRouteId`, `ipRange`, or `labels`
+ * replaces the route (GCP does not allow updating labels). Description,
+ * `priority`, and `recipient` update in place.
  *
  * ### Creating a GatewayAdvertisedRoute
  * **Example:** Advertise a CIDR to the hub
@@ -145,18 +146,17 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * ```
  *
  * ### Updating a GatewayAdvertisedRoute
- * **Example:** Description, labels, and priority
+ * **Example:** Description and priority
  * ```typescript
  * const route = yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute(
  *   "OnPrem",
  *   {
- *     parent: existing.parent,
- *     gatewayAdvertisedRouteId: existing.gatewayAdvertisedRouteId,
- *     ipRange: existing.ipRange!,
+ *     parent: spoke.name,
+ *     ipRange: "192.168.0.0/16",
  *     priority: 200,
  *     recipient: "ADVERTISE_TO_HUB",
  *     description: "on-prem v2",
- *     labels: { env: "prod", role: "gw" },
+ *     labels: { env: "prod" },
  *   },
  * );
  * ```
@@ -227,14 +227,34 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
         : previousId;
       const previousParent = olds?.parent ?? output?.parent;
       const previousRange = olds?.ipRange ?? output?.ipRange;
-      if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousParent !== undefined && previousParent !== news.parent) ||
-        (previousRange !== undefined && previousRange !== news.ipRange)
-      ) {
-        return { action: "replace" as const };
+      const previousLabels = olds?.labels ?? output?.labels;
+      const idChanged =
+        previousId !== undefined &&
+        nextId !== undefined &&
+        nextId !== previousId;
+      const parentChanged =
+        previousParent !== undefined && previousParent !== news.parent;
+      const rangeChanged =
+        previousRange !== undefined && previousRange !== news.ipRange;
+      // `labels` is not mutable on GatewayAdvertisedRoute (PATCH rejects the
+      // path), so a labels change replaces the route.
+      const labels = diffLabels(
+        toLabels(previousLabels),
+        toLabels(news.labels),
+      );
+      const labelsChanged =
+        previousLabels !== undefined &&
+        (labels.upsert.length > 0 || labels.removed.length > 0);
+      if (idChanged || parentChanged || rangeChanged || labelsChanged) {
+        return {
+          action: "replace" as const,
+          // A route with a pinned id, or the same CIDR on the same spoke,
+          // collides with the old route; delete it first.
+          deleteFirst:
+            !parentChanged &&
+            (!rangeChanged ||
+              (news.gatewayAdvertisedRouteId !== undefined && !idChanged)),
+        };
       }
       return undefined;
     }),
@@ -340,9 +360,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
         return yield* new NetworkConnectivityNotResolved({ name });
       }
 
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
+      // Labels are create-only; `diff` replaces the route when they change.
       const descriptionChanged =
         (current.description ?? "") !== (news.description ?? "");
       const priorityChanged =
@@ -350,7 +368,6 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       const recipientChanged =
         (current.recipient ?? "") !== (news.recipient ?? "");
       const updateMask = changedFields([
-        ["labels", labelsChanged],
         ["description", descriptionChanged],
         ["priority", priorityChanged],
         ["recipient", recipientChanged],
@@ -364,7 +381,6 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
               updateMask: updateMask.join(","),
               body: {
                 name: current.name ?? name,
-                labels: desiredLabels,
                 description: news.description,
                 priority,
                 recipient: news.recipient,

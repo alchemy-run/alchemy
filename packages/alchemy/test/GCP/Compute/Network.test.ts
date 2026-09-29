@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -111,6 +112,6 @@ test.provider(
 
       const gone = yield* waitUntilGone(created.project, created.networkName);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withNetworkSlot),
+  { timeout: 180_000 },
 );

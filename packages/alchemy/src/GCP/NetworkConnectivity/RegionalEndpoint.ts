@@ -359,12 +359,7 @@ export const RegionalEndpointProvider = () =>
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (created !== undefined) {
-          yield* waitForOperation(created, { times: 10 }).pipe(
-            Effect.catchTag(
-              "GCP.NetworkConnectivity.OperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilPresent(getByName(name), name);
       }

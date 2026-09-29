@@ -13,7 +13,10 @@ export const GetFunctionHttp = Layer.effect(
   GetFunction,
   makeFunctionHttpBinding({
     tag: "GCP.CloudFunctions.GetFunction",
-    iam: { role: "roles/cloudfunctions.viewer", on: "cloudfunctions.function" },
+    // 2nd gen functions accept only invoker roles on their own IAM policy
+    // (anything else is INVALID_ARGUMENT), so grant on the project under a
+    // condition naming the function.
+    iam: { role: "roles/cloudfunctions.viewer", scopeByCondition: true },
     operation: cloudfunctions.getProjectsLocationsFunctions,
   }),
 );

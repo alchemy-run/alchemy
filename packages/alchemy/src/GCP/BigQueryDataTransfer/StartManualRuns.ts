@@ -17,6 +17,11 @@ export interface StartManualRunsRequest extends Omit<
  * {@link StartManualRunsHttp}. `requestedRunTime` and `requestedTimeRange`
  * must be in the past.
  *
+ * Grants `roles/bigquery.admin` on the project because
+ * `bigquery.transfers.update` (required by `startManualRuns`) is in no
+ * narrower predefined role, and transfer configs have no resource-level
+ * IAM or IAM Conditions support to scope it to the one config.
+ *
  * ### Starting Manual Runs
  * **Example:** Run for a specific past timestamp
  * ```typescript

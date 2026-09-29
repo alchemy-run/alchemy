@@ -119,7 +119,6 @@ export type Sharedflow = Resource<
  * **Example:** New description (creates a revision)
  * ```typescript
  * const flow = yield* GCP.Apigee.Sharedflow("Traffic", {
- *   sharedflowId: existing.sharedflowId,
  *   description: "rate limit only",
  * });
  * ```
@@ -268,7 +267,7 @@ const getByName = (name: string) =>
   apigee
     .getOrganizationsSharedflows({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -277,7 +276,7 @@ const getRevision = (name: string) =>
   apigee
     .getOrganizationsSharedflowsRevisions({ name, format: "bundle" })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -399,7 +398,7 @@ export const SharedflowProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ sharedFlows: [] }),
             ),
           );
@@ -486,6 +485,11 @@ export const SharedflowProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSharedflows({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

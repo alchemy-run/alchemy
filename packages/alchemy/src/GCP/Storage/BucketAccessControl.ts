@@ -125,7 +125,7 @@ const getByEntity = (bucketName: string, entity: string) =>
 const listOnBucket = (bucketName: string) =>
   storage.listBucketAccessControls({ bucket: bucketName }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as storage.BucketAccessControl[]),
     ),
   );
@@ -185,7 +185,12 @@ export const BucketAccessControlProvider = () =>
           buckets,
           (bucket) => {
             const bucketName = bucket.name;
-            if (!bucketName) {
+            // Legacy ACL APIs reject uniform bucket-level access buckets.
+            if (
+              !bucketName ||
+              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
+                true
+            ) {
               return Effect.succeed(
                 [] as Array<BucketAccessControl["Attributes"]>,
               );

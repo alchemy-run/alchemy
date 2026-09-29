@@ -22,6 +22,7 @@ import {
   toPhysicalId,
   waitForOperation,
   zoneOf,
+  collectPages,
 } from "./operations.ts";
 
 const DEFAULT_STORAGE_TYPE = "SSD";
@@ -323,11 +324,7 @@ const toAttrs = (cluster: bigtable.Cluster, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClusters({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" ||
@@ -385,15 +382,6 @@ const waitUntilGone = (name: string) =>
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
-
-const isLastClusterError = (error: { message: string }) => {
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("last cluster") ||
-    message.includes("only cluster") ||
-    message.includes("cannot delete")
-  );
-};
 
 const toCreateBody = (
   news: ClusterResourceProps,
@@ -511,16 +499,13 @@ export const ClusterProvider = () =>
             .filter((name) => name.length > 0),
         );
         if (labeled.size === 0) return [];
-        const page = yield* bigtable
-          .listProjectsInstancesClusters({
+        const clusters = yield* collectPages(
+          bigtable.listProjectsInstancesClusters.pages({
             parent: `projects/${env.project}/instances/-`,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({ clusters: [] as bigtable.Cluster[] }),
-            ),
-          );
-        return (page.clusters ?? [])
+          }),
+          (page) => page.clusters,
+        );
+        return clusters
           .filter((cluster) =>
             labeled.has(parseResourceName(cluster.name ?? "").instance),
           )
@@ -632,12 +617,10 @@ export const ClusterProvider = () =>
             schedule: Schedule.spaced("5 seconds"),
           }),
           Effect.as("deleted" as const),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed("deleted" as const),
-          ),
-          Effect.catchIf(
-            (error) => error._tag === "BadRequest" && isLastClusterError(error),
-            () => Effect.succeed("kept" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("deleted" as const)),
+          // The instance's last cluster goes away with the instance.
+          Effect.catchTag("LastClusterDeletion", () =>
+            Effect.succeed("kept" as const),
           ),
         );
       if (result === "deleted") {

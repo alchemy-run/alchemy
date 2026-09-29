@@ -14,7 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_IAM_DENY && !process.env.FAST;
+// Needs roles/iam.denyAdmin on the project (GCP_TEST_IAM_DENY_ADMIN=1); Owner
+// does not include it, so create fails with `Forbidden: Permission
+// iam.googleapis.com/denypolicies.create denied on resource ...`.
+const runLifecycle = !!process.env.GCP_TEST_IAM_DENY_ADMIN;
 
 const attachmentOf = (project: string) =>
   encodeURIComponent(`cloudresourcemanager.googleapis.com/projects/${project}`);
@@ -43,7 +46,7 @@ test.provider(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(iam.getPolicies({ name: missingName }));
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -77,7 +80,8 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
+      expect(error.message).toContain("denypolicies.create");
 
       yield* stack.destroy();
     }).pipe(logLevel),

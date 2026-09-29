@@ -183,7 +183,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (
@@ -201,7 +200,6 @@ const findByDisplayName = (
         option._tag === "Some" ? toAttrs(option.value, project) : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const TensorboardProvider = () =>

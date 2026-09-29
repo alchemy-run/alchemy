@@ -248,7 +248,6 @@ const listOwnedAt = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toBody = (
@@ -265,12 +264,7 @@ const toBody = (
 
 const stillCommitted = (
   error: bigqueryreservation.DeleteProjectsLocationsCapacityCommitmentsError,
-) =>
-  error._tag === "Conflict" ||
-  (error._tag === "BadRequest" &&
-    /precondition|committed period|commitment_end_time|cannot be deleted|still active/i.test(
-      error.message,
-    ));
+) => error._tag === "Conflict" || error._tag === "CapacityCommitmentNotExpired";
 
 export const CapacityCommitmentProvider = () =>
   Provider.succeed(CapacityCommitment, {

@@ -32,7 +32,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsDatabasesDocuments on a missing document fails with NotFound",
+  "getProjectsDatabasesDocuments on the Datastore-mode (default) database fails with DatastoreModeDatabase",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -44,15 +44,15 @@ test.provider(
           name: defaultDocOf(project),
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("DatastoreModeDatabase");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.GCP_TEST_FIRESTORE_DOCUMENT)(
-  "createDocumentProjectsDatabasesDocuments without a database fails with NotFound",
+test.provider(
+  "createDocumentProjectsDatabasesDocuments on the Datastore-mode (default) database fails with DatastoreModeDatabase",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -67,16 +67,16 @@ test.provider.skipIf(!!process.env.GCP_TEST_FIRESTORE_DOCUMENT)(
           body: { fields: { env: { stringValue: "probe" } } },
         }),
       );
-      expect(["NotFound", "BadRequest", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("DatastoreModeDatabase");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_FIRESTORE_DOCUMENT,
-)(
+// The testing project's (default) database is Datastore mode, which rejects
+// the Firestore API, so the lifecycle provisions its own Native database.
+test.provider(
   "create, update, and delete a firestore document",
   (stack) =>
     Effect.gen(function* () {
@@ -84,8 +84,12 @@ test.provider.skipIf(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const database = yield* GCP.Firestore.Database("DocDb", {
+            location: "us-central1",
+            type: "FIRESTORE_NATIVE",
+          });
           return yield* Document("Flag", {
-            database: "(default)",
+            database: database.databaseId,
             collectionId: "_alchemy",
             fields: { env: { stringValue: "test" } },
           });
@@ -101,14 +105,16 @@ test.provider.skipIf(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.fields?.env?.stringValue).toEqual("test");
-      expect(fetched.fields?.alchemy_id?.stringValue).toEqual(
-        expect.any(String),
-      );
+      expect(Object.keys(fetched.fields ?? {})).toEqual(["env"]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const database = yield* GCP.Firestore.Database("DocDb", {
+            location: "us-central1",
+            type: "FIRESTORE_NATIVE",
+          });
           return yield* Document("Flag", {
-            database: "(default)",
+            database: database.databaseId,
             collectionId: "_alchemy",
             documentId: created.documentId,
             fields: {

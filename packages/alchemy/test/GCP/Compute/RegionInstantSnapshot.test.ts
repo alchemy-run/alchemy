@@ -26,9 +26,7 @@ const waitUntilGone = (project: string, instantSnapshot: string) =>
     }),
   );
 
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_REGION_INSTANT_SNAPSHOT,
-)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update labels, replace, and delete a regional instant snapshot",
   (stack) =>
     Effect.gen(function* () {

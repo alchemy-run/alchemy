@@ -15,8 +15,8 @@ const logLevel = Effect.provideService(
 );
 // Live create returns Forbidden: "The caller does not have permission"
 // (resourcemanager.projects.create on the parent organization/folder).
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_RESOURCE_MANAGER === "1";
+// Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there.
+const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
 
 const waitUntilGone = (name: string) =>
   resourcemanager.getProjects({ name }).pipe(
@@ -25,7 +25,7 @@ const waitUntilGone = (name: string) =>
         ? ("gone" as const)
         : ("found" as const),
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ProjectNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -54,7 +54,7 @@ test.provider(
           name: "projects/alchemy-missing-proj",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ProjectNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -64,16 +64,14 @@ test.provider(
   },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_RESOURCE_MANAGER === "1")(
-  "createProjects without project-creator IAM fails with a typed tag",
+test.provider.skipIf(runLifecycle)(
+  "createProjects without project-creator IAM fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const parent = yield* resolveParent.pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       const error = yield* Effect.flip(
         resourcemanager.createProjects({
@@ -84,9 +82,7 @@ test.provider.skipIf(process.env.GCP_TEST_RESOURCE_MANAGER === "1")(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest", "Conflict"]).toContain(
-        error._tag,
-      );
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),

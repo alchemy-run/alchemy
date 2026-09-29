@@ -18,7 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_REDUNDANCY_TYPE = "TWO_IPS_REDUNDANCY";
 const MAX_NAME_LENGTH = 63;
@@ -162,14 +162,6 @@ export class ExternalVpnGatewayPending extends Data.TaggedError(
   status: string;
 }> {}
 
-export class ExternalVpnGatewayOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ExternalVpnGatewayOperationFailed",
-)<{
-  externalVpnGatewayName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
@@ -234,74 +226,10 @@ const toAttrs = (gateway: compute.ExternalVpnGateway, project: string) => ({
   creationTimestamp: gateway.creationTimestamp,
 });
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  externalVpnGatewayName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new ExternalVpnGatewayOperationFailed({
-      externalVpnGatewayName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, externalVpnGateway: string) =>
   compute
     .getExternalVpnGateways({ project, externalVpnGateway })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  externalVpnGatewayName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, externalVpnGatewayName);
-        return;
-      }
-      return yield* new ExternalVpnGatewayOperationFailed({
-        externalVpnGatewayName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, externalVpnGatewayName);
-      return;
-    }
-    const waited = yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: 20 },
-    );
-    yield* failIfOpError(waited, externalVpnGatewayName);
-  });
 
 const requireGateway = (project: string, externalVpnGatewayName: string) =>
   getByName(project, externalVpnGatewayName).pipe(
@@ -456,11 +384,9 @@ export const ExternalVpnGatewayProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                operation,
-                externalVpnGatewayName,
-              ).pipe(
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() =>
                   requireGateway(env.project, externalVpnGatewayName),
                 ),
@@ -497,11 +423,7 @@ export const ExternalVpnGatewayProvider = () =>
             })
             .pipe(
               Effect.flatMap((operation) =>
-                waitForOperation(
-                  env.project,
-                  operation,
-                  externalVpnGatewayName,
-                ),
+                waitGlobalOperation(env.project, operation),
               ),
             );
         }).pipe(
@@ -529,7 +451,9 @@ export const ExternalVpnGatewayProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.externalVpnGatewayName),
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

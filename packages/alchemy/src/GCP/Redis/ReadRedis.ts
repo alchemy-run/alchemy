@@ -7,8 +7,11 @@ import type { Instance } from "./Instance.ts";
  * Bind a Memorystore {@link Instance} with read access.
  *
  * Uses the shared `alchemy/Redis` RESP client. Provide
- * {@link ReadRedisHttp}. The instance's host/port/AUTH are packed into
- * `REDIS_URL` on the Cloud Run / Function host.
+ * {@link ReadRedisHttp}. The host receives only the instance endpoint; when
+ * AUTH is enabled the runtime fetches the AUTH string with
+ * `instances.getAuthString`, so the host is granted `roles/redis.admin`
+ * (the only predefined role with that permission) on the project under an
+ * IAM Condition matching this instance.
  *
  * ### Read
  * **Example:** Get a key

@@ -9,7 +9,6 @@ export const UPLOADS_PREFIX = "uploads/";
  * data with it.
  */
 export const Uploads = GCP.Storage.Bucket("Uploads", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
@@ -18,7 +17,6 @@ export const Uploads = GCP.Storage.Bucket("Uploads", {
  * indexer once the object has landed.
  */
 export const Files = GCP.Firestore.Database("Files", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });
 

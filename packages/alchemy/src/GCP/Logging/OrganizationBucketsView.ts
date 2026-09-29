@@ -129,9 +129,7 @@ export type OrganizationBucketsView = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const view = yield* GCP.Logging.OrganizationBucketsView("Errors", {
- *   viewId: existing.viewId,
- *   bucket: existing.bucket,
- *   organization: existing.organization,
+ *   bucket: bucket.name,
  *   filter: 'resource.type = "gce_instance" AND LOG_ID("syslog")',
  *   description: "syslog from compute",
  * });
@@ -335,16 +333,13 @@ export const OrganizationBucketsViewProvider = () =>
                           toAttrs(view, bucket.name ?? "", env.project),
                         ),
                         Stream.catchTag("NotFound", () => Stream.empty),
-                        Stream.catchTag("Forbidden", () => Stream.empty),
                       )
                   : Stream.empty,
               { concurrency: 4 },
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

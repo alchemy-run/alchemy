@@ -10,19 +10,6 @@ export const MAX_NAME_LENGTH = 63;
 export const DEFAULT_TABULAR_METADATA_SCHEMA_URI =
   "gs://google-cloud-aiplatform/schema/dataset/metadata/tabular_1.0.0.yaml";
 
-export class AIPlatformOperationFailed extends Data.TaggedError(
-  "GCP.AIPlatform.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class AIPlatformOperationPending extends Data.TaggedError(
-  "GCP.AIPlatform.OperationPending",
-)<{
-  operation: string;
-}> {}
-
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -124,14 +111,6 @@ export const hasOwnershipMarker = (text: string | undefined) =>
     key.startsWith("alchemy-"),
   );
 
-const alreadyExists = (error: aiplatform.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: aiplatform.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
 export const resourceNameFromOperation = (
   operation: aiplatform.GoogleLongrunningOperation,
 ): string | undefined => {
@@ -143,82 +122,7 @@ export const resourceNameFromOperation = (
   return undefined;
 };
 
-export const waitForOperation = (
-  operation: aiplatform.GoogleLongrunningOperation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    space?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new AIPlatformOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new AIPlatformOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = aiplatform.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<aiplatform.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new AIPlatformOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error) return Effect.succeed(current);
-        if (alreadyExists(error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new AIPlatformOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.AIPlatform.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.space ?? "4 seconds"),
-      }),
-    );
-  });
+export { waitForOperation } from "./operations.ts";
 
 export const JOB_TERMINAL_STATES = new Set([
   "JOB_STATE_SUCCEEDED",

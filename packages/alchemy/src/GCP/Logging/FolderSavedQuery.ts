@@ -141,7 +141,6 @@ export type FolderSavedQuery = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const query = yield* GCP.Logging.FolderSavedQuery("Errors", {
- *   savedQueryId: existing.savedQueryId,
  *   displayName: "warnings and errors",
  *   visibility: "SHARED",
  *   loggingQuery: { filter: "severity>=WARNING" },

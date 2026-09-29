@@ -186,8 +186,8 @@ export type FolderSink = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const sink = yield* GCP.Logging.FolderSink("Errors", {
- *   sinkId: existing.sinkId,
- *   destination: existing.destination,
+ *   destination:
+ *     "logging.googleapis.com/projects/my-project/locations/global/buckets/_Default",
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  * });

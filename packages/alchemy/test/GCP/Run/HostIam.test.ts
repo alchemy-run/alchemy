@@ -35,8 +35,8 @@ class IamService extends GCP.Function<IamService>()(
     template: { containers: [{ image: HELLO_IMAGE }] },
   },
   Effect.gen(function* () {
-    yield* GCP.PubSub.Publish(yield* Events);
-    yield* GCP.Storage.GetObject(yield* Blobs);
+    yield* GCP.PubSub.Publish(Events);
+    yield* GCP.Storage.GetObject(Blobs);
     return {};
   }).pipe(
     Effect.provide(GCP.PubSub.PublishHttp),
@@ -51,7 +51,7 @@ class IamServicePublishOnly extends GCP.Function<IamServicePublishOnly>()(
     template: { containers: [{ image: HELLO_IMAGE }] },
   },
   Effect.gen(function* () {
-    yield* GCP.PubSub.Publish(yield* Events);
+    yield* GCP.PubSub.Publish(Events);
     yield* Blobs;
     return {};
   }).pipe(Effect.provide(GCP.PubSub.PublishHttp)),
@@ -66,7 +66,7 @@ class IamJob extends GCP.Run.Job<IamJob>()(
     containers: [{ image: HELLO_IMAGE }],
   },
   Effect.gen(function* () {
-    yield* GCP.PubSub.Publish(yield* Events);
+    yield* GCP.PubSub.Publish(Events);
     return {};
   }).pipe(Effect.provide(GCP.PubSub.PublishHttp)),
 ) {}

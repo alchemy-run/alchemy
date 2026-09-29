@@ -252,7 +252,8 @@ export const ObjectProvider = () =>
           // The observed MD5 + served headers fully describe the object, so
           // a `file` edit is caught by hashing it and a re-serialized
           // `content` with identical bytes stays a no-op.
-          const md5 = yield* md5Of(yield* desiredBytes(news));
+          const bytes = yield* desiredBytes(news);
+          const md5 = yield* md5Of(bytes);
           const unchanged =
             md5 === output.md5Hash &&
             desiredContentType(news) === output.contentType &&

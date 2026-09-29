@@ -8,6 +8,11 @@ import { ResumeJob } from "./ResumeJob.ts";
 /**
  * HTTP implementation of {@link ResumeJob}.
  *
+ * Grants `roles/cloudscheduler.admin` on the project because it is the
+ * only predefined role with `cloudscheduler.jobs.enable`, and Cloud Scheduler
+ * supports neither per-job IAM policies nor IAM Conditions on
+ * `resource.name`.
+ *
  * @layer
  * @provides GCP.CloudScheduler.ResumeJob
  */
@@ -23,7 +28,6 @@ export const ResumeJobHttp: Layer.Layer<
     scheduler.ResumeProjectsLocationsJobsError
   >({
     tag: "GCP.CloudScheduler.ResumeJob",
-    // Only cloudscheduler.admin has jobs.enable; no resource-level IAM.
     iam: { role: "roles/cloudscheduler.admin" },
     operation: scheduler.resumeProjectsLocationsJobs,
   }),

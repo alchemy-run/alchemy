@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -163,14 +163,6 @@ export class SslCertificateNotResolved extends Data.TaggedError(
   sslCertificateName: string;
 }> {}
 
-export class SslCertificateOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SslCertificateOperationFailed",
-)<{
-  sslCertificateName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const rfc1035 = (name: string): string => {
   let next = name
     .toLowerCase()
@@ -329,53 +321,6 @@ const awaitResource = (project: string, sslCertificateName: string) =>
     }),
   );
 
-const failIfErrored = (
-  sslCertificateName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new SslCertificateOperationFailed({
-        sslCertificateName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  sslCertificateName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(sslCertificateName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(sslCertificateName, operation);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (op) => op.status === "DONE",
-        times: 8,
-      }),
-    );
-    return yield* failIfErrored(sslCertificateName, done);
-  });
-
 const immutableChanged = (
   news: SslCertificateProps,
   olds: Partial<SslCertificateProps> | undefined,
@@ -507,7 +452,7 @@ export const SslCertificateProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, sslCertificateName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -540,11 +485,9 @@ export const SslCertificateProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.sslCertificateName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

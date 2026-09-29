@@ -153,7 +153,6 @@ const listKeyRingsAt = (parent: string) =>
     return found;
   }).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([] as kms.KeyRing[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as kms.KeyRing[])),
   );
 
 export const KeyRingProvider = () =>

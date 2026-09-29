@@ -1,4 +1,4 @@
-export * from "./BackupBackup.ts";
+export * from "./Backup.ts";
 export * from "./BackupRun.ts";
 export * from "./Connect.ts";
 export * from "./ConnectHttp.ts";

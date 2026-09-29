@@ -8,16 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  createInternalLabels,
-  encodeOwnership,
-  hasAlchemyLabels,
-  hasOwnershipMarker,
-  lastSegment,
-  orgIdOf,
-  orgParent,
-  parseOwnership,
-} from "./ownership.ts";
+import { orgIdOf, orgParent } from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -39,9 +30,8 @@ export type SitesApicategoryProps = {
    */
   categoryId?: string;
   /**
-   * User-facing category name. API categories have no labels field, so
-   * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * User-facing category name shown on the portal. If omitted, a unique
+   * name is generated from the stack, stage, and logical id.
    */
   name?: string;
 };
@@ -58,7 +48,7 @@ export type SitesApicategory = Resource<
     organization: string;
     /** Portal site id. */
     siteId: string;
-    /** User-facing name with the Alchemy ownership prefix stripped. */
+    /** User-facing category name. */
     categoryName: string | undefined;
     /** Last-modified time in milliseconds since epoch. */
     updateTime: string | undefined;
@@ -71,10 +61,13 @@ export type SitesApicategory = Resource<
  * An API category on an Apigee integrated portal. Catalog items can be
  * tagged with categories so portal users can browse by topic.
  *
- * API categories have no labels field, so Alchemy stamps ownership into
- * the category `name` for `list` / nuke. `siteId` and `organization` are
- * identity — changing either replaces the category. The display name
- * updates in place.
+ * API categories have no labels field and the name is shown to portal
+ * users, so Alchemy finds its category by name: `read` reports a
+ * category as owned only when it carries the generated name (an explicit
+ * `name` is reported as unowned — adopt it with `--adopt`), and nuke
+ * cannot discover categories. `siteId` and `organization` are identity —
+ * changing either replaces the category. The display name updates in
+ * place.
  *
  * ### Creating an API Category
  * **Example:** Named category
@@ -90,7 +83,6 @@ export type SitesApicategory = Resource<
  * ```typescript
  * const category = yield* GCP.Apigee.SitesApicategory("Payments", {
  *   siteId: portal.siteId,
- *   categoryId: existing.categoryId,
  *   name: "Billing",
  * });
  * ```
@@ -139,13 +131,12 @@ const toAttrs = (
   siteId: string,
 ) => {
   const categoryId = category.id ?? "";
-  const parsed = parseOwnership(category.name);
   return {
     name: categoryId ? resourceName(org, siteId, categoryId) : "",
     categoryId,
     organization: org,
     siteId: category.siteId ?? siteId,
-    categoryName: parsed.text,
+    categoryName: category.name,
     updateTime: category.updateTime,
   };
 };
@@ -153,7 +144,9 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.map((response) => unwrap(response)),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const listBySite = (org: string, siteId: string) =>
@@ -163,20 +156,17 @@ const listBySite = (org: string, siteId: string) =>
     })
     .pipe(
       Effect.map((page) => page.data ?? []),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed([]),
+      ),
     );
 
-const findOwned = (org: string, siteId: string, id: string) =>
-  Effect.gen(function* () {
-    const categories = yield* listBySite(org, siteId);
-    for (const category of categories) {
-      const { labels } = parseOwnership(category.name);
-      if (yield* hasAlchemyLabels(id, labels)) {
-        return category;
-      }
-    }
-    return undefined;
-  });
+const findByDisplayName = (org: string, siteId: string, displayName: string) =>
+  listBySite(org, siteId).pipe(
+    Effect.map((categories) =>
+      categories.find((category) => category.name === displayName),
+    ),
+  );
 
 export const SitesApicategoryProvider = () =>
   Provider.succeed(SitesApicategory, {
@@ -217,27 +207,16 @@ export const SitesApicategoryProvider = () =>
         (categoryId !== undefined
           ? resourceName(org, siteId, categoryId)
           : undefined);
+      const generated = yield* toDisplayName(id, undefined);
+      const displayName = olds?.name ?? output?.categoryName ?? generated;
       const existing =
         name !== undefined
           ? yield* getByName(name)
-          : yield* findOwned(org, siteId, id);
+          : yield* findByDisplayName(org, siteId, displayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, org, siteId);
-      const { labels } = parseOwnership(existing.name);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return existing.name === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const org = env.project;
-        const categories = yield* listBySite(org, "-");
-        return categories
-          .filter((category) => hasOwnershipMarker(category.name))
-          .map((category) =>
-            toAttrs(category, org, category.siteId ?? lastSegment("-")),
-          );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -246,20 +225,19 @@ export const SitesApicategoryProvider = () =>
         env.project,
       );
       const siteId = news.siteId;
-      const ownership = yield* createInternalLabels(id);
       const displayName = yield* toDisplayName(
         id,
         news.name,
         output?.categoryName,
       );
-      const desiredName = encodeOwnership(ownership, displayName);
+      const desiredName = displayName;
 
       let current =
         output?.name !== undefined
           ? yield* getByName(output.name)
           : news.categoryId !== undefined
             ? yield* getByName(resourceName(org, siteId, news.categoryId))
-            : yield* findOwned(org, siteId, id);
+            : yield* findByDisplayName(org, siteId, desiredName);
 
       if (current === undefined) {
         const created = yield* apigee
@@ -272,7 +250,9 @@ export const SitesApicategoryProvider = () =>
           })
           .pipe(
             Effect.map((response) => unwrap(response)),
-            Effect.catchTag("Conflict", () => findOwned(org, siteId, id)),
+            Effect.catchTag("Conflict", () =>
+              findByDisplayName(org, siteId, desiredName),
+            ),
           );
         current = created ?? undefined;
       }
@@ -302,6 +282,11 @@ export const SitesApicategoryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSitesApicategories({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

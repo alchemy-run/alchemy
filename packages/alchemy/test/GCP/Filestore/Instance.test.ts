@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { CAPACITY_ZONE } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,8 +15,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Create + patch + delete each take ~5–10 minutes; skip unless explicitly enabled.
-const runLifecycle = !!process.env.GCP_TEST_FILESTORE && !process.env.FAST;
+// Filestore instances take 5–20 minutes to provision and several to delete.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   file.getProjectsLocationsInstances({ name }).pipe(
@@ -43,12 +44,6 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page = yield* file.listProjectsLocationsInstances({
-        parent: `projects/${project}/locations/-`,
-        pageSize: 10,
-      });
-      expect(Array.isArray(page.instances ?? [])).toEqual(true);
-
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:filestore", "live"], timeout: 90_000 },
@@ -63,7 +58,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Filestore.Instance("Nfs", {
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "BASIC_HDD",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -75,7 +70,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.name).toContain("/instances/");
       expect(created.instanceId).toEqual(expect.any(String));
-      expect(created.location).toEqual("us-central1-a");
+      expect(created.location).toEqual(CAPACITY_ZONE);
       expect(created.tier).toEqual("BASIC_HDD");
       expect(created.description).toEqual("alchemy-test-nfs");
       expect(created.labels).toMatchObject({ env: "test" });
@@ -97,7 +92,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.Filestore.Instance("Nfs", {
             instanceId: created.instanceId,
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "BASIC_HDD",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -123,8 +118,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
-    timeout: 120_000,
-  },
+  { timeout: 2_700_000, retry: 0 },
 );

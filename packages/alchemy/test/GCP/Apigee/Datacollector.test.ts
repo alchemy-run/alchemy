@@ -14,13 +14,19 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsDatacollectors({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("ApigeeResourceNotFound", () =>
+      Effect.succeed("gone" as const),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -29,7 +35,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsDatacollectors on a missing collector fails with NotFound or Forbidden",
+  "getOrganizationsDatacollectors on a missing collector fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,7 +48,7 @@ test.provider(
           name: `${org}/datacollectors/dc_alchemy_missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -1,5 +1,6 @@
+import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -206,25 +207,11 @@ export class SecurityPolicyNotResolved extends Data.TaggedError(
   securityPolicyName: string;
 }> {}
 
-export class SecurityPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SecurityPolicyOperationFailed",
-)<{
-  securityPolicyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class SecurityPolicyStillExists extends Data.TaggedError(
   "GCP.Compute.SecurityPolicyStillExists",
 )<{
   securityPolicyName: string;
 }> {}
-
-const lastSegment = (value: string | undefined): string => {
-  if (value === undefined || value.length === 0) return "";
-  const parts = value.split("/");
-  return parts[parts.length - 1] || value;
-};
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -391,108 +378,10 @@ const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
   kind: policy.kind,
 });
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) =>
-    (item.code ?? "").toUpperCase(),
-  );
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const isAlreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    codes.includes("ALREADY_EXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    text.includes("already exists")
-  );
-};
-
-const isNotFoundOperation = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    operation.httpErrorStatusCode === 404 ||
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  );
-};
-
-const failIfErrored = (
-  securityPolicyName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.void;
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new SecurityPolicyOperationFailed({
-        securityPolicyName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, securityPolicy: string) =>
   compute
     .getSecurityPolicies({ project, securityPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  securityPolicyName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new SecurityPolicyOperationFailed({
-        securityPolicyName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(securityPolicyName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, securityPolicyName: string) =>
   getByName(project, securityPolicyName).pipe(
@@ -531,7 +420,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, securityPolicyName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -714,8 +605,8 @@ export const SecurityPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, securityPolicyName, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -840,8 +731,8 @@ export const SecurityPolicyProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.securityPolicyName, {
-              ignoreNotFound: true,
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),

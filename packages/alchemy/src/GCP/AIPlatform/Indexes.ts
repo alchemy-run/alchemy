@@ -186,7 +186,7 @@ const listPage = (parent: string, filter?: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.indexes ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Index[]),
       ),
     );

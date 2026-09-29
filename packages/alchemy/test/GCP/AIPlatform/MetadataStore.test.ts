@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsMetadataStores({ name }).pipe(
     Effect.as("found" as const),
@@ -42,23 +38,14 @@ test.provider(
           name: `${parent}/metadataStores/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsMetadataStores({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ metadataStores: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.metadataStores ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsMetadataStores({
+        parent,
+        pageSize: 10,
+      });
+      expect(
+        (page.metadataStores ?? []).map((item) => item.name),
+      ).not.toContain(`${parent}/metadataStores/alchemy-missing`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +55,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a metadata store",
   (stack) =>
     Effect.gen(function* () {

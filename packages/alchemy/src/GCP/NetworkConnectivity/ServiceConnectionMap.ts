@@ -172,9 +172,7 @@ export type ServiceConnectionMap = Resource<
  * **Example:** Description and labels
  * ```typescript
  * const map = yield* GCP.NetworkConnectivity.ServiceConnectionMap("Sql", {
- *   serviceConnectionMapId: existing.serviceConnectionMapId,
- *   location: existing.location,
- *   serviceClass: existing.serviceClass,
+ *   serviceClass: "gcp-cloud-sql",
  *   description: "sql psc map v2",
  *   labels: { env: "prod", role: "psc" },
  * });

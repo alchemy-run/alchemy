@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -217,8 +218,8 @@ export type Endpoint = Resource<
  * ### Updating an Endpoint
  * **Example:** Change display name and labels
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const endpoint = yield* GCP.AIPlatform.Endpoint("Predictor", {
- *   endpointId: existing.endpointId,
  *   displayName: "orders-v2",
  *   labels: { env: "prod", role: "predict" },
  * });
@@ -496,11 +497,15 @@ export const EndpointProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* aiplatform.listProjectsLocationsEndpoints
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        return yield* Stream.fromIterable(listLocations(env.region))
+          .pipe(
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsEndpoints.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
+            ),
+          )
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.endpoints ?? [])),
             Stream.filter((endpoint) => hasAlchemyLabelMap(endpoint.labels)),
@@ -508,7 +513,6 @@ export const EndpointProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

@@ -210,7 +210,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroupsAppsKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const listAppGroups = (organization: string) =>
   collectPages(
@@ -220,7 +224,7 @@ const listAppGroups = (organization: string) =>
     }),
     (page) => page.appGroups,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed([] as apigee.GoogleCloudApigeeV1AppGroup[]),
     ),
   );
@@ -233,7 +237,7 @@ const listApps = (parent: string) =>
     }),
     (page) => page.appGroupApps,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed([] as apigee.GoogleCloudApigeeV1AppGroupApp[]),
     ),
   );
@@ -335,8 +339,9 @@ export const AppgroupsAppsKeyProvider = () =>
                         name: `${parent}/apps/${appName}`,
                       })
                       .pipe(
-                        Effect.catchTag(["NotFound", "Forbidden"], () =>
-                          Effect.succeed(app),
+                        Effect.catchTag(
+                          ["NotFound", "ApigeeResourceNotFound"],
+                          () => Effect.succeed(app),
                         ),
                       );
               for (const credential of fetched.credentials ?? []) {
@@ -452,6 +457,11 @@ export const AppgroupsAppsKeyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAppgroupsAppsKeys({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

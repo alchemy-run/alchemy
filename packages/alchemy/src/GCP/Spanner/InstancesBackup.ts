@@ -239,11 +239,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesBackups({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -405,7 +401,7 @@ export const InstancesBackupProvider = () =>
                 Stream.map((backup) => toAttrs(backup, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as InstancesBackup["Attributes"][]),
                 ),
               );
@@ -481,7 +477,7 @@ export const InstancesBackupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* spanner.deleteProjectsInstancesBackups({ name: output.name }).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+        Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

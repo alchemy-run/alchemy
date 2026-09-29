@@ -478,7 +478,8 @@ const rewrite = (
 
 /**
  * Read-modify-write one resource's IAM policy under its etag, re-reading
- * on a concurrent-write `Conflict` so parallel host deploys converge
+ * on a concurrent-write `Conflict` (Cloud Storage: `IamPolicyEtagMismatch`)
+ * so parallel host deploys converge
  * instead of failing. A freshly created service account can take a few
  * seconds to become a valid policy member, surfaced as `BadRequest`.
  */
@@ -504,6 +505,8 @@ export const updateIamMembership = (options: {
     Effect.retry({
       while: (error) =>
         error._tag === "Conflict" ||
+        // Cloud Storage reports a stale etag as 412, not 409.
+        error._tag === "IamPolicyEtagMismatch" ||
         (error._tag === "BadRequest" &&
           /does not exist/i.test(error.message ?? "")),
       // ~60s total: long enough for a new service account to propagate.

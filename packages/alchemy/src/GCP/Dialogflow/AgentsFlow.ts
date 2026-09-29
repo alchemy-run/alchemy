@@ -21,6 +21,7 @@ import {
   sameJson,
   sameText,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type NluSettings = {
@@ -121,11 +122,12 @@ export type AgentsFlow = Resource<
  * ```
  *
  * ### Updating a Flow
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Rename
  * ```typescript
  * const flow = yield* GCP.Dialogflow.AgentsFlow("Ordering", {
  *   agent: agent.name,
- *   flowId: existing.flowId,
  *   displayName: "checkout",
  *   description: "checkout flow",
  * });
@@ -324,7 +326,7 @@ export const AgentsFlowProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -333,5 +335,5 @@ export const AgentsFlowProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

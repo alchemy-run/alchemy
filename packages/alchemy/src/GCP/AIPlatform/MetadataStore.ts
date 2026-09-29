@@ -153,7 +153,7 @@ const listPage = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.metadataStores ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
       ),
     );

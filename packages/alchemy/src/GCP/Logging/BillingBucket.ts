@@ -165,9 +165,7 @@ export type BillingBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.BillingBucket("AppLogs", {
- *   billingAccountId: existing.billingAccountId,
- *   bucketId: existing.bucketId,
- *   location: existing.location,
+ *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });
@@ -431,7 +429,7 @@ export const BillingBucketProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as BillingBucket["Attributes"][]),
             ),
           );

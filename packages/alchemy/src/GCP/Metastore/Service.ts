@@ -233,8 +233,8 @@ export type Service = Resource<
  * ### Updating a Service
  * **Example:** Labels and port
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const service = yield* GCP.Metastore.Service("Hive", {
- *   serviceId: existing.serviceId,
  *   hiveMetastoreConfig: { version: "3.1.2" },
  *   port: 9084,
  *   labels: { env: "prod" },
@@ -313,7 +313,7 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
-  listAtLocation(project, region, (parent) =>
+  listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsServices.pages({
         parent,
@@ -458,7 +458,12 @@ export const ServiceProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
         current = yield* waitUntilReady(
@@ -565,7 +570,12 @@ export const ServiceProvider = () =>
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
         if (unlocked !== undefined) {
-          yield* waitForOperation(unlocked, { notFoundOk: true });
+          // NOT_FOUND (5): already gone.
+          yield* waitForOperation(unlocked).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 5 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
       }
       const operation = yield* metastore
@@ -579,7 +589,12 @@ export const ServiceProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

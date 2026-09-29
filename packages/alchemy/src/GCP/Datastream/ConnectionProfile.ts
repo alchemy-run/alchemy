@@ -827,7 +827,7 @@ export const ConnectionProfileProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* ds
+        yield* ds
           .createProjectsLocationsConnectionProfiles({
             parent: locationParent(env.project, location),
             connectionProfileId,
@@ -835,8 +835,18 @@ export const ConnectionProfileProvider = () =>
             validateOnly: news.validateOnly,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        yield* settleOperation(created);
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((created) => settleOperation(created)),
+            // Datastream intermittently fails the create operation with
+            // INTERNAL ("an internal error has occurred") under load.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.OperationFailed" && error.code === 13,
+              times: 4,
+              schedule: Schedule.exponential("5 seconds"),
+            }),
+          );
         current = yield* waitUntilExists(getByName(name), name);
       }
 
@@ -1011,11 +1021,7 @@ export const ConnectionProfileProvider = () =>
             Effect.succeed(undefined),
           ),
         );
-      yield* settleOperation(operation, {
-        notFoundOk: true,
-        times: 18,
-        interval: "3 seconds",
-      });
+      yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name, {
         times: 15,
         interval: "2 seconds",

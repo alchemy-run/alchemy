@@ -17,9 +17,7 @@ const logLevel = Effect.provideService(
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsAuthConfigs({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -44,7 +42,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/authConfigs/alchemy-missing-auth`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -54,7 +52,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
+test.provider(
   "create, update, and delete an auth config",
   (stack) =>
     Effect.gen(function* () {

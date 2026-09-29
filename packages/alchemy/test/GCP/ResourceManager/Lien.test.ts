@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -16,9 +17,7 @@ const logLevel = Effect.provideService(
 const waitUntilGone = (name: string) =>
   resourcemanager.getLiens({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -27,17 +26,23 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getLiens on a missing lien fails with a typed tag",
+  "getLiens on a missing lien fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
+      // Lien names are `liens/p{projectNumber}-l{uuid}`.
+      const resource = yield* resourcemanager.getProjects({
+        name: `projects/${project}`,
+      });
+      const projectNumber = (resource.name ?? "").split("/").pop();
       const error = yield* Effect.flip(
         resourcemanager.getLiens({
-          name: "liens/999999999999",
+          name: `liens/p${projectNumber}-l00000000-0000-0000-0000-000000000000`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -71,8 +76,7 @@ test.provider(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.reason).toContain("alchemy-id=");
-      expect(fetched.reason).toContain("production API key");
+      expect(fetched.reason).toEqual("production API key");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -92,8 +96,7 @@ test.provider(
       const fetchedReplace = yield* resourcemanager.getLiens({
         name: replaced.name,
       });
-      expect(fetchedReplace.reason).toContain("holds billing export");
-      expect(fetchedReplace.reason).toContain("alchemy-id=");
+      expect(fetchedReplace.reason).toEqual("holds billing export");
 
       const oldGone = yield* waitUntilGone(created.name);
       expect(oldGone).toEqual("gone");

@@ -95,7 +95,8 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* uploadFile(repo.name);
       const fileName = `${repo.name}/files/${PACKAGE_ID}:${VERSION_ID}:${FILENAME}`;
       const versionName = `${repo.name}/packages/${PACKAGE_ID}/versions/${VERSION_ID}`;
-      expect(yield* waitForFile(fileName)).toEqual("found");
+      const file = yield* waitForFile(fileName);
+      expect(file).toEqual("found");
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

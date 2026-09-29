@@ -39,7 +39,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/templates/alchemy-missing-template`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -49,7 +49,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!process.env.GCP_TEST_INTEGRATIONS)(
+test.provider(
   "create, update, and delete an integration template",
   (stack) =>
     Effect.gen(function* () {

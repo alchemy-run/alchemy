@@ -93,7 +93,6 @@ export type Space = Resource<
  * **Example:** Change the display name
  * ```typescript
  * const space = yield* GCP.Apigee.Space("Payments", {
- *   spaceId: existing.spaceId,
  *   displayName: "payments and billing",
  * });
  * ```
@@ -162,7 +161,7 @@ const getByName = (name: string) =>
   apigee
     .getOrganizationsSpaces({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -219,7 +218,7 @@ export const SpaceProvider = () =>
             Stream.map((space) => toAttrs(space, org)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([]),
             ),
           );
@@ -271,6 +270,11 @@ export const SpaceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSpaces({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

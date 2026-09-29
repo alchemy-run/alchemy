@@ -14,9 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// AgentService is v1beta1-only; the aiplatform_v1 SDK gets BadRequest
+// "This API version is not supported by AgentService. Please use the
+// v1beta1 version." Set GCP_TEST_AIPLATFORM_AGENTS=1 once the v1 API serves agents.
 const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+  !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_AGENTS;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsAgents({ name }).pipe(
@@ -39,26 +41,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsAgents({
-          name: `${parent}/agents/alchemy-aiplatform-missing`,
+          name: `${parent}/agents/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsAgents({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ agents: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.agents ?? [])).toEqual(true);
+      expect(error._tag).toEqual("AgentServiceV1Unsupported");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -66,6 +52,23 @@ test.provider(
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
     timeout: 90_000,
   },
+);
+
+test.provider.skipIf(runLifecycle)(
+  "createProjectsLocationsAgents is rejected on the v1 API",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+      const error = yield* Effect.flip(
+        aiplatform.createProjectsLocationsAgents({
+          parent: `projects/${project}/locations/us-central1`,
+          body: {},
+        }),
+      );
+      expect(error._tag).toEqual("AgentServiceV1Unsupported");
+    }).pipe(logLevel),
+  { timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(

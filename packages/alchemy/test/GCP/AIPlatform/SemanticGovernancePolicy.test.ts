@@ -14,9 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Policies govern an existing Vertex AI Agent
+// (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create.
+// Set GCP_TEST_AGENT to that agent's resource name to run the lifecycle.
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AGENT;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsSemanticGovernancePolicies({ name }).pipe(
@@ -41,7 +42,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/semanticGovernancePolicies/alchemy-sgp-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

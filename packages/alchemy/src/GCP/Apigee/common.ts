@@ -55,8 +55,11 @@ export const missingToUndefined = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (
+        error,
+      ): error is E & {
+        readonly _tag: "NotFound" | "ApigeeResourceNotFound";
+      } => error._tag === "NotFound" || error._tag === "ApigeeResourceNotFound",
       () => Effect.succeed(undefined as A | undefined),
     ),
   );
@@ -67,8 +70,11 @@ export const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (
+        error,
+      ): error is E & {
+        readonly _tag: "NotFound" | "ApigeeResourceNotFound";
+      } => error._tag === "NotFound" || error._tag === "ApigeeResourceNotFound",
       () => Effect.succeed(empty),
     ),
   );

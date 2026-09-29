@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -134,12 +134,10 @@ export class GlobalVmExtensionPolicyNotResolved extends Data.TaggedError(
   policyName: string;
 }> {}
 
-export class GlobalVmExtensionPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.GlobalVmExtensionPolicyOperationFailed",
+export class GlobalVmExtensionPolicyStillExists extends Data.TaggedError(
+  "GCP.Compute.GlobalVmExtensionPolicyStillExists",
 )<{
   policyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const DEFAULT_ROLLOUT: GlobalVmExtensionPolicyRolloutOperation = {
@@ -205,6 +203,22 @@ const parseDescription = (
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
+// Compute echoes unset extension fields back as empty strings
+// (`{ pinnedVersion: "", stringConfig: "" }`), so compare only set fields.
+const extensionPoliciesKey = (
+  policies: compute.GlobalVmExtensionPolicy["extensionPolicies"],
+) =>
+  jsonOf(
+    Object.entries(policies ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, policy]) => [
+        name,
+        Object.entries(policy ?? {})
+          .filter(([, value]) => value !== "" && value != null)
+          .sort(([a], [b]) => a.localeCompare(b)),
+      ]),
+  );
+
 const toBody = (
   policyName: string,
   props: GlobalVmExtensionPolicyProps,
@@ -245,7 +259,10 @@ const needsUpdate = (
 ) => {
   if ((current.description ?? "") !== (desired.description ?? "")) return true;
   if ((current.priority ?? 0) !== (desired.priority ?? 0)) return true;
-  if (jsonOf(current.extensionPolicies) !== jsonOf(desired.extensionPolicies)) {
+  if (
+    extensionPoliciesKey(current.extensionPolicies) !==
+    extensionPoliciesKey(desired.extensionPolicies)
+  ) {
     return true;
   }
   if (
@@ -265,54 +282,6 @@ const getByName = (project: string, globalVmExtensionPolicy: string) =>
   compute
     .getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const failIfErrored = (policyName: string, operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new GlobalVmExtensionPolicyOperationFailed({
-        policyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  policyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations(
-        {
-          project,
-          operation: current.name,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(policyName, current);
-  });
 
 const awaitResource = (project: string, policyName: string) =>
   getByName(project, policyName).pipe(
@@ -395,7 +364,9 @@ export const GlobalVmExtensionPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, policyName, operation),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -415,7 +386,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, policyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, policyName);
@@ -431,24 +402,54 @@ export const GlobalVmExtensionPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
-      const operation = yield* compute
-        .deleteGlobalVmExtensionPolicies({
-          project: env.project,
-          globalVmExtensionPolicy: output.policyName,
-          body: { predefinedRolloutPlan: "FAST_ROLLOUT" },
-        })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            schedule: Schedule.spaced("2 seconds"),
-            times: 8,
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
-      if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.policyName, operation).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
-      }
+      const requestDelete = (retryUuid?: string) =>
+        compute
+          .deleteGlobalVmExtensionPolicies({
+            project: env.project,
+            globalVmExtensionPolicy: output.policyName,
+            body: { predefinedRolloutPlan: "FAST_ROLLOUT", retryUuid },
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.flatMap((operation) =>
+              operation === undefined
+                ? Effect.void
+                : waitGlobalOperation(env.project, operation).pipe(
+                    Effect.catchTag("NotFound", () => Effect.void),
+                    Effect.asVoid,
+                  ),
+            ),
+          );
+      // A policy left in DELETING by an earlier (possibly failed) delete
+      // rollout only accepts another delete with a fresh `retryUuid`.
+      const observed = yield* getByName(env.project, output.policyName);
+      if (observed === undefined) return;
+      const retryUuid =
+        observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
+          ? yield* Effect.sync(() => crypto.randomUUID())
+          : undefined;
+      yield* requestDelete(retryUuid);
+      // Deletion is itself a rollout; the policy stays readable until the
+      // rollout finishes.
+      yield* getByName(env.project, output.policyName).pipe(
+        Effect.filterOrFail(
+          (policy) => policy === undefined,
+          () =>
+            new GlobalVmExtensionPolicyStillExists({
+              policyName: output.policyName,
+            }),
+        ),
+        Effect.retry({
+          while: (error) =>
+            error._tag === "GCP.Compute.GlobalVmExtensionPolicyStillExists",
+          schedule: Schedule.spaced("5 seconds"),
+          times: 60,
+        }),
+      );
     }),
   });

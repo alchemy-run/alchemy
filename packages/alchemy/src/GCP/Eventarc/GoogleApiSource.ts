@@ -180,12 +180,14 @@ export type GoogleApiSource = Resource<
  * ```
  *
  * ### Updating a GoogleApiSource
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical source and patches it in place.
+ *
  * **Example:** Change labels and display name
  * ```typescript
  * const source = yield* GCP.Eventarc.GoogleApiSource("GoogleEvents", {
- *   googleApiSourceId: existing.googleApiSourceId,
- *   location: existing.location,
- *   destination: existing.destination!,
+ *   location: "us-central1",
+ *   destination: bus.name,
  *   displayName: "google events v2",
  *   labels: { env: "prod", role: "source" },
  * });
@@ -478,7 +480,7 @@ export const GoogleApiSourceProvider = () =>
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
             Effect.flatMap((current) =>
               current === undefined ? Effect.void : Effect.fail(error),

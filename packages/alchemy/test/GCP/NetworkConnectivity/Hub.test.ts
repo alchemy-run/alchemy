@@ -24,7 +24,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a hub",
   (stack) =>
     Effect.gen(function* () {

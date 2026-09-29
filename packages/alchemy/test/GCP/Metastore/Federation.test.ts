@@ -25,19 +25,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/federations/alchemy-missing-federation`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* metastore
-        .listProjectsLocationsFederations({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ federations: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.federations ?? [])).toEqual(true);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,8 +56,7 @@ test.provider(
           }),
         ),
       );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain("Dataproc Metastore API");
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),

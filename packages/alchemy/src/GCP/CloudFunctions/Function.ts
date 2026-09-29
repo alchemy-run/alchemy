@@ -20,6 +20,7 @@ import {
   makeFunctionSource,
 } from "./FunctionSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createGcpHostRuntimeContext,
   type GcpHostRuntimeContext,
@@ -503,19 +504,6 @@ export class FunctionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class FunctionOperationFailed extends Data.TaggedError(
-  "GCP.CloudFunctions.FunctionOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class FunctionOperationPending extends Data.TaggedError(
-  "GCP.CloudFunctions.FunctionOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class FunctionStillExists extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionStillExists",
 )<{
@@ -681,104 +669,35 @@ const getByName = (name: string) =>
     .getProjectsLocationsFunctions({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: cloudfunctions.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: cloudfunctions.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
 const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
   fn.stateMessages
     ?.map((item) => item.message)
     .filter((item): item is string => typeof item === "string")
     .join("; ") || "function is in FAILED state";
 
+/**
+ * A gen2 create/update builds the source and rolls out a Cloud Run revision
+ * (2–4 minutes; slow builds up to ~10). ALREADY_EXISTS (code 6) with
+ * `alreadyExistsOk` and NOT_FOUND (code 5) with `notFoundOk` count as
+ * success (create/delete races).
+ */
 const waitForOperation = (
   operation: cloudfunctions.Operation,
   options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new FunctionOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new FunctionOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudfunctions.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudfunctions.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new FunctionOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        const ignore =
-          (options?.alreadyExistsOk === true && isAlreadyExists(error)) ||
-          (options?.notFoundOk === true && isNotFoundStatus(error));
-        return error && !ignore
-          ? Effect.fail(
-              new FunctionOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.CloudFunctions.FunctionOperationPending",
-        // A gen2 create/update builds the source and rolls out a Cloud Run
-        // revision; 2–4 minutes is normal.
-        times: 36,
-        schedule: Schedule.spaced("10 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => cloudfunctions.getProjectsLocationsOperations({ name }),
+    { budget: "15 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk === true && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(

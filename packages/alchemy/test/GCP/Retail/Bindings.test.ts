@@ -1,91 +1,103 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Core from "@/Test/Core";
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import type * as retail from "@distilled.cloud/gcp/retail_v2";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import RetailBindingsHost, {
+  retailEnabled,
+  Serving,
+  Shirt,
+} from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "RetailBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let project: string;
 
-// Retail create returns Forbidden: "AI Commerce Search API has not been
-// used in project … or it is disabled."
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_RETAIL === "1";
+/** Serving configs have no IAM policy: both bindings grant on the project. */
+const expectProjectGrants = Effect.gen(function* () {
+  const policy = yield* crm.getIamPolicyProjects({
+    resource: `projects/${project}`,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
+  const roles = (policy.bindings ?? [])
+    .filter((binding) =>
+      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+    )
+    .map((binding) => ({ role: binding.role, condition: binding.condition }));
+  expect(roles).toEqual([
+    { role: "roles/retail.viewer", condition: undefined },
+  ]);
+});
 
-test.provider.skipIf(!runLifecycle)(
-  "Search round-trip against a serving config",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+describe.skipIf(!dockerAvailable || !retailEnabled)(
+  "Retail Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:retail", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* RetailBindingsHost;
+            const serving = yield* Serving;
+            yield* Shirt;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              project: serving.project,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        project = out.project;
+      }),
+      { timeout: 900_000 },
+    );
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const product = yield* GCP.Retail.CatalogsBranchesProduct("Shirt", {
-            title: "Cotton tee",
-            categories: ["Apparel > T-Shirts"],
-          });
-          const serving = yield* GCP.Retail.CatalogsServingConfig("Search", {
-            displayName: "search",
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* product.name;
-              const search = yield* GCP.Retail.Search(serving);
-              const predict = yield* GCP.Retail.Predict(serving);
-              return Effect.fn(function* () {
-                const searched = yield* search({
-                  body: {
-                    visitorId: "alchemy-visitor",
-                    query: "tee",
-                    pageSize: 5,
-                  },
-                });
-                const predicted = yield* predict({
-                  body: {
-                    validateOnly: true,
-                    userEvent: {
-                      eventType: "detail-page-view",
-                      visitorId: "visitor-1",
-                    },
-                  },
-                }).pipe(
-                  Effect.map((result) => ({ tag: "ok" as const, result })),
-                  Effect.catchTag(
-                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                    (error) =>
-                      Effect.succeed({
-                        tag: error._tag,
-                        message: error.message,
-                      }),
-                  ),
-                );
-                return { searched, predicted };
-              });
-            }),
-          );
-          return yield* Probe({});
-        }),
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("Search", () => {
+      test.provider(
+        "searches the catalog as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const searched =
+              yield* expectProbe<retail.GoogleCloudRetailV2SearchResponse>(
+                baseUrl,
+                "search",
+              );
+            expect(searched.attributionToken).toEqual(expect.any(String));
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
       );
+    });
 
-      expect(
-        out.searched.attributionToken === undefined ||
-          typeof out.searched.attributionToken === "string",
-      ).toEqual(true);
-      expect(Array.isArray(out.searched.results ?? [])).toEqual(true);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(out.predicted.tag);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:retail", "live"], timeout: 90_000 },
+    describe("Predict", () => {
+      test.provider(
+        "validates a prediction request as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const predicted =
+              yield* expectProbe<retail.GoogleCloudRetailV2PredictResponse>(
+                baseUrl,
+                "predict",
+              );
+            expect(predicted.validateOnly).toEqual(true);
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+  },
 );

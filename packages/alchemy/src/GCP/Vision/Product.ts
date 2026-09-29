@@ -10,27 +10,18 @@ import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_PRODUCT_CATEGORY,
   deleteProduct,
-  encodeOwnershipLine,
-  findOwnedProduct,
   getProduct,
-  listOwnedProducts,
   locationParent,
-  MAX_DESCRIPTION_LENGTH,
-  MAX_DISPLAY_NAME_LENGTH,
   normalizeLocation,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
+  productLabelsOf,
   productNameOf,
-  productOwnedByAlchemy,
   replaceOnIdentity,
   sameProductLabels,
   sameText,
-  stripAlchemyProductLabels,
   toResourceId,
   updateMaskOf,
   waitUntilGone,
-  withAlchemyProductLabels,
 } from "./internal.ts";
 
 export type ProductLabel = {
@@ -55,8 +46,8 @@ export type ProductProps = {
    */
   productId?: string;
   /**
-   * User-facing name (max 4096 characters). Alchemy also stamps
-   * ownership here as a fallback for `list` / nuke.
+   * User-facing name (max 4096 characters).
+   * @default the product id
    */
   displayName?: string;
   /**
@@ -71,8 +62,7 @@ export type ProductProps = {
    */
   productCategory?: string;
   /**
-   * Search labels. Alchemy ownership labels are merged in automatically
-   * and stripped from attributes.
+   * Search labels used to filter Product Search results.
    */
   productLabels?: ProductLabel[];
 };
@@ -89,13 +79,13 @@ export type Product = Resource<
     project: string;
     /** Product Search location. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** User-facing display name. */
     displayName: string | undefined;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** User-provided metadata. */
     description: string | undefined;
     /** Product category. */
     productCategory: string | undefined;
-    /** User product labels (Alchemy ownership labels stripped). */
+    /** Product search labels. */
     productLabels: ProductLabel[];
   },
   never,
@@ -106,10 +96,12 @@ export type Product = Resource<
  * A Cloud Vision Product Search product. Products hold reference images
  * and can be added to one or more product sets.
  *
- * Alchemy stamps ownership into `productLabels` and `displayName` for
- * `list` / nuke. Location, product id, and `productCategory` are identity
- * — changing any of them replaces the product. Display name, description,
- * and labels update in place.
+ * Products have no labels field (`productLabels` are search filters), so
+ * ownership rests on the deterministic product id: a product found without
+ * prior state is reported as unowned and only taken over with `--adopt`.
+ * Location, product id, and `productCategory` are identity — changing any
+ * of them replaces the product. Display name, description, and labels
+ * update in place.
  *
  * ### Creating a Product
  * **Example:** Generated id
@@ -134,9 +126,10 @@ export type Product = Resource<
  * ### Updating a Product
  * **Example:** Rename and add a label
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const product = yield* GCP.Vision.Product("Shoe", {
  *   location: "us-west1",
- *   productId: existing.productId,
+ *   productId: "trail-runner",
  *   displayName: "Trail runner v2",
  *   productCategory: "apparel-v2",
  *   productLabels: [{ key: "color", value: "green" }],
@@ -162,10 +155,10 @@ const toAttrs = (product: vision.Product, project: string) => {
     productId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: parseOwnership(product.displayName).text,
-    description: parseOwnership(product.description).text,
+    displayName: product.displayName,
+    description: product.description,
     productCategory: product.productCategory,
-    productLabels: stripAlchemyProductLabels(product.productLabels),
+    productLabels: productLabelsOf(product.productLabels),
   };
 };
 
@@ -195,7 +188,7 @@ export const ProductProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
@@ -205,58 +198,32 @@ export const ProductProvider = () =>
           location,
           olds?.productId ?? output?.productId ?? "",
         );
-      let existing = yield* getProduct(name);
-      if (existing === undefined) {
-        existing = yield* findOwnedProduct(env.project, location, id);
-      }
+      const existing = yield* getProduct(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* productOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const products = yield* listOwnedProducts(env.project);
-        return products.map((product) => toAttrs(product, env.project));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const ownership = yield* ownershipLabels(id);
       const productId = yield* toResourceId(
         id,
         news.productId,
         output?.productId,
       );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? productId,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
-      const description = encodeOwnershipLine(
-        ownership,
-        news.description,
-        MAX_DESCRIPTION_LENGTH,
-      );
+      const displayName = news.displayName ?? productId;
+      const description = news.description;
       const productCategory =
         news.productCategory ??
         output?.productCategory ??
         DEFAULT_PRODUCT_CATEGORY;
-      const productLabels = withAlchemyProductLabels(
-        news.productLabels,
-        ownership,
-      );
+      const productLabels = productLabelsOf(news.productLabels);
       const name =
         output?.name ?? productNameOf(env.project, location, productId);
 
       let current = yield* getProduct(name);
-      if (current === undefined) {
-        current = yield* findOwnedProduct(env.project, location, id);
-      }
 
       if (current === undefined) {
         const created = yield* vision
@@ -281,12 +248,11 @@ export const ProductProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const observedLabels = stripAlchemyProductLabels(current.productLabels);
-      const desiredUserLabels = stripAlchemyProductLabels(productLabels);
+      const observedLabels = productLabelsOf(current.productLabels);
       const updateMask = updateMaskOf(
         sameText(current.displayName, displayName) ? undefined : "display_name",
         sameText(current.description, description) ? undefined : "description",
-        sameProductLabels(observedLabels, desiredUserLabels)
+        sameProductLabels(observedLabels, productLabels)
           ? undefined
           : "product_labels",
       );

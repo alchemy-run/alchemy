@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +26,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+// A lake (~2.5 min) plus a bucket asset (~1.5 min), then teardown of both,
+// runs past 5 minutes.
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "create, update, and delete a lake asset",
   (stack) =>
     Effect.gen(function* () {
@@ -121,6 +124,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.asset.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { timeout: 900_000 },
 );

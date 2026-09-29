@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -42,23 +43,20 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.TargetVpnGateway("Gateway", {
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             description: "classic vpn",
             labels: { env: "test" },
           });
-          return { network, gateway };
+          return { gateway };
         }),
       );
 
       expect(created.gateway.targetVpnGatewayName).toEqual(expect.any(String));
       expect(created.gateway.region).toEqual("us-central1");
       expect(created.gateway.network).toEqual(
-        expect.stringContaining(created.network.networkName),
+        expect.stringContaining(`/networks/${DEFAULT_NETWORK}`),
       );
       expect(created.gateway.description).toEqual("classic vpn");
       expect(created.gateway.labels).toMatchObject({ env: "test" });
@@ -74,23 +72,19 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
       expect(fetched.network).toEqual(
-        expect.stringContaining(created.network.networkName),
+        expect.stringContaining(`/networks/${DEFAULT_NETWORK}`),
       );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.TargetVpnGateway("Gateway", {
             targetVpnGatewayName: created.gateway.targetVpnGatewayName,
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             description: "classic vpn",
             labels: { env: "prod", role: "vpn" },
           });
-          return { network, gateway };
+          return { gateway };
         }),
       );
 

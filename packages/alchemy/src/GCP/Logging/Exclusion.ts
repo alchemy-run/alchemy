@@ -101,7 +101,6 @@ export type Exclusion = Resource<
  * **Example:** Change the filter and disable
  * ```typescript
  * const exclusion = yield* GCP.Logging.Exclusion("DropDebug", {
- *   exclusionId: existing.exclusionId,
  *   filter: "severity<ERROR",
  *   description: "drop non-errors",
  *   disabled: true,

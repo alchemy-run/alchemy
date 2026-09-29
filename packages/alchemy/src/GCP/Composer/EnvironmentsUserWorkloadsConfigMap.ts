@@ -2,25 +2,18 @@ import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   dataKey,
-  encodeOwnershipData,
   environmentParent,
-  hasOwnershipMarker,
   lastSegment,
-  listAllEnvironments,
-  ownedBy,
+  mapOf,
   parseWorkloadName,
   toPhysicalId,
-  userData,
 } from "./internal.ts";
 
 export type EnvironmentsUserWorkloadsConfigMapProps = {
@@ -39,10 +32,8 @@ export type EnvironmentsUserWorkloadsConfigMapProps = {
    */
   configMapId?: string;
   /**
-   * Kubernetes ConfigMap data as key-value pairs. Alchemy ownership keys
-   * (`alchemy-stack`, `alchemy-stage`, `alchemy-id`) are merged in
-   * automatically and stripped from attributes. ConfigMaps have no labels
-   * field, so those keys are how `list` / nuke find owned rows.
+   * Kubernetes ConfigMap data as key-value pairs. Stored exactly as
+   * given: ConfigMaps have no labels, so Alchemy tracks them by name.
    */
   data?: Record<string, string>;
 };
@@ -63,7 +54,7 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
     location: string;
     /** Parent environment id. */
     environmentId: string;
-    /** User data (Alchemy ownership keys stripped). */
+    /** ConfigMap data. */
     data: Record<string, string>;
   },
   never,
@@ -75,8 +66,8 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
  * Kubernetes executor or KubernetesPodOperator.
  *
  * Supported on Cloud Composer 3 (`composer-3-airflow-2` and newer).
- * ConfigMaps have no labels field, so Alchemy stamps ownership into the
- * `data` map for `list` / nuke. `environmentName` and `configMapId` are
+ * ConfigMaps have no labels field, so Alchemy tracks them by name and
+ * never adds keys to `data`. `environmentName` and `configMapId` are
  * identity — changing either replaces the ConfigMap.
  *
  * ### Creating a User Workloads ConfigMap
@@ -85,6 +76,9 @@ export type EnvironmentsUserWorkloadsConfigMap = Resource<
  * const airflow = yield* GCP.Composer.Environment("Airflow", {
  *   config: {
  *     environmentSize: "ENVIRONMENT_SIZE_SMALL",
+ *     nodeConfig: {
+ *       serviceAccount: "composer-env@my-project.iam.gserviceaccount.com",
+ *     },
  *     softwareConfig: { imageVersion: "composer-3-airflow-2" },
  *   },
  * });
@@ -159,7 +153,7 @@ const toAttrs = (
     project: parsed.project,
     location: parsed.location,
     environmentId: parsed.environmentId,
-    data: userData(configMap.data),
+    data: mapOf(configMap.data),
   };
 };
 
@@ -185,24 +179,6 @@ const waitUntilGone = (name: string) =>
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const listOwnedAt = (parent: string) =>
-  composer.listProjectsLocationsEnvironmentsUserWorkloadsConfigMaps
-    .pages({
-      parent,
-      pageSize: 1000,
-    })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.userWorkloadsConfigMaps ?? []),
-      ),
-      Stream.filter((configMap) => hasOwnershipMarker(configMap.data)),
-      Stream.map((configMap) => toAttrs(configMap, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
 
 export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
   Provider.succeed(EnvironmentsUserWorkloadsConfigMap, {
@@ -243,28 +219,13 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, environmentName);
-      return (yield* ownedBy(id, existing.data, "configMap"))
-        ? attrs
-        : Unowned(attrs);
+      // No labels: a generated id embeds stack/stage/id, and a row we
+      // created is in state. Only an explicit id found without state is
+      // ambiguous.
+      return output === undefined && olds?.configMapId !== undefined
+        ? Unowned(attrs)
+        : attrs;
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const environments = yield* listAllEnvironments(
-          env.project,
-          env.region,
-        );
-        const pages = yield* Effect.forEach(
-          environments,
-          (environment) =>
-            environment.name
-              ? listOwnedAt(environment.name)
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const configMapId = yield* toPhysicalId(
@@ -274,10 +235,7 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
       );
       const parent = environmentParent(news.environmentName);
       const name = resourceName(parent, configMapId);
-      const ownership = yield* createInternalLabels(id);
-      const desiredData = yield* Effect.sync(() =>
-        encodeOwnershipData(ownership, news.data),
-      );
+      const desiredData = mapOf(news.data);
 
       let current = yield* getByName(output?.name ?? name);
 

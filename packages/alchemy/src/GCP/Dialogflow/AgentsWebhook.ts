@@ -27,6 +27,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type WebhookHttpMethod =
@@ -191,11 +192,12 @@ export type AgentsWebhook = Resource<
  * ```
  *
  * ### Updating a Webhook
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Disable and retarget
  * ```typescript
  * const webhook = yield* GCP.Dialogflow.AgentsWebhook("Fulfillment", {
  *   agent: agent.name,
- *   webhookId: existing.webhookId,
  *   displayName: "orders-v2",
  *   disabled: true,
  *   genericWebService: { uri: "https://example.com/dialogflow-v2" },
@@ -317,7 +319,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -331,7 +332,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsWebhookProvider = () =>
@@ -482,7 +482,7 @@ export const AgentsWebhookProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -491,5 +491,5 @@ export const AgentsWebhookProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

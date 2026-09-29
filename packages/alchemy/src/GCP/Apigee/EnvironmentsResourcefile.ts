@@ -287,6 +287,11 @@ export const EnvironmentsResourcefileProvider = () =>
           type: output.fileType,
           name: output.fileId,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

@@ -29,10 +29,8 @@ export const CreateExecutionHttp = Layer.effect(
       const name = yield* workflow.name;
       return Effect.fn(`GCP.Workflows.CreateExecution(${workflow.LogicalId})`)(
         function* (request?: CreateExecutionRequest) {
-          return yield* createExecution({
-            ...request,
-            parent: yield* name,
-          });
+          const parent = yield* name;
+          return yield* createExecution({ ...request, parent });
         },
       );
     });

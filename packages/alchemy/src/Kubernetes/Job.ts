@@ -437,10 +437,12 @@ export const JobProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
+      // The base name doubles as the `app.kubernetes.io/name` label value
+      // (and the Service name), both capped at 63 characters.
       const toBaseName = (id: string, props: { name?: string } = {}) =>
         props.name
           ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 200, lowercase: true }).pipe(
+          : createPhysicalName({ id, maxLength: 63, lowercase: true }).pipe(
               Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")),
             );
 

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,7 +20,6 @@ import type { Providers } from "../Providers.ts";
 const DEFAULT_TARGET_SIZE = 0;
 const MAX_NAME_LENGTH = 63;
 const MAX_BASE_NAME_LENGTH = 58;
-const WAIT_TIMES = 20;
 
 export type RegionInstanceGroupManagerNamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
@@ -210,15 +209,6 @@ export class RegionInstanceGroupManagerNotResolved extends Data.TaggedError(
 )<{
   managerName: string;
   region: string;
-}> {}
-
-export class RegionInstanceGroupManagerOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstanceGroupManagerOperationFailed",
-)<{
-  managerName: string;
-  operation: string;
-  message: string;
-  codes: readonly string[];
 }> {}
 
 export class RegionInstanceGroupManagerStillExists extends Data.TaggedError(
@@ -424,101 +414,6 @@ const toAttrs = (manager: compute.InstanceGroupManager, project: string) => {
   };
 };
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((error) =>
-    (error.code ?? "").toUpperCase(),
-  );
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const isAlreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  return (
-    codes.includes("ALREADYEXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    operation.httpErrorStatusCode === 409 ||
-    text.includes("already exists")
-  );
-};
-
-const isMissing = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  return (
-    codes.includes("NOTFOUND") ||
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("RESOURCE_NOT_FOUND_BY_NAME") ||
-    operation.httpErrorStatusCode === 404 ||
-    text.includes("was not found") ||
-    text.includes("not found")
-  );
-};
-
-const failIfErrored = (
-  managerName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  const httpFailed =
-    operation.httpErrorStatusCode !== undefined &&
-    operation.httpErrorStatusCode >= 400;
-  if (errors.length === 0 && !httpFailed && operation.status === "DONE") {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreNotFound === true && isMissing(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (errors.length === 0 && !httpFailed && operation.status !== "DONE") {
-    return Effect.succeed(operation);
-  }
-  if (errors.length === 0 && !httpFailed) {
-    return Effect.succeed(operation);
-  }
-  return Effect.fail(
-    new RegionInstanceGroupManagerOperationFailed({
-      managerName,
-      operation: operation.name ?? "",
-      message: operationMessage(operation),
-      codes: operationCodes(operation),
-    }),
-  );
-};
-
-const waitForOperation = (
-  project: string,
-  region: string,
-  managerName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(managerName, operation, options);
-    }
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) {
-      return yield* failIfErrored(managerName, operation, options);
-    }
-    const done = yield* waitRegionOperations(
-      { project, region, operation: name },
-      { times: WAIT_TIMES },
-    );
-    return yield* failIfErrored(managerName, done, options);
-  });
-
 const getByName = (
   project: string,
   region: string,
@@ -632,7 +527,7 @@ const syncNamedPorts = (
           schedule: Schedule.exponential("250 millis"),
         }),
       );
-    yield* waitForOperation(project, region, managerName, operation);
+    yield* waitRegionOperation(project, region, operation);
   });
 
 const toVersionBodies = (
@@ -737,7 +632,7 @@ export const RegionInstanceGroupManagerProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
             if (!scope.startsWith("regions/")) return [];
@@ -804,13 +699,9 @@ export const RegionInstanceGroupManagerProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitForOperation(
-                    env.project,
-                    region,
-                    managerName,
-                    operation,
-                    { ignoreAlreadyExists: true },
-                  ).pipe(Effect.asVoid),
+                : waitRegionOperation(env.project, region, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* waitUntilPresent(env.project, region, managerName);
@@ -906,7 +797,7 @@ export const RegionInstanceGroupManagerProvider = () =>
               schedule: Schedule.exponential("250 millis"),
             }),
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, region, managerName, operation),
+              waitRegionOperation(env.project, region, operation),
             ),
           );
         current =
@@ -950,28 +841,9 @@ export const RegionInstanceGroupManagerProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(
-          project,
-          region,
-          output.managerName,
-          operation,
-          { ignoreNotFound: true },
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error._tag ===
-                "GCP.Compute.RegionInstanceGroupManagerOperationFailed" &&
-              (error.codes.some(
-                (code) =>
-                  code === "NOTFOUND" ||
-                  code === "RESOURCE_NOT_FOUND" ||
-                  code === "RESOURCE_NOT_FOUND_BY_NAME",
-              ) ||
-                /not found/i.test(error.message)),
-            () => Effect.void,
-          ),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+        yield* waitRegionOperation(project, region, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
       yield* waitUntilGone(project, region, output.managerName);
     }),

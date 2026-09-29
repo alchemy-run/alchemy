@@ -30,13 +30,11 @@ export const DeadOrderEventsInbox = Effect.gen(function* () {
 
 /** The email consumer's outbox: one object per confirmation it sends. */
 export const Outbox = GCP.Storage.Bucket("Outbox", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
 /** The analytics warehouse. */
 export const Warehouse = GCP.BigQuery.Dataset("Warehouse", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 

@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { tagRecord } from "../../Tags.ts";
 import {
-  alchemyLabelKeys,
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
@@ -19,19 +19,6 @@ export const GENERIC_ENTRY_TYPE =
 
 export const RELATED_ENTRY_LINK_TYPE =
   "projects/dataplex-types/locations/global/entryLinkTypes/related";
-
-export class DataplexOperationFailed extends Data.TaggedError(
-  "GCP.Dataplex.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DataplexOperationPending extends Data.TaggedError(
-  "GCP.Dataplex.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class DataplexNotResolved extends Data.TaggedError(
   "GCP.Dataplex.ResourceNotResolved",
@@ -164,21 +151,6 @@ export const canonical = (value: unknown): unknown => {
 export const fingerprint = (value: unknown): string =>
   JSON.stringify(canonical(value) ?? null);
 
-const alreadyExists = (error: dataplex.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: dataplex.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: dataplex.GoogleRpcStatus | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
 export const retryQuota = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
@@ -190,83 +162,35 @@ export const retryQuota = <A, E extends { _tag: string }, R>(
     }),
   );
 
+/**
+ * Wait for a Dataplex operation; lakes, zones, and assets provision for
+ * several minutes. ALREADY_EXISTS (code 6) counts as success (create
+ * race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an
+ * operation that is already gone.
+ */
 export const waitForOperation = (
   operation: dataplex.GoogleLongrunningOperation,
-  options?: {
-    notFoundOk?: boolean;
-    alreadyExistsOk?: boolean;
-    interval?: `${number} seconds`;
-    times?: number;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new DataplexOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new DataplexOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = retryQuota(
-      name.startsWith("organizations/")
-        ? dataplex.getOrganizationsLocationsOperations({ name })
-        : dataplex.getProjectsLocationsOperations({ name }),
-    );
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataplex.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DataplexOperationPending({ operation: name }),
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      retryQuota(
+        name.startsWith("organizations/")
+          ? dataplex.getOrganizationsLocationsOperations({ name })
+          : dataplex.getProjectsLocationsOperations({ name }),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new DataplexOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataplex.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "2 seconds"),
-      }),
-    );
-  });
+    { budget: "20 minutes", interval: "2 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -317,12 +241,10 @@ export const listAtLocation = <A, E, R>(
   region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
+  // Prefer the all-locations wildcard; fall back to the default region
+  // (whose error, if any, propagates).
   list(`projects/${project}/locations/-`).pipe(
-    Effect.catch(() =>
-      list(`projects/${project}/locations/${region}`).pipe(
-        Effect.orElseSucceed(() => [] as A[]),
-      ),
-    ),
+    Effect.catch(() => list(`projects/${project}/locations/${region}`)),
   );
 
 export const replaceOnIdentity = (input: {
@@ -400,44 +322,6 @@ export const toPhysicalSnake = (
     );
   });
 
-const markerOf = (labels: Record<string, string>) =>
-  `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-
-export const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = markerOf(labels);
-  return description ? `${marker}\n${description}` : marker;
-};
-
-export const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseDescription(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
 export const createOwnership = (id: string) => createInternalLabels(id);
 
 export const ownedLabels = (id: string, labels: Record<string, string>) =>
@@ -447,8 +331,6 @@ export const parseResourceName = parseName;
 export const locationParent = parentOf;
 export const hasAlchemyLabelKeys = hasAlchemyLabelMap;
 export const LABELS_FILTER = "labels.alchemy-id:*";
-export const encodeOwnership = encodeDescription;
-export const parseOwnership = parseDescription;
 export const sameJson = (left: unknown, right: unknown) =>
   fingerprint(left) === fingerprint(right);
 export const sameStringList = (
@@ -474,7 +356,7 @@ export const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error) => error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound",
       () => Effect.succeed([] as A[]),
     ),
   );

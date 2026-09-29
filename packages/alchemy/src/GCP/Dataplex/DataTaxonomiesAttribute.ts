@@ -160,9 +160,9 @@ export type DataTaxonomiesAttribute = Resource<
  * ### Updating a Data Attribute
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const attr = yield* GCP.Dataplex.DataTaxonomiesAttribute("Pii", {
  *   dataTaxonomy: taxonomy.name,
- *   dataAttributeId: existing.dataAttributeId,
  *   description: "personally identifiable",
  *   labels: { env: "prod", class: "restricted" },
  * });
@@ -246,7 +246,6 @@ const listAttributesUnder = (parent: string, project: string) =>
         .map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const DataTaxonomiesAttributeProvider = () =>

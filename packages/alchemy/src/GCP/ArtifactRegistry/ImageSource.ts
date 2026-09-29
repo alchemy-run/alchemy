@@ -7,7 +7,6 @@
  * from Artifact Registry.
  */
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -26,11 +25,25 @@ import {
   isInlineDockerfile,
   type InlineDockerfile,
 } from "../../Docker/Dockerfile.ts";
+import {
+  normalizeInstallTargets,
+  resolvePackageInstallIdentity,
+  type PackageInstall,
+} from "../../Bundle/InstalledPackages.ts";
 import { tagRecord } from "../../Tags.ts";
-import { sha256Object } from "../../Util/sha256.ts";
+import {
+  contextRootOf,
+  copyExtraFiles,
+  hashExtraFiles,
+  posixRelUnder,
+  resolveExtraSource,
+  type ExtraFile,
+} from "../../Util/extraFiles.ts";
+import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { Credentials } from "../Credentials.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 export interface BundledImageSource {
   main: string;
@@ -39,6 +52,14 @@ export interface BundledImageSource {
   context?: string;
   handler?: string;
   build?: Bundle.BundleConfig;
+  /**
+   * Host files baked into the image next to `main`. With an external
+   * (`isExternal`) `main`, this selects the unbundled Node program mode:
+   * `main` is copied as-is and run by `node` (website serve entries).
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
+  /** Packages `npm install`ed into the Node program image. */
+  install?: PackageInstall;
 }
 
 export interface DockerfileImageSource {
@@ -57,7 +78,55 @@ export interface ImageSourceLike {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  extraFiles?: ReadonlyArray<ExtraFile>;
+  install?: PackageInstall;
 }
+
+/** Base image for unbundled Node programs (website serve entries). */
+const NODE_PROGRAM_BASE_IMAGE = "node:26-slim";
+
+const isNodeProgram = (
+  source: ImageSourceLike,
+  isExternal: boolean | undefined,
+) =>
+  isExternal === true &&
+  source.main !== undefined &&
+  source.extraFiles !== undefined;
+
+const nodeProgramManifest = (dependencies: Record<string, string>) =>
+  `${JSON.stringify(
+    { private: true, type: "module", dependencies },
+    null,
+    2,
+  )}\n`;
+
+const nodeProgramDockerfile = (options: {
+  image: string | undefined;
+  entry: string;
+  install: boolean;
+  port: number | undefined;
+}) => {
+  const lines = [
+    `FROM ${options.image ?? NODE_PROGRAM_BASE_IMAGE}`,
+    `WORKDIR /app`,
+    `ENV NODE_ENV=production`,
+  ];
+  if (options.install) {
+    lines.push(
+      `COPY package.json /app/package.json`,
+      `RUN npm install --omit=dev --no-fund --no-audit`,
+    );
+  }
+  lines.push(`COPY . /app`, `ENV HOST=0.0.0.0`);
+  if (options.port !== undefined) {
+    lines.push(
+      `ENV PORT=${String(options.port)}`,
+      `EXPOSE ${String(options.port)}`,
+    );
+  }
+  lines.push(`ENTRYPOINT ["node", ${JSON.stringify(`/app/${options.entry}`)}]`);
+  return `${lines.join("\n")}\n`;
+};
 
 export type ImageSourceKind = "main" | "context" | "image";
 
@@ -187,69 +256,6 @@ export const computeStaticSourceHash = Effect.fn(function* (
 
 const IMAGE_NAME = "app";
 
-export class RepositoryOperationPending extends Data.TaggedError(
-  "GCP.ArtifactRegistry.ImageSourceOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class RepositoryOperationFailed extends Data.TaggedError(
-  "GCP.ArtifactRegistry.ImageSourceOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-const waitForOperation = (
-  operation: artifactregistry.Operation,
-): Effect.Effect<
-  artifactregistry.Operation,
-  | RepositoryOperationFailed
-  | RepositoryOperationPending
-  | artifactregistry.GetProjectsLocationsOperationsError,
-  artifactregistry.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new RepositoryOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new RepositoryOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-    return yield* artifactregistry
-      .getProjectsLocationsOperations({ name })
-      .pipe(
-        Effect.filterOrFail(
-          (current) => current.done === true,
-          () => new RepositoryOperationPending({ operation: name }),
-        ),
-        Effect.filterOrFail(
-          (current) => current.error === undefined,
-          (current) =>
-            new RepositoryOperationFailed({
-              operation: name,
-              message: current.error?.message ?? "operation failed",
-            }),
-        ),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.ArtifactRegistry.ImageSourceOperationPending",
-          times: 10,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-      );
-  });
-
 const resourceName = (
   project: string,
   location: string,
@@ -324,15 +330,7 @@ export const destroyImageRepository = Effect.fn(function* (name: string) {
     .deleteProjectsLocationsRepositories({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   if (operation !== undefined) {
-    yield* waitForOperation(operation).pipe(
-      Effect.catchTag(
-        "GCP.ArtifactRegistry.ImageSourceOperationFailed",
-        (error) =>
-          error.message.toLowerCase().includes("not found")
-            ? Effect.void
-            : Effect.fail(error),
-      ),
-    );
+    yield* waitForDeleteOperation(operation);
   }
 });
 
@@ -502,6 +500,55 @@ export const makeImageSource = Effect.gen(function* () {
     return { bundled, dockerfile, codeHash };
   });
 
+  /**
+   * Hash an unbundled Node program: the entry bytes, every extra file
+   * tree, the generated Dockerfile, and the resolved install identity.
+   */
+  const computeNodeProgram = Effect.fn(function* (options: {
+    source: BundledImageSource;
+    port?: number;
+    platform: string;
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { source } = options;
+    const realMain = yield* resolveMainPath(source.main);
+    const extras = source.extraFiles ?? [];
+    const root = contextRootOf(realMain, extras, path, (file) =>
+      resolveExtraSource(file, path),
+    );
+    const entry =
+      posixRelUnder(root, realMain, path) || path.basename(realMain);
+    const requested = yield* normalizeInstallTargets(source.install);
+    const identity =
+      Object.keys(requested).length > 0
+        ? yield* resolvePackageInstallIdentity({
+            cwd: yield* findCwdForBundle(realMain),
+            requested,
+          })
+        : undefined;
+    const packageJson =
+      identity !== undefined && Object.keys(identity.resolved).length > 0
+        ? nodeProgramManifest(identity.resolved)
+        : undefined;
+    const dockerfile = nodeProgramDockerfile({
+      image: source.image,
+      entry,
+      install: packageJson !== undefined,
+      port: options.port,
+    });
+    const codeHash = (yield* sha256Object({
+      main: yield* sha256(yield* fs.readFile(realMain)),
+      entry,
+      dockerfile,
+      packageJson,
+      lockfile: identity?.lockfile,
+      extraFiles: yield* hashExtraFiles(extras),
+      platform: options.platform,
+    })).slice(0, 16);
+    return { realMain, entry, dockerfile, packageJson, codeHash };
+  });
+
   const ensureRepository = Effect.fn(function* (options: {
     id: string;
     repositoryId: string;
@@ -583,10 +630,7 @@ export const makeImageSource = Effect.gen(function* () {
       .getProjectsLocationsRepositoriesPackagesTags({
         name: tagResourceName(project, location, repositoryId, imageTag),
       })
-      .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
   const resolve = Effect.fn(function* (
@@ -630,6 +674,58 @@ export const makeImageSource = Effect.gen(function* () {
     const kind = imageSourceKind(source);
     const env = yield* GcpEnvironment.current;
     const repositoryUri = options.repositoryUri ?? ensuredRepositoryUri;
+
+    if (isNodeProgram(source, options.isExternal)) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const program = yield* computeNodeProgram({
+        source: source as BundledImageSource,
+        port: options.port,
+        platform,
+      });
+      const { codeHash } = program;
+      const imageUri = `${repositoryUri}:${codeHash}`;
+      if (
+        yield* describeImage(env.project, location, repositoryName, codeHash)
+      ) {
+        return { imageUri, repositoryName, repositoryUri, codeHash };
+      }
+      // Hash-keyed so a stale tree from an earlier build never leaks in.
+      const contextDir = yield* getStableContextDir(
+        program.realMain,
+        dotAlchemy,
+        `${id}-node-${codeHash}`,
+      );
+      yield* docker.materialize({
+        context: contextDir,
+        dockerfile: program.dockerfile,
+        files:
+          program.packageJson !== undefined
+            ? [{ path: "package.json", content: program.packageJson }]
+            : [],
+      });
+      yield* copyExtraFiles(contextDir, source.extraFiles);
+      const entryPath = path.join(contextDir, program.entry);
+      if (
+        !(yield* fs.exists(entryPath).pipe(Effect.orElseSucceed(() => false)))
+      ) {
+        yield* fs.makeDirectory(path.dirname(entryPath), { recursive: true });
+        yield* fs.copy(program.realMain, entryPath, { overwrite: true });
+      }
+      yield* session.note(`Building container image ${imageUri}...`);
+      yield* buildAndPushArtifactRegistryImage(docker, {
+        imageUri,
+        context: contextDir,
+        platform,
+        location,
+      }).pipe(
+        Effect.ensuring(
+          fs.remove(contextDir, { recursive: true }).pipe(Effect.ignore),
+        ),
+      );
+      yield* session.note(`Pushed ${imageUri}`);
+      return { imageUri, repositoryName, repositoryUri, codeHash };
+    }
 
     if (kind === "main") {
       const df = source.dockerfile;
@@ -801,6 +897,14 @@ export const makeImageSource = Effect.gen(function* () {
     bootstrap: (importPath: string) => string;
   }) {
     const platform = options.platform ?? "linux/amd64";
+    if (isNodeProgram(options.source, options.isExternal)) {
+      const { codeHash } = yield* computeNodeProgram({
+        source: options.source as BundledImageSource,
+        port: options.port,
+        platform,
+      });
+      return codeHash;
+    }
     if (imageSourceKind(options.source) === "main") {
       const df = options.source.dockerfile;
       if (

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -146,14 +146,6 @@ export class RegionTargetTcpProxyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionTargetTcpProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionTargetTcpProxyOperationFailed",
-)<{
-  targetTcpProxyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionTargetTcpProxyStillExists extends Data.TaggedError(
   "GCP.Compute.RegionTargetTcpProxyStillExists",
 )<{
@@ -271,67 +263,6 @@ const waitUntilGone = (
     }),
   );
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (
-  targetTcpProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionTargetTcpProxyOperationFailed({
-        targetTcpProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  targetTcpProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetTcpProxyName, operation);
-    }
-    const name = operationId(operation);
-    if (!name) {
-      return yield* failIfErrored(targetTcpProxyName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(targetTcpProxyName, done);
-  });
-
 const immutableChanged = (
   news: RegionTargetTcpProxyProps,
   olds: RegionTargetTcpProxyProps | undefined,
@@ -431,7 +362,7 @@ export const RegionTargetTcpProxyProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.targetTcpProxies ?? [])
@@ -487,7 +418,9 @@ export const RegionTargetTcpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, targetTcpProxyName, operation),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -502,7 +435,7 @@ export const RegionTargetTcpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, targetTcpProxyName, operation),
+              waitRegionOperation(env.project, region, operation),
             ),
             Effect.catchTag("NotFound", () => Effect.void),
           );
@@ -561,12 +494,9 @@ export const RegionTargetTcpProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.targetTcpProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
       yield* waitUntilGone(env.project, region, output.targetTcpProxyName);
     }),

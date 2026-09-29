@@ -14,10 +14,9 @@ export const GenerateDownloadUrlHttp = Layer.effect(
   makeFunctionHttpBinding({
     tag: "GCP.CloudFunctions.GenerateDownloadUrl",
     // Narrowest predefined role with cloudfunctions.functions.sourceCodeGet.
-    iam: {
-      role: "roles/cloudfunctions.developer",
-      on: "cloudfunctions.function",
-    },
+    // 2nd gen functions accept only invoker roles on their own IAM policy,
+    // so grant on the project under a condition naming the function.
+    iam: { role: "roles/cloudfunctions.developer", scopeByCondition: true },
     operation: cloudfunctions.generateDownloadUrlProjectsLocationsFunctions,
   }),
 );

@@ -15,7 +15,7 @@ import {
   hasAlchemyLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 100;
 const DEFAULT_LOCATION = "global";
@@ -165,8 +165,7 @@ export type LogBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.LogBucket("AppLogs", {
- *   bucketId: existing.bucketId,
- *   location: existing.location,
+ *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });
@@ -632,7 +631,7 @@ export const LogBucketProvider = () =>
                 Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as logging.Link[]),
                 ),
               );
@@ -646,9 +645,7 @@ export const LogBucketProvider = () =>
                       })
                       .pipe(
                         Effect.flatMap((operation) =>
-                          waitForOperation(operation, {
-                            notFoundOk: true,
-                          }),
+                          waitForDeleteOperation(operation),
                         ),
                         Effect.catchTag(
                           ["NotFound", "BadRequest"],

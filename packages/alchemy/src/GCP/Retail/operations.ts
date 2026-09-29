@@ -1,32 +1,6 @@
 import * as retail from "@distilled.cloud/gcp/retail_v2";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-
-/**
- * Retail has no interruptible wait RPC. Poll get-operation with a hard
- * iteration cap.
- */
-export class RetailOperationFailed extends Data.TaggedError(
-  "GCP.Retail.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class RetailOperationPending extends Data.TaggedError(
-  "GCP.Retail.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-const alreadyExists = (error: retail.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: retail.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const resourceNameFromOperation = (
   operation: retail.GoogleLongrunningOperation,
@@ -56,74 +30,23 @@ const getOperation = (name: string) =>
       ? retail.getProjectsLocationsOperations({ name })
       : retail.getProjectsOperations({ name });
 
+/**
+ * Wait for a Retail operation (model creation takes several minutes).
+ * ALREADY_EXISTS (code 6) counts as success (create race); with
+ * `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an operation
+ * that is already gone.
+ */
 export const waitForOperation = (
   operation: retail.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new RetailOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new RetailOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation(name).pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<retail.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation(name).pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new RetailOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error) return Effect.succeed(current);
-        if (alreadyExists(error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new RetailOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Retail.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(operation, getOperation, { budget: "30 minutes" }).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );

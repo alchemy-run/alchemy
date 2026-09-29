@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -177,15 +177,6 @@ export class RouteNotResolved extends Data.TaggedError(
   routeName: string;
 }> {}
 
-export class RouteOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RouteOperationFailed",
-)<{
-  routeName: string;
-  operation: string;
-  message: string;
-  code?: string;
-}> {}
-
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
@@ -333,75 +324,6 @@ const getByName = (project: string, route: string) =>
     .getRoutes({ project, route })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationName = (operation: compute.Operation) =>
-  operation.name?.split("/").pop() ?? operation.name ?? "";
-
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.length > 0 &&
-  errors.every((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "notfound" ||
-      code === "resource_not_found" ||
-      message.includes("was not found") ||
-      message.includes("not found")
-    );
-  });
-
-const failIfErrored = (
-  routeName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length === 0 &&
-    (operation.httpErrorStatusCode === undefined ||
-      operation.httpErrorStatusCode < 400)
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (options?.allowNotFound && isNotFoundOp(errors)) {
-    return Effect.succeed(operation);
-  }
-  return Effect.fail(
-    new RouteOperationFailed({
-      routeName,
-      operation: operation.name ?? "",
-      message:
-        errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-        operation.httpErrorMessage ||
-        "operation failed",
-      code: errors[0]?.code,
-    }),
-  );
-};
-
-const isAlreadyExists = (error: RouteOperationFailed) =>
-  error.code === "RESOURCE_ALREADY_EXISTS" ||
-  error.message.toLowerCase().includes("already exists");
-
-const waitUntilDone = (
-  project: string,
-  routeName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(routeName, operation, options);
-    }
-    const name = operationName(operation);
-    if (!name) {
-      return yield* failIfErrored(routeName, operation, options);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name });
-    return yield* failIfErrored(routeName, done, options);
-  });
-
 const requireRoute = (project: string, routeName: string) =>
   getByName(project, routeName).pipe(
     Effect.flatMap((route) =>
@@ -432,8 +354,8 @@ const removeRoute = (project: string, routeName: string) =>
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
     if (operation !== undefined) {
-      yield* waitUntilDone(project, routeName, operation, {
-        allowNotFound: true,
+      yield* waitGlobalOperation(project, operation, {
+        ignore: ["RESOURCE_NOT_FOUND"],
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }
   });
@@ -585,13 +507,9 @@ export const RouteProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, routeName, operation),
-            ),
-            Effect.catchIf(
-              (error): error is RouteOperationFailed =>
-                error._tag === "GCP.Compute.RouteOperationFailed" &&
-                isAlreadyExists(error),
-              () => Effect.void,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );

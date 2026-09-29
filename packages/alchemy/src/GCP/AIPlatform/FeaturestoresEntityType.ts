@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -211,7 +212,6 @@ const listEntitiesUnder = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const FeaturestoresEntityTypeProvider = () =>
@@ -260,11 +260,12 @@ export const FeaturestoresEntityTypeProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = parentOf(
-        env.project,
-        location,
-        olds?.featurestore ?? output?.featurestore ?? "",
-      );
+      const parentRef = olds?.featurestore ?? output?.featurestore;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, parentRef ?? "");
       const entityTypeId = yield* toPhysicalSnake(
         id,
         olds?.entityTypeId,
@@ -283,11 +284,15 @@ export const FeaturestoresEntityTypeProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* aiplatform.listProjectsLocationsFeaturestores
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        const stores = yield* Stream.fromIterable(listLocations(env.region))
+          .pipe(
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeaturestores.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
+            ),
+          )
           .pipe(
             Stream.flatMap((page) =>
               Stream.fromIterable(page.featurestores ?? []),
@@ -296,7 +301,6 @@ export const FeaturestoresEntityTypeProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
         const nested = yield* Effect.forEach(
           stores,

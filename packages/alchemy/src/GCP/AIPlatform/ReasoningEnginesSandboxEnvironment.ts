@@ -186,7 +186,6 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
         Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
           Effect.succeed(undefined),
         ),
@@ -233,11 +232,6 @@ const listSandboxes = (parent: string) =>
       pages.flatMap((page) => page.sandboxEnvironments ?? []),
     ),
     Effect.catchTag("NotFound", () =>
-      Effect.succeed<aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]>(
-        [],
-      ),
-    ),
-    Effect.catchTag("Forbidden", () =>
       Effect.succeed<aiplatform.GoogleCloudAiplatformV1SandboxEnvironment[]>(
         [],
       ),
@@ -303,11 +297,12 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = engineNameOf(
-        env.project,
-        location,
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const parentRef = olds?.reasoningEngine ?? output?.reasoningEngine;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = engineNameOf(env.project, location, parentRef ?? "");
       const existing =
         output?.name !== undefined
           ? yield* getByName(output.name)
@@ -377,7 +372,6 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
             Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
               Effect.succeed(undefined),
             ),
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
             Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
             Effect.timeoutOption("20 seconds"),

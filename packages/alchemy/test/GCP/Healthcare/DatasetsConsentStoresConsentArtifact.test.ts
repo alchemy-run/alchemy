@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_HEALTHCARE;
-
 const waitUntilGone = (name: string) =>
   healthcare
     .getProjectsLocationsDatasetsConsentStoresConsentArtifacts({ name })
@@ -41,7 +39,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/datasets/missing/consentStores/missing/consentArtifacts/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -51,7 +49,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a consent artifact",
   (stack) =>
     Effect.gen(function* () {

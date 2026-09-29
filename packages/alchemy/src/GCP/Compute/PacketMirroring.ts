@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -240,15 +240,6 @@ export class PacketMirroringNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class PacketMirroringOperationFailed extends Data.TaggedError(
-  "GCP.Compute.PacketMirroringOperationFailed",
-)<{
-  packetMirroringName: string;
-  operation: string;
-  message: string;
-  code?: string;
-}> {}
-
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
   const trimmed = value.replace(/\/+$/, "");
@@ -466,104 +457,6 @@ const getByName = (project: string, region: string, packetMirroring: string) =>
     .getPacketMirrorings({ project, region, packetMirroring })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationName = (operation: compute.Operation) =>
-  lastSegment(operation.name ?? operation.id ?? operation.selfLink);
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const isAlreadyExistsCode = (code: string) =>
-  code === "alreadyExists" ||
-  code === "RESOURCE_ALREADY_EXISTS" ||
-  code === "ALREADY_EXISTS";
-
-const isNotFoundCode = (code: string) => {
-  const lower = code.toLowerCase();
-  return (
-    lower === "notfound" ||
-    lower === "resource_not_found" ||
-    lower === "resource_not_found_by_name"
-  );
-};
-
-const failIfErrored = (
-  packetMirroringName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  const codes = operationCodes(operation);
-  if (
-    codes.some(isAlreadyExistsCode) ||
-    operation.httpErrorStatusCode === 409
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (
-    options?.allowNotFound &&
-    (codes.some(isNotFoundCode) ||
-      operation.httpErrorStatusCode === 404 ||
-      (errors.length > 0 &&
-        errors.every((error) => {
-          const message = (error.message ?? "").toLowerCase();
-          return (
-            isNotFoundCode(error.code ?? "") ||
-            message.includes("was not found") ||
-            message.includes("not found")
-          );
-        })))
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new PacketMirroringOperationFailed({
-        packetMirroringName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-        code: codes[0],
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  packetMirroringName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(packetMirroringName, operation, options);
-    }
-    const name = operationName(operation);
-    if (name.length === 0) {
-      return yield* failIfErrored(packetMirroringName, operation, options);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    }).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "NotFound",
-        times: 5,
-        schedule: Schedule.exponential("250 millis"),
-      }),
-    );
-    return yield* failIfErrored(packetMirroringName, done, options);
-  });
-
 const requirePolicy = (
   project: string,
   region: string,
@@ -728,21 +621,15 @@ export const PacketMirroringProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            // A just-created collector forwarding rule is briefly not ready.
             Effect.retry({
-              while: (error) =>
-                error._tag === "BadRequest" &&
-                (error.message ?? "").toLowerCase().includes("not ready"),
+              while: (error) => error._tag === "CollectorIlbNotReady",
               times: 8,
               schedule: Schedule.spaced("3 seconds"),
             }),
           );
         if (inserted !== undefined) {
-          yield* waitUntilDone(
-            env.project,
-            region,
-            packetMirroringName,
-            inserted,
-          );
+          yield* waitRegionOperation(env.project, region, inserted);
         }
         current = yield* requirePolicy(
           env.project,
@@ -799,12 +686,7 @@ export const PacketMirroringProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                region,
-                packetMirroringName,
-                operation,
-              ),
+              waitRegionOperation(env.project, region, operation),
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -840,13 +722,9 @@ export const PacketMirroringProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.packetMirroringName,
-          operation,
-          { allowNotFound: true },
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
     }),
   });

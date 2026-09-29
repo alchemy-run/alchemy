@@ -18,6 +18,10 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  waitForOperation as waitForLongRunning,
+  type LongRunningOperation,
+} from "../Operation.ts";
 
 const LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -220,19 +224,6 @@ export class KeyNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class KeyOperationFailed extends Data.TaggedError(
-  "GCP.ApiKeys.KeyOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class KeyOperationPending extends Data.TaggedError(
-  "GCP.ApiKeys.KeyOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class KeyStillExists extends Data.TaggedError(
   "GCP.ApiKeys.KeyStillExists",
 )<{
@@ -413,87 +404,6 @@ const toAttrsLive = (key: apikeys.V2Key, project: string) =>
     return toAttrs(key, project, keyString);
   });
 
-const isAlreadyExists = (error: apikeys.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: apikeys.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: apikeys.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: apikeys.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new KeyOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new KeyOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = apikeys.getOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies apikeys.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new KeyOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new KeyOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.ApiKeys.KeyOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("1 second"),
-      }),
-    );
-  });
-
 const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
@@ -552,7 +462,6 @@ const listOwnedKeys = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -700,8 +609,39 @@ export const KeyProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),
   });
+
+/** API key operations finish within seconds. */
+const OPERATION_BUDGET = "5 minutes";
+
+/**
+ * Wait for a long-running operation. ALREADY_EXISTS (code 6) means a
+ * concurrent create won the race; reconcile observes the resource next.
+ */
+const waitForOperation = (operation: LongRunningOperation) =>
+  waitForLongRunning(operation, (name) => apikeys.getOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
+
+/**
+ * Wait for a delete operation. A vanished operation or NOT_FOUND (code 5)
+ * means the resource is already gone.
+ */
+const waitForDeleteOperation = (operation: LongRunningOperation) =>
+  waitForOperation(operation).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "NotFound" ||
+        (error._tag === "GCP.OperationFailed" && error.code === 5),
+      () => Effect.succeed(operation),
+    ),
+  );

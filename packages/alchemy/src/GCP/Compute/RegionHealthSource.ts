@@ -147,14 +147,6 @@ export class RegionHealthSourceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionHealthSourceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthSourceOperationFailed",
-)<{
-  sourceName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const typeOf = (value: string | undefined) =>
   (value ?? DEFAULT_SOURCE_TYPE).toUpperCase();
 
@@ -221,9 +213,6 @@ const awaitResource = (project: string, region: string, sourceName: string) =>
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (sourceName: string, operation: string, message: string) =>
-  new RegionHealthSourceOperationFailed({ sourceName, operation, message });
 
 export const RegionHealthSourceProvider = () =>
   Provider.succeed(RegionHealthSource, {
@@ -297,11 +286,8 @@ export const RegionHealthSourceProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.HealthSourceAggregatedList[],
@@ -354,7 +340,6 @@ export const RegionHealthSourceProvider = () =>
               healthAggregationPolicy,
             },
           }),
-          (operation, message) => failOp(sourceName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, sourceName);
@@ -396,7 +381,6 @@ export const RegionHealthSourceProvider = () =>
             healthSource: sourceName,
             body: patch,
           }),
-          (operation, message) => failOp(sourceName, operation, message),
         );
         current =
           (yield* getByName(env.project, region, sourceName)) ?? current;
@@ -416,7 +400,6 @@ export const RegionHealthSourceProvider = () =>
           region,
           healthSource: output.sourceName,
         }),
-        (operation, message) => failOp(output.sourceName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

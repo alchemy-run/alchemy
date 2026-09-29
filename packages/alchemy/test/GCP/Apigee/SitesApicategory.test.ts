@@ -16,13 +16,16 @@ const logLevel = Effect.provideService(
 
 const siteId = process.env.GCP_TEST_APIGEE_SITE ?? "";
 
-const runLifecycle =
-  !!process.env.GCP_TEST_APIGEE && !!siteId && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG && !!siteId;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -33,7 +36,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsSitesApicategories on a missing category fails with NotFound or Forbidden",
+  "getOrganizationsSitesApicategories on a missing category fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,7 +48,7 @@ test.provider(
           name: `organizations/${project}/sites/alchemy-missing-site/apicategories/alchemy-missing-category`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -81,14 +84,12 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.data?.id).toEqual(created.categoryId);
-      expect(fetched.data?.name).toContain("alchemy-id=");
-      expect(fetched.data?.name).toContain("Payments");
+      expect(fetched.data?.name).toEqual("Payments");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Apigee.SitesApicategory("Payments", {
             siteId,
-            categoryId: created.categoryId,
             name: "Billing",
           });
         }),
@@ -100,8 +101,7 @@ test.provider.skipIf(!runLifecycle)(
       const fetchedUpdate = yield* apigee.getOrganizationsSitesApicategories({
         name: updated.name,
       });
-      expect(fetchedUpdate.data?.name).toContain("Billing");
-      expect(fetchedUpdate.data?.name).toContain("alchemy-id=");
+      expect(fetchedUpdate.data?.name).toEqual("Billing");
 
       yield* stack.destroy();
 

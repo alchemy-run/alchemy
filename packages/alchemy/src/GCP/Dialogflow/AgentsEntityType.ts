@@ -8,20 +8,16 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  encodeOwnershipLine,
   expandName,
   hasOwnershipMarker,
-  listAgents,
   listEntityTypes,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
-  ownershipText,
-  parseOwnership,
   parseResourceName,
   sameJson,
   sameText,
   updateMaskOf,
+  retryQuota,
+  toResourceId,
 } from "./internal.ts";
 
 export type EntityTypeKind =
@@ -56,9 +52,10 @@ export type AgentsEntityTypeProps = {
    */
   location?: string;
   /**
-   * Human-readable name, unique within the agent. Entity types have no
-   * labels field, so Alchemy stamps ownership into this field for
-   * `list` / nuke.
+   * Human-readable name, unique within the agent (`[A-Za-z0-9_-]`).
+   * Intents reference the type by it (`@color`). Entity types have no
+   * labels, so without state Alchemy finds the entity type by this name.
+   * @default a unique name generated from the stack, stage, and logical id
    */
   displayName?: string;
   /**
@@ -106,7 +103,7 @@ export type AgentsEntityType = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** Entity kind. */
     kind: string | undefined;
@@ -128,8 +125,10 @@ export type AgentsEntityType = Resource<
 /**
  * A Dialogflow CX entity type under an agent.
  *
- * Entity types have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Parent agent and entity type id are
+ * Entity types have no labels field, so Alchemy tracks an entity type by
+ * its resource name; without state it is found by `displayName` (unique
+ * within the agent) and reported as unowned unless that name is the
+ * generated one. Parent agent and entity type id are
  * immutable. Display name, kind, entities, and extraction flags update
  * in place.
  *
@@ -145,11 +144,12 @@ export type AgentsEntityType = Resource<
  * ```
  *
  * ### Updating an Entity Type
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Add a synonym
  * ```typescript
  * const color = yield* GCP.Dialogflow.AgentsEntityType("Color", {
  *   agent: agent.name,
- *   entityTypeId: existing.entityTypeId,
  *   displayName: "color",
  *   kind: "KIND_MAP",
  *   entities: [
@@ -192,6 +192,13 @@ const excludedOf = (
     .filter((phrase) => (phrase.value ?? "").length > 0)
     .map((phrase) => ({ value: phrase.value ?? "" }));
 
+// Drops the `[alchemy …]` excluded phrase earlier versions stamped.
+const userExcludedOf = (
+  list:
+    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[]
+    | undefined,
+) => excludedOf(list).filter((phrase) => !hasOwnershipMarker(phrase.value));
+
 const toAttrs = (
   entityType: dialogflow.GoogleCloudDialogflowCxV3EntityType,
   project: string,
@@ -204,10 +211,10 @@ const toAttrs = (
     agent: parsed.agent,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: parseOwnership(entityType.displayName).text,
+    displayName: entityType.displayName,
     kind: entityType.kind,
     entities: entitiesOf(entityType.entities),
-    excludedPhrases: excludedOf(entityType.excludedPhrases),
+    excludedPhrases: userExcludedOf(entityType.excludedPhrases),
     autoExpansionMode: entityType.autoExpansionMode,
     enableFuzzyExtraction: entityType.enableFuzzyExtraction === true,
     redact: entityType.redact === true,
@@ -221,22 +228,15 @@ const getByName = (name: string) =>
         .getProjectsLocationsAgentsEntityTypes({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (id: string, agent: string, hinted?: string) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const entityTypes = yield* listEntityTypes(agent);
-    for (const entityType of entityTypes) {
-      if (yield* ownedByAlchemy(id, ownershipText(entityType))) {
-        return entityType;
-      }
-    }
-    return undefined as
-      | dialogflow.GoogleCloudDialogflowCxV3EntityType
-      | undefined;
-  });
+const findByDisplayName = (agent: string, displayName: string) =>
+  listEntityTypes(agent).pipe(
+    Effect.map((entityTypes) =>
+      entityTypes.find((entityType) => entityType.displayName === displayName),
+    ),
+  );
+
+const displayNameOf = (id: string, requested: string | undefined) =>
+  toResourceId(id, requested, undefined);
 
 export const AgentsEntityTypeProvider = () =>
   Provider.succeed(AgentsEntityType, {
@@ -265,55 +265,36 @@ export const AgentsEntityTypeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const agent = olds?.agent ?? output?.agent;
-      const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : agent !== undefined
-            ? yield* findOwned(id, agent)
-            : undefined;
-      if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      if (output?.name !== undefined) {
+        const existing = yield* getByName(output.name);
+        return existing === undefined
+          ? undefined
+          : toAttrs(existing, env.project);
+      }
+      if (olds === undefined) return undefined;
+      const generated = yield* displayNameOf(id, undefined);
+      const displayName = olds.displayName ?? generated;
+      const agent = expandName(
+        olds.agent,
+        env.project,
+        normalizeLocation(olds.location),
+        "agents",
+      );
+      const found = yield* findByDisplayName(agent, displayName);
+      if (found === undefined) return undefined;
+      const attrs = toAttrs(found, env.project);
+      // A generated display name is unique to this stack, stage and id.
+      return displayName === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const agents = yield* listAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) =>
-            agent.name
-              ? listEntityTypes(agent.name).pipe(
-                  Effect.map((entityTypes) =>
-                    entityTypes
-                      .filter((entityType) =>
-                        hasOwnershipMarker(entityType.displayName),
-                      )
-                      .map((entityType) => toAttrs(entityType, env.project)),
-                  ),
-                )
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
       const agent = expandName(news.agent, env.project, location, "agents");
-      const ownership = yield* ownershipLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? "entity",
-      );
+      const displayName = yield* displayNameOf(id, news.displayName);
       const kind = news.kind ?? "KIND_MAP";
       const entities = news.entities;
-      const excludedPhrases = news.excludedPhrases;
+      const excludedPhrases = news.excludedPhrases ?? [];
       const autoExpansionMode = news.autoExpansionMode;
       const enableFuzzyExtraction = news.enableFuzzyExtraction === true;
       const redact = news.redact === true;
@@ -327,7 +308,10 @@ export const AgentsEntityTypeProvider = () =>
         redact,
       };
 
-      let current = yield* findOwned(id, agent, output?.name);
+      let current =
+        (output?.name !== undefined
+          ? yield* getByName(output.name)
+          : undefined) ?? (yield* findByDisplayName(agent, displayName));
 
       if (current === undefined) {
         const created = yield* dialogflow
@@ -338,7 +322,7 @@ export const AgentsEntityTypeProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwned(id, agent, output?.name),
+              findByDisplayName(agent, displayName),
             ),
           );
         current = created ?? undefined;
@@ -398,7 +382,7 @@ export const AgentsEntityTypeProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -407,5 +391,5 @@ export const AgentsEntityTypeProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

@@ -16,7 +16,7 @@ export default class InvokeCaller extends GCP.Function<InvokeCaller>()(
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
-    const callee = yield* GCP.Run.InvokeService(yield* InvokeCallee);
+    const callee = yield* GCP.Run.InvokeService(InvokeCallee);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

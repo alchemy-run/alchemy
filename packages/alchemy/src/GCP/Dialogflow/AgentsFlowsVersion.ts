@@ -24,6 +24,7 @@ import {
   sameText,
   updateMaskOf,
   waitForOperation,
+  retryQuota,
 } from "./internal.ts";
 
 export type AgentsFlowsVersionProps = {
@@ -93,11 +94,12 @@ export type AgentsFlowsVersion = Resource<
  * ```
  *
  * ### Updating a Version
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Rename
  * ```typescript
  * const version = yield* GCP.Dialogflow.AgentsFlowsVersion("V1", {
  *   flow: flow.name,
- *   versionId: existing.versionId,
  *   displayName: "v1-ga",
  *   description: "ga snapshot",
  * });
@@ -313,11 +315,11 @@ export const AgentsFlowsVersionProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsFlowsVersions({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

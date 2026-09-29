@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { OperationFailed } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { MAX_POLLS, waitForOperation } from "./internal.ts";
 
 const DEFAULT_CLUSTER_TYPE = "SINGLE_NODE";
 const DEFAULT_MACHINE_TYPE = "e2-standard-2";
@@ -355,19 +357,6 @@ export class ClusterNotReady extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-export class ClusterOperationFailed extends Data.TaggedError(
-  "GCP.Dataproc.ClusterOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ClusterOperationPending extends Data.TaggedError(
-  "GCP.Dataproc.ClusterOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ClusterStillExists extends Data.TaggedError(
   "GCP.Dataproc.ClusterStillExists",
 )<{
@@ -574,71 +563,6 @@ const getById = (projectId: string, region: string, clusterName: string) =>
     .getProjectsRegionsClusters({ projectId, region, clusterName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: dataproc.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new ClusterOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ClusterOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = dataproc.getProjectsRegionsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataproc.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ClusterOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new ClusterOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataproc.ClusterOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (
   projectId: string,
   region: string,
@@ -691,8 +615,8 @@ const waitUntilRunning = (
       while: (error) =>
         error._tag === "GCP.Dataproc.ClusterNotReady" ||
         error._tag === "GCP.Dataproc.ClusterNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
@@ -709,8 +633,71 @@ const waitUntilGone = (
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataproc.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+  );
+
+const deleteCluster = (
+  projectId: string,
+  region: string,
+  clusterName: string,
+) =>
+  Effect.gen(function* () {
+    const operation = yield* dataproc
+      .deleteProjectsRegionsClusters({ projectId, region, clusterName })
+      .pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
+    if (operation !== undefined) {
+      yield* waitForOperation(operation, { notFoundOk: true });
+    }
+    yield* waitUntilGone(projectId, region, clusterName);
+  });
+
+/**
+ * A create operation that fails because the VPC subnet is transiently busy
+ * (`The resource '.../subnetworks/default' is not ready`, raised while other
+ * operations mutate the shared subnet). LRO errors carry only a code and a
+ * message, so the message is the only discriminator.
+ */
+const isSubnetNotReady = (error: { readonly _tag: string }) =>
+  error instanceof OperationFailed &&
+  error.message.includes("/subnetworks/") &&
+  error.message.includes("is not ready");
+
+/**
+ * Create the cluster and wait for the create operation. A create that fails
+ * on a busy subnet leaves the cluster in `ERROR`; it is deleted and the
+ * create retried.
+ */
+const createCluster = (
+  projectId: string,
+  region: string,
+  clusterName: string,
+  body: dataproc.Cluster,
+) =>
+  Effect.gen(function* () {
+    const existing = yield* getById(projectId, region, clusterName);
+    if (existing !== undefined && terminalError(existing.status?.state)) {
+      yield* deleteCluster(projectId, region, clusterName);
+    }
+    const created = yield* dataproc
+      .createProjectsRegionsClusters({ projectId, region, body })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    if (created !== undefined) {
+      yield* waitForOperation(created);
+    }
+  }).pipe(
+    Effect.retry({
+      while: isSubnetNotReady,
+      times: 6,
+      schedule: Schedule.spaced("30 seconds"),
     }),
   );
 
@@ -871,7 +858,6 @@ const listRegion = (projectId: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const ClusterProvider = () =>
@@ -1062,16 +1048,12 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* dataproc
-          .createProjectsRegionsClusters({
-            projectId,
-            region,
-            body: toCreateBody(news, projectId, clusterName, desiredLabels),
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(created);
-        }
+        yield* createCluster(
+          projectId,
+          region,
+          clusterName,
+          toCreateBody(news, projectId, clusterName, desiredLabels),
+        );
         current = yield* waitUntilExists(projectId, region, clusterName);
       }
 
@@ -1177,23 +1159,6 @@ export const ClusterProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* dataproc
-        .deleteProjectsRegionsClusters({
-          projectId: output.project,
-          region: output.region,
-          clusterName: output.clusterName,
-        })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
-      if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
-      }
-      yield* waitUntilGone(output.project, output.region, output.clusterName);
+      yield* deleteCluster(output.project, output.region, output.clusterName);
     }),
   });

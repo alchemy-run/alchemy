@@ -116,8 +116,6 @@ export type OrganizationLogScope = Resource<
  * **Example:** Change description and resource names
  * ```typescript
  * const scope = yield* GCP.Logging.OrganizationLogScope("App", {
- *   logScopeId: existing.logScopeId,
- *   organization: existing.organization,
  *   resourceNames: ["projects/my-project", "projects/other"],
  *   description: "two application projects",
  * });
@@ -261,9 +259,7 @@ export const OrganizationLogScopeProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

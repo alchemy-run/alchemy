@@ -168,8 +168,9 @@ export type EntryType = Resource<
  * ### Updating an Entry Type
  * **Example:** Description and aliases
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const type = yield* GCP.Dataplex.EntryType("Table", {
- *   entryTypeId: existing.entryTypeId,
+ *   entryTypeId: "app-table",
  *   description: "table v2",
  *   typeAliases: ["TABLE", "DATASET"],
  * });

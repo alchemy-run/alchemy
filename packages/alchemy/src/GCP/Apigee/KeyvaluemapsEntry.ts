@@ -1,7 +1,6 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -14,16 +13,8 @@ import {
   organizationFromName,
   toResourceId,
 } from "./names.ts";
-import {
-  createInternalLabels,
-  encodeOwnership,
-  hasAlchemyLabels,
-  hasOwnershipMarker,
-  parseOwnership,
-} from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 255;
-const OWNERSHIP_ENTRY = "__alchemy";
 
 export type KeyvaluemapsEntryProps = {
   /**
@@ -42,12 +33,11 @@ export type KeyvaluemapsEntryProps = {
    * `organizations/{org}/keyvaluemaps/{keyvaluemap}/entries/{entry}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Immutable — changing it replaces the entry. Must not be
-   * `__alchemy` (reserved for ownership).
+   * `__alchemy` (reserved by {@link Keyvaluemap} for ownership).
    */
   entryId?: string;
   /**
-   * Payload associated with the key. Alchemy stamps ownership into a
-   * `[alchemy …]` prefix and strips it from attributes.
+   * Payload associated with the key, stored verbatim.
    */
   value: string;
 };
@@ -64,7 +54,7 @@ export type KeyvaluemapsEntry = Resource<
     mapId: string;
     /** Apigee organization id. */
     organization: string;
-    /** User payload with the Alchemy ownership prefix stripped. */
+    /** Payload associated with the key. */
     value: string;
   },
   never,
@@ -74,11 +64,11 @@ export type KeyvaluemapsEntry = Resource<
 /**
  * An organization-scoped Apigee key value map entry.
  *
- * Entries have no labels field, so Alchemy stamps ownership into the
- * stored value (`[alchemy …]` prefix) for `read` / `list` / nuke.
- * `list` walks entries of maps that contain the reserved `__alchemy`
- * ownership entry. Organization, map, and key are identity — changing
- * them replaces the entry. `value` updates in place.
+ * Entries have no labels field and the value is read by proxies, so
+ * Alchemy stores it verbatim and identifies its entries by the generated
+ * key: `read` reports an entry with an explicit `entryId` as unowned
+ * (adopt it with `--adopt`). Organization, map, and key are identity —
+ * changing them replaces the entry. `value` updates in place.
  *
  * ### Creating an Entry
  * **Example:** Generated key on a map
@@ -127,48 +117,23 @@ const toAttrs = (
 ) => {
   const raw = entry.name ?? "";
   const name = raw.includes("/") ? raw : resourceName(organization, mapId, raw);
-  const parsed = parseOwnership(entry.value);
   return {
     name,
     entryId: lastSegment(name),
     mapId,
     organization: organizationFromName(name) ?? organization,
-    value: parsed.text ?? "",
+    value: entry.value ?? "",
   };
 };
 
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const listEntries = (parent: string) =>
-  apigee.listOrganizationsKeyvaluemapsEntries
-    .pages({
-      parent,
-      pageSize: 1000,
-    })
     .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.keyValueEntries ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as apigee.GoogleCloudApigeeV1KeyValueEntry[]),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
       ),
     );
-
-const listOwnedMapNames = (organization: string) =>
-  // No org-level map list. Discover maps by probing the reserved
-  // ownership entry is only possible when the map name is already
-  // known (state / nuke of children). Return maps we can infer from
-  // nothing — empty — unless a later list API appears.
-  Effect.succeed([] as string[]).pipe(
-    Effect.map((names) =>
-      names.map((name) =>
-        name.includes("/") ? name : mapName(organization, name),
-      ),
-    ),
-  );
 
 export const KeyvaluemapsEntryProvider = () =>
   Provider.succeed(KeyvaluemapsEntry, {
@@ -210,34 +175,14 @@ export const KeyvaluemapsEntryProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, mapId);
-      const { labels } = parseOwnership(existing.value);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      const generated = yield* toResourceId(
+        id,
+        undefined,
+        undefined,
+        MAX_NAME_LENGTH,
+      );
+      return attrs.entryId === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const maps = yield* listOwnedMapNames(env.project);
-        const pages = yield* Effect.forEach(
-          maps,
-          (parent) => {
-            const mapId = mapIdOf(parent);
-            return listEntries(parent).pipe(
-              Effect.map((entries) =>
-                entries
-                  .filter(
-                    (entry) =>
-                      lastSegment(entry.name ?? "") !== OWNERSHIP_ENTRY &&
-                      hasOwnershipMarker(entry.value),
-                  )
-                  .map((entry) => toAttrs(entry, env.project, mapId)),
-              ),
-            );
-          },
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -252,8 +197,7 @@ export const KeyvaluemapsEntryProvider = () =>
       );
       const parent = mapName(organization, news.map);
       const name = resourceName(organization, mapId, entryId);
-      const ownership = yield* createInternalLabels(id);
-      const desiredValue = encodeOwnership(ownership, news.value);
+      const desiredValue = news.value;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -284,6 +228,11 @@ export const KeyvaluemapsEntryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsKeyvaluemapsEntries({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

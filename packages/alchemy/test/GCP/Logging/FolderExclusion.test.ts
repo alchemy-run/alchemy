@@ -1,14 +1,16 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
+
+// Folder-scoped: set GOOGLE_FOLDER_ID when the credentials administer a
+// folder (the testing project sits directly under the organization).
+const folderId = process.env.GOOGLE_FOLDER_ID?.trim().replace(/^folders\//, "");
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -26,77 +28,29 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const folderIdOf = () =>
-  Effect.gen(function* () {
-    const { project } = yield* GcpEnvironment.current;
-
-    return yield* resourcemanager
-      .getProjects({ name: `projects/${project}` })
-      .pipe(
-        Effect.map((resource) => {
-          const parent = resource.parent ?? "";
-          return parent.startsWith("folders/")
-            ? (parent.split("/").pop() ?? "")
-            : "";
-        }),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-      );
-  });
-
-test.provider(
-  "getFoldersExclusions on a missing exclusion fails with NotFound or Forbidden",
+test.provider.skipIf(!folderId)(
+  "getFoldersExclusions on a missing exclusion fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const folderId = (yield* folderIdOf()) || "0";
       const error = yield* Effect.flip(
         logging.getFoldersExclusions({
           name: `folders/${folderId}/exclusions/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:logging", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!folderId)(
   "create, update, replace, and delete a folder exclusion",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const folderId = yield* folderIdOf();
-      if (folderId.length === 0) {
-        const error = yield* Effect.flip(
-          logging.createFoldersExclusions({
-            parent: "folders/0",
-            body: { name: "alchemy-probe", filter: "severity=DEBUG" },
-          }),
-        );
-        expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      const access = yield* logging
-        .listFoldersExclusions({
-          parent: `folders/${folderId}`,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-            Effect.succeed(error._tag),
-          ),
-        );
-      if (access !== "ok") {
-        expect(["Forbidden", "NotFound"]).toContain(access);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

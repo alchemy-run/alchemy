@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -49,9 +49,10 @@ export type InstanceGroupManagerResizeRequestProps = {
    */
   description?: string;
   /**
-   * Optional run duration. Created VMs are deleted when it elapses.
+   * How long the created VMs run; they are deleted when it elapses. Compute
+   * requires it on insert. Immutable.
    */
-  requestedRunDuration?: InstanceGroupManagerResizeRequestDuration;
+  requestedRunDuration: InstanceGroupManagerResizeRequestDuration;
 };
 
 export type InstanceGroupManagerResizeRequest = Resource<
@@ -111,6 +112,7 @@ export type InstanceGroupManagerResizeRequest = Resource<
  *     instanceGroupManager: group.managerName,
  *     zone: group.zone,
  *     resizeBy: 1,
+ *     requestedRunDuration: { seconds: "3600" },
  *   },
  * );
  * ```
@@ -129,14 +131,6 @@ export class InstanceGroupManagerResizeRequestNotResolved extends Data.TaggedErr
   resizeRequestName: string;
   instanceGroupManager: string;
   zone: string;
-}> {}
-
-export class InstanceGroupManagerResizeRequestOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstanceGroupManagerResizeRequestOperationFailed",
-)<{
-  resizeRequestName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const lastSegment = (value: string | undefined): string => {
@@ -241,60 +235,6 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  resizeRequestName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new InstanceGroupManagerResizeRequestOperationFailed({
-        resizeRequestName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  resizeRequestName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && operationName) {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(resizeRequestName, current);
-  });
-
 const awaitResource = (
   project: string,
   zone: string,
@@ -390,7 +330,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         const managers = Array.from(pages).flatMap((page) =>
           Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
             if (!scope.startsWith("zones/")) return [];
@@ -424,7 +364,6 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
           { concurrency: 4 },
         );
@@ -465,7 +404,9 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, zone, resizeRequestName, operation),
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -514,12 +455,9 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (cancelled !== undefined) {
-          yield* waitUntilDone(
-            env.project,
-            zone,
-            output.resizeRequestName,
-            cancelled,
-          ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+          yield* waitZoneOperation(env.project, zone, cancelled).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }
         yield* getByName(
           env.project,
@@ -552,12 +490,9 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.resizeRequestName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

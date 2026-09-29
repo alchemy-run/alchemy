@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -189,14 +189,6 @@ export class TargetPoolPending extends Data.TaggedError(
   status: string;
 }> {}
 
-export class TargetPoolOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetPoolOperationFailed",
-)<{
-  targetPoolName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string | undefined) => {
   if (!value) return "";
   const trimmed = value.replace(/\/+$/, "");
@@ -312,76 +304,10 @@ const toAttrs = (
   };
 };
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  targetPoolName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new TargetPoolOperationFailed({
-      targetPoolName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, region: string, targetPool: string) =>
   compute
     .getTargetPools({ project, region, targetPool })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  targetPoolName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, targetPoolName);
-        return;
-      }
-      return yield* new TargetPoolOperationFailed({
-        targetPoolName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, targetPoolName);
-      return;
-    }
-    const waited = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    yield* failIfOpError(waited, targetPoolName);
-  });
 
 const runOp = <E, R>(
   project: string,
@@ -391,7 +317,7 @@ const runOp = <E, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, region, operation, targetPoolName),
+      waitRegionOperation(project, region, operation),
     ),
   );
 
@@ -576,12 +502,9 @@ export const TargetPoolProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                targetPoolName,
-              ).pipe(
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() =>
                   requirePool(env.project, region, targetPoolName),
                 ),
@@ -752,7 +675,9 @@ export const TargetPoolProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, region, operation, output.targetPoolName),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

@@ -212,7 +212,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApimServiceExtensions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const ApimServiceExtensionProvider = () =>
   Provider.succeed(ApimServiceExtension, {
@@ -283,7 +287,7 @@ export const ApimServiceExtensionProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([]),
             ),
           );
@@ -362,7 +366,11 @@ export const ApimServiceExtensionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsApimServiceExtensions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

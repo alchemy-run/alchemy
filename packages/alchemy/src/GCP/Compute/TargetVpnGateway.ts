@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -201,102 +201,10 @@ const toAttrs = (gateway: compute.TargetVpnGateway, project: string) => ({
   creationTimestamp: gateway.creationTimestamp,
 });
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  targetVpnGatewayName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new TargetVpnGatewayOperationFailed({
-      targetVpnGatewayName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, region: string, targetVpnGateway: string) =>
   compute
     .getTargetVpnGateways({ project, region, targetVpnGateway })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  targetVpnGatewayName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, targetVpnGatewayName);
-        return;
-      }
-      return yield* new TargetVpnGatewayOperationFailed({
-        targetVpnGatewayName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, targetVpnGatewayName);
-      return;
-    }
-    const waited = yield* waitRegionOperations(
-      {
-        project,
-        region,
-        operation: name,
-      },
-      { times: 20 },
-    );
-    if (waited.status === "DONE") {
-      yield* failIfOpError(waited, targetVpnGatewayName);
-      return;
-    }
-    yield* compute
-      .getRegionOperations({ project, region, operation: name })
-      .pipe(
-        Effect.filterOrFail(
-          (op) => op.status === "DONE",
-          (op) =>
-            new TargetVpnGatewayPending({
-              targetVpnGatewayName,
-              status: op.status ?? "UNKNOWN",
-            }),
-        ),
-        Effect.flatMap((op) => failIfOpError(op, targetVpnGatewayName)),
-        Effect.retry({
-          while: (e) =>
-            e._tag === "GCP.Compute.TargetVpnGatewayPending" ||
-            e._tag === "NotFound",
-          times: 10,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-      );
-  });
 
 const requireGateway = (
   project: string,
@@ -487,12 +395,9 @@ export const TargetVpnGatewayProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                targetVpnGatewayName,
-              ).pipe(
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() =>
                   requireGateway(env.project, region, targetVpnGatewayName),
                 ),
@@ -532,12 +437,7 @@ export const TargetVpnGatewayProvider = () =>
             })
             .pipe(
               Effect.flatMap((operation) =>
-                waitForOperation(
-                  env.project,
-                  region,
-                  operation,
-                  targetVpnGatewayName,
-                ),
+                waitRegionOperation(env.project, region, operation),
               ),
             );
         }).pipe(
@@ -568,12 +468,9 @@ export const TargetVpnGatewayProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.targetVpnGatewayName,
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

@@ -15,6 +15,10 @@ export interface ValidateMessageRequest extends Omit<
  * Bind this operation to a {@link Schema} in a Function/Action init phase.
  * Provide {@link ValidateMessageHttp}.
  *
+ * Grants `roles/pubsub.viewer` on the project: `schemas.validateMessage` is
+ * authorized on the parent project, and a grant on the schema's own IAM
+ * policy is not enough.
+ *
  * ### Validating Messages
  * **Example:** Validate a JSON-encoded Avro payload
  * ```typescript

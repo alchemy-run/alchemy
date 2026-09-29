@@ -192,11 +192,11 @@ export type WorkstationClustersWorkstationConfigsWorkstation = Resource<
  * ### Updating a Workstation
  * **Example:** Display name and env
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const workstation =
  *   yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
  *     "Mine",
  *     {
- *       workstationId: existing.workstationId,
  *       workstationConfig: config.name,
  *       displayName: "alice-dev v2",
  *       env: { EDITOR: "vim" },
@@ -359,6 +359,9 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const parent = olds?.workstationConfig ?? output?.workstationConfig;
+      // A workstation cannot exist before its config's name resolved.
+      if (output?.name === undefined && !parent) return undefined;
       const workstationId = yield* toPhysicalId(
         id,
         olds?.workstationId,
@@ -370,7 +373,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
         env.region,
       );
       const config = expandConfig(
-        olds?.workstationConfig ?? output?.workstationConfig ?? "",
+        parent ?? "",
         env.project,
         location,
         olds?.workstationCluster ?? output?.workstationCluster,
@@ -437,7 +440,12 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
           )
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -508,7 +516,12 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

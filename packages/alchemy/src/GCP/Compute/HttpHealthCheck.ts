@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -159,14 +159,6 @@ export class HttpHealthCheckNotResolved extends Data.TaggedError(
   httpHealthCheckName: string;
 }> {}
 
-export class HttpHealthCheckOperationFailed extends Data.TaggedError(
-  "GCP.Compute.HttpHealthCheckOperationFailed",
-)<{
-  httpHealthCheckName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const rfc1035 = (name: string): string => {
   let next = name
     .toLowerCase()
@@ -310,61 +302,6 @@ const getByName = (project: string, httpHealthCheck: string) =>
     .getHttpHealthChecks({ project, httpHealthCheck })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  httpHealthCheckName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new HttpHealthCheckOperationFailed({
-        httpHealthCheckName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  httpHealthCheckName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: current.name,
-      });
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    return yield* failIfErrored(httpHealthCheckName, current);
-  });
-
 const awaitResource = (project: string, httpHealthCheckName: string) =>
   getByName(project, httpHealthCheckName).pipe(
     Effect.repeat({
@@ -451,7 +388,7 @@ export const HttpHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, httpHealthCheckName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -471,7 +408,7 @@ export const HttpHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, httpHealthCheckName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, httpHealthCheckName);
@@ -501,11 +438,9 @@ export const HttpHealthCheckProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.httpHealthCheckName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

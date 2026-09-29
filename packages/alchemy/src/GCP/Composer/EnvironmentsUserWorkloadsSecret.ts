@@ -2,26 +2,18 @@ import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   dataKey,
-  encodeOwnershipData,
   environmentParent,
-  hasOwnershipMarker,
   lastSegment,
-  listAllEnvironments,
   mapOf,
-  ownedBy,
   parseWorkloadName,
   toPhysicalId,
-  userData,
 } from "./internal.ts";
 
 export type EnvironmentsUserWorkloadsSecretProps = {
@@ -41,10 +33,8 @@ export type EnvironmentsUserWorkloadsSecretProps = {
   secretId?: string;
   /**
    * Kubernetes Secret data as key-value pairs. Values must be
-   * base64-encoded strings. Alchemy ownership keys (`alchemy-stack`,
-   * `alchemy-stage`, `alchemy-id`) are merged in automatically (values
-   * base64-encoded) and stripped from attributes. Secrets have no labels
-   * field, so those keys are how `list` / nuke find owned rows.
+   * base64-encoded strings. Stored exactly as given: Secrets have no
+   * labels, so Alchemy tracks them by name.
    *
    * `secrets.get` clears data values in the response; keys remain.
    */
@@ -68,7 +58,7 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
     /** Parent environment id. */
     environmentId: string;
     /**
-     * User data (Alchemy ownership keys stripped). `secrets.get` clears
+     * Secret data. `secrets.get` clears
      * values, so this may contain empty strings after a refresh.
      */
     data: Record<string, string>;
@@ -82,8 +72,8 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
  * executor or KubernetesPodOperator.
  *
  * Supported on Cloud Composer 3 (`composer-3-airflow-2` and newer).
- * Secrets have no labels field, so Alchemy stamps ownership into the
- * `data` map for `list` / nuke. `environmentName` and `secretId` are
+ * Secrets have no labels field, so Alchemy tracks them by name and
+ * never adds keys to `data`. `environmentName` and `secretId` are
  * identity — changing either replaces the Secret. Data values must be
  * base64-encoded.
  *
@@ -93,6 +83,9 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
  * const airflow = yield* GCP.Composer.Environment("Airflow", {
  *   config: {
  *     environmentSize: "ENVIRONMENT_SIZE_SMALL",
+ *     nodeConfig: {
+ *       serviceAccount: "composer-env@my-project.iam.gserviceaccount.com",
+ *     },
  *     softwareConfig: { imageVersion: "composer-3-airflow-2" },
  *   },
  * });
@@ -167,7 +160,7 @@ const toAttrs = (
     project: parsed.project,
     location: parsed.location,
     environmentId: parsed.environmentId,
-    data: userData(secret.data),
+    data: mapOf(secret.data),
   };
 };
 
@@ -191,24 +184,6 @@ const waitUntilGone = (name: string) =>
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const listOwnedAt = (parent: string) =>
-  composer.listProjectsLocationsEnvironmentsUserWorkloadsSecrets
-    .pages({
-      parent,
-      pageSize: 1000,
-    })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.userWorkloadsSecrets ?? []),
-      ),
-      Stream.filter((secret) => hasOwnershipMarker(secret.data)),
-      Stream.map((secret) => toAttrs(secret, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
 
 const keysOf = (map: Record<string, string>) =>
   Object.keys(map).sort().join("\0");
@@ -255,37 +230,19 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, environmentName);
-      return (yield* ownedBy(id, existing.data, "secret"))
-        ? attrs
-        : Unowned(attrs);
+      // No labels: a generated id embeds stack/stage/id, and a row we
+      // created is in state. Only an explicit id found without state is
+      // ambiguous.
+      return output === undefined && olds?.secretId !== undefined
+        ? Unowned(attrs)
+        : attrs;
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const environments = yield* listAllEnvironments(
-          env.project,
-          env.region,
-        );
-        const pages = yield* Effect.forEach(
-          environments,
-          (environment) =>
-            environment.name
-              ? listOwnedAt(environment.name)
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const secretId = yield* toPhysicalId(id, news.secretId, output?.secretId);
       const parent = environmentParent(news.environmentName);
       const name = resourceName(parent, secretId);
-      const ownership = yield* createInternalLabels(id);
-      const desiredData = yield* Effect.sync(() =>
-        encodeOwnershipData(ownership, news.data, { base64: true }),
-      );
+      const desiredData = mapOf(news.data);
 
       let current = yield* getByName(output?.name ?? name);
 

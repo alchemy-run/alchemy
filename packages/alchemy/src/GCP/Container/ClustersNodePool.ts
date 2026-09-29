@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -336,12 +337,6 @@ export class ClustersNodePoolOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class ClustersNodePoolOperationPending extends Data.TaggedError(
-  "GCP.Container.ClustersNodePoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ClustersNodePoolStillExists extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolStillExists",
 )<{
@@ -536,7 +531,8 @@ const toAttrs = (
     zone: resolvedZone,
     status: pool.status,
     version: pool.version,
-    nodeCount: pool.initialNodeCount ?? DEFAULT_NODE_COUNT,
+    // The API omits a zero count.
+    nodeCount: pool.initialNodeCount ?? 0,
     machineType: config?.machineType,
     diskSizeGb: config?.diskSizeGb,
     diskType: config?.diskType,
@@ -596,95 +592,37 @@ const operationIdOf = (operation: container.Operation) => {
   return lastSegment(raw);
 };
 
-const operationErrorText = (operation: container.Operation) =>
-  operation.error?.message ??
-  operation.statusMessage ??
-  operation.detail ??
-  "operation failed";
-
-const isAlreadyExists = (operation: container.Operation) => {
-  if (operation.error?.code === 6) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("already exists") || text.includes("alreadyexist");
-};
-
-const isNotFoundOperation = (operation: container.Operation) => {
-  if (operation.error?.code === 5) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("not found") || text.includes("notfound");
-};
-
+/**
+ * Wait for a zonal GKE node-pool operation (create/delete takes several
+ * minutes). ALREADY_EXISTS (code 6) counts as success (create race); with
+ * `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an operation
+ * that is already gone.
+ */
 const waitForOperation = (
   project: string,
   zone: string,
   operation: container.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const operationId = operationIdOf(operation);
-    if (operationId.length === 0) {
-      return yield* new ClustersNodePoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const failIfErrored = (current: container.Operation) => {
-      const ignore =
-        isAlreadyExists(current) ||
-        (options?.notFoundOk === true && isNotFoundOperation(current));
-      return current.error && !ignore
-        ? Effect.fail(
-            new ClustersNodePoolOperationFailed({
-              operation: operationId,
-              message: operationErrorText(current),
-            }),
-          )
-        : Effect.succeed(current);
-    };
-
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(operation);
-    }
-
-    const getOperation = container.getProjectsZonesOperations({
-      projectId: project,
-      zone,
-      operationId,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name: operationId,
-                status: "DONE",
-              } satisfies container.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        () => new ClustersNodePoolOperationPending({ operation: operationId }),
-      ),
-      Effect.flatMap(failIfErrored),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Container.ClustersNodePoolOperationPending",
-        // Node pool create/delete takes several minutes.
-        times: 60,
-        schedule: Schedule.spaced("10 seconds"),
+  waitForGcpOperation(
+    { ...operation, name: operationIdOf(operation) },
+    (operationId) =>
+      container.getProjectsZonesOperations({
+        projectId: project,
+        zone,
+        operationId,
       }),
-    );
-  });
+    { budget: "20 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (
   project: string,
@@ -792,6 +730,7 @@ const toCreatePool = (
   news: ClustersNodePoolProps,
   nodePoolId: string,
   desiredLabels: Record<string, string>,
+  workloadIdentity: boolean,
 ): container.NodePool => ({
   name: nodePoolId,
   initialNodeCount: news.nodeCount ?? DEFAULT_NODE_COUNT,
@@ -810,7 +749,10 @@ const toCreatePool = (
     serviceAccount: news.serviceAccount,
     localSsdCount: news.localSsdCount,
     bootDiskKmsKey: news.bootDiskKmsKey,
-    workloadMetadataConfig: { mode: "GKE_METADATA" },
+    // GKE rejects GKE_METADATA on clusters without Workload Identity.
+    workloadMetadataConfig: workloadIdentity
+      ? { mode: "GKE_METADATA" }
+      : undefined,
   },
   autoscaling: news.autoscaling,
   management: news.management,
@@ -939,8 +881,18 @@ export const ClustersNodePoolProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const nodePoolId = yield* toId(id, olds?.nodePoolId, output?.nodePoolId);
+      const clusterRef =
+        (typeof olds?.cluster === "string" ? olds.cluster : undefined) ??
+        output?.clusterName ??
+        output?.clusterId ??
+        "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (output?.name === undefined && clusterRef.trim().length === 0) {
+        return undefined;
+      }
       const ref = parseClusterRef(
-        olds?.cluster ?? output?.clusterName ?? output?.clusterId ?? "",
+        clusterRef,
         env.project,
         olds?.zone ?? output?.zone,
       );
@@ -980,11 +932,6 @@ export const ClustersNodePoolProvider = () =>
                 clusters: [],
               } satisfies container.ListClustersResponse),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed({
-                clusters: [],
-              } satisfies container.ListClustersResponse),
-            ),
           );
 
         const found: ReturnType<typeof toAttrs>[] = [];
@@ -1016,9 +963,6 @@ export const ClustersNodePoolProvider = () =>
                   .pipe(
                     Effect.map((response) => response.nodePools ?? []),
                     Effect.catchTag("NotFound", () =>
-                      Effect.succeed([] as container.NodePool[]),
-                    ),
-                    Effect.catchTag("Forbidden", () =>
                       Effect.succeed([] as container.NodePool[]),
                     ),
                   );
@@ -1067,6 +1011,15 @@ export const ClustersNodePoolProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        const cluster = yield* container
+          .getProjectsZonesClusters({
+            projectId: ref.project,
+            zone: ref.zone,
+            clusterId: ref.clusterId,
+          })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        const workloadIdentity =
+          (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
             .createProjectsZonesClustersNodePools({
@@ -1074,7 +1027,12 @@ export const ClustersNodePoolProvider = () =>
               zone: ref.zone,
               clusterId: ref.clusterId,
               body: {
-                nodePool: toCreatePool(news, nodePoolId, desiredLabels),
+                nodePool: toCreatePool(
+                  news,
+                  nodePoolId,
+                  desiredLabels,
+                  workloadIdentity,
+                ),
               },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
@@ -1253,10 +1211,7 @@ export const ClustersNodePoolProvider = () =>
       const autoscalingOn =
         news.autoscaling?.enabled === true ||
         live.autoscaling?.enabled === true;
-      if (
-        !autoscalingOn &&
-        (live.initialNodeCount ?? DEFAULT_NODE_COUNT) !== nodeCount
-      ) {
+      if (!autoscalingOn && (live.initialNodeCount ?? 0) !== nodeCount) {
         const resized = yield* retryConflict(
           container.setSizeProjectsZonesClustersNodePools({
             projectId: ref.project,

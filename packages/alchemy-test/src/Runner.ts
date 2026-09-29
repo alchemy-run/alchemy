@@ -395,13 +395,15 @@ const included = (
 };
 
 const isSkipped = (test: TestCase): "skip" | "todo" | undefined => {
-  if (test.mode === "todo" || test.body === undefined) return "todo";
+  if (test.mode === "todo") return "todo";
   let node: Suite | TestCase | undefined = test;
   while (node !== undefined) {
     if (node.mode === "skip") return "skip";
     node = node.parent;
   }
-  return undefined;
+  // Wrappers (e.g. alchemy's `test.skipIf`) drop the body of skipped tests,
+  // so a missing body only means "todo" once skip has been ruled out.
+  return test.body === undefined ? "todo" : undefined;
 };
 
 const hookChain = (

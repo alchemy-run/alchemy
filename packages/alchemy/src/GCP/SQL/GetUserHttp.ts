@@ -13,7 +13,10 @@ export const GetUserHttp = Layer.effect(
   GetUser,
   makeSqlUserHttpBinding({
     tag: "GCP.SQL.GetUser",
-    iam: { role: "roles/cloudsql.viewer", scopeByCondition: true },
+    // `users.get` is not evaluated against the instance's resource name, so
+    // an instance-scoped IAM Condition never matches it (observed:
+    // SqlInstanceNotAuthorized); no narrower predefined role has it.
+    iam: { role: "roles/cloudsql.viewer" },
     operation: sqladmin.getUsers,
   }),
 );

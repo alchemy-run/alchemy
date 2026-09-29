@@ -20,6 +20,7 @@ import {
   sameJson,
   sameText,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type ExperimentVariant = {
@@ -362,7 +363,7 @@ export const AgentsEnvironmentsExperimentProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -370,5 +371,5 @@ export const AgentsEnvironmentsExperimentProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

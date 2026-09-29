@@ -176,9 +176,8 @@ export type OrganizationSink = Resource<
  * **Example:** Change the filter and add an exclusion
  * ```typescript
  * const sink = yield* GCP.Logging.OrganizationSink("Errors", {
- *   sinkId: existing.sinkId,
- *   organization: existing.organization,
- *   destination: existing.destination,
+ *   destination:
+ *     "logging.googleapis.com/organizations/123456789/locations/global/buckets/_Default",
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  *   exclusions: [
@@ -351,9 +350,7 @@ export const OrganizationSinkProvider = () =>
             Stream.map((sink) => toAttrs(sink, organization, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

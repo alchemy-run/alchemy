@@ -458,10 +458,7 @@ export const StreamProvider = () =>
             body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        yield* settleOperation(created, {
-          times: 10,
-          interval: "6 seconds",
-        });
+        yield* settleOperation(created);
         current = yield* waitUntilExists(getByName(name), name);
       }
 
@@ -526,10 +523,7 @@ export const StreamProvider = () =>
           validateOnly: news.validateOnly,
           body: patch,
         });
-        yield* settleOperation(operation, {
-          times: 10,
-          interval: "6 seconds",
-        });
+        yield* settleOperation(operation);
         current = yield* waitUntilExists(
           getByName(current.name ?? name),
           current.name ?? name,
@@ -554,19 +548,11 @@ export const StreamProvider = () =>
             Effect.succeed(undefined),
           ),
         );
-      yield* settleOperation(operation, {
-        notFoundOk: true,
-        times: 8,
-        interval: "3 seconds",
-      });
+      // Stream deletes take a few minutes.
+      yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name, {
-        times: 8,
-        interval: "2 seconds",
-      }).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
-      );
+        times: 15,
+        interval: "4 seconds",
+      });
     }),
   });

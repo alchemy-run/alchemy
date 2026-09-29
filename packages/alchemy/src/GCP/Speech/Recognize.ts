@@ -19,6 +19,9 @@ export interface RecognizeRequest {
  * Bind this operation to a {@link PhraseSet} in a Function/Action init
  * phase. Provide {@link RecognizeHttp}.
  *
+ * Grants `roles/speech.client` on the project because Speech-to-Text has no
+ * resource-level IAM.
+ *
  * ### Recognizing Speech
  * **Example:** Transcribe audio with phrase hints
  * ```typescript

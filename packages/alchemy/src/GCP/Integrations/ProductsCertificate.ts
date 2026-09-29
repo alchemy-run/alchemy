@@ -63,7 +63,7 @@ export type ProductsCertificateProps = {
   requestorId?: string;
   /**
    * Raw client certificate (PEM). Write-only — never returned on
-   * attributes.
+   * attributes. Changing it replaces the certificate.
    */
   rawCertificate?: ClientCertificate;
 };
@@ -168,11 +168,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsProductsCertificates({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsCertificates
@@ -186,7 +182,6 @@ const listAt = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
@@ -202,7 +197,6 @@ const findOwned = (parent: string, id: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const ProductsCertificateProvider = () =>
@@ -243,6 +237,15 @@ export const ProductsCertificateProvider = () =>
         previousId !== undefined &&
         news.certificateId !== undefined &&
         news.certificateId !== previousId
+      ) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      // The patch API only accepts certificate_name, description, and
+      // certificate_status, so a new raw certificate needs a new resource.
+      if (
+        olds !== undefined &&
+        JSON.stringify(olds.rawCertificate ?? null) !==
+          JSON.stringify(news.rawCertificate ?? null)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -337,22 +340,19 @@ export const ProductsCertificateProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const rawChanged = news.rawCertificate !== undefined;
 
-      if (displayChanged || descriptionChanged || rawChanged) {
+      if (displayChanged || descriptionChanged) {
         current =
           yield* integrations.patchProjectsLocationsProductsCertificates({
             name: currentName,
             updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
+              displayChanged ? "certificate_name" : undefined,
               descriptionChanged ? "description" : undefined,
-              rawChanged ? "raw_certificate" : undefined,
             ),
             body: {
               name: currentName,
               displayName,
               description,
-              rawCertificate: news.rawCertificate,
             },
           });
       }

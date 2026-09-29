@@ -1,5 +1,6 @@
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Data from "effect/Data";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -368,19 +370,6 @@ export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.ConnectionNotResolved",
 )<{
   name: string;
-}> {}
-
-export class ConnectionOperationFailed extends Data.TaggedError(
-  "GCP.CloudBuild.ConnectionOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ConnectionOperationPending extends Data.TaggedError(
-  "GCP.CloudBuild.ConnectionOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class ConnectionStillExists extends Data.TaggedError(
@@ -902,88 +891,57 @@ const getByName = (name: string) =>
     .getProjectsLocationsConnections({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: cloudbuild.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: cloudbuild.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: cloudbuild.Status | undefined,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  (options?.alreadyExistsOk === true && isAlreadyExists(error)) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait on a Cloud Build connections long-running operation (seconds to a minute).
+ * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
+ * when `notFoundOk` (deletes). Returns the final operation.
+ */
 const waitForOperation = (
   operation: cloudbuild.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new ConnectionOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new ConnectionOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudbuild.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudbuild.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
+  Effect.suspend(() => {
+    let latest = operation;
+    return waitForLongRunningOperation(
+      operation,
+      (name) => {
+        const get = cloudbuild.getProjectsLocationsOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
             }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ConnectionOperationPending({ operation: name }),
+          ),
+        );
+        const observe: Effect.Effect<
+          cloudbuild.Operation,
+          cloudbuild.GetProjectsLocationsOperationsError,
+          GcpOpContext
+        > =
+          options?.notFoundOk === true
+            ? get.pipe(
+                Effect.catchTag("NotFound", () =>
+                  Effect.succeed<cloudbuild.Operation>({ name, done: true }),
+                ),
+              )
+            : get.pipe(
+                // A just-returned operation can briefly 404 on read.
+                Effect.retry({
+                  while: (error) => error._tag === "NotFound",
+                  times: 5,
+                  schedule: Schedule.exponential("250 millis"),
+                }),
+              );
+        return observe;
+      },
+      { budget: "5 minutes" },
+    ).pipe(
+      Effect.map(() => latest),
+      // google.rpc.Code ALREADY_EXISTS = 6, NOT_FOUND = 5.
+      Effect.catchTag("GCP.OperationFailed", (error) =>
+        error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+          ? Effect.succeed(latest)
+          : Effect.fail(error),
       ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new ConnectionOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.CloudBuild.ConnectionOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
     );
   });
 
@@ -1119,7 +1077,6 @@ export const ConnectionProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
@@ -1158,7 +1115,7 @@ export const ConnectionProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }
@@ -1256,7 +1213,7 @@ export const ConnectionProvider = () =>
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
           if (created !== undefined) {
-            yield* waitForOperation(created, { alreadyExistsOk: true });
+            yield* waitForOperation(created);
           }
         } else {
           yield* waitForOperation(operation);

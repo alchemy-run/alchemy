@@ -25,19 +25,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/services/alchemy-missing-service`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* metastore
-        .listProjectsLocationsServices({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ services: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.services ?? [])).toEqual(true);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -62,8 +50,7 @@ test.provider(
           }),
         ),
       );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain("Dataproc Metastore API");
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),

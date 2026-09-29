@@ -18,7 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_INSTANCE_TYPE = "PRIMARY";
 const DEFAULT_CPU_COUNT = 2;
@@ -567,8 +567,8 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -581,8 +581,8 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -748,7 +748,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
@@ -941,8 +940,8 @@ export const InstanceProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
@@ -959,12 +958,12 @@ export const InstanceProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

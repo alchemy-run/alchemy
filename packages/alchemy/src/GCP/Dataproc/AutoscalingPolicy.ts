@@ -15,6 +15,7 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
   MAX_POLICY_ID_LENGTH,
   defaultWorkerConfig,
@@ -189,18 +190,19 @@ const getByName = (name: string) =>
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsLocationsAutoscalingPolicies({
+    collectPages(
+      dataproc.listProjectsLocationsAutoscalingPolicies.pages({
         parent: locationParent(project, location),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.policies ?? [])
-            .filter((policy) => hasAlchemyLabelMap(policy.labels))
-            .map((policy) => toAttrs(policy, project, location)),
-        ),
+      }),
+      (page) => page.policies,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((policy) => hasAlchemyLabelMap(policy.labels))
+          .map((policy) => toAttrs(policy, project, location)),
       ),
+    ),
   );
 
 const policyChanged = (

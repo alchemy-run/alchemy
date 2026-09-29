@@ -1,106 +1,129 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
-import { zipFiles } from "@/Util/zip.ts";
 import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
-import { expect } from "alchemy-test";
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { GcpEnvironment } from "@/GCP/Environment";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import CloudFunctionsBindingsHost from "./fixtures/bindings-host.ts";
+import TargetFunction from "./fixtures/target-function.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "CloudFunctionsBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let functionName: string;
+let project: string;
 
-const LOCATION = "us-central1";
-
-const runLifecycle = !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
-
-const uploadSource = Effect.fn(function* () {
-  const { project } = yield* GcpEnvironment.current;
-  const archive = yield* zipFiles([
-    {
-      path: "index.js",
-      content: `exports.helloHttp = (req, res) => { res.status(200).send("ok"); };\n`,
-    },
-    {
-      path: "package.json",
-      content: JSON.stringify({
-        name: "hello",
-        private: true,
-        main: "index.js",
-      }),
-    },
+/**
+ * 2nd gen functions accept only invoker roles on their own IAM policy, so
+ * both bindings grant on the project under an IAM Condition naming only the
+ * function: GetFunction `roles/cloudfunctions.viewer`, GenerateDownloadUrl
+ * `roles/cloudfunctions.developer` (narrowest role with
+ * `functions.sourceCodeGet`).
+ */
+const expectFunctionGrants = Effect.gen(function* () {
+  const policy = yield* crm.getIamPolicyProjects({
+    resource: `projects/${project}`,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
+  const condition = `resource.name == "${functionName}" || resource.name.startsWith("${functionName}/")`;
+  const grants = (policy.bindings ?? [])
+    .filter((binding) =>
+      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+    )
+    .map((binding) => ({
+      role: binding.role,
+      condition: binding.condition?.expression,
+    }))
+    .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? ""));
+  expect(grants).toEqual([
+    { role: "roles/cloudfunctions.developer", condition },
+    { role: "roles/cloudfunctions.viewer", condition },
   ]);
-  const uploaded =
-    yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
-      parent: `projects/${project}/locations/${LOCATION}`,
-      body: { environment: "GEN_2" },
-    });
-  if (
-    uploaded.uploadUrl === undefined ||
-    uploaded.storageSource === undefined
-  ) {
-    return yield* Effect.die(new Error("generateUploadUrl incomplete"));
-  }
-  const client = yield* HttpClient.HttpClient;
-  const bytes = yield* Effect.sync(() => new Uint8Array(archive));
-  yield* client.execute(
-    HttpClientRequest.put(uploaded.uploadUrl).pipe(
-      HttpClientRequest.bodyUint8Array(bytes, "application/zip"),
-    ),
-  );
-
-  return uploaded.storageSource;
 });
 
-test.provider.skipIf(!runLifecycle)(
-  "GetFunction and GenerateDownloadUrl invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const storageSource = yield* uploadSource();
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const fn = yield* GCP.CloudFunctions.Function("Hello", {
-            location: LOCATION,
-            buildConfig: {
-              runtime: "nodejs20",
-              entryPoint: "helloHttp",
-              source: { storageSource },
-            },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* fn.name;
-              const getFunction = yield* GCP.CloudFunctions.GetFunction(fn);
-              const download =
-                yield* GCP.CloudFunctions.GenerateDownloadUrl(fn);
-              return Effect.fn(function* () {
-                const live = yield* getFunction();
-                const { downloadUrl } = yield* download();
-                return { live, downloadUrl };
-              });
-            }),
-          );
-          return { fn, probe: yield* Probe({}) };
-        }),
-      );
-
-      expect(out.probe.live.name).toEqual(out.fn.name);
-      expect(out.probe.downloadUrl).toEqual(expect.any(String));
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+// The target function's gen2 build takes 2-4 minutes.
+describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+  "CloudFunctions Bindings",
   {
-    tags: ["provider:gcp", "provider:gcp:cloudfunctions", "live"],
-    timeout: 180_000,
+    tags: [
+      "provider:gcp",
+      "provider:gcp:cloudfunctions",
+      "provider:gcp:run",
+      "live",
+    ],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* CloudFunctionsBindingsHost;
+            const fn = yield* TargetFunction;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              name: fn.name,
+              project: fn.project,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        functionName = out.name;
+        project = out.project;
+      }),
+      { timeout: 1_200_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("GetFunction", () => {
+      test.provider(
+        "reads the function as the host's service account, scoped to the function by condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live =
+              yield* expectProbe<cloudfunctions.Cloudfunctions_Function>(
+                baseUrl,
+                "getFunction",
+              );
+            expect(live.name).toEqual(functionName);
+            expect(live.state).toEqual("ACTIVE");
+            expect(live.buildConfig?.entryPoint).toEqual("handler");
+            yield* expectFunctionGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("GenerateDownloadUrl", () => {
+      test.provider(
+        "signs a source download URL as the host's service account, scoped to the function by condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            const { downloadUrl } =
+              yield* expectProbe<cloudfunctions.GenerateDownloadUrlResponse>(
+                baseUrl,
+                "generateDownloadUrl",
+              );
+            // The signed URL serves the function's source archive (a zip).
+            const response = yield* HttpClient.get(downloadUrl ?? "");
+            expect(response.status).toEqual(200);
+            const bytes = new Uint8Array(yield* response.arrayBuffer);
+            expect(String.fromCharCode(bytes[0] ?? 0, bytes[1] ?? 0)).toEqual(
+              "PK",
+            );
+            yield* expectFunctionGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
   },
 );

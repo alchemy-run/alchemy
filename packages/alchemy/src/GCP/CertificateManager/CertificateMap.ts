@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -145,19 +146,6 @@ export class CertificateMapNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class CertificateMapOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateMapOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateMapOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateMapOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CertificateMapStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapStillExists",
 )<{
@@ -265,104 +253,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsCertificateMaps({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        if (
-          options?.notFoundOk === true &&
-          (operation.error.code === 5 ||
-            (operation.error.message ?? "").toUpperCase().includes("NOT_FOUND"))
-        ) {
-          return operation;
-        }
-        return yield* new CertificateMapOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateMapOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved: Effect.Effect<
-      certificatemanager.Operation,
-      certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<certificatemanager.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      certificatemanager.Operation,
-      | CertificateMapOperationFailed
-      | CertificateMapOperationPending
-      | certificatemanager.GetProjectsLocationsOperationsError,
-      certificatemanager.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CertificateMapOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => {
-          const error = current.error;
-          const ignoreNotFound =
-            options?.notFoundOk === true &&
-            (error?.code === 5 ||
-              (error?.message ?? "").toUpperCase().includes("NOT_FOUND"));
-          return !error || isAlreadyExists(error) || ignoreNotFound;
-        },
-        (current) =>
-          new CertificateMapOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.CertificateManager.CertificateMapOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
@@ -408,7 +298,6 @@ const listOwnedMaps = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const CertificateMapProvider = () =>

@@ -14,16 +14,20 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
 const runLifecycle =
-  !!process.env.GCP_TEST_APIGEE &&
-  !!process.env.GCP_TEST_APIGEE_ENDPOINT &&
-  !process.env.FAST;
+  !!process.env.GCP_TEST_APIGEE_ORG && !!process.env.GCP_TEST_APIGEE_ENDPOINT;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsEndpointAttachments({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("ApigeeResourceNotFound", () =>
+      Effect.succeed("gone" as const),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -32,7 +36,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsEndpointAttachments on a missing attachment fails with NotFound or Forbidden",
+  "getOrganizationsEndpointAttachments on a missing attachment fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,7 +49,7 @@ test.provider(
           name: `${org}/endpointAttachments/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

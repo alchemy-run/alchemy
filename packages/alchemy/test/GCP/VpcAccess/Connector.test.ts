@@ -14,8 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Create + patch + delete each take ~2–4 minutes; skip unless explicitly enabled.
-const runLifecycle = !!process.env.GCP_TEST_VPC_ACCESS && !process.env.FAST;
+// Create + patch + delete each take ~2–4 minutes (~7 minutes end to end).
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   vpcaccess.getProjectsLocationsConnectors({ name }).pipe(
@@ -47,13 +47,19 @@ test.provider(
         parent: `projects/${project}/locations/us-central1`,
         pageSize: 100,
       });
-      expect(Array.isArray(page.connectors ?? [])).toEqual(true);
+      expect(
+        (page.connectors ?? []).map((connector) => connector.name),
+      ).not.toContain(
+        `projects/${project}/locations/us-central1/connectors/alchemy-vpc-con-missing`,
+      );
 
       const locations = yield* vpcaccess.listProjectsLocations({
         name: `projects/${project}`,
         pageSize: 100,
       });
-      expect(Array.isArray(locations.locations ?? [])).toEqual(true);
+      expect(
+        (locations.locations ?? []).map((location) => location.locationId),
+      ).toContain("us-central1");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getDatasets({ name }).pipe(
     Effect.as("found" as const),
@@ -39,26 +35,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getDatasets({
-          name: `${parent}/datasets/alchemy-aiplatform-missing`,
+          name: `${parent}/datasets/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsDatasets({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ datasets: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.datasets ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsDatasets({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.datasets ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/datasets/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +55,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a vertex dataset",
   (stack) =>
     Effect.gen(function* () {

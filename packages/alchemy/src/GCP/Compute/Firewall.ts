@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -209,21 +209,6 @@ export class FirewallNotResolved extends Data.TaggedError(
   firewallName: string;
 }> {}
 
-export class FirewallOperationFailed extends Data.TaggedError(
-  "GCP.Compute.FirewallOperationFailed",
-)<{
-  operation: string;
-  code?: string;
-  message: string;
-}> {}
-
-class FirewallOperationPending extends Data.TaggedError(
-  "GCP.Compute.FirewallOperationPending",
-)<{
-  operation: string;
-  status: string;
-}> {}
-
 const DEFAULT_NETWORK = "global/networks/default";
 const DEFAULT_DIRECTION = "INGRESS";
 const DEFAULT_PRIORITY = 1000;
@@ -418,100 +403,6 @@ const toAttrs = (firewall: compute.Firewall, project: string) => ({
   creationTimestamp: firewall.creationTimestamp,
 });
 
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.length > 0 &&
-  errors.every((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "notfound" ||
-      code === "resource_not_found" ||
-      message.includes("was not found") ||
-      message.includes("not found")
-    );
-  });
-
-const failIfError = (operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const status = operation.httpErrorStatusCode;
-  if (
-    (errors.length === 0 && (status === undefined || status < 400)) ||
-    isNotFoundOp(errors)
-  ) {
-    return Effect.void;
-  }
-  const first = errors[0];
-  return Effect.fail(
-    new FirewallOperationFailed({
-      operation: operation.name ?? "",
-      code: first?.code ?? (status !== undefined ? String(status) : undefined),
-      message:
-        first?.message ??
-        operation.httpErrorMessage ??
-        "Compute operation failed",
-    }),
-  );
-};
-
-const waitForGlobalOp = (project: string, operation: compute.Operation) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (name === undefined || name.length === 0) {
-      if (operation.status === "DONE") {
-        yield* failIfError(operation);
-        return operation;
-      }
-      return yield* new FirewallOperationFailed({
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfError(operation);
-      return operation;
-    }
-    const waited = yield* waitGlobalOperations({
-      project,
-      operation: name,
-    });
-    if (waited.status === "DONE") {
-      yield* failIfError(waited);
-      return waited;
-    }
-    const done = yield* compute
-      .getGlobalOperations({ project, operation: name })
-      .pipe(
-        Effect.flatMap((current) => {
-          if (current.status === "DONE") return Effect.succeed(current);
-          return Effect.fail(
-            new FirewallOperationPending({
-              operation: name,
-              status: current.status ?? "UNKNOWN",
-            }),
-          );
-        }),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Compute.FirewallOperationPending" ||
-            error._tag === "NotFound",
-          times: 10,
-          schedule: backoff,
-        }),
-        Effect.catchTag(
-          "GCP.Compute.FirewallOperationPending",
-          (error) =>
-            new FirewallOperationFailed({
-              operation: error.operation,
-              message: `Timed out waiting for operation (status=${error.status})`,
-            }),
-        ),
-      );
-    yield* failIfError(done);
-    return done;
-  });
-
 const getByName = (project: string, firewall: string) =>
   compute
     .getFirewalls({ project, firewall })
@@ -664,7 +555,7 @@ export const FirewallProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForGlobalOp(env.project, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
@@ -750,7 +641,7 @@ export const FirewallProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForGlobalOp(env.project, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -773,7 +664,9 @@ export const FirewallProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForGlobalOp(env.project, operation),
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
         );

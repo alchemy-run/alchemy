@@ -1,64 +1,119 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Core from "@/Test/Core";
+import * as privateca from "@distilled.cloud/gcp/privateca_v1";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import PrivateCaBindingsHost, { Pool, Root } from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "PrivateCABindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let poolName: string;
+let caName: string;
 
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
+/**
+ * Roles the host holds on the CA pool (CAs have no IAM policy of their
+ * own, so both bindings grant on the parent pool).
+ */
+const expectPoolGrants = Effect.gen(function* () {
+  const policy = yield* privateca.getIamPolicyProjectsLocationsCaPools({
+    resource: poolName,
+  });
+  const roles = (policy.bindings ?? [])
+    .filter((binding) =>
+      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+    )
+    .map((binding) => binding.role)
+    .sort();
+  expect(roles).toEqual([
+    "roles/privateca.auditor",
+    "roles/privateca.poolReader",
+  ]);
+});
 
-test.provider.skipIf(!runLifecycle)(
-  "FetchCaCerts and GetCertificateAuthority invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const pool = yield* GCP.PrivateCA.CaPool("AppCa", {
-            location: "us-central1",
-            tier: "DEVOPS",
-            publishingOptions: {
-              publishCaCert: false,
-              publishCrl: false,
-            },
-          });
-          const ca = yield* GCP.PrivateCA.CertificateAuthority("Root", {
-            caPool: pool.name,
-            type: "SELF_SIGNED",
-            keySpec: { algorithm: "RSA_PKCS1_2048_SHA256" },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* ca.name;
-              const fetchCaCerts = yield* GCP.PrivateCA.FetchCaCerts(pool);
-              const getCa = yield* GCP.PrivateCA.GetCertificateAuthority(ca);
-              return Effect.fn(function* () {
-                const certs = yield* fetchCaCerts();
-                const live = yield* getCa();
-                return { certs, live };
-              });
-            }),
-          );
-          return { ca, probe: yield* Probe({}) };
-        }),
-      );
-
-      expect(Array.isArray(out.probe.certs.caCerts ?? [])).toEqual(true);
-      expect(out.probe.live.name).toEqual(out.ca.name);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+describe.skipIf(!dockerAvailable)(
+  "PrivateCA Bindings",
   {
-    tags: ["provider:gcp", "provider:gcp:privateca", "live"],
-    timeout: 120_000,
+    tags: [
+      "provider:gcp",
+      "provider:gcp:privateca",
+      "provider:gcp:run",
+      "live",
+    ],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* PrivateCaBindingsHost;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              pool: (yield* Pool).name,
+              ca: (yield* Root).name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        poolName = out.pool;
+        caName = out.ca;
+      }),
+      { timeout: 900_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("FetchCaCerts", () => {
+      test.provider(
+        "fetches the pool's trust anchors as the host's service account, granted on the pool only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const certs = yield* expectProbe<privateca.FetchCaCertsResponse>(
+              baseUrl,
+              "fetchCaCerts",
+            );
+            const pems = (certs.caCerts ?? []).flatMap(
+              (chain) => chain.certificates ?? [],
+            );
+            // The enabled root CA is the pool's only trust anchor.
+            const ca =
+              yield* privateca.getProjectsLocationsCaPoolsCertificateAuthorities(
+                { name: caName },
+              );
+            expect(pems.map((pem) => pem.trim())).toEqual(
+              (ca.pemCaCertificates ?? []).map((pem) => pem.trim()),
+            );
+            expect(pems[0]).toContain("BEGIN CERTIFICATE");
+            yield* expectPoolGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("GetCertificateAuthority", () => {
+      test.provider(
+        "reads the CA as the host's service account, granted on the pool only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<privateca.CertificateAuthority>(
+              baseUrl,
+              "getCertificateAuthority",
+            );
+            expect(live.name).toEqual(caName);
+            expect(live.type).toEqual("SELF_SIGNED");
+            expect(live.state).toEqual("ENABLED");
+            yield* expectPoolGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
   },
 );

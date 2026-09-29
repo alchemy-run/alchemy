@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -26,7 +27,7 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, replace, and delete a policy-based route",
   (stack) =>
     Effect.gen(function* () {
@@ -34,13 +35,10 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const route = yield* GCP.NetworkConnectivity.PolicyBasedRoute(
             "Skip",
             {
-              network: network.networkName,
+              network: DEFAULT_NETWORK,
               filter: {
                 protocolVersion: "IPV4",
                 ipProtocol: "TCP",
@@ -53,7 +51,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
               labels: { env: "test" },
             },
           );
-          return { network, route };
+          return { route };
         }),
       );
 
@@ -61,9 +59,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
       expect(created.route.name).toContain("/locations/global/");
       expect(created.route.policyBasedRouteId).toEqual(expect.any(String));
       expect(created.route.location).toEqual("global");
-      expect(created.route.network).toContain(
-        `networks/${created.network.networkName}`,
-      );
+      expect(created.route.network).toContain(`networks/${DEFAULT_NETWORK}`);
       expect(created.route.filter.protocolVersion).toEqual("IPV4");
       expect(created.route.filter.ipProtocol?.toUpperCase()).toEqual("TCP");
       expect(created.route.filter.srcRange).toEqual("10.0.0.0/8");
@@ -93,15 +89,11 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const route = yield* GCP.NetworkConnectivity.PolicyBasedRoute(
             "Skip",
             {
               policyBasedRouteId: created.route.policyBasedRouteId,
-              network: network.networkName,
+              network: DEFAULT_NETWORK,
               filter: {
                 protocolVersion: "IPV4",
                 ipProtocol: "TCP",
@@ -115,7 +107,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
               labels: { env: "prod", role: "pbr" },
             },
           );
-          return { network, route };
+          return { route };
         }),
       );
 
@@ -142,8 +134,5 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
       const gone = yield* waitUntilGone(created.route.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 120_000,
-  },
+  { timeout: 600_000 },
 );

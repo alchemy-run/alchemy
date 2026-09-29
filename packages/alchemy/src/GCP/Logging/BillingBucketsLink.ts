@@ -21,8 +21,8 @@ import {
   parseDescription,
   resolveBillingAccountId,
   toLinkId,
-  waitForBillingOperation,
 } from "./internal.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 export type BillingBucketsLinkProps = {
   /**
@@ -304,7 +304,7 @@ export const BillingBucketsLinkProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as logging.LogBucket[]),
             ),
           );
@@ -329,7 +329,7 @@ export const BillingBucketsLinkProvider = () =>
               ),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as BillingBucketsLink["Attributes"][]),
               ),
             );
@@ -366,7 +366,7 @@ export const BillingBucketsLinkProvider = () =>
             ),
           );
         if (operation.done !== true || operation.name) {
-          yield* waitForBillingOperation(operation);
+          yield* waitForOperation(operation);
         }
         current = yield* waitUntilActive(name);
       } else if (isPending(current.lifecycleState)) {
@@ -390,7 +390,7 @@ export const BillingBucketsLinkProvider = () =>
           ),
         );
       if (operation.done !== true || operation.name) {
-        yield* waitForBillingOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilDeleted(output.name);
     }),

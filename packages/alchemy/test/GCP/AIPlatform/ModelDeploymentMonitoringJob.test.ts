@@ -14,9 +14,15 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Monitoring needs an endpoint with a deployed model: against an empty
+// endpoint create fails with BadRequest "Deployed Model ID: `0` does not
+// match existing Deployed Models". Set GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT
+// to `{endpoint name}#{deployed model id}` to run the lifecycle.
+const deployedEndpoint = process.env.GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT;
+const runLifecycle = !process.env.FAST && !!deployedEndpoint;
+const [endpointName = "", deployedModelId = ""] = (
+  deployedEndpoint ?? ""
+).split("#");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsModelDeploymentMonitoringJobs({ name }).pipe(
@@ -39,27 +45,19 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsModelDeploymentMonitoringJobs({
-          name: `${parent}/modelDeploymentMonitoringJobs/alchemy-missing`,
+          name: `${parent}/modelDeploymentMonitoringJobs/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsModelDeploymentMonitoringJobs({
+      expect(error._tag).toEqual("NotFound");
+      const page =
+        yield* aiplatform.listProjectsLocationsModelDeploymentMonitoringJobs({
           parent,
           pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ modelDeploymentMonitoringJobs: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.modelDeploymentMonitoringJobs ?? [])).toEqual(
-        true,
+        });
+      expect(
+        (page.modelDeploymentMonitoringJobs ?? []).map((item) => item.name),
+      ).not.toContain(
+        `${parent}/modelDeploymentMonitoringJobs/1234567890123456789`,
       );
 
       yield* stack.destroy();
@@ -78,17 +76,12 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const endpoint = yield* GCP.AIPlatform.Endpoint("Predictor", {
-            location: "us-central1",
-            displayName: "alchemy-mdm-endpoint",
-            labels: { env: "test" },
-          });
           const job = yield* GCP.AIPlatform.ModelDeploymentMonitoringJob(
             "Watch",
             {
               location: "us-central1",
               displayName: "alchemy-mdm",
-              endpoint: endpoint.name,
+              endpoint: endpointName,
               loggingSamplingStrategy: {
                 randomSampleConfig: { sampleRate: 0.1 },
               },
@@ -97,7 +90,7 @@ test.provider.skipIf(!runLifecycle)(
               },
               modelDeploymentMonitoringObjectiveConfigs: [
                 {
-                  deployedModelId: "0",
+                  deployedModelId,
                   objectiveConfig: {
                     predictionDriftDetectionConfig: {},
                   },
@@ -106,12 +99,12 @@ test.provider.skipIf(!runLifecycle)(
               labels: { env: "test" },
             },
           );
-          return { endpoint, job };
+          return { job };
         }),
       );
 
       expect(created.job.name).toContain("/modelDeploymentMonitoringJobs/");
-      expect(created.job.endpoint).toEqual(created.endpoint.name);
+      expect(created.job.endpoint).toEqual(endpointName);
       expect(created.job.labels).toMatchObject({ env: "test" });
 
       const fetched =
@@ -122,18 +115,12 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const endpoint = yield* GCP.AIPlatform.Endpoint("Predictor", {
-            endpointId: created.endpoint.endpointId,
-            location: "us-central1",
-            displayName: "alchemy-mdm-endpoint",
-            labels: { env: "test" },
-          });
           const job = yield* GCP.AIPlatform.ModelDeploymentMonitoringJob(
             "Watch",
             {
               location: "us-central1",
               displayName: "alchemy-mdm-v2",
-              endpoint: endpoint.name,
+              endpoint: endpointName,
               loggingSamplingStrategy: {
                 randomSampleConfig: { sampleRate: 0.2 },
               },
@@ -142,7 +129,7 @@ test.provider.skipIf(!runLifecycle)(
               },
               modelDeploymentMonitoringObjectiveConfigs: [
                 {
-                  deployedModelId: "0",
+                  deployedModelId,
                   objectiveConfig: {
                     predictionDriftDetectionConfig: {},
                   },
@@ -151,7 +138,7 @@ test.provider.skipIf(!runLifecycle)(
               labels: { env: "prod" },
             },
           );
-          return { endpoint, job };
+          return { job };
         }),
       );
 

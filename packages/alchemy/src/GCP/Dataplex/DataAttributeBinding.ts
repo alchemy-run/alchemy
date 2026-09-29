@@ -186,7 +186,6 @@ const listBindings = (project: string, region: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
 };

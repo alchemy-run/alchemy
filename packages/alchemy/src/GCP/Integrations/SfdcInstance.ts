@@ -22,7 +22,7 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parseOwnership,
-  projectOf,
+  withProjectId,
   replaceOnIdentity,
   sameText,
   toResourceId,
@@ -122,10 +122,12 @@ export type SfdcInstance = Resource<
  * ```
  *
  * ### Updating an SFDC Instance
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Change alias and org id
  * ```typescript
  * const instance = yield* GCP.Integrations.SfdcInstance("Salesforce", {
- *   sfdcInstanceId: existing.sfdcInstanceId,
  *   displayName: "prod-org-v2",
  *   description: "production salesforce v2",
  *   sfdcOrgId: "00Dxx0000000002",
@@ -156,12 +158,12 @@ const toAttrs = (
   project: string,
   region: string,
 ) => {
-  const name = instance.name ?? "";
+  const name = withProjectId(instance.name ?? "", project);
   return {
     name,
     sfdcInstanceId: lastSegment(name),
     location: locationOf(name, region),
-    project: projectOf(name) || project,
+    project,
     displayName: instance.displayName,
     description: parseOwnership(instance.description).text,
     sfdcOrgId: instance.sfdcOrgId,
@@ -289,7 +291,7 @@ export const SfdcInstanceProvider = () =>
         return yield* new SfdcInstanceNotResolved({ name });
       }
 
-      const currentName = current.name ?? name;
+      const currentName = withProjectId(current.name ?? name, env.project);
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const orgChanged = !sameText(current.sfdcOrgId, news.sfdcOrgId);

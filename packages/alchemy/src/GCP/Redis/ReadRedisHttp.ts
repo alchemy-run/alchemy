@@ -12,6 +12,7 @@ import { ReadRedis } from "./ReadRedis.ts";
 export const ReadRedisHttp = Layer.effect(
   ReadRedis,
   makeRedisBinding({
+    tag: "GCP.Redis.ReadRedis",
     makeClient: makeRead,
   }),
 );

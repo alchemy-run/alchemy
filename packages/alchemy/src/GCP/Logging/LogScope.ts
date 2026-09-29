@@ -108,8 +108,7 @@ export type LogScope = Resource<
  * **Example:** Change the description
  * ```typescript
  * const scope = yield* GCP.Logging.LogScope("App", {
- *   logScopeId: existing.logScopeId,
- *   resourceNames: existing.resourceNames,
+ *   resourceNames: ["projects/my-project"],
  *   description: "all application logs",
  * });
  * ```

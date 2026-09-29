@@ -278,7 +278,8 @@ const waitUntilGone = (name: string) =>
     Effect.asVoid,
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.StillExists",
-      times: 10,
+      // Tearing down the cluster takes several minutes.
+      times: 75,
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
@@ -361,10 +362,7 @@ export const PersistentResourceProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.persistentResources ?? [])
@@ -480,6 +478,15 @@ export const PersistentResourceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // A PROVISIONING resource rejects deletes ("is being created thus can
+      // not be deleted now"), so wait for provisioning to settle first.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (resource) => resource?.state !== "PROVISIONING",
+          times: 60,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsPersistentResources({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));

@@ -15,8 +15,8 @@ const logLevel = Effect.provideService(
 );
 // Live create returns Forbidden: Permission 'resourcemanager.folders.create'
 // denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'.
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_RESOURCE_MANAGER === "1";
+// Set GOOGLE_ORGANIZATION_ID when the credentials can create folders there.
+const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
 
 const waitUntilGone = (name: string) =>
   resourcemanager.getFolders({ name }).pipe(
@@ -25,7 +25,7 @@ const waitUntilGone = (name: string) =>
         ? ("gone" as const)
         : ("found" as const),
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "FolderNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -54,7 +54,7 @@ test.provider(
           name: "folders/999999999999",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("FolderNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -64,28 +64,24 @@ test.provider(
   },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_RESOURCE_MANAGER === "1")(
-  "createFolders without folder IAM fails with a typed tag",
+test.provider.skipIf(runLifecycle)(
+  "createFolders without folder IAM fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const parent = yield* resolveParent.pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       const error = yield* Effect.flip(
         resourcemanager.createFolders({
           body: {
             parent: parent ?? "organizations/0",
-            displayName: "az-probe-folder",
+            displayName: "probe-folder",
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest", "Conflict"]).toContain(
-        error._tag,
-      );
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -110,7 +106,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toMatch(/^folders\//);
-      expect(created.displayName).toMatch(/^az-/);
+      expect(created.displayName).toEqual("platform");
       expect(created.parent).toMatch(/^(organizations|folders)\//);
       expect(created.state).toEqual("ACTIVE");
 
@@ -130,13 +126,13 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.displayName).toEqual("az-platform-prod");
+      expect(updated.displayName).toEqual("platform-prod");
       expect(updated.createTime).toEqual(created.createTime);
 
       const fetchedUpdate = yield* resourcemanager.getFolders({
         name: updated.name,
       });
-      expect(fetchedUpdate.displayName).toEqual("az-platform-prod");
+      expect(fetchedUpdate.displayName).toEqual("platform-prod");
 
       yield* stack.destroy();
 

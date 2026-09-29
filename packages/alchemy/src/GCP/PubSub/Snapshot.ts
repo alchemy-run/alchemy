@@ -2,6 +2,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -232,17 +233,22 @@ export const SnapshotProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const page = yield* pubsub.listProjectsSnapshots({
-          project: `projects/${env.project}`,
-          pageSize: 1000,
-        });
-        return (page.snapshots ?? [])
-          .filter((snapshot) =>
-            Object.keys(snapshot.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
+        return yield* pubsub.listProjectsSnapshots
+          .pages({
+            project: `projects/${env.project}`,
+            pageSize: 1000,
+          })
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.snapshots ?? [])),
+            Stream.filter((snapshot) =>
+              Object.keys(snapshot.labels ?? {}).some((key) =>
+                key.startsWith("alchemy-"),
+              ),
             ),
-          )
-          .map((snapshot) => toAttrs(snapshot, env.project));
+            Stream.map((snapshot) => toAttrs(snapshot, env.project)),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {

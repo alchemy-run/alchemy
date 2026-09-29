@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Sandbox template provisioning takes 1-2 minutes.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform
@@ -41,17 +40,11 @@ test.provider(
       const error = yield* Effect.flip(
         aiplatform
           .getProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
-            name: `projects/${project}/locations/us-central1/reasoningEngines/alchemy-missing-engine/sandboxEnvironmentTemplates/alchemy-missing-template`,
+            name: `projects/${project}/locations/us-central1/reasoningEngines/1234567890123456789/sandboxEnvironmentTemplates/1234567890123456789`,
           })
           .pipe(Effect.timeout("15 seconds")),
       );
-      expect([
-        "NotFound",
-        "Forbidden",
-        "BadRequest",
-        "SandboxEnvironmentsNotEnabled",
-        "TimeoutError",
-      ]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -67,43 +60,29 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
-              location: "us-central1",
-              displayName: "alchemy-template-engine",
-              labels: { env: "test" },
-              spec: { agentFramework: "custom" },
-            });
-            const template =
-              yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplate(
-                "Browser",
-                {
-                  reasoningEngine: engine.name,
-                  displayName: "browser",
-                  defaultContainerEnvironment: {
-                    defaultContainerCategory:
-                      "DEFAULT_CONTAINER_CATEGORY_COMPUTER_USE",
-                  },
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
+            location: "us-central1",
+            displayName: "alchemy-template-engine",
+            labels: { env: "test" },
+            spec: { agentFramework: "custom" },
+          });
+          const template =
+            yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplate(
+              "Browser",
+              {
+                reasoningEngine: engine.name,
+                displayName: "browser",
+                defaultContainerEnvironment: {
+                  defaultContainerCategory:
+                    "DEFAULT_CONTAINER_CATEGORY_COMPUTER_USE",
                 },
-              );
-            return { engine, template };
-          }),
-        )
-        .pipe(
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
-            expect(error.message ?? "").toMatch(
-              /not implemented|not supported|not enabled/i,
+              },
             );
-            return Effect.succeed(undefined);
-          }),
-        );
-
-      if (created === undefined) {
-        yield* stack.destroy();
-        return;
-      }
+          return { engine, template };
+        }),
+      );
 
       expect(created.template.name).toContain("/sandboxEnvironmentTemplates/");
       expect(created.template.displayName).toEqual("browser");
@@ -123,8 +102,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.template.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 120_000,
-  },
+  { timeout: 600_000 },
 );

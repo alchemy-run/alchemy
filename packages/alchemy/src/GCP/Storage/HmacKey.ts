@@ -250,9 +250,6 @@ export const HmacKeyProvider = () =>
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as HmacKey["Attributes"][]),
-            ),
           );
       }),
 

@@ -19,7 +19,6 @@ export default class Auditor extends GCP.Function<Auditor>()(
   "Auditor",
   {
     main: import.meta.url,
-    location: LOCATION,
   },
   Effect.gen(function* () {
     const shop = yield* Shop;

@@ -213,7 +213,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityMonitoringConditions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   news: SecurityMonitoringConditionProps,
@@ -298,7 +302,7 @@ export const SecurityMonitoringConditionProvider = () =>
             Stream.map((condition) => toAttrs(condition, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as SecurityMonitoringCondition["Attributes"][]),
             ),
           );
@@ -372,6 +376,11 @@ export const SecurityMonitoringConditionProvider = () =>
         .deleteOrganizationsSecurityMonitoringConditions({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

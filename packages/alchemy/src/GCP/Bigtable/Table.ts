@@ -16,6 +16,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type GcRule = {
@@ -218,11 +219,7 @@ const toAttrs = (table: bigtable.Table, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTables({ name, view: SCHEMA_VIEW })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
@@ -342,17 +339,17 @@ export const TableProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesTables({
+            collectPages(
+              bigtable.listProjectsInstancesTables.pages({
                 parent: instance.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.tables ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.Table[]),
-                ),
+              }),
+              (page) => page.tables,
+            ).pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as bigtable.Table[]),
               ),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((table) => toAttrs(table, env.project));
@@ -486,7 +483,7 @@ export const TableProvider = () =>
         yield* waitForOperation(patched);
       }
       yield* bigtable.deleteProjectsInstancesTables({ name: output.name }).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+        Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

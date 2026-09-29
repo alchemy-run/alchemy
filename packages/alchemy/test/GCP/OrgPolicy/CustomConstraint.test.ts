@@ -15,14 +15,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const entitlementTags = ["Forbidden", "NotFound", "BadRequest"] as const;
-
 const waitUntilGone = (name: string) =>
   orgpolicy.getOrganizationsCustomConstraints({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -46,16 +42,12 @@ const organizationOf = () =>
       current = current.startsWith("projects/")
         ? yield* resourcemanager.getProjects({ name: current }).pipe(
             Effect.map((resource) => resource.parent),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           )
         : current.startsWith("folders/")
           ? yield* resourcemanager.getFolders({ name: current }).pipe(
               Effect.map((folder) => folder.parent),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             )
           : undefined;
     }
@@ -87,14 +79,32 @@ test.provider(
           name: `${organization}/customConstraints/custom.alchemyDoesNotExist`,
         }),
       );
-      expect([...entitlementTags]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+// Custom constraints need Organization Policy Administrator on the org; the
+// testing credentials get Forbidden (probe). Set GOOGLE_ORGANIZATION_ID when
+// the credentials administer the org to run the lifecycle.
+const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
+
+test.provider.skipIf(runLifecycle)(
+  "createOrganizationsCustomConstraints without org policy admin fails with a typed tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const organization = (yield* organizationOf()) || "organizations/0";
+      const error = yield* Effect.flip(probeCreate(organization));
+      expect(error._tag).toEqual("Forbidden");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider.skipIf(!runLifecycle)(
   "create, update, replace, and delete an organization custom constraint",
   (stack) =>
     Effect.gen(function* () {
@@ -102,36 +112,6 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
 
       const organization = yield* organizationOf();
-      if (organization.length === 0) {
-        const error = yield* Effect.flip(probeCreate("organizations/0"));
-        expect([...entitlementTags]).toContain(error._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      const access = yield* orgpolicy
-        .listOrganizationsCustomConstraints({
-          parent: organization,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.as("ok" as const),
-          Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-            Effect.succeed(error._tag),
-          ),
-        );
-      if (access !== "ok") {
-        expect([...entitlementTags]).toContain(access);
-        const listed = yield* Effect.flip(
-          orgpolicy.listOrganizationsCustomConstraints({
-            parent: organization,
-            pageSize: 1,
-          }),
-        );
-        expect([...entitlementTags]).toContain(listed._tag);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -168,7 +148,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.condition).toEqual(created.condition);
       expect(fetched.actionType).toEqual("DENY");
-      expect(fetched.description ?? "").toContain("[alchemy ");
+      expect(fetched.description ?? "").toContain(
+        "blocks test-prefixed instances",
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

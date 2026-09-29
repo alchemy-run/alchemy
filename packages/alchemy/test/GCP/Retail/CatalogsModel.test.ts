@@ -14,9 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Retail create returns Forbidden: "AI Commerce Search API has not been
-// used in project … or it is disabled."
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_RETAIL === "1";
+// Retail only serves projects that accepted the Retail data use terms (a
+// one-time console step); until then every call fails with
+// RetailDataUseTermsNotAccepted. Set GCP_TEST_RETAIL_TERMS=1 once accepted.
+const runLifecycle = !!process.env.GCP_TEST_RETAIL_TERMS;
 
 const waitUntilGone = (name: string) =>
   retail.getProjectsLocationsCatalogsModels({ name }).pipe(
@@ -42,12 +43,9 @@ test.provider(
           name: `projects/${project}/locations/global/catalogs/default_catalog/models/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain(
-          "AI Commerce Search API has not been used",
-        );
-      }
+      expect(error._tag).toEqual(
+        runLifecycle ? "NotFound" : "RetailDataUseTermsNotAccepted",
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -78,7 +76,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.displayName).toMatch(/\[alc/);
+      expect(fetched.displayName).toEqual(created.displayName);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

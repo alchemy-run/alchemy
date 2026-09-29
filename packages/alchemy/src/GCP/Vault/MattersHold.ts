@@ -137,9 +137,9 @@ export type MattersHold = Resource<
  * ### Updating a Hold
  * **Example:** Narrow the mail query
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const hold = yield* GCP.Vault.MattersHold("Mail", {
- *   matterId: existing.matterId,
- *   holdId: existing.holdId,
+ *   matterId: matter.matterId,
  *   corpus: "MAIL",
  *   accounts: [{ email: "user@example.com" }],
  *   query: { mailQuery: { terms: "subject:contract 2026" } },

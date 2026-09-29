@@ -14,9 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !!process.env.GCP_TEST_CROSS_SITE_NETWORK && !process.env.FAST;
-
 const waitUntilGone = (project: string, crossSiteNetwork: string) =>
   compute.getCrossSiteNetworks({ project, crossSiteNetwork }).pipe(
     Effect.as("found" as const),
@@ -29,53 +26,6 @@ const waitUntilGone = (project: string, crossSiteNetwork: string) =>
   );
 
 test.provider(
-  "probe insertCrossSiteNetworks entitlement",
-  () =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertCrossSiteNetworks({
-          project,
-          body: {
-            name: "alchemy-csn-probe",
-            description: "alchemy entitlement probe",
-          },
-        })
-        .pipe(
-          Effect.map((operation) => ({
-            tag: "ok" as const,
-            name: operation.name,
-          })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        if (result.name) {
-          yield* compute
-            .deleteCrossSiteNetworks({
-              project,
-              crossSiteNetwork: "alchemy-csn-probe",
-            })
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        }
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
-);
-
-test.provider.skipIf(!runLifecycle)(
   "create, update, replace, and delete a cross-site network",
   (stack) =>
     Effect.gen(function* () {

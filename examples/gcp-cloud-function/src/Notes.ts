@@ -43,7 +43,7 @@ const notFound = () =>
  */
 export default class Notes extends GCP.CloudFunctions.Function<Notes>()(
   "Notes",
-  { main: import.meta.url, location: "us-central1" },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const db = yield* GCP.Firestore.ReadWriteDatabase(NotesDb);
 

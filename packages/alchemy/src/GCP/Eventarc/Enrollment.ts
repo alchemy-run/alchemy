@@ -153,13 +153,15 @@ export type Enrollment = Resource<
  * ```
  *
  * ### Updating an Enrollment
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical enrollment and patches it in place.
+ *
  * **Example:** Tighten the CEL match
  * ```typescript
  * const enrollment = yield* GCP.Eventarc.Enrollment("All", {
- *   enrollmentId: existing.enrollmentId,
- *   location: existing.location,
- *   messageBus: existing.messageBus!,
- *   destination: existing.destination!,
+ *   location: "us-central1",
+ *   messageBus: bus.name,
+ *   destination: pipeline.name,
  *   celMatch: "message.type == 'google.cloud.pubsub.topic.v1.messagePublished'",
  *   labels: { env: "prod", role: "enrollment" },
  * });
@@ -410,7 +412,7 @@ export const EnrollmentProvider = () =>
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
             Effect.flatMap((current) =>
               current === undefined ? Effect.void : Effect.fail(error),

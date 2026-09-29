@@ -27,6 +27,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type GeneratorModelParameter = {
@@ -140,11 +141,12 @@ export type AgentsGenerator = Resource<
  * ```
  *
  * ### Updating a Generator
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Change the prompt
  * ```typescript
  * const generator = yield* GCP.Dialogflow.AgentsGenerator("Greeting", {
- *   agent: existing.agent,
- *   generatorId: existing.generatorId,
+ *   agent: agentName,
  *   displayName: "greeting",
  *   promptText: "Greet the user warmly.",
  * });
@@ -241,7 +243,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -255,7 +256,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsGeneratorProvider = () =>
@@ -410,7 +410,7 @@ export const AgentsGeneratorProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -419,5 +419,5 @@ export const AgentsGeneratorProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

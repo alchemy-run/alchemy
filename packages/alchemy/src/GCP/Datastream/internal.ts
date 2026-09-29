@@ -6,21 +6,9 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
-
-export class DatastreamOperationFailed extends Data.TaggedError(
-  "GCP.Datastream.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DatastreamOperationPending extends Data.TaggedError(
-  "GCP.Datastream.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Datastream.ResourceNotResolved",
@@ -208,91 +196,34 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const alreadyExists = (error: ds.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: ds.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: ds.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait for a Datastream long-running operation. Private connections peer a
+ * VPC and can take 10–20 minutes.
+ * `ALREADY_EXISTS` (a concurrent create won) always succeeds;
+ * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
+ * already been garbage-collected (deletes).
+ */
 export const waitForOperation = (
   operation: ds.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new DatastreamOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new DatastreamOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = ds.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<ds.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DatastreamOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new DatastreamOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Datastream.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "5 seconds"),
-      }),
-    );
-  });
+  waitForLongRunning(
+    operation,
+    (name) => ds.getProjectsLocationsOperations({ name }),
+    { budget: "30 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    Effect.catchIf(
+      (error) => options?.notFoundOk === true && error._tag === "NotFound",
+      () => Effect.void,
+    ),
+  );
 
 export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -331,17 +262,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 
 export const settleOperation = (
   operation: ds.Operation | undefined,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  operation === undefined
-    ? Effect.void
-    : waitForOperation(operation, options).pipe(
-        Effect.catchTag("GCP.Datastream.OperationPending", () => Effect.void),
-      );
+  operation === undefined ? Effect.void : waitForOperation(operation, options);
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
@@ -353,6 +276,11 @@ export const collectPages = <Page, A, E, R>(
     Effect.map((chunk) => Array.from(chunk)),
   );
 
+/**
+ * List across every location via the `locations/-` wildcard, falling back to
+ * the default region where the API rejects the wildcard. A missing parent
+ * (`NotFound`) lists as empty; any other error fails.
+ */
 export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
   project: string,
   region: string,
@@ -360,14 +288,12 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound" || error._tag === "BadRequest",
       () =>
         list(`projects/${project}/locations/${region}`).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-              error._tag === "NotFound" || error._tag === "Forbidden",
-            () => Effect.succeed([] as A[]),
+            (error) => error._tag === "NotFound",
+            () => Effect.succeed<A[]>([]),
           ),
         ),
     ),

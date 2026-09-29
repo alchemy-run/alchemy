@@ -310,12 +310,14 @@ export type Pipeline = Resource<
  * ```
  *
  * ### Updating a Pipeline
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical pipeline and patches it in place.
+ *
  * **Example:** Change labels and retry policy
  * ```typescript
  * const pipeline = yield* GCP.Eventarc.Pipeline("Forward", {
- *   pipelineId: existing.pipelineId,
- *   location: existing.location,
- *   destinations: existing.destinations,
+ *   location: "us-central1",
+ *   destinations: [{ topic: topic.name }],
  *   retryPolicy: { maxAttempts: 8 },
  *   labels: { env: "prod", role: "pipeline" },
  * });
@@ -622,7 +624,7 @@ export const PipelineProvider = () =>
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (created !== undefined) {
-          yield* waitForOperation(created, { times: 10, delay: "8 seconds" });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilPresent(getByName(name), name);
       }
@@ -674,7 +676,7 @@ export const PipelineProvider = () =>
             annotations: desiredAnnotations ?? {},
           },
         });
-        yield* waitForOperation(patched, { times: 10, delay: "8 seconds" });
+        yield* waitForOperation(patched);
         current = yield* waitUntilPresent(
           getByName(current.name ?? name),
           current.name ?? name,
@@ -696,15 +698,11 @@ export const PipelineProvider = () =>
             })
             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           if (operation !== undefined) {
-            yield* waitForOperation(operation, {
-              notFoundOk: true,
-              times: 10,
-              delay: "5 seconds",
-            });
+            yield* waitForOperation(operation, { notFoundOk: true });
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
             Effect.flatMap((current) =>
               current === undefined ? Effect.void : Effect.fail(error),

@@ -41,12 +41,6 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page = yield* bqdt.listProjectsLocationsTransferConfigs({
-        parent: `projects/${project}/locations/${LOCATION}`,
-        pageSize: 10,
-      });
-      expect(Array.isArray(page.transferConfigs ?? [])).toEqual(true);
-
       yield* stack.destroy();
     }).pipe(logLevel),
   {

@@ -27,7 +27,6 @@ export default class Api extends GCP.Function<Api>()(
     const schemaVersion = yield* migrate;
     return {
       main: import.meta.url,
-      location: "us-central1",
       invokerIamDisabled: true,
       env: { SCHEMA_VERSION: schemaVersion },
     };

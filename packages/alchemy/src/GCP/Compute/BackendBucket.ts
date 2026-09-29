@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -141,14 +141,6 @@ export class BackendBucketNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class BackendBucketOperationFailed extends Data.TaggedError(
-  "GCP.Compute.BackendBucketOperationFailed",
-)<{
-  operation: string | undefined;
-  status: string | undefined;
-  errors: ReadonlyArray<{ code?: string; message?: string }> | undefined;
-}> {}
-
 const rfc1035 = (name: string): string => {
   let next = name
     .toLowerCase()
@@ -240,58 +232,6 @@ const sameCdnPolicy = (
 ): boolean =>
   JSON.stringify(normalizeCdnPolicy(left) ?? null) ===
   JSON.stringify(normalizeCdnPolicy(right) ?? null);
-
-const operationErrors = (operation: compute.Operation) =>
-  operation.error?.errors?.map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const isFailedOperation = (operation: compute.Operation): boolean =>
-  (operation.error?.errors?.length ?? 0) > 0;
-
-const failOperation = (operation: compute.Operation) =>
-  new BackendBucketOperationFailed({
-    operation: operation.name,
-    status: operation.status,
-    errors: operationErrors(operation),
-  });
-
-const waitGlobal = (project: string, operation: compute.Operation) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations(
-        {
-          project,
-          operation: current.name,
-        },
-        { times: 18 },
-      ).pipe(
-        Effect.catchTag("GCP.Compute.OperationPending", () =>
-          Effect.succeed(current),
-        ),
-      );
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    if (current.status !== "DONE" || isFailedOperation(current)) {
-      return yield* failOperation(current);
-    }
-    return current;
-  });
 
 const getByName = (project: string, name: string) =>
   compute
@@ -387,7 +327,9 @@ export const BackendBucketProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+            Effect.flatMap((operation) =>
+              waitGlobalOperation(env.project, operation),
+            ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (inserted !== undefined) {
@@ -438,7 +380,9 @@ export const BackendBucketProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+            Effect.flatMap((operation) =>
+              waitGlobalOperation(env.project, operation),
+            ),
           );
         current = yield* awaitResource(env.project, name);
       }
@@ -458,7 +402,9 @@ export const BackendBucketProvider = () =>
           backendBucket: output.name,
         })
         .pipe(
-          Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+          Effect.flatMap((operation) =>
+            waitGlobalOperation(env.project, operation),
+          ),
           Effect.catchTag("NotFound", () => Effect.void),
         );
     }),

@@ -253,7 +253,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityProfiles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   news: SecurityProfileProps,
@@ -326,7 +330,7 @@ export const SecurityProfileProvider = () =>
             Stream.map((profile) => toAttrs(profile, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as SecurityProfile["Attributes"][]),
             ),
           );
@@ -400,6 +404,11 @@ export const SecurityProfileProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSecurityProfiles({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

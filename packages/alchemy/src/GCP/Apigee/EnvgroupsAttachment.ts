@@ -10,7 +10,6 @@ import {
   childName,
   collectPages,
   defaultOrgName,
-  hasOwnershipHostname,
   hasOwnershipMarker,
   lastSegment,
   listOrgNames,
@@ -69,8 +68,7 @@ export type EnvgroupsAttachment = Resource<
  *
  * Existence-only: the identity is the (envgroup, environment) pair. The
  * API has no labels or description, so `list` / nuke returns attachments
- * whose parent envgroup carries an Alchemy ownership hostname or whose
- * attached environment carries an Alchemy description marker.
+ * whose attached environment carries an Alchemy description marker.
  *
  * ### Creating an Environment Group Attachment
  * **Example:** Attach an environment to a group
@@ -126,7 +124,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvgroupsAttachments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const listAttachments = (parent: string) =>
   collectPages(
@@ -136,7 +138,7 @@ const listAttachments = (parent: string) =>
     }),
     (page) => page.environmentGroupAttachments,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed(
         [] as apigee.GoogleCloudApigeeV1EnvironmentGroupAttachment[],
       ),
@@ -227,7 +229,7 @@ export const EnvgroupsAttachmentProvider = () =>
             }),
             (page) => page.environmentGroups,
           ).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed(
                 [] as apigee.GoogleCloudApigeeV1EnvironmentGroup[],
               ),
@@ -236,7 +238,7 @@ export const EnvgroupsAttachmentProvider = () =>
           const org = yield* apigee
             .getOrganizations({ name: organization })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                 Effect.succeed(undefined),
               ),
             );
@@ -247,7 +249,7 @@ export const EnvgroupsAttachmentProvider = () =>
                 name: `${organization}/environments/${environmentId}`,
               })
               .pipe(
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                   Effect.succeed(undefined),
                 ),
               );
@@ -258,12 +260,11 @@ export const EnvgroupsAttachmentProvider = () =>
           for (const group of groups) {
             const envgroupId = lastSegment(group.name ?? "");
             if (envgroupId.length === 0) continue;
-            const parentOwned = hasOwnershipHostname(group.hostnames);
             const parent = `${organization}/envgroups/${envgroupId}`;
             const attachments = yield* listAttachments(parent);
             for (const attachment of attachments) {
               const environment = attachment.environment ?? "";
-              if (parentOwned || ownedEnvs.has(environment)) {
+              if (ownedEnvs.has(environment)) {
                 rows.push(toAttrs(attachment, organization, envgroupId));
               }
             }
@@ -333,7 +334,11 @@ export const EnvgroupsAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvgroupsAttachments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

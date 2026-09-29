@@ -123,8 +123,9 @@ export type Glossary = Resource<
  * ### Updating a Glossary
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const glossary = yield* GCP.Dataplex.Glossary("BusinessTerms", {
- *   glossaryId: existing.glossaryId,
+ *   glossaryId: "app-glossary",
  *   description: "glossary v2",
  *   labels: { env: "prod", team: "data" },
  * });

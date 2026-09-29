@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -180,14 +180,6 @@ export class RegionUrlMapNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionUrlMapOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionUrlMapOperationFailed",
-)<{
-  urlMapName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -332,59 +324,6 @@ const getByName = (project: string, region: string, urlMap: string) =>
     .getRegionUrlMaps({ project, region, urlMap })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (urlMapName: string, operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionUrlMapOperationFailed({
-        urlMapName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  urlMapName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(urlMapName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(urlMapName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(urlMapName, done);
-  });
-
 export const RegionUrlMapProvider = () =>
   Provider.succeed(RegionUrlMap, {
     stables: [
@@ -447,7 +386,7 @@ export const RegionUrlMapProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.urlMaps ?? [])
@@ -476,7 +415,9 @@ export const RegionUrlMapProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, urlMapName, operation),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -497,7 +438,7 @@ export const RegionUrlMapProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, urlMapName, operation),
+              waitRegionOperation(env.project, region, operation),
             ),
           );
         current = yield* getByName(env.project, region, urlMapName);
@@ -520,12 +461,9 @@ export const RegionUrlMapProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.urlMapName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

@@ -21,7 +21,6 @@ export default class Drain extends GCP.Run.Job<Drain>()(
   "Drain",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     const inbox = yield* Inbox;

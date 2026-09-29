@@ -23,7 +23,7 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parseOwnership,
-  projectOf,
+  withProjectId,
   replaceOnIdentity,
   sameText,
   toResourceId,
@@ -119,11 +119,13 @@ export type SfdcInstancesSfdcChannel = Resource<
  * ```
  *
  * ### Updating an SFDC Channel
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Rename the alias
  * ```typescript
  * const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel("Events", {
  *   sfdcInstance: instance.name,
- *   sfdcChannelId: existing.sfdcChannelId,
  *   displayName: "account-events-v2",
  *   channelTopic: "/event/AlchemyTest__e",
  * });
@@ -151,7 +153,7 @@ const toAttrs = (
   region: string,
   instanceHint?: string,
 ) => {
-  const name = channel.name ?? "";
+  const name = withProjectId(channel.name ?? "", project);
   const parsed = parseResourceName(name, "sfdcChannels", region);
   return {
     name,
@@ -160,7 +162,7 @@ const toAttrs = (
       ? parsed.sfdcInstance
       : (instanceHint ?? parsed.parent),
     location: locationOf(name, region),
-    project: projectOf(name) || project,
+    project,
     displayName: channel.displayName,
     description: parseOwnership(channel.description).text,
     channelTopic: channel.channelTopic,
@@ -310,7 +312,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
         return yield* new SfdcInstancesSfdcChannelNotResolved({ name });
       }
 
-      const currentName = current.name ?? name;
+      const currentName = withProjectId(current.name ?? name, env.project);
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const topicChanged = !sameText(current.channelTopic, news.channelTopic);

@@ -7,6 +7,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  type OperationFailed,
+  type OperationTimedOut,
+  waitForOperation as waitForGcpOperation,
+} from "../Operation.ts";
 
 const DEFAULT_STATE: kms.CryptoKeyVersionStateEnum = "ENABLED";
 const DELETABLE_STATES = new Set([
@@ -176,12 +181,6 @@ export class CryptoKeyVersionOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class CryptoKeyVersionOperationPending extends Data.TaggedError(
-  "GCP.KMS.CryptoKeyVersionOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CryptoKeyVersionNotReady extends Data.TaggedError(
   "GCP.KMS.CryptoKeyVersionNotReady",
 )<{
@@ -346,12 +345,6 @@ const listKeyRingsAt = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.KeyRing[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -378,12 +371,6 @@ const listAlchemyKeysInRing = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.CryptoKey[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -401,12 +388,6 @@ const listVersionsInKey = (parent: string) =>
           nextPageToken: response.nextPageToken,
         })),
         Effect.catchTag("NotFound", () =>
-          Effect.succeed({
-            items: [] as kms.CryptoKeyVersion[],
-            nextPageToken: undefined,
-          }),
-        ),
-        Effect.catchTag("Forbidden", () =>
           Effect.succeed({
             items: [] as kms.CryptoKeyVersion[],
             nextPageToken: undefined,
@@ -438,60 +419,19 @@ const listVersionsAt = (locationParent: string) =>
     return versionPages.flat();
   });
 
-const waitOperation = (
-  operation: kms.Operation,
-): Effect.Effect<
-  kms.Operation,
-  | CryptoKeyVersionOperationFailed
-  | CryptoKeyVersionOperationPending
-  | kms.GetProjectsLocationsOperationsError,
-  kms.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    if (operation.done === true) {
-      const status = operation.error;
-      if (status) {
-        return yield* new CryptoKeyVersionOperationFailed({
-          operation: operation.name ?? "",
-          message: status.message ?? "KMS operation failed",
-        });
-      }
-      return operation;
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return operation;
-    }
-    const wait: Effect.Effect<
-      kms.Operation,
-      | CryptoKeyVersionOperationFailed
-      | CryptoKeyVersionOperationPending
-      | kms.GetProjectsLocationsOperationsError,
-      kms.GcpOpContext
-    > = kms.getProjectsLocationsOperations({ name }).pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        (): CryptoKeyVersionOperationPending =>
-          new CryptoKeyVersionOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => current.error === undefined,
-        (current): CryptoKeyVersionOperationFailed =>
-          new CryptoKeyVersionOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "KMS operation failed",
-          }),
-      ),
-    );
-    return yield* wait.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.KMS.CryptoKeyVersionOperationPending",
-        times: 8,
-        schedule: Schedule.exponential("500 millis"),
-      }),
-    );
-  });
+const waitOperation = (operation: kms.Operation) =>
+  waitForGcpOperation(
+    operation,
+    (name) => kms.getProjectsLocationsOperations({ name }),
+    { budget: "10 minutes" },
+  ).pipe(
+    // Re-read the finished operation for its typed response.
+    Effect.flatMap(() =>
+      operation.name === undefined
+        ? Effect.succeed(operation)
+        : kms.getProjectsLocationsOperations({ name: operation.name }),
+    ),
+  );
 
 const waitReady = (
   name: string,
@@ -610,7 +550,8 @@ const deleteVersion = (name: string) =>
       ): Effect.Effect<
         void,
         | CryptoKeyVersionOperationFailed
-        | CryptoKeyVersionOperationPending
+        | OperationFailed
+        | OperationTimedOut
         | kms.GetProjectsLocationsOperationsError,
         kms.GcpOpContext
       > =>

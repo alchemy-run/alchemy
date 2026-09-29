@@ -18,6 +18,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type InstancesMaterializedViewProps = {
@@ -155,11 +156,7 @@ const toAttrs = (view: bigtable.MaterializedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesMaterializedViews({ name, view: "FULL" })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -267,17 +264,17 @@ export const InstancesMaterializedViewProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesMaterializedViews({
+            collectPages(
+              bigtable.listProjectsInstancesMaterializedViews.pages({
                 parent: instance.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.materializedViews ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.MaterializedView[]),
-                ),
+              }),
+              (page) => page.materializedViews,
+            ).pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as bigtable.MaterializedView[]),
               ),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((view) => toAttrs(view, env.project));
@@ -306,7 +303,15 @@ export const InstancesMaterializedViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            // A just-created source table rejects views for a short while.
+            Effect.retry({
+              while: (error) => error._tag === "SourceTableNotReady",
+              times: 8,
+              schedule: Schedule.spaced("5 seconds"),
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -351,7 +356,7 @@ export const InstancesMaterializedViewProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

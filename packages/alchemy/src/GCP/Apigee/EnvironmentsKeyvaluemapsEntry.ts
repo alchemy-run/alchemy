@@ -264,6 +264,11 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
         .deleteOrganizationsEnvironmentsKeyvaluemapsEntries({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

@@ -92,8 +92,7 @@ export type FolderBucketsView = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const view = yield* GCP.Logging.FolderBucketsView("Errors", {
- *   bucketName: existing.bucketName,
- *   viewId: existing.viewId,
+ *   bucketName: bucket.name,
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  * });
@@ -192,7 +191,7 @@ export const FolderBucketsViewProvider = () =>
               Stream.map((view) => toAttrs(view, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as ReturnType<typeof toAttrs>[]),
               ),
             );

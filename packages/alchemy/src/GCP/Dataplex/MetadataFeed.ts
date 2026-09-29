@@ -211,11 +211,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     const resource = topicResource(topic, project);
     const projectResource = yield* resourcemanager
       .getProjects({ name: `projects/${project}` })
-      .pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     const projectNumber = lastSegment(projectResource?.name ?? "");
     if (projectNumber.length === 0) return;
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-dataplex.iam.gserviceaccount.com`;
@@ -244,9 +240,6 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
       times: 5,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Forbidden", () => Effect.void),
-    Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catchTag("BadRequest", () => Effect.void),
   );
 
 const waitUntilExists = (name: string) =>
@@ -381,7 +374,7 @@ export const MetadataFeedProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }

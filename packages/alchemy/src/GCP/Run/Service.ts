@@ -6,6 +6,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
+import type { ExtraFile } from "../../Util/extraFiles.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
@@ -18,6 +20,10 @@ import {
   makeImageSource,
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
 import {
   createGcpHostRuntimeContext,
   type GcpHostRuntimeContext,
@@ -256,9 +262,20 @@ export type ServiceProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`. `install` lists packages
+   * `npm install`ed into an unbundled Node program image (see
+   * {@link extraFiles}); Next.js needs `next`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & { install?: PackageInstall };
+  /**
+   * Host files or directories baked into the image next to `main`
+   * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on
+   * an external (non-Effect) `main`, the program is not bundled: `main`
+   * is copied as-is and run by `node` on `node:26-slim`. Content-hashed,
+   * so a changed file rolls out a new revision. `GCP.Website.*` uses this
+   * to ship framework build output.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 };
 
 export type Service = Resource<
@@ -449,19 +466,6 @@ export class ServiceStillExists extends Data.TaggedError(
   "GCP.Run.ServiceStillExists",
 )<{
   name: string;
-}> {}
-
-export class ServiceOperationFailed extends Data.TaggedError(
-  "GCP.Run.ServiceOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ServiceOperationPending extends Data.TaggedError(
-  "GCP.Run.ServiceOperationPending",
-)<{
-  operation: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -828,87 +832,52 @@ const toAttrs = (
 const bootstrapFor = (news: ServiceProps) =>
   makeGcpBootstrap("CloudRun", news.handler ?? "default");
 
+const sourceOf = (news: ServiceProps, main: string) => ({
+  main,
+  handler: news.handler ?? "default",
+  build: news.build,
+  extraFiles: news.extraFiles,
+  install: news.build?.install,
+});
+
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsServices({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isNotFoundStatus = (error: cloudrun.GoogleRpcStatus | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
+/** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
   operation: cloudrun.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new ServiceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ServiceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudrun.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
+  waitForLongRunningOperation(
+    operation,
+    (name) => {
+      const get = cloudrun.getProjectsLocationsOperations({ name });
+      return options?.notFoundOk === true
+        ? get.pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudrun.GoogleLongrunningOperation),
+              Effect.succeed<LongRunningOperation>({ name, done: true }),
             ),
           )
-        : getOperation.pipe(
+        : get.pipe(
+            // A just-returned operation can briefly 404 on read.
             Effect.retry({
               while: (error) => error._tag === "NotFound",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ServiceOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        const ignoreNotFound =
-          options?.notFoundOk === true && isNotFoundStatus(status);
-        return status && !ignoreNotFound
-          ? Effect.fail(
-              new ServiceOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Run.ServiceOperationPending",
-        // A first revision can take over a minute to become ready.
-        times: 24,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+    },
+    { budget: "10 minutes" },
+  ).pipe(
+    // google.rpc.Code NOT_FOUND: the resource was already gone.
+    Effect.catchTag("GCP.OperationFailed", (error) =>
+      options?.notFoundOk === true && error.code === 5
+        ? Effect.succeed<LongRunningOperation>(operation)
+        : Effect.fail(error),
+    ),
+  );
 
 const isPendingService = (service: cloudrun.GoogleCloudRunV2Service) => {
   const state = service.terminalCondition?.state ?? "";
@@ -1017,7 +986,7 @@ export const ServiceProvider = () =>
       if (output !== undefined && news.main !== undefined) {
         const images = yield* makeImageSource;
         const hash = yield* images.hash({
-          source: { main: news.main, handler: news.handler, build: news.build },
+          source: sourceOf(news, news.main),
           port: news.port ?? 8080,
           isExternal: news.isExternal,
           bootstrap: bootstrapFor(news),
@@ -1106,11 +1075,7 @@ export const ServiceProvider = () =>
         const image = yield* images
           .resolve({
             id,
-            source: {
-              main: news.main,
-              handler: news.handler ?? "default",
-              build: news.build,
-            },
+            source: sourceOf(news, news.main),
             repositoryName: rfc1035(`${serviceId}-src`),
             location,
             port,

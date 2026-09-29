@@ -5,37 +5,28 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
-  MAX_DISPLAY_NAME_LENGTH,
   ResourceNotResolved,
-  encodeRestrictedDisplayName,
   expandParent,
-  findOwnedByDisplayName,
-  hasOwnershipMarker,
-  listModelsAt,
-  listProjectModels,
   locationParent,
   normalizeLocation,
-  ownedByAlchemy,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   resourceNameOf,
   retryTransient,
-  toPhysicalId,
   waitUntilGone,
+  toRestrictedDisplayName,
 } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
 export type ModelProps = {
   /**
-   * Model id (the `{model}` segment of
-   * `projects/{project}/locations/{location}/models/{model}`). If
-   * omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the model.
+   * Server-assigned model id (the `{model}` segment of
+   * `projects/{project}/locations/{location}/models/{model}`, e.g.
+   * `NM…`) of an existing model to manage. Omit to train a new model.
+   * Immutable — changing it replaces the model.
    */
   modelId?: string;
   /**
@@ -53,11 +44,8 @@ export type ModelProps = {
    */
   dataset: string;
   /**
-   * User-facing display name. Custom models have no labels field and
-   * display names may only use A-Z, a-z, 0-9, and underscore (max 32
-   * characters), so Alchemy packs ownership as `alc_{stack}_{stage}_{id}`
-   * and strips it from attributes. There is no update API — changing
-   * display name replaces the model.
+   * User-facing display name. There is no update API — changing display name
+   * replaces the model.
    */
   displayName?: string;
 };
@@ -76,7 +64,7 @@ export type Model = Resource<
     location: string;
     /** Training dataset resource name. */
     dataset: string | undefined;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** BCP-47 source language copied from the dataset. */
     sourceLanguageCode: string | undefined;
@@ -100,12 +88,13 @@ export type Model = Resource<
 /**
  * A trained Cloud Translation AutoML model.
  *
- * Models are trained from a Translation dataset in the same location.
- * Create and delete are long-running operations. Models have no labels
- * field, so Alchemy stamps ownership into `displayName` for `list` /
- * nuke. Dataset, location, and display name are immutable — there is
- * no patch RPC. Training can take hours; tests skipIf-gate behind
- * `FAST`.
+ * Model ids are assigned by Google and models have no labels, so Alchemy
+ * tracks a model only through the name recorded in state; `read` reports a
+ * model it finds without prior state as unowned (adopt it with `--adopt`).
+ * Models are trained from a Translation dataset in the same location. Create
+ * and delete are long-running operations. Dataset, location, and display name
+ * are immutable — there is no patch RPC. Training can take hours; tests
+ * skipIf-gate behind `FAST`.
  *
  * ### Creating a Model
  * **Example:** Train from a dataset
@@ -116,10 +105,9 @@ export type Model = Resource<
  * });
  * ```
  *
- * **Example:** Explicit id and location
+ * **Example:** Explicit location
  * ```typescript
  * const model = yield* GCP.Translate.Model("EnEs", {
- *   modelId: "en-es-custom",
  *   location: "us-central1",
  *   dataset: dataset.name,
  * });
@@ -139,14 +127,13 @@ const datasetNameOf = (project: string, location: string, dataset: string) =>
 const toAttrs = (model: translate.Model, project: string) => {
   const name = model.name ?? "";
   const parsed = parseResourceName(name, "models");
-  const ownership = parseOwnership(model.displayName);
   return {
     name,
     modelId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
     dataset: model.dataset,
-    displayName: ownership.text,
+    displayName: model.displayName,
     sourceLanguageCode: model.sourceLanguageCode,
     targetLanguageCode: model.targetLanguageCode,
     trainExampleCount: model.trainExampleCount,
@@ -163,25 +150,6 @@ const getByName = (name: string) =>
     : translate
         .getProjectsLocationsModels({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const local = yield* findOwnedByDisplayName(
-      id,
-      yield* listModelsAt(parent),
-    );
-    if (local !== undefined) return local;
-    return yield* findOwnedByDisplayName(id, yield* listProjectModels(project));
-  });
 
 export const ModelProvider = () =>
   Provider.succeed(Model, {
@@ -207,30 +175,19 @@ export const ModelProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const modelId = olds?.modelId ?? output?.modelId;
       const name =
         output?.name ??
         (modelId ? resourceName(env.project, location, modelId) : "");
-      const parent = locationParent(env.project, location);
-      const existing = yield* findOwned(id, env.project, parent, name);
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const models = yield* listProjectModels(env.project);
-        return models
-          .filter((model) => hasOwnershipMarker(model.displayName))
-          .map((model) => toAttrs(model, env.project));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -238,48 +195,31 @@ export const ModelProvider = () =>
         news.location ?? output?.location ?? DEFAULT_LOCATION,
       );
       const parent = locationParent(env.project, location);
-      const modelId = yield* toPhysicalId(id, news.modelId, output?.modelId);
-      const name = resourceName(env.project, location, modelId);
       const dataset = datasetNameOf(env.project, location, news.dataset);
-      const ownership = yield* createInternalLabels(id);
-      const displayName = encodeRestrictedDisplayName(
-        ownership,
-        news.displayName ?? output?.displayName,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
-      const hinted = output?.name ?? name;
+      const displayName = toRestrictedDisplayName(news.displayName ?? id);
+      const hinted =
+        output?.name ??
+        (news.modelId ? resourceName(env.project, location, news.modelId) : "");
 
-      let current = yield* findOwned(id, env.project, parent, hinted);
+      let current = yield* getByName(hinted);
 
       if (current === undefined) {
-        const created = yield* retryTransient(
+        const operation = yield* retryTransient(
           translate.createProjectsLocationsModels({
             parent,
-            body: {
-              name,
-              displayName,
-              dataset,
-            },
+            body: { displayName, dataset },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findOwned(id, env.project, parent, name),
-          ),
         );
-        if (created && "done" in created) {
-          yield* waitForOperation(created);
-          current = yield* findOwned(id, env.project, parent, name);
-        } else {
-          current = created ?? undefined;
-        }
+        // Training a custom model takes hours.
+        const done = yield* waitForOperation(operation, { budget: "12 hours" });
+        const createdName = done.response?.name;
+        current = yield* getByName(
+          typeof createdName === "string" ? createdName : "",
+        );
       }
 
       if (current === undefined) {
-        current = yield* getByName(name);
-      }
-
-      if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || name });
+        return yield* new ResourceNotResolved({ name: hinted || parent });
       }
 
       return toAttrs(current, env.project);

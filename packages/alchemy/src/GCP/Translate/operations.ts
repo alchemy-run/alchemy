@@ -1,112 +1,68 @@
 import * as translate from "@distilled.cloud/gcp/translate_v3";
-import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-
-export class TranslateOperationFailed extends Data.TaggedError(
-  "GCP.Translate.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class TranslateOperationPending extends Data.TaggedError(
-  "GCP.Translate.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-const alreadyExists = (error: translate.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: translate.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: translate.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
+import * as Predicate from "effect/Predicate";
+import {
+  OperationFailed,
+  waitForOperation as waitForGcpOperation,
+} from "../Operation.ts";
 
 /**
- * Poll `getProjectsLocationsOperations` until `done`. Model create/delete
- * and glossary create/delete are LROs. Adaptive MT datasets and glossary
- * entries are synchronous.
+ * Translate reports some failures (e.g. a model created from an empty
+ * dataset) as `done: true` with the error in `metadata.error` and no
+ * top-level `error`.
+ */
+const metadataFailure = (operation: translate.Operation) => {
+  const error = operation.metadata?.error;
+  if (!Predicate.isObject(error)) return undefined;
+  const code =
+    Predicate.hasProperty(error, "code") && Predicate.isNumber(error.code)
+      ? error.code
+      : undefined;
+  const message =
+    Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
+      ? error.message
+      : "operation failed";
+  return new OperationFailed({
+    operation: operation.name ?? "",
+    code,
+    reason: undefined,
+    message,
+  });
+};
+
+/**
+ * Wait for a Translate long-running operation, then re-read it so the
+ * returned operation carries its `response`. Model create/delete and
+ * glossary create/delete are LROs; Adaptive MT datasets and glossary
+ * entries are synchronous. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
  */
 export const waitForOperation = (
   operation: translate.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    interval?: `${number} seconds`;
-    times?: number;
-  },
+  options?: { notFoundOk?: boolean; budget?: Duration.Input },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new TranslateOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new TranslateOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = translate.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<translate.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new TranslateOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new TranslateOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Translate.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "3 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => translate.getProjectsLocationsOperations({ name }),
+    { budget: options?.budget ?? "10 minutes" },
+  ).pipe(
+    Effect.flatMap(() =>
+      operation.name
+        ? translate.getProjectsLocationsOperations({ name: operation.name })
+        : Effect.succeed(operation),
+    ),
+    Effect.flatMap((done) => {
+      const failed = metadataFailure(done);
+      return failed ? Effect.fail(failed) : Effect.succeed(done);
+    }),
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );

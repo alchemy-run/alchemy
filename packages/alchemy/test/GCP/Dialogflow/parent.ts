@@ -1,6 +1,20 @@
+import * as Category from "@distilled.cloud/core/category";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
+import * as GcpRetry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+
+/**
+ * The Dialogflow suite runs ~20 files at once against one project, which
+ * overruns the per-minute "All other requests" quota. Distilled's default
+ * backoff gives up before the minute rolls over, so the suite rides it out.
+ */
+export const quotaTolerant = GcpRetry.policy({
+  while: (error) =>
+    Category.isThrottling(error) || Category.isTransientError(error),
+  schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(12)]),
+});
 
 export const DEFAULT_LOCATION = "global";
 
@@ -18,7 +32,6 @@ const listAgents = (parent: string) =>
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const ensureAgent = (
@@ -69,7 +82,6 @@ export const ensureEntityType = (agent: string, displayName: string) =>
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
       );
     const existing = listed.find(
       (entityType) => entityType.displayName === displayName,

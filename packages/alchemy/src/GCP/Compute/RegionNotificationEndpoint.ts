@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -151,14 +151,6 @@ export class RegionNotificationEndpointNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionNotificationEndpointOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionNotificationEndpointOperationFailed",
-)<{
-  notificationEndpointName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string | undefined) => {
   if (value === undefined || value.length === 0) return "";
   const trimmed = value.replace(/\/+$/, "");
@@ -254,67 +246,6 @@ const getByName = (
       notificationEndpoint,
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (
-  notificationEndpointName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionNotificationEndpointOperationFailed({
-        notificationEndpointName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  notificationEndpointName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(notificationEndpointName, operation);
-    }
-    const name = operationId(operation);
-    if (!name) {
-      return yield* failIfErrored(notificationEndpointName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(notificationEndpointName, done);
-  });
 
 const immutableChanged = (
   news: RegionNotificationEndpointProps,
@@ -426,7 +357,7 @@ export const RegionNotificationEndpointProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.resources ?? [])
@@ -481,12 +412,9 @@ export const RegionNotificationEndpointProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                region,
-                notificationEndpointName,
-                operation,
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -518,12 +446,9 @@ export const RegionNotificationEndpointProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.notificationEndpointName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

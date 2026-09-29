@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -62,6 +62,74 @@ export type RouterBgp = {
   identifierRange?: string;
 };
 
+export type RouterNatSubnetwork = {
+  /** Subnetwork name, partial URL, or full resource URL. */
+  name: string;
+  /**
+   * Ranges of this subnetwork to translate (`ALL_IP_RANGES`,
+   * `PRIMARY_IP_RANGE`, `LIST_OF_SECONDARY_IP_RANGES`).
+   * @default ["ALL_IP_RANGES"]
+   */
+  sourceIpRangesToNat?: compute.RouterNatSubnetworkToNatSourceIpRangesToNatItemEnum[];
+  /**
+   * Secondary range names to translate. Requires
+   * `LIST_OF_SECONDARY_IP_RANGES` in `sourceIpRangesToNat`.
+   */
+  secondaryIpRangeNames?: string[];
+};
+
+export type RouterNatLogConfig = {
+  /** Export NAT logs. */
+  enable: boolean;
+  /**
+   * Which connections to log (`ERRORS_ONLY`, `TRANSLATIONS_ONLY`, `ALL`).
+   * @default "ALL"
+   */
+  filter?: compute.RouterNatLogConfigFilterEnum;
+};
+
+export type RouterNat = {
+  /** NAT name, unique within the router (RFC1035, 1-63 chars). */
+  name: string;
+  /**
+   * Which subnetwork ranges are translated: `ALL_SUBNETWORKS_ALL_IP_RANGES`,
+   * `ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES`, or `LIST_OF_SUBNETWORKS`
+   * (with `subnetworks`).
+   */
+  sourceSubnetworkIpRangesToNat: compute.RouterNatSourceSubnetworkIpRangesToNatEnum;
+  /** Subnetworks to translate when `LIST_OF_SUBNETWORKS` is selected. */
+  subnetworks?: RouterNatSubnetwork[];
+  /**
+   * `AUTO_ONLY` lets Google allocate external IPs; `MANUAL_ONLY` uses
+   * `natIps`.
+   * @default "AUTO_ONLY"
+   */
+  natIpAllocateOption?: compute.RouterNatNatIpAllocateOptionEnum;
+  /**
+   * Static external addresses (`GCP.Compute.Address` self links or names)
+   * used with `MANUAL_ONLY`.
+   */
+  natIps?: string[];
+  /** Minimum ports allocated to each VM. */
+  minPortsPerVm?: number;
+  /** Maximum ports per VM when dynamic port allocation is enabled. */
+  maxPortsPerVm?: number;
+  /** Enable dynamic port allocation. */
+  enableDynamicPortAllocation?: boolean;
+  /** Enable endpoint-independent mapping. */
+  enableEndpointIndependentMapping?: boolean;
+  /** UDP idle timeout in seconds. */
+  udpIdleTimeoutSec?: number;
+  /** ICMP idle timeout in seconds. */
+  icmpIdleTimeoutSec?: number;
+  /** TCP established-connection idle timeout in seconds. */
+  tcpEstablishedIdleTimeoutSec?: number;
+  /** TCP transitory-connection idle timeout in seconds. */
+  tcpTransitoryIdleTimeoutSec?: number;
+  /** NAT logging. */
+  logConfig?: RouterNatLogConfig;
+};
+
 export type RouterProps = {
   /**
    * Router name (RFC1035, 1-63 chars). If omitted, a unique name is
@@ -92,6 +160,11 @@ export type RouterProps = {
    */
   bgp?: RouterBgp;
   /**
+   * Cloud NAT gateways hosted on this router. Updated in place. Omit to
+   * leave the router's NATs unmanaged; `[]` removes all of them.
+   */
+  nats?: RouterNat[];
+  /**
    * Dedicated for encrypted VLAN attachments. Immutable — changing it
    * replaces the router.
    * @default false
@@ -120,6 +193,8 @@ export type Router = Resource<
     description: string | undefined;
     /** BGP configuration, if set. */
     bgp: RouterBgp | undefined;
+    /** Cloud NAT gateways on this router. */
+    nats: RouterNat[];
     /** Whether this router is dedicated to encrypted interconnect. */
     encryptedInterconnectRouter: boolean;
     /** NCC Gateway spoke URI, if any. */
@@ -146,7 +221,8 @@ export type Router = Resource<
  *
  * Name, region, network, `encryptedInterconnectRouter`, and `nccGateway`
  * are immutable. Description and BGP (ASN, advertise mode, advertised
- * ranges, keepalive) update in place via `routers.patch`.
+ * ranges, keepalive) and Cloud NAT gateways (`nats`) update in place via
+ * `routers.patch`.
  *
  * ### Creating a Router
  * **Example:** Generated name on a custom-mode VPC
@@ -167,6 +243,27 @@ export type Router = Resource<
  *   network: "app-vpc",
  *   description: "edge bgp",
  *   bgp: { asn: 65001, advertiseMode: "DEFAULT" },
+ * });
+ * ```
+ *
+ * ### Cloud NAT
+ * **Example:** NAT a subnet through a static egress IP
+ * ```typescript
+ * const egressIp = yield* GCP.Compute.Address("EgressIp", {
+ *   addressType: "EXTERNAL",
+ * });
+ * const router = yield* GCP.Compute.Router("Nat", {
+ *   network: network.networkName,
+ *   nats: [
+ *     {
+ *       name: "egress",
+ *       sourceSubnetworkIpRangesToNat: "LIST_OF_SUBNETWORKS",
+ *       subnetworks: [{ name: subnet.subnetworkName }],
+ *       natIpAllocateOption: "MANUAL_ONLY",
+ *       natIps: [egressIp.selfLink.as<string>()],
+ *       logConfig: { enable: true, filter: "ERRORS_ONLY" },
+ *     },
+ *   ],
  * });
  * ```
  *
@@ -196,13 +293,6 @@ export class RouterNotResolved extends Data.TaggedError(
 )<{
   routerName: string;
   region: string;
-}> {}
-
-export class RouterOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RouterOperationFailed",
-)<{
-  operation: string;
-  errors: ReadonlyArray<{ code?: string; message?: string }>;
 }> {}
 
 export class RouterOperationPending extends Data.TaggedError(
@@ -387,6 +477,146 @@ const bgpEqual = (observed: RouterBgp | undefined, desired: RouterBgp) => {
   );
 };
 
+const regionalRef = (
+  project: string,
+  region: string,
+  collection: "subnetworks" | "addresses",
+  value: string,
+) => {
+  if (value.startsWith("http") || value.startsWith("projects/")) return value;
+  if (value.includes("/")) {
+    return `projects/${project}/${value.replace(/^\//, "")}`;
+  }
+  return `projects/${project}/regions/${region}/${collection}/${value}`;
+};
+
+const toNats = (nats: compute.RouterNat[] | undefined): RouterNat[] =>
+  (nats ?? []).map((nat) => ({
+    name: nat.name ?? "",
+    sourceSubnetworkIpRangesToNat:
+      nat.sourceSubnetworkIpRangesToNat as compute.RouterNatSourceSubnetworkIpRangesToNatEnum,
+    subnetworks: nat.subnetworks?.map((subnetwork) => ({
+      name: subnetwork.name ?? "",
+      sourceIpRangesToNat:
+        subnetwork.sourceIpRangesToNat as RouterNatSubnetwork["sourceIpRangesToNat"],
+      secondaryIpRangeNames: subnetwork.secondaryIpRangeNames,
+    })),
+    natIpAllocateOption:
+      nat.natIpAllocateOption as compute.RouterNatNatIpAllocateOptionEnum,
+    natIps: nat.natIps,
+    minPortsPerVm: nat.minPortsPerVm,
+    maxPortsPerVm: nat.maxPortsPerVm,
+    enableDynamicPortAllocation: nat.enableDynamicPortAllocation,
+    enableEndpointIndependentMapping: nat.enableEndpointIndependentMapping,
+    udpIdleTimeoutSec: nat.udpIdleTimeoutSec,
+    icmpIdleTimeoutSec: nat.icmpIdleTimeoutSec,
+    tcpEstablishedIdleTimeoutSec: nat.tcpEstablishedIdleTimeoutSec,
+    tcpTransitoryIdleTimeoutSec: nat.tcpTransitoryIdleTimeoutSec,
+    logConfig:
+      nat.logConfig === undefined
+        ? undefined
+        : {
+            enable: nat.logConfig.enable === true,
+            filter: nat.logConfig
+              .filter as compute.RouterNatLogConfigFilterEnum,
+          },
+  }));
+
+const desiredNats = (
+  project: string,
+  region: string,
+  nats: ReadonlyArray<RouterNat>,
+): compute.RouterNat[] =>
+  nats.map((nat) => ({
+    ...nat,
+    natIpAllocateOption:
+      nat.natIpAllocateOption ??
+      (nat.natIps !== undefined && nat.natIps.length > 0
+        ? "MANUAL_ONLY"
+        : "AUTO_ONLY"),
+    subnetworks: nat.subnetworks?.map((subnetwork) => ({
+      ...subnetwork,
+      name: regionalRef(project, region, "subnetworks", subnetwork.name),
+      sourceIpRangesToNat: subnetwork.sourceIpRangesToNat ?? ["ALL_IP_RANGES"],
+    })),
+    natIps: nat.natIps?.map((ip) =>
+      regionalRef(project, region, "addresses", ip),
+    ),
+    logConfig:
+      nat.logConfig === undefined
+        ? undefined
+        : {
+            enable: nat.logConfig.enable,
+            filter: nat.logConfig.filter ?? "ALL",
+          },
+  }));
+
+const sortedKey = (values: ReadonlyArray<string> | undefined) =>
+  [...(values ?? [])].sort().join("\0");
+
+// Compare only fields the desired NAT specifies: the API fills in defaults
+// (timeouts, endpoint types, tier) that the user never declared.
+const natMatches = (
+  desired: compute.RouterNat,
+  observed: compute.RouterNat,
+) => {
+  for (const [key, value] of Object.entries(desired)) {
+    if (value === undefined) continue;
+    const current = observed[key as keyof compute.RouterNat];
+    switch (key) {
+      case "natIps":
+        if (
+          sortedKey((value as string[]).map(linkKey)) !==
+          sortedKey(((current as string[] | undefined) ?? []).map(linkKey))
+        ) {
+          return false;
+        }
+        break;
+      case "subnetworks": {
+        const subnetKey = (list: compute.RouterNatSubnetworkToNat[]) =>
+          JSON.stringify(
+            list
+              .map((subnetwork) => ({
+                name: linkKey(subnetwork.name),
+                ranges: sortedKey(subnetwork.sourceIpRangesToNat),
+                secondary: sortedKey(subnetwork.secondaryIpRangeNames),
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          );
+        if (
+          subnetKey(value as compute.RouterNatSubnetworkToNat[]) !==
+          subnetKey((current as compute.RouterNatSubnetworkToNat[]) ?? [])
+        ) {
+          return false;
+        }
+        break;
+      }
+      case "logConfig": {
+        const log = current as compute.RouterNatLogConfig | undefined;
+        const want = value as compute.RouterNatLogConfig;
+        if ((log?.enable === true) !== (want.enable === true)) return false;
+        if (want.enable === true && log?.filter !== want.filter) return false;
+        break;
+      }
+      default:
+        if (current !== value) return false;
+    }
+  }
+  return true;
+};
+
+const natsEqual = (
+  observed: compute.RouterNat[] | undefined,
+  desired: compute.RouterNat[],
+) => {
+  const byName = new Map((observed ?? []).map((nat) => [nat.name, nat]));
+  if (byName.size !== desired.length) return false;
+  return desired.every((nat) => {
+    const current = byName.get(nat.name);
+    return current !== undefined && natMatches(nat, current);
+  });
+};
+
 const toAttrs = (
   router: compute.Router,
   project: string,
@@ -399,6 +629,7 @@ const toAttrs = (
     network: router.network ?? "",
     description: parsed.description,
     bgp: toBgp(router.bgp),
+    nats: toNats(router.nats),
     encryptedInterconnectRouter: router.encryptedInterconnectRouter === true,
     nccGateway: router.nccGateway,
     selfLink: router.selfLink,
@@ -411,127 +642,6 @@ const getByName = (project: string, region: string, router: string) =>
   compute
     .getRouters({ project, region, router })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationErrors = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const operationText = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase())
-    .join(" ");
-
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return (
-    errors.length > 0 &&
-    (text.includes("not_found") ||
-      text.includes("notfound") ||
-      text.includes("was not found") ||
-      text.includes("not found"))
-  );
-};
-
-const isAlreadyExistsOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return text.includes("already_exists") || text.includes("already exists");
-};
-
-const isInUseOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return text.includes("resource_in_use") || text.includes("in use");
-};
-
-const assertOperationOk = (
-  operation: compute.Operation,
-  options?: { allowMissing?: boolean; allowExists?: boolean },
-) => {
-  const errors = operationErrors(operation);
-  if (errors.length === 0) return Effect.void;
-  if (options?.allowMissing === true && isNotFoundOp(errors)) {
-    return Effect.void;
-  }
-  if (options?.allowExists === true && isAlreadyExistsOp(errors)) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new RouterOperationFailed({
-      operation: operation.name ?? "",
-      errors,
-    }),
-  );
-};
-
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const waitForRegionOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { allowMissing?: boolean; allowExists?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* assertOperationOk(operation, options);
-        return;
-      }
-      return yield* new RouterOperationFailed({
-        operation: "",
-        errors: [{ message: "compute operation is missing a name" }],
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation, options);
-      return;
-    }
-    const waited = yield* waitRegionOperations(
-      {
-        project,
-        region,
-        operation: name,
-      },
-      { times: 30 },
-    );
-    if (waited.status === "DONE") {
-      yield* assertOperationOk(waited, options);
-      return;
-    }
-    yield* compute
-      .getRegionOperations({ project, region, operation: name })
-      .pipe(
-        Effect.filterOrFail(
-          (current) => current.status === "DONE",
-          (current) =>
-            new RouterOperationPending({
-              operation: name,
-              status: current.status,
-            }),
-        ),
-        Effect.flatMap((current) => assertOperationOk(current, options)),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Compute.RouterOperationPending" ||
-            error._tag === "NotFound",
-          schedule: Schedule.spaced("2 seconds"),
-          times: 10,
-        }),
-      );
-  });
 
 const requireRouter = (project: string, region: string, routerName: string) =>
   getByName(project, region, routerName).pipe(
@@ -689,6 +799,10 @@ export const RouterProvider = () =>
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
       const encrypted = news.encryptedInterconnectRouter === true;
+      const nats =
+        news.nats === undefined
+          ? undefined
+          : desiredNats(env.project, region, news.nats);
 
       let current = yield* getByName(env.project, region, routerName);
 
@@ -700,6 +814,9 @@ export const RouterProvider = () =>
         };
         if (news.bgp !== undefined) {
           body.bgp = desiredBgp(news.bgp);
+        }
+        if (nats !== undefined && nats.length > 0) {
+          body.nats = nats;
         }
         if (encrypted) {
           body.encryptedInterconnectRouter = true;
@@ -715,8 +832,8 @@ export const RouterProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForRegionOperation(env.project, region, operation, {
-                allowExists: true,
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -731,6 +848,9 @@ export const RouterProvider = () =>
       if (news.bgp !== undefined && !bgpEqual(toBgp(current.bgp), news.bgp)) {
         patchBody.bgp = desiredBgp(news.bgp);
       }
+      if (nats !== undefined && !natsEqual(current.nats, nats)) {
+        patchBody.nats = nats;
+      }
       if (Object.keys(patchBody).length > 0) {
         const patched = yield* compute.patchRouters({
           project: env.project,
@@ -738,7 +858,7 @@ export const RouterProvider = () =>
           router: routerName,
           body: patchBody,
         });
-        yield* waitForRegionOperation(env.project, region, patched);
+        yield* waitRegionOperation(env.project, region, patched);
         current = yield* requireRouter(env.project, region, routerName);
       }
 
@@ -765,17 +885,15 @@ export const RouterProvider = () =>
             schedule: Schedule.spaced("3 seconds"),
           }),
           Effect.flatMap((operation) =>
-            waitForRegionOperation(project, region, operation, {
-              allowMissing: true,
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) =>
-              error._tag === "GCP.Compute.OperationPending" ||
-              error._tag === "GCP.Compute.RouterOperationPending" ||
-              (error._tag === "GCP.Compute.RouterOperationFailed" &&
-                isInUseOp(error.errors)),
+              error._tag === "GCP.OperationFailed" &&
+              error.reason === "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE",
             times: 10,
             schedule: Schedule.spaced("3 seconds"),
           }),

@@ -116,12 +116,16 @@ export type DatasetsHl7V2StoresMessage = Resource<
  * ```
  *
  * ### Updating a Message
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Relabel an existing message
  * ```typescript
  * const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage("Adt", {
- *   parent: existing.parent,
- *   messageId: existing.messageId,
- *   data: existing.data,
+ *   parent: store.name,
+ *   data: [
+ *     "MSH|^~\\&|APP|FACILITY|DEST|DESTFAC|20240101120000||ADT^A01|MSG00001|P|2.5",
+ *     "PID|1||PAT001^^^MR||DOE^JOHN",
+ *   ].join("\r"),
  *   labels: { env: "prod" },
  * });
  * ```

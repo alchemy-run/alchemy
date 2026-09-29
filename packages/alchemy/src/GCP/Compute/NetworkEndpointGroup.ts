@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -182,15 +182,6 @@ export class NetworkEndpointGroupNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class NetworkEndpointGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NetworkEndpointGroupOperationFailed",
-)<{
-  operation: string;
-  zone: string;
-  message: string;
-  codes: readonly string[];
-}> {}
-
 export class NetworkEndpointGroupStillExists extends Data.TaggedError(
   "GCP.Compute.NetworkEndpointGroupStillExists",
 )<{
@@ -338,85 +329,6 @@ const toAttrs = (
   };
 };
 
-const alreadyExists = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).some(
-    (error) =>
-      error.code === "alreadyExists" ||
-      error.code === "RESOURCE_ALREADY_EXISTS",
-  );
-
-const isGoneCode = (code: string | undefined) =>
-  code === "notFound" ||
-  code === "RESOURCE_NOT_FOUND" ||
-  code === "RESOURCE_NOT_FOUND_BY_NAME";
-
-const waitZonal = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id ?? "");
-    if (name.length === 0) {
-      return yield* new NetworkEndpointGroupOperationFailed({
-        operation: "",
-        zone,
-        message: "Compute operation returned no name",
-        codes: [],
-      });
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: name,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: name,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-    const errors = current.error?.errors ?? [];
-    if (alreadyExists(current) || current.httpErrorStatusCode === 409) {
-      return current;
-    }
-    if (
-      errors.length > 0 ||
-      current.status !== "DONE" ||
-      current.httpErrorStatusCode
-    ) {
-      return yield* new NetworkEndpointGroupOperationFailed({
-        operation: name,
-        zone,
-        message:
-          errors
-            .map((error) => error.message ?? "")
-            .filter(Boolean)
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-        codes: errors.map((error) => error.code ?? ""),
-      });
-    }
-    return current;
-  });
-
 const getByName = (
   project: string,
   zone: string,
@@ -472,7 +384,6 @@ const listEndpoints = (
       body: { healthStatus: "SKIP" },
     })
     .pipe(
-      Stream.take(500),
       Stream.runCollect,
       Effect.map((chunk) =>
         Array.from(chunk)
@@ -517,7 +428,11 @@ const runOp = <E, R>(
   start: Effect.Effect<compute.Operation, E, R>,
 ) =>
   start.pipe(
-    Effect.flatMap((operation) => waitZonal(project, zone, operation)),
+    Effect.flatMap((operation) =>
+      waitZoneOperation(project, zone, operation, {
+        ignore: ["RESOURCE_ALREADY_EXISTS"],
+      }),
+    ),
   );
 
 export const NetworkEndpointGroupProvider = () =>
@@ -620,7 +535,7 @@ export const NetworkEndpointGroupProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.networkEndpointGroups ?? [])
@@ -684,7 +599,9 @@ export const NetworkEndpointGroupProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitZonal(env.project, zone, operation).pipe(Effect.asVoid),
+                : waitZoneOperation(env.project, zone, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* getByName(
@@ -782,16 +699,9 @@ export const NetworkEndpointGroupProvider = () =>
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void
-              : waitZonal(output.project, output.zone, operation).pipe(
-                  Effect.asVoid,
-                ),
-          ),
-          Effect.catchIf(
-            (error) =>
-              error._tag ===
-                "GCP.Compute.NetworkEndpointGroupOperationFailed" &&
-              error.codes.some(isGoneCode),
-            () => Effect.void,
+              : waitZoneOperation(output.project, output.zone, operation, {
+                  ignore: ["RESOURCE_NOT_FOUND"],
+                }).pipe(Effect.asVoid),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
         );

@@ -62,7 +62,7 @@ export type ProductsAuthConfigProps = {
    */
   description?: string;
   /**
-   * Credential type.
+   * Credential type applied to `decryptedCredential` when it omits one.
    * @default "USERNAME_AND_PASSWORD"
    */
   credentialType?: CredentialType;
@@ -177,7 +177,8 @@ const toAttrs = (
     project,
     displayName: config.displayName,
     description: parsed.text,
-    credentialType: config.credentialType,
+    credentialType:
+      config.credentialType ?? config.decryptedCredential?.credentialType,
     certificateId: config.certificateId,
     visibility: config.visibility,
     state: config.state,
@@ -191,11 +192,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsProductsAuthConfigs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsAuthConfigs
@@ -207,7 +204,6 @@ const listAt = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
@@ -221,7 +217,6 @@ const findOwned = (parent: string, id: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const ProductsAuthConfigProvider = () =>
@@ -330,7 +325,10 @@ export const ProductsAuthConfigProvider = () =>
       const displayName = news.displayName ?? authConfigId;
       const credentialType = news.credentialType ?? DEFAULT_CREDENTIAL_TYPE;
       const visibility = news.visibility ?? DEFAULT_VISIBILITY;
-      const decryptedCredential = credentialBody(news.decryptedCredential);
+      const decryptedCredential = credentialBody(
+        news.decryptedCredential,
+        credentialType,
+      );
 
       let current = yield* getByName(output?.name ?? name);
       if (current === undefined) {
@@ -344,7 +342,6 @@ export const ProductsAuthConfigProvider = () =>
             body: {
               displayName,
               description,
-              credentialType,
               decryptedCredential,
               certificateId: news.certificateId,
               visibility,
@@ -361,7 +358,6 @@ export const ProductsAuthConfigProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const typeChanged = !sameText(current.credentialType, credentialType);
       const visibilityChanged = !sameText(current.visibility, visibility);
       const certificateChanged = !sameText(
         current.certificateId,
@@ -372,7 +368,6 @@ export const ProductsAuthConfigProvider = () =>
       if (
         displayChanged ||
         descriptionChanged ||
-        typeChanged ||
         visibilityChanged ||
         certificateChanged ||
         credentialChanged
@@ -383,7 +378,6 @@ export const ProductsAuthConfigProvider = () =>
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
               descriptionChanged ? "description" : undefined,
-              typeChanged ? "credential_type" : undefined,
               visibilityChanged ? "visibility" : undefined,
               certificateChanged ? "certificate_id" : undefined,
               credentialChanged ? "decrypted_credential" : undefined,
@@ -392,7 +386,6 @@ export const ProductsAuthConfigProvider = () =>
               name: currentName,
               displayName,
               description,
-              credentialType,
               decryptedCredential,
               certificateId: news.certificateId,
               visibility,

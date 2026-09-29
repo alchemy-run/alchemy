@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Persistent training clusters take 5-15 minutes to provision and tear down.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsPersistentResources({ name }).pipe(
@@ -42,23 +41,14 @@ test.provider(
           name: `${parent}/persistentResources/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsPersistentResources({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ persistentResources: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.persistentResources ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsPersistentResources({
+        parent,
+        pageSize: 10,
+      });
+      expect(
+        (page.persistentResources ?? []).map((item) => item.name),
+      ).not.toContain(`${parent}/persistentResources/alchemy-missing`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -130,8 +120,6 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
-  },
+  // Provisioning the worker pool takes several minutes; so does teardown.
+  { timeout: 2_400_000, retry: 0 },
 );

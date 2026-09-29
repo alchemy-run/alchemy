@@ -254,7 +254,7 @@ export const listLocationIds = (project: string, region: string) =>
         ids.add(region);
         return [...ids];
       }),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([DEFAULT_TRACE_LOCATION, region]),
       ),
     );
@@ -270,7 +270,7 @@ const listBucketsAt = (parent: string) =>
       Stream.filter((bucket) => (bucket.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as observability.Bucket[]),
       ),
     );
@@ -307,7 +307,7 @@ const listDatasetsAt = (parent: string) =>
       Stream.filter((dataset) => (dataset.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as observability.Dataset[]),
       ),
     );
@@ -333,7 +333,7 @@ export const listLinksAt = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as observability.Link[]),
       ),
     );

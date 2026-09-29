@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Legacy Featurestore online serving provisioning takes ~6 minutes.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsFeaturestores({ name }).pipe(
@@ -39,26 +38,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsFeaturestores({
-          name: `${parent}/featurestores/alchemy-missing`,
+          name: `${parent}/featurestores/alchemy_missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsFeaturestores({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ featurestores: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.featurestores ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsFeaturestores({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.featurestores ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/featurestores/alchemy_missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -111,8 +101,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
-  },
+  { timeout: 600_000 },
 );

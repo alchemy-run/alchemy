@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -35,10 +36,27 @@ interface Claims {
   iat?: number;
 }
 
+/**
+ * Google's signing keys could not be fetched or imported. Deliveries should
+ * be retried (answer 5xx), not rejected as unauthorized.
+ */
+export class GoogleSigningKeysUnavailable extends Data.TaggedError(
+  "GCP.GoogleSigningKeysUnavailable",
+)<{ message: string }> {}
+
+const keysUnavailable = (cause: unknown) =>
+  new GoogleSigningKeysUnavailable({ message: String(cause) });
+
 let certs: { keys: Map<string, CryptoKey>; fetchedAt: number } | undefined;
 
-const decodeSegment = (segment: string): unknown =>
-  JSON.parse(new TextDecoder().decode(base64UrlBytes(segment)));
+/** A JWT segment's JSON, or `undefined` when it isn't valid base64url JSON. */
+const decodeSegment = (segment: string): unknown => {
+  try {
+    return JSON.parse(new TextDecoder().decode(base64UrlBytes(segment)));
+  } catch {
+    return undefined;
+  }
+};
 
 const base64UrlBytes = (segment: string): Uint8Array<ArrayBuffer> => {
   const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
@@ -56,20 +74,26 @@ const loadKeys = (http: HttpClient.HttpClient, force: boolean) =>
     if (!force && certs !== undefined && now - certs.fetchedAt < 3_600_000) {
       return certs.keys;
     }
-    const response = yield* http.execute(HttpClientRequest.get(CERTS_URL));
-    const body = (yield* response.json) as { keys?: Jwk[] };
+    const response = yield* http
+      .execute(HttpClientRequest.get(CERTS_URL))
+      .pipe(Effect.mapError(keysUnavailable));
+    const body = (yield* response.json.pipe(
+      Effect.mapError(keysUnavailable),
+    )) as { keys?: Jwk[] };
     const keys = new Map<string, CryptoKey>();
     for (const jwk of body.keys ?? []) {
       if (jwk.kty !== "RSA") continue;
-      const key = yield* Effect.promise(() =>
-        crypto.subtle.importKey(
-          "jwk",
-          { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-          false,
-          ["verify"],
-        ),
-      );
+      const key = yield* Effect.tryPromise({
+        try: () =>
+          crypto.subtle.importKey(
+            "jwk",
+            { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
+            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+            false,
+            ["verify"],
+          ),
+        catch: keysUnavailable,
+      });
       keys.set(jwk.kid, key);
     }
     certs = { keys, fetchedAt: now };
@@ -78,8 +102,10 @@ const loadKeys = (http: HttpClient.HttpClient, force: boolean) =>
 
 /**
  * True when `authorization` carries a valid Google ID token for `audience`
- * whose verified email is `email`. Never fails: any malformed, expired,
- * mis-addressed, or unverifiable token is rejected.
+ * whose verified email is `email`. A malformed, expired, mis-addressed, or
+ * badly signed token is `false`; failing to load Google's signing keys is a
+ * {@link GoogleSigningKeysUnavailable} error, so callers can ask the sender
+ * to retry.
  */
 export const verifyGoogleIdToken = (options: {
   authorization: string | undefined;
@@ -91,26 +117,35 @@ export const verifyGoogleIdToken = (options: {
     if (token === undefined) return false;
     const [header, payload, signature] = token.split(".");
     if (!header || !payload || !signature) return false;
-    const { kid, alg } = decodeSegment(header) as {
+    const { kid, alg } = (decodeSegment(header) ?? {}) as {
       kid?: string;
       alg?: string;
     };
     if (alg !== "RS256" || kid === undefined) return false;
-    const claims = decodeSegment(payload) as Claims;
+    const claims = decodeSegment(payload) as Claims | undefined;
+    if (claims === undefined) return false;
+    let signatureBytes: Uint8Array<ArrayBuffer>;
+    try {
+      signatureBytes = base64UrlBytes(signature);
+    } catch {
+      return false;
+    }
 
     const http = yield* HttpClient.HttpClient;
     let key = (yield* loadKeys(http, false)).get(kid);
     // Google rotates signing keys; refetch once for an unknown `kid`.
     if (key === undefined) key = (yield* loadKeys(http, true)).get(kid);
     if (key === undefined) return false;
-    const valid = yield* Effect.promise(() =>
-      crypto.subtle.verify(
-        "RSASSA-PKCS1-v1_5",
-        key,
-        base64UrlBytes(signature),
-        new TextEncoder().encode(`${header}.${payload}`),
-      ),
-    );
+    const valid = yield* Effect.tryPromise({
+      try: () =>
+        crypto.subtle.verify(
+          "RSASSA-PKCS1-v1_5",
+          key,
+          signatureBytes,
+          new TextEncoder().encode(`${header}.${payload}`),
+        ),
+      catch: keysUnavailable,
+    });
     if (!valid) return false;
 
     const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
@@ -122,7 +157,7 @@ export const verifyGoogleIdToken = (options: {
       (claims.exp ?? 0) + CLOCK_SKEW_SECONDS > now &&
       (claims.iat ?? Number.POSITIVE_INFINITY) - CLOCK_SKEW_SECONDS <= now
     );
-  }).pipe(Effect.catchCause(() => Effect.succeed(false)));
+  });
 
 /** The `aud` claim of a bearer token, unverified — for diagnostics only. */
 export const unverifiedAudience = (authorization: string | undefined) => {

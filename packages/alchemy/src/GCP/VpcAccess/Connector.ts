@@ -2,11 +2,13 @@ import * as vpcaccess from "@distilled.cloud/gcp/vpcaccess_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_NETWORK = "default";
@@ -196,19 +198,6 @@ export class ConnectorFailed extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-export class ConnectorOperationFailed extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ConnectorOperationPending extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ConnectorNotReady extends Data.TaggedError(
   "GCP.VpcAccess.ConnectorNotReady",
 )<{
@@ -338,82 +327,13 @@ const getByName = (name: string) =>
     .getProjectsLocationsConnectors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: vpcaccess.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new ConnectorOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ConnectorOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = vpcaccess.getProjectsLocationsOperations({ name });
-    const resolved: Effect.Effect<
-      vpcaccess.Operation,
-      vpcaccess.GetProjectsLocationsOperationsError,
-      vpcaccess.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<vpcaccess.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      vpcaccess.Operation,
-      | ConnectorOperationFailed
-      | ConnectorOperationPending
-      | vpcaccess.GetProjectsLocationsOperationsError,
-      vpcaccess.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ConnectorOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => current.error === undefined,
-        (current) =>
-          new ConnectorOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.VpcAccess.ConnectorOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("20 seconds"),
-      }),
-    );
-  });
+// Connector create/delete takes 2-5 minutes.
+const waitForOperation = (operation: vpcaccess.Operation) =>
+  waitForGcpOperation(
+    operation,
+    (name) => vpcaccess.getProjectsLocationsOperations({ name }),
+    { budget: "10 minutes" },
+  );
 
 const waitUntilReady = (name: string) => {
   const ready: Effect.Effect<
@@ -463,54 +383,29 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listConnectors = (parent: string) =>
-  Effect.gen(function* () {
-    const found: vpcaccess.Connector[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* vpcaccess.listProjectsLocationsConnectors({
-        parent,
-        pageSize: 100,
-        pageToken,
-      });
-      found.push(...(response.connectors ?? []));
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  });
-
+// A location without the API answers NotFound: nothing lives there.
 const listAt = (parent: string) =>
-  listConnectors(parent).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as vpcaccess.Connector[]),
-    ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed([] as vpcaccess.Connector[]),
-    ),
-  );
+  vpcaccess.listProjectsLocationsConnectors
+    .pages({ parent, pageSize: 100 })
+    .pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.connectors ?? [])),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed([] as vpcaccess.Connector[]),
+      ),
+    );
 
 const listLocations = (project: string) =>
-  Effect.gen(function* () {
-    const found: string[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* vpcaccess.listProjectsLocations({
-        name: `projects/${project}`,
-        pageSize: 100,
-        pageToken,
-      });
-      for (const location of response.locations ?? []) {
-        if (location.name) found.push(location.name);
-      }
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
-  );
+  vpcaccess.listProjectsLocations
+    .pages({ name: `projects/${project}`, pageSize: 100 })
+    .pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
+      Stream.map((location) => location.name ?? ""),
+      Stream.filter((name) => name.length > 0),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
 
 const createBody = (news: ConnectorProps): vpcaccess.Connector => {
   const body: vpcaccess.Connector = {};
@@ -691,12 +586,7 @@ export const ConnectorProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.VpcAccess.ConnectorOperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         } else {
           const raced = yield* getByName(name);
           if (raced === undefined) {
@@ -756,12 +646,7 @@ export const ConnectorProvider = () =>
             maxThroughput: news.maxThroughput ?? current.maxThroughput,
           },
         });
-        yield* waitForOperation(operation).pipe(
-          Effect.catchTag(
-            "GCP.VpcAccess.ConnectorOperationPending",
-            () => Effect.void,
-          ),
-        );
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);
       }
 
@@ -780,10 +665,10 @@ export const ConnectorProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag(
-            "GCP.VpcAccess.ConnectorOperationPending",
-            () => Effect.void,
+        // NOT_FOUND (5): the connector was already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
           ),
         );
       }

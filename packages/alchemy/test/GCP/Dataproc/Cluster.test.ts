@@ -14,7 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_DATAPROC && !process.env.FAST;
+// Cluster create + update + delete takes ~8 minutes (observed 475s).
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (
   projectId: string,
@@ -32,7 +33,7 @@ const waitUntilGone = (
   );
 
 test.provider(
-  "getProjectsRegionsClusters on a missing cluster fails with NotFound or Forbidden",
+  "getProjectsRegionsClusters on a missing cluster fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,18 +46,7 @@ test.provider(
           clusterName: "alchemy-dataproc-missing",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Dataproc API has not been used");
-      } else {
-        const page = yield* dataproc.listProjectsRegionsClusters({
-          projectId: project,
-          region: "us-central1",
-          pageSize: 10,
-        });
-        expect(Array.isArray(page.clusters ?? [])).toEqual(true);
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -130,5 +120,5 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 120_000 },
+  { timeout: 1_800_000 },
 );

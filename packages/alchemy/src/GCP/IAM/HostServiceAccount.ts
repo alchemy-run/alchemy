@@ -113,7 +113,7 @@ export const HostServiceAccountProvider = () =>
             Stream.map((account) => toAttrs(account, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as HostServiceAccount["Attributes"][]),
             ),
           );

@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -239,19 +240,6 @@ export class TransportFailed extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-export class TransportOperationFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.TransportOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class TransportOperationPending extends Data.TaggedError(
-  "GCP.NetworkConnectivity.TransportOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class TransportStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.TransportStillExists",
 )<{
@@ -403,94 +391,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsTransports({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: networkconnectivity.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new TransportOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new TransportOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = networkconnectivity.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies networkconnectivity.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new TransportOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new TransportOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.NetworkConnectivity.TransportOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
-
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
   state === "DELETING" ||
@@ -552,7 +452,6 @@ const listOwnedTransports = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (

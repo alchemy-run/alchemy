@@ -22,7 +22,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_SQL && !process.env.FAST;
+// Cloud SQL instances take well over 5 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (project: string, instance: string) =>
   sqladmin.getInstances({ project, instance }).pipe(
@@ -46,7 +47,9 @@ test.provider(
         project,
         maxResults: 10,
       });
-      expect(Array.isArray(page.items ?? [])).toEqual(true);
+      expect((page.items ?? []).map((instance) => instance.name)).not.toContain(
+        "alchemy-sql-instance-does-not-exist",
+      );
 
       const error = yield* Effect.flip(
         sqladmin.getInstances({
@@ -125,5 +128,6 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.project, created.instanceName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 120_000 },
+  // Create 5–15 minutes, label patch, delete a few minutes.
+  { timeout: 2_400_000, retry: 0 },
 );

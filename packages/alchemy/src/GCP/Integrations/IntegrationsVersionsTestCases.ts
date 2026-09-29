@@ -155,11 +155,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsIntegrationsVersionsTestCases({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsIntegrationsVersionsTestCases
@@ -171,7 +167,6 @@ const listAt = (parent: string, project: string, region: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (parent: string, id: string) =>
@@ -187,7 +182,6 @@ const findOwned = (parent: string, id: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 const listWildcard = (project: string, location: string) =>

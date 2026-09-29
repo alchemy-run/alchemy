@@ -19,7 +19,6 @@ import {
   parseName,
   replaceOnIdentity,
   ResourceNotResolved,
-  retryTransient,
   serviceAccountName,
   stringMap,
   toPhysicalId,
@@ -400,8 +399,8 @@ export const PreviewProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* retryTransient(
-          config.createProjectsLocationsPreviews({
+        const created = yield* config
+          .createProjectsLocationsPreviews({
             parent: parentOf(env.project, location),
             previewId,
             body: {
@@ -416,13 +415,10 @@ export const PreviewProvider = () =>
               annotations: desiredAnnotations,
               labels: desiredLabels,
             },
-          }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, {
-            times: 10,
-            interval: "5 seconds",
-          });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -435,18 +431,18 @@ export const PreviewProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* retryTransient(
-        config.deleteProjectsLocationsPreviews({
+      const operation = yield* config
+        .deleteProjectsLocationsPreviews({
           name: output.name,
-        }),
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      );
+        })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "Conflict",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

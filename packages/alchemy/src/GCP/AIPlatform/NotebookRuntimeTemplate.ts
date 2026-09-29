@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
@@ -93,11 +88,13 @@ export type NotebookRuntimeTemplateProps = {
    */
   displayName?: string;
   /**
-   * Human-readable description.
+   * Human-readable description. Vertex AI cannot update it, so changing
+   * it replaces the template.
    */
   description?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Vertex AI cannot update them, so changing them replaces the template.
    */
   labels?: Record<string, string>;
   /**
@@ -184,8 +181,9 @@ export type NotebookRuntimeTemplate = Resource<
  * A Vertex AI notebook runtime template — machine, disk, network, and
  * software defaults used to create Colab Enterprise runtimes.
  *
- * Changing `notebookRuntimeTemplateId`, `location`, `machineSpec`,
- * `notebookRuntimeType`, or `shieldedVmConfig` replaces the template.
+ * Only `displayName` and `softwareConfig` update in place; changing
+ * `notebookRuntimeTemplateId`, `location`, `machineSpec`,
+ * `notebookRuntimeType`, `description`, or `labels` replaces the template.
  *
  * ### Creating a Template
  * **Example:** Generated name
@@ -323,7 +321,11 @@ export const NotebookRuntimeTemplateProvider = () =>
           nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousMachine !== undefined && previousMachine !== nextMachine) ||
-        (olds?.notebookRuntimeType !== undefined && typeChanged);
+        (olds?.notebookRuntimeType !== undefined && typeChanged) ||
+        (olds !== undefined &&
+          ((news.description ?? "") !== (olds.description ?? "") ||
+            JSON.stringify(news.labels ?? {}) !==
+              JSON.stringify(olds.labels ?? {})));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -366,10 +368,7 @@ export const NotebookRuntimeTemplateProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.notebookRuntimeTemplates ?? [])
@@ -438,48 +437,29 @@ export const NotebookRuntimeTemplateProvider = () =>
       }
 
       const observedName = current.name ?? name;
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
+      // Only display name and software config are updatable; label and
+      // description changes replace the template (see `diff`).
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const softwareChanged = !jsonEqual(
-        current.softwareConfig,
-        news.softwareConfig,
-      );
+      const softwareChanged =
+        news.softwareConfig !== undefined &&
+        !jsonEqual(current.softwareConfig, news.softwareConfig);
 
-      if (labelsChanged || displayChanged || softwareChanged) {
+      if (displayChanged || softwareChanged) {
         const updateMask = [
-          labelsChanged ? "labels" : undefined,
           displayChanged ? "display_name" : undefined,
           softwareChanged ? "software_config" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const patched = yield* aiplatform
-          .patchProjectsLocationsNotebookRuntimeTemplates({
+        const patched =
+          yield* aiplatform.patchProjectsLocationsNotebookRuntimeTemplates({
             name: observedName,
             updateMask: updateMask.join(","),
             body: {
               name: observedName,
               displayName,
-              labels: desiredLabels,
               softwareConfig: news.softwareConfig,
               etag: current.etag,
             },
-          })
-          .pipe(
-            Effect.catchTag("BadRequest", () =>
-              displayChanged
-                ? aiplatform.patchProjectsLocationsNotebookRuntimeTemplates({
-                    name: observedName,
-                    updateMask: "display_name",
-                    body: {
-                      name: observedName,
-                      displayName,
-                      etag: current?.etag,
-                    },
-                  })
-                : Effect.succeed(current),
-            ),
-          );
+          });
         current = patched ?? current;
       }
 

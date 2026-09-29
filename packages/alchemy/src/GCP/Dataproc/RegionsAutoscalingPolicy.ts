@@ -16,6 +16,7 @@ import {
 import type { Providers } from "../Providers.ts";
 import type { AutoscalingPolicyProps } from "./AutoscalingPolicy.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
   MAX_POLICY_ID_LENGTH,
   defaultWorkerConfig,
@@ -155,18 +156,19 @@ const getByName = (name: string) =>
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsRegionsAutoscalingPolicies({
+    collectPages(
+      dataproc.listProjectsRegionsAutoscalingPolicies.pages({
         parent: regionParent(project, region),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.policies ?? [])
-            .filter((policy) => hasAlchemyLabelMap(policy.labels))
-            .map((policy) => toAttrs(policy, project, region)),
-        ),
+      }),
+      (page) => page.policies,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((policy) => hasAlchemyLabelMap(policy.labels))
+          .map((policy) => toAttrs(policy, project, region)),
       ),
+    ),
   );
 
 const policyChanged = (

@@ -24,7 +24,6 @@ export default class Monitor extends GCP.Function<Monitor>()(
   "Monitor",
   {
     main: import.meta.url,
-    location: "us-central1",
     // Opens `GET /heartbeats`. The schedule routes still reject any
     // request without a valid token from Cloud Scheduler.
     invokerIamDisabled: true,

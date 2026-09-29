@@ -14,9 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !!process.env.GCP_TEST_INSTANT_SNAPSHOT_GROUP && !process.env.FAST;
-
 const zone = "us-central1-a";
 
 const waitUntilGone = (
@@ -41,12 +38,12 @@ const waitUntilGone = (
     );
 
 test.provider(
-  "probe insertInstantSnapshotGroups entitlement",
+  "insertInstantSnapshotGroups with a malformed consistency group fails with BadRequest",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInstantSnapshotGroups({
+      const error = yield* Effect.flip(
+        compute.insertInstantSnapshotGroups({
           project,
           zone,
           sourceConsistencyGroup: "does-not-exist",
@@ -55,44 +52,14 @@ test.provider(
             description: "alchemy entitlement probe",
             sourceConsistencyGroup: "does-not-exist",
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInstantSnapshotGroups({
-            project,
-            zone,
-            instantSnapshotGroup: "alchemy-isg-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete an instant snapshot group",
   (stack) =>
     Effect.gen(function* () {

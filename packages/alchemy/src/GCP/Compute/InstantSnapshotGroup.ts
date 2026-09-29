@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -110,14 +110,6 @@ export class InstantSnapshotGroupNotResolved extends Data.TaggedError(
 )<{
   instantSnapshotGroupName: string;
   zone: string;
-}> {}
-
-export class InstantSnapshotGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstantSnapshotGroupOperationFailed",
-)<{
-  instantSnapshotGroupName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class InstantSnapshotGroupNotReady extends Data.TaggedError(
@@ -233,60 +225,6 @@ const getByName = (
   compute
     .getInstantSnapshotGroups({ project, zone, instantSnapshotGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const failIfErrored = (
-  instantSnapshotGroupName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new InstantSnapshotGroupOperationFailed({
-        instantSnapshotGroupName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  instantSnapshotGroupName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && operationName) {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(instantSnapshotGroupName, current);
-  });
 
 const waitReady = (
   project: string,
@@ -430,7 +368,6 @@ export const InstantSnapshotGroupProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
           { concurrency: 4 },
         );
@@ -472,12 +409,9 @@ export const InstantSnapshotGroupProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(
-                env.project,
-                zone,
-                instantSnapshotGroupName,
-                operation,
-              ),
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -516,12 +450,9 @@ export const InstantSnapshotGroupProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.instantSnapshotGroupName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
       yield* waitGone(env.project, zone, output.instantSnapshotGroupName);
     }),

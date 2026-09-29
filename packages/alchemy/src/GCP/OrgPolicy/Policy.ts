@@ -432,7 +432,7 @@ const listPolicies = (parent: string) =>
     const kind = parentKindOf(parent);
     const found: orgpolicy.GoogleCloudOrgpolicyV2Policy[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const request = { parent, pageSize: 1000, pageToken };
       const response =
         kind === "folders"
@@ -442,11 +442,10 @@ const listPolicies = (parent: string) =>
             : yield* orgpolicy.listProjectsPolicies(request);
       found.push(...(response.policies ?? []));
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as orgpolicy.GoogleCloudOrgpolicyV2Policy[]),
     ),
   );

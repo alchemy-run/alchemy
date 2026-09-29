@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -187,14 +187,6 @@ export class ResourcePolicyNotResolved extends Data.TaggedError(
 )<{
   resourcePolicyName: string;
   region: string;
-}> {}
-
-export class ResourcePolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ResourcePolicyOperationFailed",
-)<{
-  resourcePolicyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class ResourcePolicyNotReady extends Data.TaggedError(
@@ -473,100 +465,6 @@ const getByName = (project: string, region: string, resourcePolicy: string) =>
     .getResourcePolicies({ project, region, resourcePolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (
-  resourcePolicyName: string,
-  operation: compute.Operation,
-) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new ResourcePolicyOperationFailed({
-        resourcePolicyName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitRegionOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  resourcePolicyName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(resourcePolicyName, operation);
-      return operation;
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: operationName,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-    yield* failIfErrored(resourcePolicyName, current);
-    return current;
-  });
-
 const waitPolicyReady = (
   project: string,
   region: string,
@@ -731,12 +629,9 @@ export const ResourcePolicyProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitRegionOperation(
-            env.project,
-            region,
-            inserted,
-            resourcePolicyName,
-          );
+          yield* waitRegionOperation(env.project, region, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitPolicyReady(
           env.project,
@@ -785,12 +680,7 @@ export const ResourcePolicyProvider = () =>
           resourcePolicy: resourcePolicyName,
           body: desired,
         });
-        yield* waitRegionOperation(
-          env.project,
-          region,
-          patched,
-          resourcePolicyName,
-        );
+        yield* waitRegionOperation(env.project, region, patched);
         current =
           (yield* getByName(env.project, region, resourcePolicyName)) ??
           (yield* waitPolicyReady(env.project, region, resourcePolicyName));
@@ -825,19 +715,9 @@ export const ResourcePolicyProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitRegionOperation(
-          project,
-          region,
-          deleted,
-          output.resourcePolicyName,
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof ResourcePolicyOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitRegionOperation(project, region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitPolicyGone(project, region, output.resourcePolicyName);
     }),

@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -24,7 +25,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a glossary term",
   (stack) =>
     Effect.gen(function* () {
@@ -92,6 +93,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.term.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { timeout: 900_000 },
 );

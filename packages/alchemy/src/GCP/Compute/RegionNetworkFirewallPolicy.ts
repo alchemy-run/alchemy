@@ -1,5 +1,6 @@
+import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -153,14 +154,6 @@ export class RegionNetworkFirewallPolicyNotResolved extends Data.TaggedError(
 )<{
   firewallPolicyName: string;
   region: string;
-}> {}
-
-export class RegionNetworkFirewallPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionNetworkFirewallPolicyOperationFailed",
-)<{
-  firewallPolicyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class RegionNetworkFirewallPolicyStillExists extends Data.TaggedError(
@@ -348,110 +341,10 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) =>
-    (item.code ?? "").toUpperCase(),
-  );
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const isAlreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    codes.includes("ALREADY_EXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    text.includes("already exists")
-  );
-};
-
-const isNotFoundOperation = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    operation.httpErrorStatusCode === 404 ||
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  );
-};
-
-const failIfErrored = (
-  firewallPolicyName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.void;
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionNetworkFirewallPolicyOperationFailed({
-        firewallPolicyName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, region: string, firewallPolicy: string) =>
   compute
     .getRegionNetworkFirewallPolicies({ project, region, firewallPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  firewallPolicyName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new RegionNetworkFirewallPolicyOperationFailed({
-        firewallPolicyName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(firewallPolicyName, current, options);
-    return current;
-  });
 
 const awaitResource = (
   project: string,
@@ -514,7 +407,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, region, operation, firewallPolicyName, options),
+      waitRegionOperation(project, region, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -686,7 +581,7 @@ export const RegionNetworkFirewallPolicyProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.firewallPolicies ?? [])
@@ -719,13 +614,9 @@ export const RegionNetworkFirewallPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                firewallPolicyName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
@@ -795,13 +686,9 @@ export const RegionNetworkFirewallPolicyProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.firewallPolicyName,
-              { ignoreNotFound: true },
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

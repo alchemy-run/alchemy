@@ -76,15 +76,15 @@ import { Table, TableProvider } from "./BigQuery/Table.ts";
 import {
   Catalog as BiglakeCatalog,
   CatalogProvider as BiglakeCatalogProvider,
-} from "./Biglake/Catalog.ts";
+} from "./BigLake/Catalog.ts";
 import {
   CatalogsDatabase,
   CatalogsDatabaseProvider,
-} from "./Biglake/CatalogsDatabase.ts";
+} from "./BigLake/CatalogsDatabase.ts";
 import {
   CatalogsDatabasesTable,
   CatalogsDatabasesTableProvider,
-} from "./Biglake/CatalogsDatabasesTable.ts";
+} from "./BigLake/CatalogsDatabasesTable.ts";
 import { StartManualRunsHttp } from "./BigQueryDataTransfer/StartManualRunsHttp.ts";
 import {
   TransferConfig,
@@ -93,7 +93,7 @@ import {
 import {
   BillingBudget,
   BillingBudgetProvider,
-} from "./Billingbudgets/BillingBudget.ts";
+} from "./BillingBudgets/BillingBudget.ts";
 import {
   Connection as BigQueryConnection,
   ConnectionProvider as BigQueryConnectionProvider,
@@ -114,7 +114,7 @@ import {
 import {
   DataPolicy,
   DataPolicyProvider,
-} from "./Bigquerydatapolicy/DataPolicy.ts";
+} from "./BigQueryDataPolicy/DataPolicy.ts";
 import { Channel, ChannelProvider } from "./Eventarc/Channel.ts";
 import {
   ChannelConnection,
@@ -131,15 +131,15 @@ import { Trigger, TriggerProvider } from "./Eventarc/Trigger.ts";
 import {
   Contact as EssentialcontactsContact,
   ContactProvider as EssentialcontactsContactProvider,
-} from "./Essentialcontacts/Contact.ts";
+} from "./EssentialContacts/Contact.ts";
 import {
   FolderContact,
   FolderContactProvider,
-} from "./Essentialcontacts/FolderContact.ts";
+} from "./EssentialContacts/FolderContact.ts";
 import {
   OrganizationContact,
   OrganizationContactProvider,
-} from "./Essentialcontacts/OrganizationContact.ts";
+} from "./EssentialContacts/OrganizationContact.ts";
 import {
   Connection as CloudBuildConnection,
   ConnectionProvider as CloudBuildConnectionProvider,
@@ -201,37 +201,37 @@ import { NodePool, NodePoolProvider } from "./Container/NodePool.ts";
 import {
   Note as ContaineranalysisNote,
   NoteProvider as ContaineranalysisNoteProvider,
-} from "./Containeranalysis/Note.ts";
+} from "./ContainerAnalysis/Note.ts";
 import {
   Occurrence as ContaineranalysisOccurrence,
   OccurrenceProvider as ContaineranalysisOccurrenceProvider,
-} from "./Containeranalysis/Occurrence.ts";
+} from "./ContainerAnalysis/Occurrence.ts";
 import {
   LocationsNote,
   LocationsNoteProvider,
-} from "./Containeranalysis/LocationsNote.ts";
+} from "./ContainerAnalysis/LocationsNote.ts";
 import {
   LocationsOccurrence,
   LocationsOccurrenceProvider,
-} from "./Containeranalysis/LocationsOccurrence.ts";
-import { GetNoteHttp } from "./Containeranalysis/GetNoteHttp.ts";
-import { GetOccurrenceHttp } from "./Containeranalysis/GetOccurrenceHttp.ts";
+} from "./ContainerAnalysis/LocationsOccurrence.ts";
+import { GetNoteHttp } from "./ContainerAnalysis/GetNoteHttp.ts";
+import { GetOccurrenceHttp } from "./ContainerAnalysis/GetOccurrenceHttp.ts";
 import {
   Attestor as BinaryauthorizationAttestor,
   AttestorProvider as BinaryauthorizationAttestorProvider,
-} from "./Binaryauthorization/Attestor.ts";
+} from "./BinaryAuthorization/Attestor.ts";
 import {
   PlatformsPolicy,
   PlatformsPolicyProvider,
-} from "./Binaryauthorization/PlatformsPolicy.ts";
-import { GetAttestorHttp } from "./Binaryauthorization/GetAttestorHttp.ts";
-import { GetPlatformsPolicyHttp } from "./Binaryauthorization/GetPlatformsPolicyHttp.ts";
-import { ValidateAttestationHttp } from "./Binaryauthorization/ValidateAttestationHttp.ts";
-import { EvaluateGkePolicyHttp } from "./Binaryauthorization/EvaluateGkePolicyHttp.ts";
+} from "./BinaryAuthorization/PlatformsPolicy.ts";
+import { GetAttestorHttp } from "./BinaryAuthorization/GetAttestorHttp.ts";
+import { GetPlatformsPolicyHttp } from "./BinaryAuthorization/GetPlatformsPolicyHttp.ts";
+import { ValidateAttestationHttp } from "./BinaryAuthorization/ValidateAttestationHttp.ts";
+import { EvaluateGkePolicyHttp } from "./BinaryAuthorization/EvaluateGkePolicyHttp.ts";
 import {
   BlockchainNode,
   BlockchainNodeProvider,
-} from "./Blockchainnodeengine/BlockchainNode.ts";
+} from "./BlockchainNodeEngine/BlockchainNode.ts";
 import { Address, AddressProvider } from "./Compute/Address.ts";
 import {
   RegionNetworkEndpointGroup,
@@ -553,9 +553,9 @@ import {
   DatabasesBackupScheduleProvider,
 } from "./Firestore/DatabasesBackupSchedule.ts";
 import {
-  DatabasesCollectionGroupsIndexe,
-  DatabasesCollectionGroupsIndexeProvider,
-} from "./Firestore/DatabasesCollectionGroupsIndexe.ts";
+  DatabasesCollectionGroupsIndex,
+  DatabasesCollectionGroupsIndexProvider,
+} from "./Firestore/DatabasesCollectionGroupsIndex.ts";
 import {
   DatabasesUserCred,
   DatabasesUserCredProvider,
@@ -566,54 +566,54 @@ import { PatchDocumentHttp } from "./Firestore/PatchDocumentHttp.ts";
 import {
   Backend as FirebaseapphostingBackend,
   BackendProvider as FirebaseapphostingBackendProvider,
-} from "./Firebaseapphosting/Backend.ts";
+} from "./FirebaseAppHosting/Backend.ts";
 import {
   BackendsBuild,
   BackendsBuildProvider,
-} from "./Firebaseapphosting/BackendsBuild.ts";
+} from "./FirebaseAppHosting/BackendsBuild.ts";
 import {
   BackendsDomain,
   BackendsDomainProvider,
-} from "./Firebaseapphosting/BackendsDomain.ts";
+} from "./FirebaseAppHosting/BackendsDomain.ts";
 import {
   AppsDebugToken,
   AppsDebugTokenProvider,
-} from "./Firebaseappcheck/AppsDebugToken.ts";
-import { ExchangeDebugTokenHttp } from "./Firebaseappcheck/ExchangeDebugTokenHttp.ts";
+} from "./FirebaseAppCheck/AppsDebugToken.ts";
+import { ExchangeDebugTokenHttp } from "./FirebaseAppCheck/ExchangeDebugTokenHttp.ts";
 import {
   ServicesResourcePolicy,
   ServicesResourcePolicyProvider,
-} from "./Firebaseappcheck/ServicesResourcePolicy.ts";
+} from "./FirebaseAppCheck/ServicesResourcePolicy.ts";
 import {
   Group as FirebaseappdistributionGroup,
   GroupProvider as FirebaseappdistributionGroupProvider,
-} from "./Firebaseappdistribution/Group.ts";
-import { ExecuteGraphqlHttp } from "./Firebasedataconnect/ExecuteGraphqlHttp.ts";
-import { ExecuteGraphqlReadHttp } from "./Firebasedataconnect/ExecuteGraphqlReadHttp.ts";
-import { ExecuteMutationHttp } from "./Firebasedataconnect/ExecuteMutationHttp.ts";
-import { ExecuteQueryHttp } from "./Firebasedataconnect/ExecuteQueryHttp.ts";
+} from "./FirebaseAppDistribution/Group.ts";
+import { ExecuteGraphqlHttp } from "./FirebaseDataConnect/ExecuteGraphqlHttp.ts";
+import { ExecuteGraphqlReadHttp } from "./FirebaseDataConnect/ExecuteGraphqlReadHttp.ts";
+import { ExecuteMutationHttp } from "./FirebaseDataConnect/ExecuteMutationHttp.ts";
+import { ExecuteQueryHttp } from "./FirebaseDataConnect/ExecuteQueryHttp.ts";
 import {
   Service as FirebasedataconnectService,
   ServiceProvider as FirebasedataconnectServiceProvider,
-} from "./Firebasedataconnect/Service.ts";
+} from "./FirebaseDataConnect/Service.ts";
 import {
   ServicesConnector,
   ServicesConnectorProvider,
-} from "./Firebasedataconnect/ServicesConnector.ts";
+} from "./FirebaseDataConnect/ServicesConnector.ts";
 import {
   ServicesSchema,
   ServicesSchemaProvider,
-} from "./Firebasedataconnect/ServicesSchema.ts";
+} from "./FirebaseDataConnect/ServicesSchema.ts";
 import {
   Release as FirebaserulesRelease,
   ReleaseProvider as FirebaserulesReleaseProvider,
-} from "./Firebaserules/Release.ts";
+} from "./FirebaseRules/Release.ts";
 import {
   Ruleset as FirebaserulesRuleset,
   RulesetProvider as FirebaserulesRulesetProvider,
-} from "./Firebaserules/Ruleset.ts";
-import { GetReleaseExecutableHttp } from "./Firebaserules/GetReleaseExecutableHttp.ts";
-import { TestRulesetHttp } from "./Firebaserules/TestRulesetHttp.ts";
+} from "./FirebaseRules/Ruleset.ts";
+import { GetReleaseExecutableHttp } from "./FirebaseRules/GetReleaseExecutableHttp.ts";
+import { TestRulesetHttp } from "./FirebaseRules/TestRulesetHttp.ts";
 import { fromCredentials } from "./Environment.ts";
 import { AcknowledgeHttp } from "./PubSub/AcknowledgeHttp.ts";
 import { GetSchemaHttp } from "./PubSub/GetSchemaHttp.ts";
@@ -630,18 +630,18 @@ import { ValidateMessageHttp } from "./PubSub/ValidateMessageHttp.ts";
 import {
   AdminReservation,
   AdminReservationProvider,
-} from "./Pubsublite/AdminReservation.ts";
+} from "./PubSubLite/AdminReservation.ts";
 import {
   AdminSubscription,
   AdminSubscriptionProvider,
-} from "./Pubsublite/AdminSubscription.ts";
-import { AdminTopic, AdminTopicProvider } from "./Pubsublite/AdminTopic.ts";
-import { CommitCursorHttp } from "./Pubsublite/CommitCursorHttp.ts";
-import { ComputeHeadCursorHttp } from "./Pubsublite/ComputeHeadCursorHttp.ts";
-import { GetPartitionsHttp } from "./Pubsublite/GetPartitionsHttp.ts";
-import { GetReservationHttp as GetPubsubliteReservationHttp } from "./Pubsublite/GetReservationHttp.ts";
-import { GetSubscriptionHttp as GetPubsubliteSubscriptionHttp } from "./Pubsublite/GetSubscriptionHttp.ts";
-import { GetTopicHttp as GetPubsubliteTopicHttp } from "./Pubsublite/GetTopicHttp.ts";
+} from "./PubSubLite/AdminSubscription.ts";
+import { AdminTopic, AdminTopicProvider } from "./PubSubLite/AdminTopic.ts";
+import { CommitCursorHttp } from "./PubSubLite/CommitCursorHttp.ts";
+import { ComputeHeadCursorHttp } from "./PubSubLite/ComputeHeadCursorHttp.ts";
+import { GetPartitionsHttp } from "./PubSubLite/GetPartitionsHttp.ts";
+import { GetReservationHttp as GetPubsubliteReservationHttp } from "./PubSubLite/GetReservationHttp.ts";
+import { GetSubscriptionHttp as GetPubsubliteSubscriptionHttp } from "./PubSubLite/GetSubscriptionHttp.ts";
+import { GetTopicHttp as GetPubsubliteTopicHttp } from "./PubSubLite/GetTopicHttp.ts";
 import { CryptoKey, CryptoKeyProvider } from "./KMS/CryptoKey.ts";
 import {
   CryptoKeyVersion,
@@ -753,14 +753,14 @@ import {
   LocationsSecretProvider,
 } from "./SecretManager/LocationsSecret.ts";
 import { Secret, SecretProvider } from "./SecretManager/Secret.ts";
-import { GetParameterHttp } from "./Parametermanager/GetParameterHttp.ts";
-import { GetParameterVersionHttp } from "./Parametermanager/GetParameterVersionHttp.ts";
-import { Parameter, ParameterProvider } from "./Parametermanager/Parameter.ts";
+import { GetParameterHttp } from "./ParameterManager/GetParameterHttp.ts";
+import { GetParameterVersionHttp } from "./ParameterManager/GetParameterVersionHttp.ts";
+import { Parameter, ParameterProvider } from "./ParameterManager/Parameter.ts";
 import {
   ParametersVersion,
   ParametersVersionProvider,
-} from "./Parametermanager/ParametersVersion.ts";
-import { RenderParameterVersionHttp } from "./Parametermanager/RenderParameterVersionHttp.ts";
+} from "./ParameterManager/ParametersVersion.ts";
+import { RenderParameterVersionHttp } from "./ParameterManager/RenderParameterVersionHttp.ts";
 import { TagValue, TagValueProvider } from "./ResourceManager/TagValue.ts";
 import { Bucket, BucketProvider } from "./Storage/Bucket.ts";
 import {
@@ -786,13 +786,13 @@ import {
 import { DeleteObjectHttp } from "./Storage/DeleteObjectHttp.ts";
 import { GetObjectHttp } from "./Storage/GetObjectHttp.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
-import { AgentPool, AgentPoolProvider } from "./Storagetransfer/AgentPool.ts";
-import { GetGoogleServiceAccountHttp } from "./Storagetransfer/GetGoogleServiceAccountHttp.ts";
-import { RunTransferJobHttp } from "./Storagetransfer/RunTransferJobHttp.ts";
+import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
+import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
+import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
 import {
   TransferJob,
   TransferJobProvider,
-} from "./Storagetransfer/TransferJob.ts";
+} from "./StorageTransfer/TransferJob.ts";
 import { GetAclPolicyHttp } from "./Redis/GetAclPolicyHttp.ts";
 import { GetAuthStringHttp } from "./Redis/GetAuthStringHttp.ts";
 import { GetInstanceHttp as GetRedisInstanceHttp } from "./Redis/GetInstanceHttp.ts";
@@ -809,14 +809,14 @@ import {
   Instance as MemcacheInstance,
   InstanceProvider as MemcacheInstanceProvider,
 } from "./Memcache/Instance.ts";
-import { GetModelHttp as GetMlModelHttp } from "./Ml/GetModelHttp.ts";
-import { GetVersionHttp as GetMlVersionHttp } from "./Ml/GetVersionHttp.ts";
+import { GetModelHttp as GetMlModelHttp } from "./ML/GetModelHttp.ts";
+import { GetVersionHttp as GetMlVersionHttp } from "./ML/GetVersionHttp.ts";
 import {
   Model as MlModel,
   ModelProvider as MlModelProvider,
-} from "./Ml/Model.ts";
-import { ModelsVersion, ModelsVersionProvider } from "./Ml/ModelsVersion.ts";
-import { PredictHttp as PredictMlHttp } from "./Ml/PredictHttp.ts";
+} from "./ML/Model.ts";
+import { ModelsVersion, ModelsVersionProvider } from "./ML/ModelsVersion.ts";
+import { PredictHttp as PredictMlHttp } from "./ML/PredictHttp.ts";
 import { GetBackupHttp as GetFilestoreBackupHttp } from "./Filestore/GetBackupHttp.ts";
 import { GetInstanceHttp as GetFilestoreInstanceHttp } from "./Filestore/GetInstanceHttp.ts";
 import { GetInstancesSnapshotHttp as GetFilestoreInstancesSnapshotHttp } from "./Filestore/GetInstancesSnapshotHttp.ts";
@@ -832,52 +832,52 @@ import {
   InstancesSnapshot as FilestoreInstancesSnapshot,
   InstancesSnapshotProvider as FilestoreInstancesSnapshotProvider,
 } from "./Filestore/InstancesSnapshot.ts";
-import { GetNodeHttp as GetTpuNodeHttp } from "./Tpu/GetNodeHttp.ts";
-import { GetQueuedResourceHttp as GetTpuQueuedResourceHttp } from "./Tpu/GetQueuedResourceHttp.ts";
+import { GetNodeHttp as GetTpuNodeHttp } from "./TPU/GetNodeHttp.ts";
+import { GetQueuedResourceHttp as GetTpuQueuedResourceHttp } from "./TPU/GetQueuedResourceHttp.ts";
 import {
   Node as TpuNode,
   NodeProvider as TpuNodeProvider,
-} from "./Tpu/Node.ts";
+} from "./TPU/Node.ts";
 import {
   QueuedResource as TpuQueuedResource,
   QueuedResourceProvider as TpuQueuedResourceProvider,
-} from "./Tpu/QueuedResource.ts";
+} from "./TPU/QueuedResource.ts";
 import {
   ActiveDirectory as NetappActiveDirectory,
   ActiveDirectoryProvider as NetappActiveDirectoryProvider,
-} from "./Netapp/ActiveDirectory.ts";
+} from "./NetApp/ActiveDirectory.ts";
 import {
   BackupPolicy as NetappBackupPolicy,
   BackupPolicyProvider as NetappBackupPolicyProvider,
-} from "./Netapp/BackupPolicy.ts";
+} from "./NetApp/BackupPolicy.ts";
 import {
   BackupVault as NetappBackupVault,
   BackupVaultProvider as NetappBackupVaultProvider,
-} from "./Netapp/BackupVault.ts";
+} from "./NetApp/BackupVault.ts";
 import {
   BackupVaultsBackup as NetappBackupVaultsBackup,
   BackupVaultsBackupProvider as NetappBackupVaultsBackupProvider,
-} from "./Netapp/BackupVaultsBackup.ts";
+} from "./NetApp/BackupVaultsBackup.ts";
 import {
   HostGroup as NetappHostGroup,
   HostGroupProvider as NetappHostGroupProvider,
-} from "./Netapp/HostGroup.ts";
+} from "./NetApp/HostGroup.ts";
 import {
   KmsConfig as NetappKmsConfig,
   KmsConfigProvider as NetappKmsConfigProvider,
-} from "./Netapp/KmsConfig.ts";
+} from "./NetApp/KmsConfig.ts";
 import {
   StoragePool as NetappStoragePool,
   StoragePoolProvider as NetappStoragePoolProvider,
-} from "./Netapp/StoragePool.ts";
+} from "./NetApp/StoragePool.ts";
 import {
   Volume as NetappVolume,
   VolumeProvider as NetappVolumeProvider,
-} from "./Netapp/Volume.ts";
+} from "./NetApp/Volume.ts";
 import {
   VolumesQuotaRule as NetappVolumesQuotaRule,
   VolumesQuotaRuleProvider as NetappVolumesQuotaRuleProvider,
-} from "./Netapp/VolumesQuotaRule.ts";
+} from "./NetApp/VolumesQuotaRule.ts";
 import { GetInstanceHttp as GetSpannerInstanceHttp } from "./Spanner/GetInstanceHttp.ts";
 import { ExecuteSqlHttp as SpannerExecuteSqlHttp } from "./Spanner/ExecuteSqlHttp.ts";
 import { GetDdlHttp as SpannerGetDdlHttp } from "./Spanner/GetDdlHttp.ts";
@@ -929,56 +929,56 @@ import {
 import {
   GoldengateDeployment,
   GoldengateDeploymentProvider,
-} from "./Oracledatabase/GoldengateDeployment.ts";
-import { OdbNetwork, OdbNetworkProvider } from "./Oracledatabase/OdbNetwork.ts";
+} from "./OracleDatabase/GoldengateDeployment.ts";
+import { OdbNetwork, OdbNetworkProvider } from "./OracleDatabase/OdbNetwork.ts";
 import {
   OdbNetworksOdbSubnet,
   OdbNetworksOdbSubnetProvider,
-} from "./Oracledatabase/OdbNetworksOdbSubnet.ts";
+} from "./OracleDatabase/OdbNetworksOdbSubnet.ts";
 import {
   AutonomousDatabase,
   AutonomousDatabaseProvider,
-} from "./Oracledatabase/AutonomousDatabase.ts";
+} from "./OracleDatabase/AutonomousDatabase.ts";
 import {
   CloudExadataInfrastructure,
   CloudExadataInfrastructureProvider,
-} from "./Oracledatabase/CloudExadataInfrastructure.ts";
+} from "./OracleDatabase/CloudExadataInfrastructure.ts";
 import {
   CloudVmCluster,
   CloudVmClusterProvider,
-} from "./Oracledatabase/CloudVmCluster.ts";
-import { DbSystem, DbSystemProvider } from "./Oracledatabase/DbSystem.ts";
+} from "./OracleDatabase/CloudVmCluster.ts";
+import { DbSystem, DbSystemProvider } from "./OracleDatabase/DbSystem.ts";
 import {
   ExadbVmCluster,
   ExadbVmClusterProvider,
-} from "./Oracledatabase/ExadbVmCluster.ts";
+} from "./OracleDatabase/ExadbVmCluster.ts";
 import {
   ExascaleDbStorageVault,
   ExascaleDbStorageVaultProvider,
-} from "./Oracledatabase/ExascaleDbStorageVault.ts";
+} from "./OracleDatabase/ExascaleDbStorageVault.ts";
 import {
   GoldengateConnection,
   GoldengateConnectionProvider,
-} from "./Oracledatabase/GoldengateConnection.ts";
+} from "./OracleDatabase/GoldengateConnection.ts";
 import {
   GoldengateConnectionAssignment,
   GoldengateConnectionAssignmentProvider,
-} from "./Oracledatabase/GoldengateConnectionAssignment.ts";
-import { GetAutonomousDatabaseHttp } from "./Oracledatabase/GetAutonomousDatabaseHttp.ts";
-import { GenerateWalletHttp } from "./Oracledatabase/GenerateWalletHttp.ts";
-import { StartAutonomousDatabaseHttp } from "./Oracledatabase/StartAutonomousDatabaseHttp.ts";
-import { StopAutonomousDatabaseHttp } from "./Oracledatabase/StopAutonomousDatabaseHttp.ts";
-import { RestartAutonomousDatabaseHttp } from "./Oracledatabase/RestartAutonomousDatabaseHttp.ts";
-import { GetCloudExadataInfrastructureHttp } from "./Oracledatabase/GetCloudExadataInfrastructureHttp.ts";
-import { GetCloudVmClusterHttp } from "./Oracledatabase/GetCloudVmClusterHttp.ts";
-import { GetDbSystemHttp } from "./Oracledatabase/GetDbSystemHttp.ts";
-import { GetExadbVmClusterHttp } from "./Oracledatabase/GetExadbVmClusterHttp.ts";
-import { GetExascaleDbStorageVaultHttp } from "./Oracledatabase/GetExascaleDbStorageVaultHttp.ts";
-import { GetGoldengateConnectionHttp } from "./Oracledatabase/GetGoldengateConnectionHttp.ts";
-import { GetGoldengateConnectionAssignmentHttp } from "./Oracledatabase/GetGoldengateConnectionAssignmentHttp.ts";
-import { GetGoldengateDeploymentHttp } from "./Oracledatabase/GetGoldengateDeploymentHttp.ts";
-import { GetOdbNetworkHttp } from "./Oracledatabase/GetOdbNetworkHttp.ts";
-import { GetOdbNetworksOdbSubnetHttp } from "./Oracledatabase/GetOdbNetworksOdbSubnetHttp.ts";
+} from "./OracleDatabase/GoldengateConnectionAssignment.ts";
+import { GetAutonomousDatabaseHttp } from "./OracleDatabase/GetAutonomousDatabaseHttp.ts";
+import { GenerateWalletHttp } from "./OracleDatabase/GenerateWalletHttp.ts";
+import { StartAutonomousDatabaseHttp } from "./OracleDatabase/StartAutonomousDatabaseHttp.ts";
+import { StopAutonomousDatabaseHttp } from "./OracleDatabase/StopAutonomousDatabaseHttp.ts";
+import { RestartAutonomousDatabaseHttp } from "./OracleDatabase/RestartAutonomousDatabaseHttp.ts";
+import { GetCloudExadataInfrastructureHttp } from "./OracleDatabase/GetCloudExadataInfrastructureHttp.ts";
+import { GetCloudVmClusterHttp } from "./OracleDatabase/GetCloudVmClusterHttp.ts";
+import { GetDbSystemHttp } from "./OracleDatabase/GetDbSystemHttp.ts";
+import { GetExadbVmClusterHttp } from "./OracleDatabase/GetExadbVmClusterHttp.ts";
+import { GetExascaleDbStorageVaultHttp } from "./OracleDatabase/GetExascaleDbStorageVaultHttp.ts";
+import { GetGoldengateConnectionHttp } from "./OracleDatabase/GetGoldengateConnectionHttp.ts";
+import { GetGoldengateConnectionAssignmentHttp } from "./OracleDatabase/GetGoldengateConnectionAssignmentHttp.ts";
+import { GetGoldengateDeploymentHttp } from "./OracleDatabase/GetGoldengateDeploymentHttp.ts";
+import { GetOdbNetworkHttp } from "./OracleDatabase/GetOdbNetworkHttp.ts";
+import { GetOdbNetworksOdbSubnetHttp } from "./OracleDatabase/GetOdbNetworksOdbSubnetHttp.ts";
 import { GetInstanceHttp as GetBigtableInstanceHttp } from "./Bigtable/GetInstanceHttp.ts";
 import { GetClusterHttp as GetBigtableClusterHttp } from "./Bigtable/GetClusterHttp.ts";
 import { GetTableHttp as GetBigtableTableHttp } from "./Bigtable/GetTableHttp.ts";
@@ -1027,9 +1027,9 @@ import {
   AutoscalingPolicyProvider as DataprocAutoscalingPolicyProvider,
 } from "./Dataproc/AutoscalingPolicy.ts";
 import {
-  Batche as DataprocBatche,
-  BatcheProvider as DataprocBatcheProvider,
-} from "./Dataproc/Batche.ts";
+  Batch as DataprocBatche,
+  BatchProvider as DataprocBatcheProvider,
+} from "./Dataproc/Batch.ts";
 import {
   RegionsAutoscalingPolicy as DataprocRegionsAutoscalingPolicy,
   RegionsAutoscalingPolicyProvider as DataprocRegionsAutoscalingPolicyProvider,
@@ -1104,12 +1104,12 @@ import {
   LakesEntitiesPartitionProvider,
 } from "./Dataplex/LakesEntitiesPartition.ts";
 import { MetadataFeed, MetadataFeedProvider } from "./Dataplex/MetadataFeed.ts";
-import { TagTemplate, TagTemplateProvider } from "./Datacatalog/TagTemplate.ts";
-import { Taxonomy, TaxonomyProvider } from "./Datacatalog/Taxonomy.ts";
+import { TagTemplate, TagTemplateProvider } from "./DataCatalog/TagTemplate.ts";
+import { Taxonomy, TaxonomyProvider } from "./DataCatalog/Taxonomy.ts";
 import {
   TaxonomiesPolicyTag,
   TaxonomiesPolicyTagProvider,
-} from "./Datacatalog/TaxonomiesPolicyTag.ts";
+} from "./DataCatalog/TaxonomiesPolicyTag.ts";
 import { GetClusterHttp as GetDataprocClusterHttp } from "./Dataproc/GetClusterHttp.ts";
 import { SubmitJobHttp as DataprocSubmitJobHttp } from "./Dataproc/SubmitJobHttp.ts";
 import { ExecuteSqlHttp } from "./SQL/ExecuteSqlHttp.ts";
@@ -1132,9 +1132,9 @@ import {
   UserProvider as SqlUserProvider,
 } from "./SQL/User.ts";
 import {
-  BackupBackup as SqlBackupBackup,
-  BackupBackupProvider as SqlBackupBackupProvider,
-} from "./SQL/BackupBackup.ts";
+  Backup as SqlBackupBackup,
+  BackupProvider as SqlBackupBackupProvider,
+} from "./SQL/Backup.ts";
 import {
   BackupRun as SqlBackupRun,
   BackupRunProvider as SqlBackupRunProvider,
@@ -1162,7 +1162,7 @@ import { ResolveHttp as ServiceDirectoryResolveHttp } from "./ServiceDirectory/R
 import {
   Service as ServicemanagementService,
   ServiceProvider as ServicemanagementServiceProvider,
-} from "./Servicemanagement/Service.ts";
+} from "./ServiceManagement/Service.ts";
 import { TagKey, TagKeyProvider } from "./ResourceManager/TagKey.ts";
 import {
   TagBinding,
@@ -1182,16 +1182,16 @@ import { GetKeyStringHttp } from "./ApiKeys/GetKeyStringHttp.ts";
 import {
   Key as RecaptchaenterpriseKey,
   KeyProvider as RecaptchaenterpriseKeyProvider,
-} from "./Recaptchaenterprise/Key.ts";
+} from "./RecaptchaEnterprise/Key.ts";
 import {
   Firewallpolicy as RecaptchaenterpriseFirewallpolicy,
   FirewallpolicyProvider as RecaptchaenterpriseFirewallpolicyProvider,
-} from "./Recaptchaenterprise/Firewallpolicy.ts";
-import { CreateAssessmentHttp as RecaptchaenterpriseCreateAssessmentHttp } from "./Recaptchaenterprise/CreateAssessmentHttp.ts";
+} from "./RecaptchaEnterprise/Firewallpolicy.ts";
+import { CreateAssessmentHttp as RecaptchaenterpriseCreateAssessmentHttp } from "./RecaptchaEnterprise/CreateAssessmentHttp.ts";
 import {
   Binding as AgentregistryBinding,
   BindingProvider as AgentregistryBindingProvider,
-} from "./Agentregistry/Binding.ts";
+} from "./AgentRegistry/Binding.ts";
 import { Policy, PolicyProvider } from "./OrgPolicy/Policy.ts";
 import {
   CustomConstraint,
@@ -1200,35 +1200,35 @@ import {
 import {
   FoldersLocationsGlobalPolicyOrchestrator,
   FoldersLocationsGlobalPolicyOrchestratorProvider,
-} from "./Osconfig/FoldersLocationsGlobalPolicyOrchestrator.ts";
+} from "./OSConfig/FoldersLocationsGlobalPolicyOrchestrator.ts";
 import {
   OrganizationsLocationsGlobalPolicyOrchestrator,
   OrganizationsLocationsGlobalPolicyOrchestratorProvider,
-} from "./Osconfig/OrganizationsLocationsGlobalPolicyOrchestrator.ts";
+} from "./OSConfig/OrganizationsLocationsGlobalPolicyOrchestrator.ts";
 import {
   ProjectsLocationsGlobalPolicyOrchestrator,
   ProjectsLocationsGlobalPolicyOrchestratorProvider,
-} from "./Osconfig/ProjectsLocationsGlobalPolicyOrchestrator.ts";
+} from "./OSConfig/ProjectsLocationsGlobalPolicyOrchestrator.ts";
 import {
   AccessPolicy,
   AccessPolicyProvider,
-} from "./Accesscontextmanager/AccessPolicy.ts";
+} from "./AccessContextManager/AccessPolicy.ts";
 import {
   AccessPoliciesAccessLevel,
   AccessPoliciesAccessLevelProvider,
-} from "./Accesscontextmanager/AccessPoliciesAccessLevel.ts";
+} from "./AccessContextManager/AccessPoliciesAccessLevel.ts";
 import {
   AccessPoliciesAuthorizedOrgsDesc,
   AccessPoliciesAuthorizedOrgsDescProvider,
-} from "./Accesscontextmanager/AccessPoliciesAuthorizedOrgsDesc.ts";
+} from "./AccessContextManager/AccessPoliciesAuthorizedOrgsDesc.ts";
 import {
   AccessPoliciesServicePerimeter,
   AccessPoliciesServicePerimeterProvider,
-} from "./Accesscontextmanager/AccessPoliciesServicePerimeter.ts";
+} from "./AccessContextManager/AccessPoliciesServicePerimeter.ts";
 import {
   GcpUserAccessBinding,
   GcpUserAccessBindingProvider,
-} from "./Accesscontextmanager/GcpUserAccessBinding.ts";
+} from "./AccessContextManager/GcpUserAccessBinding.ts";
 import { Hub, HubProvider } from "./NetworkConnectivity/Hub.ts";
 import { Spoke, SpokeProvider } from "./NetworkConnectivity/Spoke.ts";
 import {
@@ -1278,186 +1278,186 @@ import {
 import {
   VpcFlowLogsConfig,
   VpcFlowLogsConfigProvider,
-} from "./Networkmanagement/VpcFlowLogsConfig.ts";
+} from "./NetworkManagement/VpcFlowLogsConfig.ts";
 import {
   OrganizationsVpcFlowLogsConfig,
   OrganizationsVpcFlowLogsConfigProvider,
-} from "./Networkmanagement/OrganizationsVpcFlowLogsConfig.ts";
+} from "./NetworkManagement/OrganizationsVpcFlowLogsConfig.ts";
 import {
   ConnectivityTest,
   ConnectivityTestProvider,
-} from "./Networkmanagement/ConnectivityTest.ts";
+} from "./NetworkManagement/ConnectivityTest.ts";
 import {
   NetworkMonitoringProvider,
   NetworkMonitoringProviderProvider,
-} from "./Networkmanagement/NetworkMonitoringProvider.ts";
+} from "./NetworkManagement/NetworkMonitoringProvider.ts";
 import {
   ClientTlsPolicy,
   ClientTlsPolicyProvider,
-} from "./Networksecurity/ClientTlsPolicy.ts";
+} from "./NetworkSecurity/ClientTlsPolicy.ts";
 import {
   DnsThreatDetector,
   DnsThreatDetectorProvider,
-} from "./Networksecurity/DnsThreatDetector.ts";
+} from "./NetworkSecurity/DnsThreatDetector.ts";
 import {
   FirewallEndpoint,
   FirewallEndpointProvider,
-} from "./Networksecurity/FirewallEndpoint.ts";
+} from "./NetworkSecurity/FirewallEndpoint.ts";
 import {
   FirewallEndpointAssociation,
   FirewallEndpointAssociationProvider,
-} from "./Networksecurity/FirewallEndpointAssociation.ts";
+} from "./NetworkSecurity/FirewallEndpointAssociation.ts";
 import {
   GatewaySecurityPolicy,
   GatewaySecurityPolicyProvider,
-} from "./Networksecurity/GatewaySecurityPolicy.ts";
+} from "./NetworkSecurity/GatewaySecurityPolicy.ts";
 import {
   GatewaySecurityPoliciesRule,
   GatewaySecurityPoliciesRuleProvider,
-} from "./Networksecurity/GatewaySecurityPoliciesRule.ts";
+} from "./NetworkSecurity/GatewaySecurityPoliciesRule.ts";
 import {
   InterceptDeploymentGroup,
   InterceptDeploymentGroupProvider,
-} from "./Networksecurity/InterceptDeploymentGroup.ts";
+} from "./NetworkSecurity/InterceptDeploymentGroup.ts";
 import {
   InterceptDeployment,
   InterceptDeploymentProvider,
-} from "./Networksecurity/InterceptDeployment.ts";
+} from "./NetworkSecurity/InterceptDeployment.ts";
 import {
   InterceptEndpointGroup,
   InterceptEndpointGroupProvider,
-} from "./Networksecurity/InterceptEndpointGroup.ts";
+} from "./NetworkSecurity/InterceptEndpointGroup.ts";
 import {
   InterceptEndpointGroupAssociation,
   InterceptEndpointGroupAssociationProvider,
-} from "./Networksecurity/InterceptEndpointGroupAssociation.ts";
+} from "./NetworkSecurity/InterceptEndpointGroupAssociation.ts";
 import {
   MirroringDeploymentGroup,
   MirroringDeploymentGroupProvider,
-} from "./Networksecurity/MirroringDeploymentGroup.ts";
+} from "./NetworkSecurity/MirroringDeploymentGroup.ts";
 import {
   MirroringDeployment,
   MirroringDeploymentProvider,
-} from "./Networksecurity/MirroringDeployment.ts";
+} from "./NetworkSecurity/MirroringDeployment.ts";
 import {
   MirroringEndpointGroup,
   MirroringEndpointGroupProvider,
-} from "./Networksecurity/MirroringEndpointGroup.ts";
+} from "./NetworkSecurity/MirroringEndpointGroup.ts";
 import {
   MirroringEndpointGroupAssociation,
   MirroringEndpointGroupAssociationProvider,
-} from "./Networksecurity/MirroringEndpointGroupAssociation.ts";
-import { SacRealm, SacRealmProvider } from "./Networksecurity/SacRealm.ts";
+} from "./NetworkSecurity/MirroringEndpointGroupAssociation.ts";
+import { SacRealm, SacRealmProvider } from "./NetworkSecurity/SacRealm.ts";
 import {
   SacAttachment,
   SacAttachmentProvider,
-} from "./Networksecurity/SacAttachment.ts";
+} from "./NetworkSecurity/SacAttachment.ts";
 import {
   SecurityProfile,
   SecurityProfileProvider,
-} from "./Networksecurity/SecurityProfile.ts";
+} from "./NetworkSecurity/SecurityProfile.ts";
 import {
   SecurityProfileGroup,
   SecurityProfileGroupProvider,
-} from "./Networksecurity/SecurityProfileGroup.ts";
+} from "./NetworkSecurity/SecurityProfileGroup.ts";
 import {
   ServerTlsPolicy,
   ServerTlsPolicyProvider,
-} from "./Networksecurity/ServerTlsPolicy.ts";
+} from "./NetworkSecurity/ServerTlsPolicy.ts";
 import {
   TlsInspectionPolicy,
   TlsInspectionPolicyProvider,
-} from "./Networksecurity/TlsInspectionPolicy.ts";
-import { UrlList, UrlListProvider } from "./Networksecurity/UrlList.ts";
+} from "./NetworkSecurity/TlsInspectionPolicy.ts";
+import { UrlList, UrlListProvider } from "./NetworkSecurity/UrlList.ts";
 import {
   AddressGroup,
   AddressGroupProvider,
-} from "./Networksecurity/AddressGroup.ts";
+} from "./NetworkSecurity/AddressGroup.ts";
 import {
   AuthorizationPolicy,
   AuthorizationPolicyProvider,
-} from "./Networksecurity/AuthorizationPolicy.ts";
+} from "./NetworkSecurity/AuthorizationPolicy.ts";
 import {
   AuthzPolicy,
   AuthzPolicyProvider,
-} from "./Networksecurity/AuthzPolicy.ts";
+} from "./NetworkSecurity/AuthzPolicy.ts";
 import {
   BackendAuthenticationConfig,
   BackendAuthenticationConfigProvider,
-} from "./Networksecurity/BackendAuthenticationConfig.ts";
+} from "./NetworkSecurity/BackendAuthenticationConfig.ts";
 import {
   OrganizationsAddressGroup,
   OrganizationsAddressGroupProvider,
-} from "./Networksecurity/OrganizationsAddressGroup.ts";
+} from "./NetworkSecurity/OrganizationsAddressGroup.ts";
 import {
   OrganizationsFirewallEndpoint,
   OrganizationsFirewallEndpointProvider,
-} from "./Networksecurity/OrganizationsFirewallEndpoint.ts";
+} from "./NetworkSecurity/OrganizationsFirewallEndpoint.ts";
 import {
   OrganizationsSecurityProfile,
   OrganizationsSecurityProfileProvider,
-} from "./Networksecurity/OrganizationsSecurityProfile.ts";
+} from "./NetworkSecurity/OrganizationsSecurityProfile.ts";
 import {
   OrganizationsSecurityProfileGroup,
   OrganizationsSecurityProfileGroupProvider,
-} from "./Networksecurity/OrganizationsSecurityProfileGroup.ts";
+} from "./NetworkSecurity/OrganizationsSecurityProfileGroup.ts";
 import {
   AgentGateway,
   AgentGatewayProvider,
-} from "./Networkservices/AgentGateway.ts";
+} from "./NetworkServices/AgentGateway.ts";
 import {
   AuthzExtension,
   AuthzExtensionProvider,
-} from "./Networkservices/AuthzExtension.ts";
+} from "./NetworkServices/AuthzExtension.ts";
 import {
   EndpointPolicy,
   EndpointPolicyProvider,
-} from "./Networkservices/EndpointPolicy.ts";
+} from "./NetworkServices/EndpointPolicy.ts";
 import {
   Gateway as NetworkservicesGateway,
   GatewayProvider as NetworkservicesGatewayProvider,
-} from "./Networkservices/Gateway.ts";
-import { GrpcRoute, GrpcRouteProvider } from "./Networkservices/GrpcRoute.ts";
-import { HttpRoute, HttpRouteProvider } from "./Networkservices/HttpRoute.ts";
+} from "./NetworkServices/Gateway.ts";
+import { GrpcRoute, GrpcRouteProvider } from "./NetworkServices/GrpcRoute.ts";
+import { HttpRoute, HttpRouteProvider } from "./NetworkServices/HttpRoute.ts";
 import {
   LbEdgeExtension,
   LbEdgeExtensionProvider,
-} from "./Networkservices/LbEdgeExtension.ts";
+} from "./NetworkServices/LbEdgeExtension.ts";
 import {
   LbRouteExtension,
   LbRouteExtensionProvider,
-} from "./Networkservices/LbRouteExtension.ts";
+} from "./NetworkServices/LbRouteExtension.ts";
 import {
   WasmPlugin,
   WasmPluginProvider,
-} from "./Networkservices/WasmPlugin.ts";
+} from "./NetworkServices/WasmPlugin.ts";
 import {
   WasmPluginsVersion,
   WasmPluginsVersionProvider,
-} from "./Networkservices/WasmPluginsVersion.ts";
+} from "./NetworkServices/WasmPluginsVersion.ts";
 import {
   LbTrafficExtension,
   LbTrafficExtensionProvider,
-} from "./Networkservices/LbTrafficExtension.ts";
-import { Mesh, MeshProvider } from "./Networkservices/Mesh.ts";
+} from "./NetworkServices/LbTrafficExtension.ts";
+import { Mesh, MeshProvider } from "./NetworkServices/Mesh.ts";
 import {
   MulticastConsumerAssociation,
   MulticastConsumerAssociationProvider,
-} from "./Networkservices/MulticastConsumerAssociation.ts";
+} from "./NetworkServices/MulticastConsumerAssociation.ts";
 import {
   MulticastGroupConsumerActivation,
   MulticastGroupConsumerActivationProvider,
-} from "./Networkservices/MulticastGroupConsumerActivation.ts";
+} from "./NetworkServices/MulticastGroupConsumerActivation.ts";
 import {
   ServiceBinding,
   ServiceBindingProvider,
-} from "./Networkservices/ServiceBinding.ts";
+} from "./NetworkServices/ServiceBinding.ts";
 import {
   ServiceLbPolicy,
   ServiceLbPolicyProvider,
-} from "./Networkservices/ServiceLbPolicy.ts";
-import { TcpRoute, TcpRouteProvider } from "./Networkservices/TcpRoute.ts";
-import { TlsRoute, TlsRouteProvider } from "./Networkservices/TlsRoute.ts";
+} from "./NetworkServices/ServiceLbPolicy.ts";
+import { TcpRoute, TcpRouteProvider } from "./NetworkServices/TcpRoute.ts";
+import { TlsRoute, TlsRouteProvider } from "./NetworkServices/TlsRoute.ts";
 import { AlertPolicy, AlertPolicyProvider } from "./Monitoring/AlertPolicy.ts";
 import {
   NotificationChannel,
@@ -1555,205 +1555,112 @@ import {
 import {
   AnalysisRule,
   AnalysisRuleProvider,
-} from "./Contactcenterinsights/AnalysisRule.ts";
+} from "./ContactCenterInsights/AnalysisRule.ts";
 import {
   AssessmentRule,
   AssessmentRuleProvider,
-} from "./Contactcenterinsights/AssessmentRule.ts";
+} from "./ContactCenterInsights/AssessmentRule.ts";
 import {
   AuthorizedViewSet,
   AuthorizedViewSetProvider,
-} from "./Contactcenterinsights/AuthorizedViewSet.ts";
+} from "./ContactCenterInsights/AuthorizedViewSet.ts";
 import {
   AuthorizedViewSetsAuthorizedView,
   AuthorizedViewSetsAuthorizedViewProvider,
-} from "./Contactcenterinsights/AuthorizedViewSetsAuthorizedView.ts";
+} from "./ContactCenterInsights/AuthorizedViewSetsAuthorizedView.ts";
 import {
   AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
   AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider,
-} from "./Contactcenterinsights/AuthorizedViewSetsAuthorizedViewsConversationsAssessment.ts";
+} from "./ContactCenterInsights/AuthorizedViewSetsAuthorizedViewsConversationsAssessment.ts";
 import {
   AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel,
   AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider,
-} from "./Contactcenterinsights/AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel.ts";
+} from "./ContactCenterInsights/AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel.ts";
 import {
   AutoLabelingRule,
   AutoLabelingRuleProvider,
-} from "./Contactcenterinsights/AutoLabelingRule.ts";
+} from "./ContactCenterInsights/AutoLabelingRule.ts";
 import {
   Conversation,
   ConversationProvider,
-} from "./Contactcenterinsights/Conversation.ts";
+} from "./ContactCenterInsights/Conversation.ts";
 import {
   ConversationsAnalyses,
   ConversationsAnalysesProvider,
-} from "./Contactcenterinsights/ConversationsAnalyses.ts";
+} from "./ContactCenterInsights/ConversationsAnalyses.ts";
 import {
   ConversationsAssessment,
   ConversationsAssessmentProvider,
-} from "./Contactcenterinsights/ConversationsAssessment.ts";
+} from "./ContactCenterInsights/ConversationsAssessment.ts";
 import {
   ConversationsFeedbackLabel,
   ConversationsFeedbackLabelProvider,
-} from "./Contactcenterinsights/ConversationsFeedbackLabel.ts";
+} from "./ContactCenterInsights/ConversationsFeedbackLabel.ts";
 import {
   Dashboard,
   DashboardProvider,
-} from "./Contactcenterinsights/Dashboard.ts";
+} from "./ContactCenterInsights/Dashboard.ts";
 import {
   DashboardsChart,
   DashboardsChartProvider,
-} from "./Contactcenterinsights/DashboardsChart.ts";
+} from "./ContactCenterInsights/DashboardsChart.ts";
 import {
   DatasetsConversationsFeedbackLabel,
   DatasetsConversationsFeedbackLabelProvider,
-} from "./Contactcenterinsights/DatasetsConversationsFeedbackLabel.ts";
+} from "./ContactCenterInsights/DatasetsConversationsFeedbackLabel.ts";
 import {
   IssueModel,
   IssueModelProvider,
-} from "./Contactcenterinsights/IssueModel.ts";
+} from "./ContactCenterInsights/IssueModel.ts";
 import {
   IssueModelsIssue,
   IssueModelsIssueProvider,
-} from "./Contactcenterinsights/IssueModelsIssue.ts";
+} from "./ContactCenterInsights/IssueModelsIssue.ts";
 import {
   PhraseMatcher,
   PhraseMatcherProvider,
-} from "./Contactcenterinsights/PhraseMatcher.ts";
+} from "./ContactCenterInsights/PhraseMatcher.ts";
 import {
   QaQuestionTag,
   QaQuestionTagProvider,
-} from "./Contactcenterinsights/QaQuestionTag.ts";
+} from "./ContactCenterInsights/QaQuestionTag.ts";
 import {
   QaScorecard,
   QaScorecardProvider,
-} from "./Contactcenterinsights/QaScorecard.ts";
+} from "./ContactCenterInsights/QaScorecard.ts";
 import {
   QaScorecardsRevision,
   QaScorecardsRevisionProvider,
-} from "./Contactcenterinsights/QaScorecardsRevision.ts";
+} from "./ContactCenterInsights/QaScorecardsRevision.ts";
 import {
   QaScorecardsRevisionsQaQuestion,
   QaScorecardsRevisionsQaQuestionProvider,
-} from "./Contactcenterinsights/QaScorecardsRevisionsQaQuestion.ts";
-import { View, ViewProvider } from "./Contactcenterinsights/View.ts";
+} from "./ContactCenterInsights/QaScorecardsRevisionsQaQuestion.ts";
+import { View, ViewProvider } from "./ContactCenterInsights/View.ts";
 import {
   ContactCenter,
   ContactCenterProvider,
-} from "./Contactcenteraiplatform/ContactCenter.ts";
-import {
-  Property as AnalyticsadminProperty,
-  PropertyProvider as AnalyticsadminPropertyProvider,
-} from "./Analyticsadmin/Property.ts";
-import {
-  PropertiesConversionEvent,
-  PropertiesConversionEventProvider,
-} from "./Analyticsadmin/PropertiesConversionEvent.ts";
-import {
-  PropertiesDataStream,
-  PropertiesDataStreamProvider,
-} from "./Analyticsadmin/PropertiesDataStream.ts";
-import {
-  PropertiesDataStreamsMeasurementProtocolSecret,
-  PropertiesDataStreamsMeasurementProtocolSecretProvider,
-} from "./Analyticsadmin/PropertiesDataStreamsMeasurementProtocolSecret.ts";
-import {
-  PropertiesKeyEvent,
-  PropertiesKeyEventProvider,
-} from "./Analyticsadmin/PropertiesKeyEvent.ts";
-import { Courses, CoursesProvider } from "./Classroom/Courses.ts";
-import {
-  CoursesAnnouncement,
-  CoursesAnnouncementProvider,
-} from "./Classroom/CoursesAnnouncement.ts";
-import {
-  CoursesAnnouncementsAddOnAttachment,
-  CoursesAnnouncementsAddOnAttachmentProvider,
-} from "./Classroom/CoursesAnnouncementsAddOnAttachment.ts";
-import {
-  CoursesCourseWork,
-  CoursesCourseWorkProvider,
-} from "./Classroom/CoursesCourseWork.ts";
-import {
-  CoursesCourseWorkAddOnAttachment,
-  CoursesCourseWorkAddOnAttachmentProvider,
-} from "./Classroom/CoursesCourseWorkAddOnAttachment.ts";
-import {
-  CoursesCourseWorkMaterial,
-  CoursesCourseWorkMaterialProvider,
-} from "./Classroom/CoursesCourseWorkMaterial.ts";
-import {
-  CoursesCourseWorkMaterialsAddOnAttachment,
-  CoursesCourseWorkMaterialsAddOnAttachmentProvider,
-} from "./Classroom/CoursesCourseWorkMaterialsAddOnAttachment.ts";
-import {
-  CoursesCourseWorkRubric,
-  CoursesCourseWorkRubricProvider,
-} from "./Classroom/CoursesCourseWorkRubric.ts";
-import {
-  CoursesPostsAddOnAttachment,
-  CoursesPostsAddOnAttachmentProvider,
-} from "./Classroom/CoursesPostsAddOnAttachment.ts";
-import {
-  CoursesStudent,
-  CoursesStudentProvider,
-} from "./Classroom/CoursesStudent.ts";
-import {
-  CoursesTeacher,
-  CoursesTeacherProvider,
-} from "./Classroom/CoursesTeacher.ts";
-import {
-  CoursesTopic,
-  CoursesTopicProvider,
-} from "./Classroom/CoursesTopic.ts";
-import { Invitation, InvitationProvider } from "./Classroom/Invitation.ts";
-import { UsersDraft, UsersDraftProvider } from "./Gmail/UsersDraft.ts";
-import { UsersLabel, UsersLabelProvider } from "./Gmail/UsersLabel.ts";
-import { UsersMessage, UsersMessageProvider } from "./Gmail/UsersMessage.ts";
-import {
-  UsersSettingsCseIdentity,
-  UsersSettingsCseIdentityProvider,
-} from "./Gmail/UsersSettingsCseIdentity.ts";
-import {
-  UsersSettingsDelegate,
-  UsersSettingsDelegateProvider,
-} from "./Gmail/UsersSettingsDelegate.ts";
-import {
-  UsersSettingsFilter,
-  UsersSettingsFilterProvider,
-} from "./Gmail/UsersSettingsFilter.ts";
-import {
-  UsersSettingsForwardingAddresse,
-  UsersSettingsForwardingAddresseProvider,
-} from "./Gmail/UsersSettingsForwardingAddresse.ts";
-import {
-  UsersSettingsSendA,
-  UsersSettingsSendAProvider,
-} from "./Gmail/UsersSettingsSendA.ts";
-import {
-  UsersSettingsSendAsSmimeInfo,
-  UsersSettingsSendAsSmimeInfoProvider,
-} from "./Gmail/UsersSettingsSendAsSmimeInfo.ts";
+} from "./ContactCenterAIPlatform/ContactCenter.ts";
 import {
   Domain as GmailpostmastertoolsDomain,
   DomainProvider as GmailpostmastertoolsDomainProvider,
-} from "./Gmailpostmastertools/Domain.ts";
+} from "./GmailPostmasterTools/Domain.ts";
 import {
   DomainsUser,
   DomainsUserProvider,
-} from "./Gmailpostmastertools/DomainsUser.ts";
+} from "./GmailPostmasterTools/DomainsUser.ts";
 import {
   SettingsDatasource,
   SettingsDatasourceProvider,
-} from "./Cloudsearch/SettingsDatasource.ts";
+} from "./CloudSearch/SettingsDatasource.ts";
 import {
   SettingsSearchapplication,
   SettingsSearchapplicationProvider,
-} from "./Cloudsearch/SettingsSearchapplication.ts";
+} from "./CloudSearch/SettingsSearchapplication.ts";
 import {
   SupportEventSubscription,
   SupportEventSubscriptionProvider,
-} from "./Cloudsupport/SupportEventSubscription.ts";
+} from "./CloudSupport/SupportEventSubscription.ts";
 import { Matter, MatterProvider } from "./Vault/Matter.ts";
 import { MattersExport, MattersExportProvider } from "./Vault/MattersExport.ts";
 import { MattersHold, MattersHoldProvider } from "./Vault/MattersHold.ts";
@@ -1761,21 +1668,14 @@ import {
   MattersSavedQuery,
   MattersSavedQueryProvider,
 } from "./Vault/MattersSavedQuery.ts";
-import { CustomEmoji, CustomEmojiProvider } from "./Chat/CustomEmoji.ts";
-import {
-  Space as ChatSpace,
-  SpaceProvider as ChatSpaceProvider,
-} from "./Chat/Space.ts";
-import { SpacesMember, SpacesMemberProvider } from "./Chat/SpacesMember.ts";
-import { SpacesMessage, SpacesMessageProvider } from "./Chat/SpacesMessage.ts";
 import {
   Subscription as WorkspaceeventsSubscription,
   SubscriptionProvider as WorkspaceeventsSubscriptionProvider,
-} from "./Workspaceevents/Subscription.ts";
+} from "./WorkspaceEvents/Subscription.ts";
 import {
   TasksPushNotificationConfig,
   TasksPushNotificationConfigProvider,
-} from "./Workspaceevents/TasksPushNotificationConfig.ts";
+} from "./WorkspaceEvents/TasksPushNotificationConfig.ts";
 import {
   Tenant as JobsTenant,
   TenantProvider as JobsTenantProvider,
@@ -1797,24 +1697,24 @@ import {
   ProductsReferenceImage,
   ProductsReferenceImageProvider,
 } from "./Vision/ProductsReferenceImage.ts";
-import { CustomClasse, CustomClasseProvider } from "./Speech/CustomClasse.ts";
+import { CustomClass, CustomClassProvider } from "./Speech/CustomClass.ts";
 import { PhraseSet, PhraseSetProvider } from "./Speech/PhraseSet.ts";
-import { GetCustomClasseHttp } from "./Speech/GetCustomClasseHttp.ts";
+import { GetCustomClassHttp } from "./Speech/GetCustomClassHttp.ts";
 import { GetPhraseSetHttp } from "./Speech/GetPhraseSetHttp.ts";
 import { RecognizeHttp } from "./Speech/RecognizeHttp.ts";
 import {
   MonetizationSubscription,
   MonetizationSubscriptionProvider,
-} from "./Androidpublisher/MonetizationSubscription.ts";
+} from "./AndroidPublisher/MonetizationSubscription.ts";
 import {
   MonetizationSubscriptionsBasePlansOffer,
   MonetizationSubscriptionsBasePlansOfferProvider,
-} from "./Androidpublisher/MonetizationSubscriptionsBasePlansOffer.ts";
-import { Edit, EditProvider } from "./Androidpublisher/Edit.ts";
+} from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
+import { Edit, EditProvider } from "./AndroidPublisher/Edit.ts";
 import {
   Inappproduct,
   InappproductProvider,
-} from "./Androidpublisher/Inappproduct.ts";
+} from "./AndroidPublisher/Inappproduct.ts";
 import {
   AchievementConfiguration,
   AchievementConfigurationProvider,
@@ -1826,104 +1726,60 @@ import {
 import {
   Storelayoutcluster,
   StorelayoutclusterProvider,
-} from "./Androidenterprise/Storelayoutcluster.ts";
+} from "./AndroidEnterprise/Storelayoutcluster.ts";
 import {
   Storelayoutpage,
   StorelayoutpageProvider,
-} from "./Androidenterprise/Storelayoutpage.ts";
-import { Webapp, WebappProvider } from "./Androidenterprise/Webapp.ts";
+} from "./AndroidEnterprise/Storelayoutpage.ts";
+import { Webapp, WebappProvider } from "./AndroidEnterprise/Webapp.ts";
 import {
   CustomersConfiguration,
   CustomersConfigurationProvider,
-} from "./Androiddeviceprovisioning/CustomersConfiguration.ts";
+} from "./AndroidDeviceProvisioning/CustomersConfiguration.ts";
 import {
   CustomersConnectorConfig,
   CustomersConnectorConfigProvider,
-} from "./Chromemanagement/CustomersConnectorConfig.ts";
+} from "./ChromeManagement/CustomersConnectorConfig.ts";
 import {
   Enterprise as AndroidmanagementEnterprise,
   EnterpriseProvider as AndroidmanagementEnterpriseProvider,
-} from "./Androidmanagement/Enterprise.ts";
+} from "./AndroidManagement/Enterprise.ts";
 import {
   EnterprisesEnrollmentToken,
   EnterprisesEnrollmentTokenProvider,
-} from "./Androidmanagement/EnterprisesEnrollmentToken.ts";
+} from "./AndroidManagement/EnterprisesEnrollmentToken.ts";
 import {
   EnterprisesWebApp,
   EnterprisesWebAppProvider,
-} from "./Androidmanagement/EnterprisesWebApp.ts";
+} from "./AndroidManagement/EnterprisesWebApp.ts";
 import {
   AppsAuthorizedCertificate,
   AppsAuthorizedCertificateProvider,
-} from "./Appengine/AppsAuthorizedCertificate.ts";
+} from "./AppEngine/AppsAuthorizedCertificate.ts";
 import {
   AppsDomainMapping,
   AppsDomainMappingProvider,
-} from "./Appengine/AppsDomainMapping.ts";
+} from "./AppEngine/AppsDomainMapping.ts";
 import {
   AppsFirewallIngressRule,
   AppsFirewallIngressRuleProvider,
-} from "./Appengine/AppsFirewallIngressRule.ts";
+} from "./AppEngine/AppsFirewallIngressRule.ts";
 import {
   AppsServicesVersion,
   AppsServicesVersionProvider,
-} from "./Appengine/AppsServicesVersion.ts";
+} from "./AppEngine/AppsServicesVersion.ts";
 import {
   ApplicationsAuthorizedCertificate,
   ApplicationsAuthorizedCertificateProvider,
-} from "./Appengine/ApplicationsAuthorizedCertificate.ts";
+} from "./AppEngine/ApplicationsAuthorizedCertificate.ts";
 import {
   ApplicationsDomainMapping,
   ApplicationsDomainMappingProvider,
-} from "./Appengine/ApplicationsDomainMapping.ts";
-import { Comment, CommentProvider } from "./Drive/Comment.ts";
-import { Drive, DriveProvider } from "./Drive/Drive.ts";
-import {
-  File as DriveFile,
-  FileProvider as DriveFileProvider,
-} from "./Drive/File.ts";
-import {
-  Permission as DrivePermission,
-  PermissionProvider as DrivePermissionProvider,
-} from "./Drive/Permission.ts";
-import { Reply, ReplyProvider } from "./Drive/Reply.ts";
-import { Teamdrive, TeamdriveProvider } from "./Drive/Teamdrive.ts";
-import {
-  Acl as CalendarAcl,
-  AclProvider as CalendarAclProvider,
-} from "./Calendar/Acl.ts";
-import {
-  Calendar as CalendarResource,
-  CalendarProvider,
-} from "./Calendar/Calendar.ts";
-import { CalendarList, CalendarListProvider } from "./Calendar/CalendarList.ts";
-import {
-  Event as CalendarEvent,
-  EventProvider as CalendarEventProvider,
-} from "./Calendar/Event.ts";
-import { Tasklist, TasklistProvider } from "./Tasks/Tasklist.ts";
-import {
-  Task as TasksTask,
-  TaskProvider as TasksTaskProvider,
-} from "./Tasks/Task.ts";
-import {
-  UsersDataSource,
-  UsersDataSourceProvider,
-} from "./Fitness/UsersDataSource.ts";
+} from "./AppEngine/ApplicationsDomainMapping.ts";
 import {
   UsersSshPublicKey,
   UsersSshPublicKeyProvider,
-} from "./Oslogin/UsersSshPublicKey.ts";
-import { GetUsersSshPublicKeyHttp } from "./Oslogin/GetUsersSshPublicKeyHttp.ts";
-import {
-  Note as KeepNote,
-  NoteProvider as KeepNoteProvider,
-} from "./Keep/Note.ts";
-import { ContactGroup, ContactGroupProvider } from "./People/ContactGroup.ts";
-import {
-  ContactPeople,
-  ContactPeopleProvider,
-} from "./People/ContactPeople.ts";
+} from "./OSLogin/UsersSshPublicKey.ts";
 import {
   LicenseAssignment,
   LicenseAssignmentProvider,
@@ -1933,85 +1789,61 @@ import {
   WebResourceProvider,
 } from "./SiteVerification/WebResource.ts";
 import {
-  Deployment as ScriptDeployment,
-  DeploymentProvider as ScriptDeploymentProvider,
-} from "./Script/Deployment.ts";
-import {
-  Page as BloggerPage,
-  PageProvider as BloggerPageProvider,
-} from "./Blogger/Page.ts";
-import {
-  Post as BloggerPost,
-  PostProvider as BloggerPostProvider,
-} from "./Blogger/Post.ts";
-import {
-  Photo as StreetviewPhoto,
-  PhotoProvider as StreetviewPhotoProvider,
-} from "./Streetviewpublish/Photo.ts";
-import {
-  PhotoSequence,
-  PhotoSequenceProvider,
-} from "./Streetviewpublish/PhotoSequence.ts";
-import {
   Feed as CloudassetFeed,
   FeedProvider as CloudassetFeedProvider,
-} from "./Cloudasset/Feed.ts";
+} from "./CloudAsset/Feed.ts";
 import {
   SavedQuery as CloudassetSavedQuery,
   SavedQueryProvider as CloudassetSavedQueryProvider,
-} from "./Cloudasset/SavedQuery.ts";
+} from "./CloudAsset/SavedQuery.ts";
 import {
   Device as CloudidentityDevice,
   DeviceProvider as CloudidentityDeviceProvider,
-} from "./Cloudidentity/Device.ts";
+} from "./CloudIdentity/Device.ts";
 import {
   Group as CloudidentityGroup,
   GroupProvider as CloudidentityGroupProvider,
-} from "./Cloudidentity/Group.ts";
+} from "./CloudIdentity/Group.ts";
 import {
   GroupsMembership,
   GroupsMembershipProvider,
-} from "./Cloudidentity/GroupsMembership.ts";
+} from "./CloudIdentity/GroupsMembership.ts";
 import {
   InboundOidcSsoProfile,
   InboundOidcSsoProfileProvider,
-} from "./Cloudidentity/InboundOidcSsoProfile.ts";
+} from "./CloudIdentity/InboundOidcSsoProfile.ts";
 import {
   InboundSamlSsoProfile,
   InboundSamlSsoProfileProvider,
-} from "./Cloudidentity/InboundSamlSsoProfile.ts";
+} from "./CloudIdentity/InboundSamlSsoProfile.ts";
 import {
   InboundSsoAssignment,
   InboundSsoAssignmentProvider,
-} from "./Cloudidentity/InboundSsoAssignment.ts";
+} from "./CloudIdentity/InboundSsoAssignment.ts";
 import {
   Customer as CloudchannelCustomer,
   CustomerProvider as CloudchannelCustomerProvider,
-} from "./Cloudchannel/Customer.ts";
+} from "./CloudChannel/Customer.ts";
 import {
   ChannelPartnerLinksCustomer,
   ChannelPartnerLinksCustomerProvider,
-} from "./Cloudchannel/ChannelPartnerLinksCustomer.ts";
+} from "./CloudChannel/ChannelPartnerLinksCustomer.ts";
 import {
   CustomersCustomerRepricingConfig,
   CustomersCustomerRepricingConfigProvider,
-} from "./Cloudchannel/CustomersCustomerRepricingConfig.ts";
+} from "./CloudChannel/CustomersCustomerRepricingConfig.ts";
 import {
   ChannelPartnerLinksChannelPartnerRepricingConfig,
   ChannelPartnerLinksChannelPartnerRepricingConfigProvider,
-} from "./Cloudchannel/ChannelPartnerLinksChannelPartnerRepricingConfig.ts";
+} from "./CloudChannel/ChannelPartnerLinksChannelPartnerRepricingConfig.ts";
 import {
   Customer as CloudcontrolspartnerCustomer,
   CustomerProvider as CloudcontrolspartnerCustomerProvider,
-} from "./Cloudcontrolspartner/Customer.ts";
-import {
-  Subscription as ResellerSubscription,
-  SubscriptionProvider as ResellerSubscriptionProvider,
-} from "./Reseller/Subscription.ts";
+} from "./CloudControlsPartner/Customer.ts";
 import {
   Deployment as DeploymentmanagerDeployment,
   DeploymentProvider as DeploymentmanagerDeploymentProvider,
-} from "./Deploymentmanager/Deployment.ts";
+} from "./DeploymentManager/Deployment.ts";
 import {
   Dataset as HealthcareDataset,
   DatasetProvider as HealthcareDatasetProvider,
@@ -2055,8 +1887,8 @@ import {
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
-} from "./Iap/BrandsIdentityAwareProxyClient.ts";
-import { IapDestGroup, IapDestGroupProvider } from "./Iap/IapDestGroup.ts";
+} from "./IAP/BrandsIdentityAwareProxyClient.ts";
+import { IapDestGroup, IapDestGroupProvider } from "./IAP/IapDestGroup.ts";
 import {
   AgentsEntityType,
   AgentsEntityTypeProvider,
@@ -2127,228 +1959,143 @@ import {
   SecuritySetting,
   SecuritySettingProvider,
 } from "./Dialogflow/SecuritySetting.ts";
-import {
-  Container as TagmanagerContainer,
-  ContainerProvider as TagmanagerContainerProvider,
-} from "./Tagmanager/Container.ts";
-import {
-  ContainersEnvironment,
-  ContainersEnvironmentProvider,
-} from "./Tagmanager/ContainersEnvironment.ts";
-import {
-  ContainersWorkspace,
-  ContainersWorkspaceProvider,
-} from "./Tagmanager/ContainersWorkspace.ts";
-import {
-  ContainersWorkspacesClient,
-  ContainersWorkspacesClientProvider,
-} from "./Tagmanager/ContainersWorkspacesClient.ts";
-import {
-  ContainersWorkspacesFolder,
-  ContainersWorkspacesFolderProvider,
-} from "./Tagmanager/ContainersWorkspacesFolder.ts";
-import {
-  ContainersWorkspacesGtag,
-  ContainersWorkspacesGtagProvider,
-} from "./Tagmanager/ContainersWorkspacesGtag.ts";
-import {
-  ContainersWorkspacesTag,
-  ContainersWorkspacesTagProvider,
-} from "./Tagmanager/ContainersWorkspacesTag.ts";
-import {
-  ContainersWorkspacesTemplate,
-  ContainersWorkspacesTemplateProvider,
-} from "./Tagmanager/ContainersWorkspacesTemplate.ts";
-import {
-  ContainersWorkspacesTransformation,
-  ContainersWorkspacesTransformationProvider,
-} from "./Tagmanager/ContainersWorkspacesTransformation.ts";
-import {
-  ContainersWorkspacesTrigger,
-  ContainersWorkspacesTriggerProvider,
-} from "./Tagmanager/ContainersWorkspacesTrigger.ts";
-import {
-  ContainersWorkspacesVariable,
-  ContainersWorkspacesVariableProvider,
-} from "./Tagmanager/ContainersWorkspacesVariable.ts";
-import {
-  ContainersWorkspacesZone,
-  ContainersWorkspacesZoneProvider,
-} from "./Tagmanager/ContainersWorkspacesZone.ts";
-import {
-  User as TagmanagerUser,
-  UserProvider as TagmanagerUserProvider,
-} from "./Tagmanager/User.ts";
-import { ContentPolicy, ContentPolicyProvider } from "./Dlp/ContentPolicy.ts";
+import { ContentPolicy, ContentPolicyProvider } from "./DLP/ContentPolicy.ts";
 import {
   DeidentifyTemplate,
   DeidentifyTemplateProvider,
-} from "./Dlp/DeidentifyTemplate.ts";
+} from "./DLP/DeidentifyTemplate.ts";
 import {
   DiscoveryConfig,
   DiscoveryConfigProvider,
-} from "./Dlp/DiscoveryConfig.ts";
-import { DlpJob, DlpJobProvider } from "./Dlp/DlpJob.ts";
+} from "./DLP/DiscoveryConfig.ts";
+import { DlpJob, DlpJobProvider } from "./DLP/DlpJob.ts";
 import {
   InspectTemplate,
   InspectTemplateProvider,
-} from "./Dlp/InspectTemplate.ts";
-import { JobTrigger, JobTriggerProvider } from "./Dlp/JobTrigger.ts";
+} from "./DLP/InspectTemplate.ts";
+import { JobTrigger, JobTriggerProvider } from "./DLP/JobTrigger.ts";
 import {
   LocationsDeidentifyTemplate,
   LocationsDeidentifyTemplateProvider,
-} from "./Dlp/LocationsDeidentifyTemplate.ts";
+} from "./DLP/LocationsDeidentifyTemplate.ts";
 import {
   LocationsDlpJob,
   LocationsDlpJobProvider,
-} from "./Dlp/LocationsDlpJob.ts";
+} from "./DLP/LocationsDlpJob.ts";
 import {
   LocationsInspectTemplate,
   LocationsInspectTemplateProvider,
-} from "./Dlp/LocationsInspectTemplate.ts";
+} from "./DLP/LocationsInspectTemplate.ts";
 import {
   LocationsJobTrigger,
   LocationsJobTriggerProvider,
-} from "./Dlp/LocationsJobTrigger.ts";
+} from "./DLP/LocationsJobTrigger.ts";
 import {
   LocationsStoredInfoType,
   LocationsStoredInfoTypeProvider,
-} from "./Dlp/LocationsStoredInfoType.ts";
+} from "./DLP/LocationsStoredInfoType.ts";
 import {
   OrganizationStoredInfoType,
   OrganizationStoredInfoTypeProvider,
-} from "./Dlp/OrganizationStoredInfoType.ts";
+} from "./DLP/OrganizationStoredInfoType.ts";
 import {
   StoredInfoType,
   StoredInfoTypeProvider,
-} from "./Dlp/StoredInfoType.ts";
+} from "./DLP/StoredInfoType.ts";
 import {
   OrganizationsDeidentifyTemplate,
   OrganizationsDeidentifyTemplateProvider,
-} from "./Dlp/OrganizationsDeidentifyTemplate.ts";
+} from "./DLP/OrganizationsDeidentifyTemplate.ts";
 import {
   OrganizationsInspectTemplate,
   OrganizationsInspectTemplateProvider,
-} from "./Dlp/OrganizationsInspectTemplate.ts";
+} from "./DLP/OrganizationsInspectTemplate.ts";
 import {
   OrganizationsLocationsConnection,
   OrganizationsLocationsConnectionProvider,
-} from "./Dlp/OrganizationsLocationsConnection.ts";
+} from "./DLP/OrganizationsLocationsConnection.ts";
 import {
   OrganizationsLocationsDeidentifyTemplate,
   OrganizationsLocationsDeidentifyTemplateProvider,
-} from "./Dlp/OrganizationsLocationsDeidentifyTemplate.ts";
+} from "./DLP/OrganizationsLocationsDeidentifyTemplate.ts";
 import {
   OrganizationsLocationsDiscoveryConfig,
   OrganizationsLocationsDiscoveryConfigProvider,
-} from "./Dlp/OrganizationsLocationsDiscoveryConfig.ts";
+} from "./DLP/OrganizationsLocationsDiscoveryConfig.ts";
 import {
   OrganizationsLocationsInspectTemplate,
   OrganizationsLocationsInspectTemplateProvider,
-} from "./Dlp/OrganizationsLocationsInspectTemplate.ts";
+} from "./DLP/OrganizationsLocationsInspectTemplate.ts";
 import {
   OrganizationsLocationsJobTrigger,
   OrganizationsLocationsJobTriggerProvider,
-} from "./Dlp/OrganizationsLocationsJobTrigger.ts";
+} from "./DLP/OrganizationsLocationsJobTrigger.ts";
 import {
   OrganizationsLocationsStoredInfoType,
   OrganizationsLocationsStoredInfoTypeProvider,
-} from "./Dlp/OrganizationsLocationsStoredInfoType.ts";
-import { Advertiser, AdvertiserProvider } from "./Displayvideo/Advertiser.ts";
-import {
-  AdvertisersAdGroup,
-  AdvertisersAdGroupProvider,
-} from "./Displayvideo/AdvertisersAdGroup.ts";
-import {
-  AdvertisersAdGroupAd,
-  AdvertisersAdGroupAdProvider,
-} from "./Displayvideo/AdvertisersAdGroupAd.ts";
-import {
-  AdvertisersAdGroupsTargetingTypesAssignedTargetingOption,
-  AdvertisersAdGroupsTargetingTypesAssignedTargetingOptionProvider,
-} from "./Displayvideo/AdvertisersAdGroupsTargetingTypesAssignedTargetingOption.ts";
-import {
-  AdvertisersCampaign,
-  AdvertisersCampaignProvider,
-} from "./Displayvideo/AdvertisersCampaign.ts";
-import {
-  AdvertisersChannel,
-  AdvertisersChannelProvider,
-} from "./Displayvideo/AdvertisersChannel.ts";
-import {
-  AdvertisersCreative,
-  AdvertisersCreativeProvider,
-} from "./Displayvideo/AdvertisersCreative.ts";
-import {
-  AdvertisersInsertionOrder,
-  AdvertisersInsertionOrderProvider,
-} from "./Displayvideo/AdvertisersInsertionOrder.ts";
-import {
-  AdvertisersLineItem,
-  AdvertisersLineItemProvider,
-} from "./Displayvideo/AdvertisersLineItem.ts";
+} from "./DLP/OrganizationsLocationsStoredInfoType.ts";
 import {
   FolderBigQueryExport,
   FolderBigQueryExportProvider,
-} from "./Securitycenter/FolderBigQueryExport.ts";
+} from "./SecurityCenter/FolderBigQueryExport.ts";
 import {
   FolderEventThreatDetectionSettingsCustomModule,
   FolderEventThreatDetectionSettingsCustomModuleProvider,
-} from "./Securitycenter/FolderEventThreatDetectionSettingsCustomModule.ts";
+} from "./SecurityCenter/FolderEventThreatDetectionSettingsCustomModule.ts";
 import {
   FolderMuteConfig,
   FolderMuteConfigProvider,
-} from "./Securitycenter/FolderMuteConfig.ts";
+} from "./SecurityCenter/FolderMuteConfig.ts";
 import {
   FolderNotificationConfig,
   FolderNotificationConfigProvider,
-} from "./Securitycenter/FolderNotificationConfig.ts";
+} from "./SecurityCenter/FolderNotificationConfig.ts";
 import {
   FolderSecurityHealthAnalyticsSettingsCustomModule,
   FolderSecurityHealthAnalyticsSettingsCustomModuleProvider,
-} from "./Securitycenter/FolderSecurityHealthAnalyticsSettingsCustomModule.ts";
+} from "./SecurityCenter/FolderSecurityHealthAnalyticsSettingsCustomModule.ts";
 import {
   OrganizationBigQueryExport,
   OrganizationBigQueryExportProvider,
-} from "./Securitycenter/OrganizationBigQueryExport.ts";
+} from "./SecurityCenter/OrganizationBigQueryExport.ts";
 import {
   OrganizationEventThreatDetectionSettingsCustomModule,
   OrganizationEventThreatDetectionSettingsCustomModuleProvider,
-} from "./Securitycenter/OrganizationEventThreatDetectionSettingsCustomModule.ts";
+} from "./SecurityCenter/OrganizationEventThreatDetectionSettingsCustomModule.ts";
 import {
   OrganizationMuteConfig,
   OrganizationMuteConfigProvider,
-} from "./Securitycenter/OrganizationMuteConfig.ts";
+} from "./SecurityCenter/OrganizationMuteConfig.ts";
 import {
   NotificationConfig,
   NotificationConfigProvider,
-} from "./Securitycenter/NotificationConfig.ts";
+} from "./SecurityCenter/NotificationConfig.ts";
 import {
   OrganizationsNotificationConfig,
   OrganizationsNotificationConfigProvider,
-} from "./Securitycenter/OrganizationsNotificationConfig.ts";
-import { MuteConfig, MuteConfigProvider } from "./Securitycenter/MuteConfig.ts";
+} from "./SecurityCenter/OrganizationsNotificationConfig.ts";
+import { MuteConfig, MuteConfigProvider } from "./SecurityCenter/MuteConfig.ts";
 import {
   BigQueryExport,
   BigQueryExportProvider,
-} from "./Securitycenter/BigQueryExport.ts";
+} from "./SecurityCenter/BigQueryExport.ts";
 import {
   EventThreatDetectionSettingsCustomModule,
   EventThreatDetectionSettingsCustomModuleProvider,
-} from "./Securitycenter/EventThreatDetectionSettingsCustomModule.ts";
+} from "./SecurityCenter/EventThreatDetectionSettingsCustomModule.ts";
 import {
   SecurityHealthAnalyticsSettingsCustomModule,
   SecurityHealthAnalyticsSettingsCustomModuleProvider,
-} from "./Securitycenter/SecurityHealthAnalyticsSettingsCustomModule.ts";
+} from "./SecurityCenter/SecurityHealthAnalyticsSettingsCustomModule.ts";
 import {
   OrganizationsSecurityHealthAnalyticsSettingsCustomModule,
   OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider,
-} from "./Securitycenter/OrganizationsSecurityHealthAnalyticsSettingsCustomModule.ts";
-import { Posture, PostureProvider } from "./Securityposture/Posture.ts";
+} from "./SecurityCenter/OrganizationsSecurityHealthAnalyticsSettingsCustomModule.ts";
+import { Posture, PostureProvider } from "./SecurityPosture/Posture.ts";
 import {
   PostureDeployment,
   PostureDeploymentProvider,
-} from "./Securityposture/PostureDeployment.ts";
+} from "./SecurityPosture/PostureDeployment.ts";
 import {
   AppgroupsAppsKey,
   AppgroupsAppsKeyProvider,
@@ -2383,182 +2130,146 @@ import {
 import {
   DataStoresBranchesDocument,
   DataStoresBranchesDocumentProvider,
-} from "./Discoveryengine/DataStoresBranchesDocument.ts";
+} from "./DiscoveryEngine/DataStoresBranchesDocument.ts";
 import {
   DataStoresControl,
   DataStoresControlProvider,
-} from "./Discoveryengine/DataStoresControl.ts";
+} from "./DiscoveryEngine/DataStoresControl.ts";
 import {
   DataStoresConversation,
   DataStoresConversationProvider,
-} from "./Discoveryengine/DataStoresConversation.ts";
+} from "./DiscoveryEngine/DataStoresConversation.ts";
 import {
   DataStoresSchema,
   DataStoresSchemaProvider,
-} from "./Discoveryengine/DataStoresSchema.ts";
+} from "./DiscoveryEngine/DataStoresSchema.ts";
 import {
   DataStoresServingConfig,
   DataStoresServingConfigProvider,
-} from "./Discoveryengine/DataStoresServingConfig.ts";
+} from "./DiscoveryEngine/DataStoresServingConfig.ts";
 import {
   DataStoresSession,
   DataStoresSessionProvider,
-} from "./Discoveryengine/DataStoresSession.ts";
+} from "./DiscoveryEngine/DataStoresSession.ts";
 import {
   DataStoresSiteSearchEngineTargetSite,
   DataStoresSiteSearchEngineTargetSiteProvider,
-} from "./Discoveryengine/DataStoresSiteSearchEngineTargetSite.ts";
+} from "./DiscoveryEngine/DataStoresSiteSearchEngineTargetSite.ts";
 import {
   IdentityMappingStore,
   IdentityMappingStoreProvider,
-} from "./Discoveryengine/IdentityMappingStore.ts";
-import { DataStore, DataStoreProvider } from "./Discoveryengine/DataStore.ts";
+} from "./DiscoveryEngine/IdentityMappingStore.ts";
+import { DataStore, DataStoreProvider } from "./DiscoveryEngine/DataStore.ts";
 import {
   CollectionsEngine,
   CollectionsEngineProvider,
-} from "./Discoveryengine/CollectionsEngine.ts";
+} from "./DiscoveryEngine/CollectionsEngine.ts";
 import {
   CollectionsEnginesAssistant,
   CollectionsEnginesAssistantProvider,
-} from "./Discoveryengine/CollectionsEnginesAssistant.ts";
+} from "./DiscoveryEngine/CollectionsEnginesAssistant.ts";
 import {
   CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig,
   CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigProvider,
-} from "./Discoveryengine/CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig.ts";
+} from "./DiscoveryEngine/CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig.ts";
 import {
   CollectionsEnginesControl,
   CollectionsEnginesControlProvider,
-} from "./Discoveryengine/CollectionsEnginesControl.ts";
+} from "./DiscoveryEngine/CollectionsEnginesControl.ts";
 import {
   CollectionsEnginesConversation,
   CollectionsEnginesConversationProvider,
-} from "./Discoveryengine/CollectionsEnginesConversation.ts";
+} from "./DiscoveryEngine/CollectionsEnginesConversation.ts";
 import {
   CollectionsEnginesServingConfig,
   CollectionsEnginesServingConfigProvider,
-} from "./Discoveryengine/CollectionsEnginesServingConfig.ts";
+} from "./DiscoveryEngine/CollectionsEnginesServingConfig.ts";
 import {
   CollectionsEnginesSession,
   CollectionsEnginesSessionProvider,
-} from "./Discoveryengine/CollectionsEnginesSession.ts";
+} from "./DiscoveryEngine/CollectionsEnginesSession.ts";
 import {
   CollectionsDataStore,
   CollectionsDataStoreProvider,
-} from "./Discoveryengine/CollectionsDataStore.ts";
+} from "./DiscoveryEngine/CollectionsDataStore.ts";
 import {
   CollectionsDataStoresBranchesDocument,
   CollectionsDataStoresBranchesDocumentProvider,
-} from "./Discoveryengine/CollectionsDataStoresBranchesDocument.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresBranchesDocument.ts";
 import {
   CollectionsDataStoresControl,
   CollectionsDataStoresControlProvider,
-} from "./Discoveryengine/CollectionsDataStoresControl.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresControl.ts";
 import {
   CollectionsDataStoresConversation,
   CollectionsDataStoresConversationProvider,
-} from "./Discoveryengine/CollectionsDataStoresConversation.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresConversation.ts";
 import {
   CollectionsDataStoresSchema,
   CollectionsDataStoresSchemaProvider,
-} from "./Discoveryengine/CollectionsDataStoresSchema.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresSchema.ts";
 import {
   CollectionsDataStoresServingConfig,
   CollectionsDataStoresServingConfigProvider,
-} from "./Discoveryengine/CollectionsDataStoresServingConfig.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresServingConfig.ts";
 import {
   CollectionsDataStoresSession,
   CollectionsDataStoresSessionProvider,
-} from "./Discoveryengine/CollectionsDataStoresSession.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresSession.ts";
 import {
   CollectionsDataStoresSiteSearchEngineTargetSite,
   CollectionsDataStoresSiteSearchEngineTargetSiteProvider,
-} from "./Discoveryengine/CollectionsDataStoresSiteSearchEngineTargetSite.ts";
+} from "./DiscoveryEngine/CollectionsDataStoresSiteSearchEngineTargetSite.ts";
 import {
   Deployment as ApihubDeployment,
   DeploymentProvider as ApihubDeploymentProvider,
-} from "./Apihub/Deployment.ts";
-import { ExternalApi, ExternalApiProvider } from "./Apihub/ExternalApi.ts";
-import { Plugin, PluginProvider } from "./Apihub/Plugin.ts";
+} from "./ApiHub/Deployment.ts";
+import { ExternalApi, ExternalApiProvider } from "./ApiHub/ExternalApi.ts";
+import { Plugin, PluginProvider } from "./ApiHub/Plugin.ts";
 import {
   PluginsInstance,
   PluginsInstanceProvider,
-} from "./Apihub/PluginsInstance.ts";
+} from "./ApiHub/PluginsInstance.ts";
 import {
   RuntimeProjectAttachment,
   RuntimeProjectAttachmentProvider,
-} from "./Apihub/RuntimeProjectAttachment.ts";
+} from "./ApiHub/RuntimeProjectAttachment.ts";
 import {
   ApiHubInstance,
   ApiHubInstanceProvider,
-} from "./Apihub/ApiHubInstance.ts";
+} from "./ApiHub/ApiHubInstance.ts";
 import {
   Api as ApihubApi,
   ApiProvider as ApihubApiProvider,
-} from "./Apihub/Api.ts";
-import { ApisVersion, ApisVersionProvider } from "./Apihub/ApisVersion.ts";
+} from "./ApiHub/Api.ts";
+import { ApisVersion, ApisVersionProvider } from "./ApiHub/ApisVersion.ts";
 import {
   ApisVersionsOperation,
   ApisVersionsOperationProvider,
-} from "./Apihub/ApisVersionsOperation.ts";
+} from "./ApiHub/ApisVersionsOperation.ts";
 import {
   ApisVersionsSpec,
   ApisVersionsSpecProvider,
-} from "./Apihub/ApisVersionsSpec.ts";
+} from "./ApiHub/ApisVersionsSpec.ts";
 import {
   Attribute as ApihubAttribute,
   AttributeProvider as ApihubAttributeProvider,
-} from "./Apihub/Attribute.ts";
-import { Curation, CurationProvider } from "./Apihub/Curation.ts";
-import { Dependency, DependencyProvider } from "./Apihub/Dependency.ts";
-import { Application, ApplicationProvider } from "./Apphub/Application.ts";
+} from "./ApiHub/Attribute.ts";
+import { Curation, CurationProvider } from "./ApiHub/Curation.ts";
+import { Dependency, DependencyProvider } from "./ApiHub/Dependency.ts";
+import { Application, ApplicationProvider } from "./AppHub/Application.ts";
 import {
   ApplicationsService,
   ApplicationsServiceProvider,
-} from "./Apphub/ApplicationsService.ts";
+} from "./AppHub/ApplicationsService.ts";
 import {
   ApplicationsWorkload,
   ApplicationsWorkloadProvider,
-} from "./Apphub/ApplicationsWorkload.ts";
+} from "./AppHub/ApplicationsWorkload.ts";
 import {
   ServiceProjectAttachment,
   ServiceProjectAttachmentProvider,
-} from "./Apphub/ServiceProjectAttachment.ts";
-import {
-  Api as ApigeeregistryApi,
-  ApiProvider as ApigeeregistryApiProvider,
-} from "./Apigeeregistry/Api.ts";
-import {
-  ApisArtifact,
-  ApisArtifactProvider,
-} from "./Apigeeregistry/ApisArtifact.ts";
-import {
-  ApisDeployment,
-  ApisDeploymentProvider,
-} from "./Apigeeregistry/ApisDeployment.ts";
-import {
-  ApisDeploymentsArtifact,
-  ApisDeploymentsArtifactProvider,
-} from "./Apigeeregistry/ApisDeploymentsArtifact.ts";
-import {
-  ApisVersion as ApigeeregistryApisVersion,
-  ApisVersionProvider as ApigeeregistryApisVersionProvider,
-} from "./Apigeeregistry/ApisVersion.ts";
-import {
-  ApisVersionsArtifact,
-  ApisVersionsArtifactProvider,
-} from "./Apigeeregistry/ApisVersionsArtifact.ts";
-import {
-  ApisVersionsSpec as ApigeeregistryApisVersionsSpec,
-  ApisVersionsSpecProvider as ApigeeregistryApisVersionsSpecProvider,
-} from "./Apigeeregistry/ApisVersionsSpec.ts";
-import {
-  ApisVersionsSpecsArtifact,
-  ApisVersionsSpecsArtifactProvider,
-} from "./Apigeeregistry/ApisVersionsSpecsArtifact.ts";
-import {
-  Artifact as ApigeeregistryArtifact,
-  ArtifactProvider as ApigeeregistryArtifactProvider,
-} from "./Apigeeregistry/Artifact.ts";
+} from "./AppHub/ServiceProjectAttachment.ts";
 import {
   ObservationJob,
   ObservationJobProvider,
@@ -2567,200 +2278,76 @@ import {
   ObservationSource,
   ObservationSourceProvider,
 } from "./Apim/ObservationSource.ts";
-import { ApisConfig, ApisConfigProvider } from "./Apigateway/ApisConfig.ts";
+import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
 import {
   DataExchange,
   DataExchangeProvider,
-} from "./Analyticshub/DataExchange.ts";
+} from "./AnalyticsHub/DataExchange.ts";
 import {
   DataExchangesListing,
   DataExchangesListingProvider,
-} from "./Analyticshub/DataExchangesListing.ts";
+} from "./AnalyticsHub/DataExchangesListing.ts";
 import {
   DataExchangesQueryTemplate,
   DataExchangesQueryTemplateProvider,
-} from "./Analyticshub/DataExchangesQueryTemplate.ts";
-import {
-  AdvertisersLineItemsTargetingTypesAssignedTargetingOption,
-  AdvertisersLineItemsTargetingTypesAssignedTargetingOptionProvider,
-} from "./Displayvideo/AdvertisersLineItemsTargetingTypesAssignedTargetingOption.ts";
-import {
-  AdvertisersLocationList,
-  AdvertisersLocationListProvider,
-} from "./Displayvideo/AdvertisersLocationList.ts";
-import {
-  AdvertisersNegativeKeywordList,
-  AdvertisersNegativeKeywordListProvider,
-} from "./Displayvideo/AdvertisersNegativeKeywordList.ts";
-import {
-  AdvertisersTargetingTypesAssignedTargetingOption,
-  AdvertisersTargetingTypesAssignedTargetingOptionProvider,
-} from "./Displayvideo/AdvertisersTargetingTypesAssignedTargetingOption.ts";
-import {
-  InventorySource,
-  InventorySourceProvider,
-} from "./Displayvideo/InventorySource.ts";
-import {
-  InventorySourceGroup,
-  InventorySourceGroupProvider,
-} from "./Displayvideo/InventorySourceGroup.ts";
-import {
-  InventorySourceGroupsAssignedInventorySource,
-  InventorySourceGroupsAssignedInventorySourceProvider,
-} from "./Displayvideo/InventorySourceGroupsAssignedInventorySource.ts";
-import {
-  PartnersChannel,
-  PartnersChannelProvider,
-} from "./Displayvideo/PartnersChannel.ts";
-import {
-  PartnersTargetingTypesAssignedTargetingOption,
-  PartnersTargetingTypesAssignedTargetingOptionProvider,
-} from "./Displayvideo/PartnersTargetingTypesAssignedTargetingOption.ts";
-import {
-  User as DisplayvideoUser,
-  UserProvider as DisplayvideoUserProvider,
-} from "./Displayvideo/User.ts";
-import { UserRole, UserRoleProvider } from "./Dfareporting/UserRole.ts";
-import {
-  AdvertiserGroup,
-  AdvertiserGroupProvider,
-} from "./Dfareporting/AdvertiserGroup.ts";
-import {
-  ContentCategory,
-  ContentCategoryProvider,
-} from "./Dfareporting/ContentCategory.ts";
-import {
-  CreativeField,
-  CreativeFieldProvider,
-} from "./Dfareporting/CreativeField.ts";
-import {
-  CreativeFieldValue,
-  CreativeFieldValueProvider,
-} from "./Dfareporting/CreativeFieldValue.ts";
-import { EventTag, EventTagProvider } from "./Dfareporting/EventTag.ts";
-import {
-  FloodlightActivity,
-  FloodlightActivityProvider,
-} from "./Dfareporting/FloodlightActivity.ts";
-import {
-  PlacementStrategy,
-  PlacementStrategyProvider,
-} from "./Dfareporting/PlacementStrategy.ts";
-import {
-  Report as DfareportingReport,
-  ReportProvider as DfareportingReportProvider,
-} from "./Dfareporting/Report.ts";
-import {
-  BiddersAccountsFilterSet,
-  BiddersAccountsFilterSetProvider,
-} from "./Adexchangebuyer2/BiddersAccountsFilterSet.ts";
-import {
-  BiddersFilterSet,
-  BiddersFilterSetProvider,
-} from "./Adexchangebuyer2/BiddersFilterSet.ts";
-import {
-  BuyersFilterSet,
-  BuyersFilterSetProvider,
-} from "./Adexchangebuyer2/BuyersFilterSet.ts";
+} from "./AnalyticsHub/DataExchangesQueryTemplate.ts";
 import {
   BuyersClientsUser,
   BuyersClientsUserProvider,
-} from "./Authorizedbuyersmarketplace/BuyersClientsUser.ts";
-import {
-  AdclientsCustomchannel,
-  AdclientsCustomchannelProvider,
-} from "./Adsense/AdclientsCustomchannel.ts";
+} from "./AuthorizedBuyersMarketplace/BuyersClientsUser.ts";
 import {
   AccountTypesUserList,
   AccountTypesUserListProvider,
-} from "./Datamanager/AccountTypesUserList.ts";
+} from "./DataManager/AccountTypesUserList.ts";
 import {
   BiddersPretargetingConfig,
   BiddersPretargetingConfigProvider,
-} from "./Realtimebidding/BiddersPretargetingConfig.ts";
+} from "./RealTimeBidding/BiddersPretargetingConfig.ts";
 import {
   Pipeline as DatapipelinesPipeline,
   PipelineProvider as DatapipelinesPipelineProvider,
-} from "./Datapipelines/Pipeline.ts";
-import { RunPipelineHttp } from "./Datapipelines/RunPipelineHttp.ts";
-import { StopPipelineHttp } from "./Datapipelines/StopPipelineHttp.ts";
-import { Indexe, IndexeProvider } from "./Datastore/Indexe.ts";
+} from "./DataPipelines/Pipeline.ts";
+import { RunPipelineHttp } from "./DataPipelines/RunPipelineHttp.ts";
+import { StopPipelineHttp } from "./DataPipelines/StopPipelineHttp.ts";
+import {
+  Index as DatastoreIndex,
+  IndexProvider as DatastoreIndexProvider,
+} from "./Datastore/Indexes.ts";
 import { LookupHttp } from "./Datastore/LookupHttp.ts";
 import { CommitHttp } from "./Datastore/CommitHttp.ts";
 import { RunQueryHttp } from "./Datastore/RunQueryHttp.ts";
 import {
-  PlatformsSite,
-  PlatformsSiteProvider,
-} from "./Adsenseplatform/PlatformsSite.ts";
-import {
   AuthProvider as AgentidentityAuthProvider,
   AuthProviderProvider as AgentidentityAuthProviderProvider,
-} from "./Agentidentity/AuthProvider.ts";
-import { Po, PoProvider } from "./Content/Po.ts";
-import {
-  Product as ContentProduct,
-  ProductProvider as ContentProductProvider,
-} from "./Content/Product.ts";
-import {
-  Account as ContentAccount,
-  AccountProvider as ContentAccountProvider,
-} from "./Content/Account.ts";
-import {
-  Collection as ContentCollection,
-  CollectionProvider as ContentCollectionProvider,
-} from "./Content/Collection.ts";
-import {
-  Conversionsource,
-  ConversionsourceProvider,
-} from "./Content/Conversionsource.ts";
-import {
-  Datafeed as ContentDatafeed,
-  DatafeedProvider as ContentDatafeedProvider,
-} from "./Content/Datafeed.ts";
-import {
-  FreelistingsprogramCheckoutsetting,
-  FreelistingsprogramCheckoutsettingProvider,
-} from "./Content/FreelistingsprogramCheckoutsetting.ts";
-import {
-  Productdeliverytime,
-  ProductdeliverytimeProvider,
-} from "./Content/Productdeliverytime.ts";
-import {
-  Region as ContentRegion,
-  RegionProvider as ContentRegionProvider,
-} from "./Content/Region.ts";
-import {
-  Returnpolicyonline,
-  ReturnpolicyonlineProvider,
-} from "./Content/Returnpolicyonline.ts";
+} from "./AgentIdentity/AuthProvider.ts";
 import {
   MerchantReview,
   MerchantReviewProvider,
-} from "./MerchantapiReviews/MerchantReview.ts";
+} from "./MerchantApiReviews/MerchantReview.ts";
 import {
   ProductReview,
   ProductReviewProvider,
-} from "./MerchantapiReviews/ProductReview.ts";
+} from "./MerchantApiReviews/ProductReview.ts";
 import {
   DocumentSchema as ContentwarehouseDocumentSchema,
   DocumentSchemaProvider as ContentwarehouseDocumentSchemaProvider,
-} from "./Contentwarehouse/DocumentSchema.ts";
+} from "./ContentWarehouse/DocumentSchema.ts";
 import {
   Document as ContentwarehouseDocument,
   DocumentProvider as ContentwarehouseDocumentProvider,
-} from "./Contentwarehouse/Document.ts";
+} from "./ContentWarehouse/Document.ts";
 import {
   RuleSet as ContentwarehouseRuleSet,
   RuleSetProvider as ContentwarehouseRuleSetProvider,
-} from "./Contentwarehouse/RuleSet.ts";
+} from "./ContentWarehouse/RuleSet.ts";
 import {
   SynonymSet as ContentwarehouseSynonymSet,
   SynonymSetProvider as ContentwarehouseSynonymSetProvider,
-} from "./Contentwarehouse/SynonymSet.ts";
-import { GetDocumentSchemaHttp } from "./Contentwarehouse/GetDocumentSchemaHttp.ts";
-import { GetDocumentHttp as GetContentwarehouseDocumentHttp } from "./Contentwarehouse/GetDocumentHttp.ts";
-import { GetRuleSetHttp } from "./Contentwarehouse/GetRuleSetHttp.ts";
-import { GetSynonymSetHttp } from "./Contentwarehouse/GetSynonymSetHttp.ts";
+} from "./ContentWarehouse/SynonymSet.ts";
+import { GetDocumentSchemaHttp } from "./ContentWarehouse/GetDocumentSchemaHttp.ts";
+import { GetDocumentHttp as GetContentwarehouseDocumentHttp } from "./ContentWarehouse/GetDocumentHttp.ts";
+import { GetRuleSetHttp } from "./ContentWarehouse/GetRuleSetHttp.ts";
+import { GetSynonymSetHttp } from "./ContentWarehouse/GetSynonymSetHttp.ts";
 
 import {
   SfdcInstance,
@@ -2806,46 +2393,46 @@ import {
 import {
   AssetsExportJob as MigrationcenterAssetsExportJob,
   AssetsExportJobProvider as MigrationcenterAssetsExportJobProvider,
-} from "./Migrationcenter/AssetsExportJob.ts";
+} from "./MigrationCenter/AssetsExportJob.ts";
 import {
   DiscoveryClient as MigrationcenterDiscoveryClient,
   DiscoveryClientProvider as MigrationcenterDiscoveryClientProvider,
-} from "./Migrationcenter/DiscoveryClient.ts";
+} from "./MigrationCenter/DiscoveryClient.ts";
 import {
   Group as MigrationcenterGroup,
   GroupProvider as MigrationcenterGroupProvider,
-} from "./Migrationcenter/Group.ts";
+} from "./MigrationCenter/Group.ts";
 import {
   ImportJob as MigrationcenterImportJob,
   ImportJobProvider as MigrationcenterImportJobProvider,
-} from "./Migrationcenter/ImportJob.ts";
+} from "./MigrationCenter/ImportJob.ts";
 import {
   ImportJobsImportDataFile as MigrationcenterImportJobsImportDataFile,
   ImportJobsImportDataFileProvider as MigrationcenterImportJobsImportDataFileProvider,
-} from "./Migrationcenter/ImportJobsImportDataFile.ts";
+} from "./MigrationCenter/ImportJobsImportDataFile.ts";
 import {
   PreferenceSet as MigrationcenterPreferenceSet,
   PreferenceSetProvider as MigrationcenterPreferenceSetProvider,
-} from "./Migrationcenter/PreferenceSet.ts";
+} from "./MigrationCenter/PreferenceSet.ts";
 import {
   ReportConfig as MigrationcenterReportConfig,
   ReportConfigProvider as MigrationcenterReportConfigProvider,
-} from "./Migrationcenter/ReportConfig.ts";
+} from "./MigrationCenter/ReportConfig.ts";
 import {
   ReportConfigsReport as MigrationcenterReportConfigsReport,
   ReportConfigsReportProvider as MigrationcenterReportConfigsReportProvider,
-} from "./Migrationcenter/ReportConfigsReport.ts";
+} from "./MigrationCenter/ReportConfigsReport.ts";
 import {
   Source as MigrationcenterSource,
   SourceProvider as MigrationcenterSourceProvider,
-} from "./Migrationcenter/Source.ts";
+} from "./MigrationCenter/Source.ts";
 import {
   Collector as RapidmigrationassessmentCollector,
   CollectorProvider as RapidmigrationassessmentCollectorProvider,
-} from "./Rapidmigrationassessment/Collector.ts";
-import { PauseCollectorHttp } from "./Rapidmigrationassessment/PauseCollectorHttp.ts";
-import { RegisterCollectorHttp } from "./Rapidmigrationassessment/RegisterCollectorHttp.ts";
-import { ResumeCollectorHttp } from "./Rapidmigrationassessment/ResumeCollectorHttp.ts";
+} from "./RapidMigrationAssessment/Collector.ts";
+import { PauseCollectorHttp } from "./RapidMigrationAssessment/PauseCollectorHttp.ts";
+import { RegisterCollectorHttp } from "./RapidMigrationAssessment/RegisterCollectorHttp.ts";
+import { ResumeCollectorHttp } from "./RapidMigrationAssessment/ResumeCollectorHttp.ts";
 import {
   Federation as MetastoreFederation,
   FederationProvider as MetastoreFederationProvider,
@@ -2886,77 +2473,77 @@ import { Team, TeamProvider } from "./Dataform/Team.ts";
 import {
   VolumesReplication,
   VolumesReplicationProvider,
-} from "./Netapp/VolumesReplication.ts";
+} from "./NetApp/VolumesReplication.ts";
 import {
   VmwareEngineNetwork,
   VmwareEngineNetworkProvider,
-} from "./Vmwareengine/VmwareEngineNetwork.ts";
+} from "./VMwareEngine/VmwareEngineNetwork.ts";
 import {
   PrivateConnection,
   PrivateConnectionProvider,
-} from "./Vmwareengine/PrivateConnection.ts";
+} from "./VMwareEngine/PrivateConnection.ts";
 import {
   PrivateCloudsManagementDnsZoneBinding,
   PrivateCloudsManagementDnsZoneBindingProvider,
-} from "./Vmwareengine/PrivateCloudsManagementDnsZoneBinding.ts";
+} from "./VMwareEngine/PrivateCloudsManagementDnsZoneBinding.ts";
 import {
   Datastore as VmwareengineDatastore,
   DatastoreProvider as VmwareengineDatastoreProvider,
-} from "./Vmwareengine/Datastore.ts";
+} from "./VMwareEngine/Datastore.ts";
 import {
   NetworkPeering,
   NetworkPeeringProvider,
-} from "./Vmwareengine/NetworkPeering.ts";
+} from "./VMwareEngine/NetworkPeering.ts";
 import {
   NetworkPolicy as VmwareengineNetworkPolicy,
   NetworkPolicyProvider as VmwareengineNetworkPolicyProvider,
-} from "./Vmwareengine/NetworkPolicy.ts";
+} from "./VMwareEngine/NetworkPolicy.ts";
 import {
   NetworkPoliciesExternalAccessRule,
   NetworkPoliciesExternalAccessRuleProvider,
-} from "./Vmwareengine/NetworkPoliciesExternalAccessRule.ts";
+} from "./VMwareEngine/NetworkPoliciesExternalAccessRule.ts";
 import {
   PrivateCloud,
   PrivateCloudProvider,
-} from "./Vmwareengine/PrivateCloud.ts";
+} from "./VMwareEngine/PrivateCloud.ts";
 import {
   PrivateCloudsCluster,
   PrivateCloudsClusterProvider,
-} from "./Vmwareengine/PrivateCloudsCluster.ts";
+} from "./VMwareEngine/PrivateCloudsCluster.ts";
 import {
-  PrivateCloudsExternalAddresse,
-  PrivateCloudsExternalAddresseProvider,
-} from "./Vmwareengine/PrivateCloudsExternalAddresse.ts";
+  PrivateCloudsExternalAddress,
+  PrivateCloudsExternalAddressProvider,
+} from "./VMwareEngine/PrivateCloudsExternalAddress.ts";
 import {
   PrivateCloudsLoggingServer,
   PrivateCloudsLoggingServerProvider,
-} from "./Vmwareengine/PrivateCloudsLoggingServer.ts";
+} from "./VMwareEngine/PrivateCloudsLoggingServer.ts";
 import {
   VolumesSnapshot,
   VolumesSnapshotProvider,
-} from "./Netapp/VolumesSnapshot.ts";
+} from "./NetApp/VolumesSnapshot.ts";
 import {
   BackupChannel,
   BackupChannelProvider,
-} from "./Gkebackup/BackupChannel.ts";
-import { BackupPlan, BackupPlanProvider } from "./Gkebackup/BackupPlan.ts";
+} from "./GKEBackup/BackupChannel.ts";
+import { BackupPlan, BackupPlanProvider } from "./GKEBackup/BackupPlan.ts";
 import {
   BackupPlansBackup,
   BackupPlansBackupProvider,
-} from "./Gkebackup/BackupPlansBackup.ts";
+} from "./GKEBackup/BackupPlansBackup.ts";
 import {
   RestoreChannel,
   RestoreChannelProvider,
-} from "./Gkebackup/RestoreChannel.ts";
-import { RestorePlan, RestorePlanProvider } from "./Gkebackup/RestorePlan.ts";
+} from "./GKEBackup/RestoreChannel.ts";
+import { RestorePlan, RestorePlanProvider } from "./GKEBackup/RestorePlan.ts";
 import {
   RestorePlansRestore,
   RestorePlansRestoreProvider,
-} from "./Gkebackup/RestorePlansRestore.ts";
+} from "./GKEBackup/RestorePlansRestore.ts";
 import {
   MembershipsFeature,
   MembershipsFeatureProvider,
-} from "./Gkehub/MembershipsFeature.ts";
+} from "./GKEHub/MembershipsFeature.ts";
 import {
   InstancesBackup,
   InstancesBackupProvider,
@@ -2964,75 +2551,75 @@ import {
 import {
   BareMetalCluster,
   BareMetalClusterProvider,
-} from "./Gkeonprem/BareMetalCluster.ts";
+} from "./GKEOnPrem/BareMetalCluster.ts";
 import {
   BareMetalClustersBareMetalNodePool,
   BareMetalClustersBareMetalNodePoolProvider,
-} from "./Gkeonprem/BareMetalClustersBareMetalNodePool.ts";
+} from "./GKEOnPrem/BareMetalClustersBareMetalNodePool.ts";
 import {
   VmwareCluster as GkeonpremVmwareCluster,
   VmwareClusterProvider as GkeonpremVmwareClusterProvider,
-} from "./Gkeonprem/VmwareCluster.ts";
+} from "./GKEOnPrem/VmwareCluster.ts";
 import {
   VmwareClustersVmwareNodePool,
   VmwareClustersVmwareNodePoolProvider,
-} from "./Gkeonprem/VmwareClustersVmwareNodePool.ts";
+} from "./GKEOnPrem/VmwareClustersVmwareNodePool.ts";
 import {
   BackupVault as BackupdrBackupVault,
   BackupVaultProvider as BackupdrBackupVaultProvider,
-} from "./Backupdr/BackupVault.ts";
+} from "./BackupDR/BackupVault.ts";
 import {
   BackupPlan as BackupdrBackupPlan,
   BackupPlanProvider as BackupdrBackupPlanProvider,
-} from "./Backupdr/BackupPlan.ts";
+} from "./BackupDR/BackupPlan.ts";
 import {
   BackupPlanAssociation,
   BackupPlanAssociationProvider,
-} from "./Backupdr/BackupPlanAssociation.ts";
+} from "./BackupDR/BackupPlanAssociation.ts";
 import {
   ManagementServer as BackupdrManagementServer,
   ManagementServerProvider as BackupdrManagementServerProvider,
-} from "./Backupdr/ManagementServer.ts";
+} from "./BackupDR/ManagementServer.ts";
 import {
   NfsShare as BaremetalsolutionNfsShare,
   NfsShareProvider as BaremetalsolutionNfsShareProvider,
-} from "./Baremetalsolution/NfsShare.ts";
+} from "./BareMetalSolution/NfsShare.ts";
 import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
-} from "./Baremetalsolution/VolumesSnapshot.ts";
+} from "./BareMetalSolution/VolumesSnapshot.ts";
 import {
   Domain as ManagedidentitiesDomain,
   DomainProvider as ManagedidentitiesDomainProvider,
-} from "./Managedidentities/Domain.ts";
+} from "./ManagedIdentities/Domain.ts";
 import {
   DomainsBackup as ManagedidentitiesDomainsBackup,
   DomainsBackupProvider as ManagedidentitiesDomainsBackupProvider,
-} from "./Managedidentities/DomainsBackup.ts";
+} from "./ManagedIdentities/DomainsBackup.ts";
 import {
   Peering as ManagedidentitiesPeering,
   PeeringProvider as ManagedidentitiesPeeringProvider,
-} from "./Managedidentities/Peering.ts";
+} from "./ManagedIdentities/Peering.ts";
 import {
   CustomTargetType,
   CustomTargetTypeProvider,
-} from "./Clouddeploy/CustomTargetType.ts";
+} from "./CloudDeploy/CustomTargetType.ts";
 import {
   DeliveryPipeline,
   DeliveryPipelineProvider,
-} from "./Clouddeploy/DeliveryPipeline.ts";
+} from "./CloudDeploy/DeliveryPipeline.ts";
 import {
   DeliveryPipelinesAutomation,
   DeliveryPipelinesAutomationProvider,
-} from "./Clouddeploy/DeliveryPipelinesAutomation.ts";
+} from "./CloudDeploy/DeliveryPipelinesAutomation.ts";
 import {
   DeployPolicy,
   DeployPolicyProvider,
-} from "./Clouddeploy/DeployPolicy.ts";
+} from "./CloudDeploy/DeployPolicy.ts";
 import {
   Target as ClouddeployTarget,
   TargetProvider as ClouddeployTargetProvider,
-} from "./Clouddeploy/Target.ts";
+} from "./CloudDeploy/Target.ts";
 import {
   DeploymentGroup as ConfigDeploymentGroup,
   DeploymentGroupProvider as ConfigDeploymentGroupProvider,
@@ -3041,180 +2628,163 @@ import {
   Preview as ConfigPreview,
   PreviewProvider as ConfigPreviewProvider,
 } from "./Config/Preview.ts";
-import { App as CesApp, AppProvider as CesAppProvider } from "./Ces/App.ts";
-import { AppsAgent, AppsAgentProvider } from "./Ces/AppsAgent.ts";
+import { App as CesApp, AppProvider as CesAppProvider } from "./CES/App.ts";
+import { AppsAgent, AppsAgentProvider } from "./CES/AppsAgent.ts";
 import {
   AppsDeployment,
   AppsDeploymentProvider,
-} from "./Ces/AppsDeployment.ts";
-import { AppsExample, AppsExampleProvider } from "./Ces/AppsExample.ts";
-import { AppsGuardrail, AppsGuardrailProvider } from "./Ces/AppsGuardrail.ts";
-import { AppsTool, AppsToolProvider } from "./Ces/AppsTool.ts";
-import { AppsToolset, AppsToolsetProvider } from "./Ces/AppsToolset.ts";
-import { AppsVersion, AppsVersionProvider } from "./Ces/AppsVersion.ts";
-import {
-  CustomersDeployment,
-  CustomersDeploymentProvider,
-} from "./ProdTtSasportal/CustomersDeployment.ts";
-import {
-  CustomersDevice,
-  CustomersDeviceProvider,
-} from "./ProdTtSasportal/CustomersDevice.ts";
-import {
-  CustomersNode,
-  CustomersNodeProvider,
-} from "./ProdTtSasportal/CustomersNode.ts";
-import {
-  NodesDevice,
-  NodesDeviceProvider,
-} from "./ProdTtSasportal/NodesDevice.ts";
-import { NodesNode, NodesNodeProvider } from "./ProdTtSasportal/NodesNode.ts";
+} from "./CES/AppsDeployment.ts";
+import { AppsExample, AppsExampleProvider } from "./CES/AppsExample.ts";
+import { AppsGuardrail, AppsGuardrailProvider } from "./CES/AppsGuardrail.ts";
+import { AppsTool, AppsToolProvider } from "./CES/AppsTool.ts";
+import { AppsToolset, AppsToolsetProvider } from "./CES/AppsToolset.ts";
+import { AppsVersion, AppsVersionProvider } from "./CES/AppsVersion.ts";
 import {
   CustomersDeployment as SasportalCustomersDeployment,
   CustomersDeploymentProvider as SasportalCustomersDeploymentProvider,
-} from "./Sasportal/CustomersDeployment.ts";
+} from "./SasPortal/CustomersDeployment.ts";
 import {
   CustomersDevice as SasportalCustomersDevice,
   CustomersDeviceProvider as SasportalCustomersDeviceProvider,
-} from "./Sasportal/CustomersDevice.ts";
+} from "./SasPortal/CustomersDevice.ts";
 import {
   CustomersNode as SasportalCustomersNode,
   CustomersNodeProvider as SasportalCustomersNodeProvider,
-} from "./Sasportal/CustomersNode.ts";
+} from "./SasPortal/CustomersNode.ts";
 import {
   NodesDevice as SasportalNodesDevice,
   NodesDeviceProvider as SasportalNodesDeviceProvider,
-} from "./Sasportal/NodesDevice.ts";
+} from "./SasPortal/NodesDevice.ts";
 import {
   NodesNode as SasportalNodesNode,
   NodesNodeProvider as SasportalNodesNodeProvider,
-} from "./Sasportal/NodesNode.ts";
+} from "./SasPortal/NodesNode.ts";
 import {
   AnnotationSpecSet as DatalabelingAnnotationSpecSet,
   AnnotationSpecSetProvider as DatalabelingAnnotationSpecSetProvider,
-} from "./Datalabeling/AnnotationSpecSet.ts";
+} from "./DataLabeling/AnnotationSpecSet.ts";
 import {
   Dataset as DatalabelingDataset,
   DatasetProvider as DatalabelingDatasetProvider,
-} from "./Datalabeling/Dataset.ts";
+} from "./DataLabeling/Dataset.ts";
 import {
   DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage,
   DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider,
-} from "./Datalabeling/DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage.ts";
+} from "./DataLabeling/DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage.ts";
 import {
   EvaluationJob as DatalabelingEvaluationJob,
   EvaluationJobProvider as DatalabelingEvaluationJobProvider,
-} from "./Datalabeling/EvaluationJob.ts";
+} from "./DataLabeling/EvaluationJob.ts";
 import {
   Instruction as DatalabelingInstruction,
   InstructionProvider as DatalabelingInstructionProvider,
-} from "./Datalabeling/Instruction.ts";
-import { Processe, ProcesseProvider } from "./Datalineage/Processe.ts";
+} from "./DataLabeling/Instruction.ts";
+import { Process, ProcessProvider } from "./DataLineage/Process.ts";
 import {
   ProcessesRun,
   ProcessesRunProvider,
-} from "./Datalineage/ProcessesRun.ts";
+} from "./DataLineage/ProcessesRun.ts";
 import {
   ProcessesRunsLineageEvent,
   ProcessesRunsLineageEventProvider,
-} from "./Datalineage/ProcessesRunsLineageEvent.ts";
+} from "./DataLineage/ProcessesRunsLineageEvent.ts";
 import {
   Saa as SaasservicemgmtSaa,
   SaaProvider as SaasservicemgmtSaaProvider,
-} from "./Saasservicemgmt/Saa.ts";
+} from "./SaasServiceManagement/Saa.ts";
 import {
   Tenant as SaasservicemgmtTenant,
   TenantProvider as SaasservicemgmtTenantProvider,
-} from "./Saasservicemgmt/Tenant.ts";
+} from "./SaasServiceManagement/Tenant.ts";
 import {
   UnitKind as SaasservicemgmtUnitKind,
   UnitKindProvider as SaasservicemgmtUnitKindProvider,
-} from "./Saasservicemgmt/UnitKind.ts";
+} from "./SaasServiceManagement/UnitKind.ts";
 import {
   Unit as SaasservicemgmtUnit,
   UnitProvider as SaasservicemgmtUnitProvider,
-} from "./Saasservicemgmt/Unit.ts";
+} from "./SaasServiceManagement/Unit.ts";
 import {
   Release as SaasservicemgmtRelease,
   ReleaseProvider as SaasservicemgmtReleaseProvider,
-} from "./Saasservicemgmt/Release.ts";
+} from "./SaasServiceManagement/Release.ts";
 import {
   RolloutKind as SaasservicemgmtRolloutKind,
   RolloutKindProvider as SaasservicemgmtRolloutKindProvider,
-} from "./Saasservicemgmt/RolloutKind.ts";
+} from "./SaasServiceManagement/RolloutKind.ts";
 import {
   Rollout as SaasservicemgmtRollout,
   RolloutProvider as SaasservicemgmtRolloutProvider,
-} from "./Saasservicemgmt/Rollout.ts";
+} from "./SaasServiceManagement/Rollout.ts";
 import {
   UnitOperation as SaasservicemgmtUnitOperation,
   UnitOperationProvider as SaasservicemgmtUnitOperationProvider,
-} from "./Saasservicemgmt/UnitOperation.ts";
+} from "./SaasServiceManagement/UnitOperation.ts";
 import {
   RegistryBook,
   RegistryBookProvider,
-} from "./Cloudnumberregistry/RegistryBook.ts";
-import { Realm, RealmProvider } from "./Cloudnumberregistry/Realm.ts";
+} from "./CloudNumberRegistry/RegistryBook.ts";
+import { Realm, RealmProvider } from "./CloudNumberRegistry/Realm.ts";
 import {
   CustomRange,
   CustomRangeProvider,
-} from "./Cloudnumberregistry/CustomRange.ts";
+} from "./CloudNumberRegistry/CustomRange.ts";
 import {
   IpamAdminScope,
   IpamAdminScopeProvider,
-} from "./Cloudnumberregistry/IpamAdminScope.ts";
+} from "./CloudNumberRegistry/IpamAdminScope.ts";
 import {
   Group as VmmigrationGroup,
   GroupProvider as VmmigrationGroupProvider,
-} from "./Vmmigration/Group.ts";
+} from "./VMMigration/Group.ts";
 import {
   ImageImport as VmmigrationImageImport,
   ImageImportProvider as VmmigrationImageImportProvider,
-} from "./Vmmigration/ImageImport.ts";
+} from "./VMMigration/ImageImport.ts";
 import {
   Source as VmmigrationSource,
   SourceProvider as VmmigrationSourceProvider,
-} from "./Vmmigration/Source.ts";
+} from "./VMMigration/Source.ts";
 import {
   SourcesDatacenterConnector,
   SourcesDatacenterConnectorProvider,
-} from "./Vmmigration/SourcesDatacenterConnector.ts";
+} from "./VMMigration/SourcesDatacenterConnector.ts";
 import {
   SourcesDiskMigrationJob,
   SourcesDiskMigrationJobProvider,
-} from "./Vmmigration/SourcesDiskMigrationJob.ts";
+} from "./VMMigration/SourcesDiskMigrationJob.ts";
 import {
   SourcesMigratingVm,
   SourcesMigratingVmProvider,
-} from "./Vmmigration/SourcesMigratingVm.ts";
+} from "./VMMigration/SourcesMigratingVm.ts";
 import {
   SourcesUtilizationReport,
   SourcesUtilizationReportProvider,
-} from "./Vmmigration/SourcesUtilizationReport.ts";
+} from "./VMMigration/SourcesUtilizationReport.ts";
 import {
   Target as VmmigrationTarget,
   TargetProvider as VmmigrationTargetProvider,
-} from "./Vmmigration/Target.ts";
+} from "./VMMigration/Target.ts";
 import {
   ConnectionProfile as DatamigrationConnectionProfile,
   ConnectionProfileProvider as DatamigrationConnectionProfileProvider,
-} from "./Datamigration/ConnectionProfile.ts";
+} from "./DataMigration/ConnectionProfile.ts";
 import {
   ConversionWorkspace as DatamigrationConversionWorkspace,
   ConversionWorkspaceProvider as DatamigrationConversionWorkspaceProvider,
-} from "./Datamigration/ConversionWorkspace.ts";
+} from "./DataMigration/ConversionWorkspace.ts";
 import {
   ConversionWorkspacesMappingRule,
   ConversionWorkspacesMappingRuleProvider,
-} from "./Datamigration/ConversionWorkspacesMappingRule.ts";
+} from "./DataMigration/ConversionWorkspacesMappingRule.ts";
 import {
   MigrationJob as DatamigrationMigrationJob,
   MigrationJobProvider as DatamigrationMigrationJobProvider,
-} from "./Datamigration/MigrationJob.ts";
+} from "./DataMigration/MigrationJob.ts";
 import {
   PrivateConnection as DatamigrationPrivateConnection,
   PrivateConnectionProvider as DatamigrationPrivateConnectionProvider,
-} from "./Datamigration/PrivateConnection.ts";
+} from "./DataMigration/PrivateConnection.ts";
 import {
   ConnectionProfile as DatastreamConnectionProfile,
   ConnectionProfileProvider as DatastreamConnectionProfileProvider,
@@ -3234,95 +2804,95 @@ import {
 import {
   AccountConnector,
   AccountConnectorProvider,
-} from "./Developerconnect/AccountConnector.ts";
+} from "./DeveloperConnect/AccountConnector.ts";
 import {
   Connection as DeveloperconnectConnection,
   ConnectionProvider as DeveloperconnectConnectionProvider,
-} from "./Developerconnect/Connection.ts";
+} from "./DeveloperConnect/Connection.ts";
 import {
   ConnectionsGitRepositoryLink,
   ConnectionsGitRepositoryLinkProvider,
-} from "./Developerconnect/ConnectionsGitRepositoryLink.ts";
-import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./Developerconnect/FetchGitRefsHttp.ts";
-import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./Developerconnect/FetchReadTokenHttp.ts";
-import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./Developerconnect/FetchReadWriteTokenHttp.ts";
+} from "./DeveloperConnect/ConnectionsGitRepositoryLink.ts";
+import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./DeveloperConnect/FetchGitRefsHttp.ts";
+import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./DeveloperConnect/FetchReadTokenHttp.ts";
+import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./DeveloperConnect/FetchReadWriteTokenHttp.ts";
 import {
   InsightsConfig,
   InsightsConfigProvider,
-} from "./Developerconnect/InsightsConfig.ts";
+} from "./DeveloperConnect/InsightsConfig.ts";
 import {
   AppConnection,
   AppConnectionProvider,
-} from "./Beyondcorp/AppConnection.ts";
+} from "./BeyondCorp/AppConnection.ts";
 import {
   AppConnector,
   AppConnectorProvider,
-} from "./Beyondcorp/AppConnector.ts";
-import { AppGateway, AppGatewayProvider } from "./Beyondcorp/AppGateway.ts";
+} from "./BeyondCorp/AppConnector.ts";
+import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
 import {
   SecurityGateway,
   SecurityGatewayProvider,
-} from "./Beyondcorp/SecurityGateway.ts";
+} from "./BeyondCorp/SecurityGateway.ts";
 import {
   SecurityGatewaysApplication,
   SecurityGatewaysApplicationProvider,
-} from "./Beyondcorp/SecurityGatewaysApplication.ts";
+} from "./BeyondCorp/SecurityGatewaysApplication.ts";
 import {
   Cluster as ManagedKafkaCluster,
   ClusterProvider as ManagedKafkaClusterProvider,
-} from "./Managedkafka/Cluster.ts";
+} from "./ManagedKafka/Cluster.ts";
 import {
   ClustersAcl,
   ClustersAclProvider,
-} from "./Managedkafka/ClustersAcl.ts";
+} from "./ManagedKafka/ClustersAcl.ts";
 import {
   ClustersTopic,
   ClustersTopicProvider,
-} from "./Managedkafka/ClustersTopic.ts";
+} from "./ManagedKafka/ClustersTopic.ts";
 import {
   ConnectCluster as ManagedKafkaConnectCluster,
   ConnectClusterProvider as ManagedKafkaConnectClusterProvider,
-} from "./Managedkafka/ConnectCluster.ts";
+} from "./ManagedKafka/ConnectCluster.ts";
 import {
   ConnectClustersConnector,
   ConnectClustersConnectorProvider,
-} from "./Managedkafka/ConnectClustersConnector.ts";
+} from "./ManagedKafka/ConnectClustersConnector.ts";
 import {
   SchemaRegistry as ManagedKafkaSchemaRegistry,
   SchemaRegistryProvider as ManagedKafkaSchemaRegistryProvider,
-} from "./Managedkafka/SchemaRegistry.ts";
+} from "./ManagedKafka/SchemaRegistry.ts";
 import {
   SchemaRegistriesSubjectsVersion,
   SchemaRegistriesSubjectsVersionProvider,
-} from "./Managedkafka/SchemaRegistriesSubjectsVersion.ts";
+} from "./ManagedKafka/SchemaRegistriesSubjectsVersion.ts";
 import {
   SchemaRegistriesContextsSubjectsVersion,
   SchemaRegistriesContextsSubjectsVersionProvider,
-} from "./Managedkafka/SchemaRegistriesContextsSubjectsVersion.ts";
+} from "./ManagedKafka/SchemaRegistriesContextsSubjectsVersion.ts";
 import {
   RepositoriesBranchRule,
   RepositoriesBranchRuleProvider,
-} from "./Securesourcemanager/RepositoriesBranchRule.ts";
+} from "./SecureSourceManager/RepositoriesBranchRule.ts";
 import {
   RepositoriesHook,
   RepositoriesHookProvider,
-} from "./Securesourcemanager/RepositoriesHook.ts";
+} from "./SecureSourceManager/RepositoriesHook.ts";
 import {
   RepositoriesIssue,
   RepositoriesIssueProvider,
-} from "./Securesourcemanager/RepositoriesIssue.ts";
+} from "./SecureSourceManager/RepositoriesIssue.ts";
 import {
   RepositoriesIssuesIssueComment,
   RepositoriesIssuesIssueCommentProvider,
-} from "./Securesourcemanager/RepositoriesIssuesIssueComment.ts";
+} from "./SecureSourceManager/RepositoriesIssuesIssueComment.ts";
 import {
   RepositoriesPullRequestsPullRequestComment,
   RepositoriesPullRequestsPullRequestCommentProvider,
-} from "./Securesourcemanager/RepositoriesPullRequestsPullRequestComment.ts";
-import { GetClusterHttp as GetManagedKafkaClusterHttp } from "./Managedkafka/GetClusterHttp.ts";
-import { GetTopicHttp as GetManagedKafkaTopicHttp } from "./Managedkafka/GetTopicHttp.ts";
-import { GetConnectClusterHttp as GetManagedKafkaConnectClusterHttp } from "./Managedkafka/GetConnectClusterHttp.ts";
-import { GetSchemaRegistryHttp as GetManagedKafkaSchemaRegistryHttp } from "./Managedkafka/GetSchemaRegistryHttp.ts";
+} from "./SecureSourceManager/RepositoriesPullRequestsPullRequestComment.ts";
+import { GetClusterHttp as GetManagedKafkaClusterHttp } from "./ManagedKafka/GetClusterHttp.ts";
+import { GetTopicHttp as GetManagedKafkaTopicHttp } from "./ManagedKafka/GetTopicHttp.ts";
+import { GetConnectClusterHttp as GetManagedKafkaConnectClusterHttp } from "./ManagedKafka/GetConnectClusterHttp.ts";
+import { GetSchemaRegistryHttp as GetManagedKafkaSchemaRegistryHttp } from "./ManagedKafka/GetSchemaRegistryHttp.ts";
 import {
   CatalogsBranchesProduct,
   CatalogsBranchesProductProvider,
@@ -3344,24 +2914,24 @@ import { PredictHttp as RetailPredictHttp } from "./Retail/PredictHttp.ts";
 import {
   CatalogsCatalogItem,
   CatalogsCatalogItemProvider,
-} from "./Recommendationengine/CatalogsCatalogItem.ts";
-import { GetCatalogItemHttp } from "./Recommendationengine/GetCatalogItemHttp.ts";
+} from "./RecommendationEngine/CatalogsCatalogItem.ts";
+import { GetCatalogItemHttp } from "./RecommendationEngine/GetCatalogItemHttp.ts";
 import {
   Processor as DocumentaiProcessor,
   ProcessorProvider as DocumentaiProcessorProvider,
-} from "./Documentai/Processor.ts";
+} from "./DocumentAI/Processor.ts";
 import {
   Schema as DocumentaiSchema,
   SchemaProvider as DocumentaiSchemaProvider,
-} from "./Documentai/Schema.ts";
+} from "./DocumentAI/Schema.ts";
 import {
   SchemasSchemaVersion,
   SchemasSchemaVersionProvider,
-} from "./Documentai/SchemasSchemaVersion.ts";
-import { ProcessHttp as DocumentaiProcessHttp } from "./Documentai/ProcessHttp.ts";
-import { GetProcessorHttp } from "./Documentai/GetProcessorHttp.ts";
-import { GetSchemaHttp as DocumentaiGetSchemaHttp } from "./Documentai/GetSchemaHttp.ts";
-import { GetSchemaVersionHttp } from "./Documentai/GetSchemaVersionHttp.ts";
+} from "./DocumentAI/SchemasSchemaVersion.ts";
+import { ProcessHttp as DocumentaiProcessHttp } from "./DocumentAI/ProcessHttp.ts";
+import { GetProcessorHttp } from "./DocumentAI/GetProcessorHttp.ts";
+import { GetSchemaHttp as DocumentaiGetSchemaHttp } from "./DocumentAI/GetSchemaHttp.ts";
+import { GetSchemaVersionHttp } from "./DocumentAI/GetSchemaVersionHttp.ts";
 import {
   AdaptiveMtDataset,
   AdaptiveMtDatasetProvider,
@@ -3400,15 +2970,15 @@ import { StopWorkstationHttp } from "./Workstations/StopWorkstationHttp.ts";
 import {
   Evaluation as WorkloadmanagerEvaluation,
   EvaluationProvider as WorkloadmanagerEvaluationProvider,
-} from "./Workloadmanager/Evaluation.ts";
+} from "./WorkloadManager/Evaluation.ts";
 import {
   DeploymentsActuation,
   DeploymentsActuationProvider,
-} from "./Workloadmanager/DeploymentsActuation.ts";
+} from "./WorkloadManager/DeploymentsActuation.ts";
 import {
   Workload as AssuredworkloadsWorkload,
   WorkloadProvider as AssuredworkloadsWorkloadProvider,
-} from "./Assuredworkloads/Workload.ts";
+} from "./AssuredWorkloads/Workload.ts";
 import {
   ConnectionsEntityTypesEntity,
   ConnectionsEntityTypesEntityProvider,
@@ -3470,7 +3040,14 @@ import {
   HyperparameterTuningJobProvider,
 } from "./AIPlatform/HyperparameterTuningJob.ts";
 import { TuningJob, TuningJobProvider } from "./AIPlatform/TuningJob.ts";
-import { Index, IndexProvider } from "./AIPlatform/Indexes.ts";
+import {
+  Index as AIPlatformIndex,
+  IndexProvider as AIPlatformIndexProvider,
+} from "./AIPlatform/Indexes.ts";
+import {
+  Endpoint as AIPlatformEndpoint,
+  EndpointProvider as AIPlatformEndpointProvider,
+} from "./AIPlatform/Endpoint.ts";
 import {
   IndexEndpoint,
   IndexEndpointProvider,
@@ -3566,9 +3143,9 @@ import {
   InstancesAttachmentProvider,
 } from "./Apigee/InstancesAttachment.ts";
 import {
-  InstancesNatAddresses,
-  InstancesNatAddressesProvider,
-} from "./Apigee/InstancesNatAddresses.ts";
+  InstancesNatAddress,
+  InstancesNatAddressProvider,
+} from "./Apigee/InstancesNatAddress.ts";
 import { Keyvaluemap, KeyvaluemapProvider } from "./Apigee/Keyvaluemap.ts";
 import {
   KeyvaluemapsEntry,
@@ -3593,135 +3170,59 @@ import {
   Assignment,
   AssignmentProvider,
 } from "./BigQueryReservation/Assignment.ts";
-import { Placement, PlacementProvider } from "./Dfareporting/Placement.ts";
-import { Label, LabelProvider } from "./Drivelabels/Label.ts";
 import { AndroidApp, AndroidAppProvider } from "./Firebase/AndroidApp.ts";
-import { Form, FormProvider } from "./Forms/Form.ts";
-import {
-  Page as FactchecktoolsPage,
-  PageProvider as FactchecktoolsPageProvider,
-} from "./Factchecktools/Page.ts";
-import {
-  AccountsLocation,
-  AccountsLocationProvider,
-} from "./Mybusinessbusinessinformation/AccountsLocation.ts";
-import {
-  PlaceActionLink,
-  PlaceActionLinkProvider,
-} from "./Mybusinessplaceactions/PlaceActionLink.ts";
-import {
-  CustomersDeploymentsDevice,
-  CustomersDeploymentsDeviceProvider,
-} from "./ProdTtSasportal/CustomersDeploymentsDevice.ts";
-import {
-  CustomersNodesDeployment,
-  CustomersNodesDeploymentProvider,
-} from "./ProdTtSasportal/CustomersNodesDeployment.ts";
-import {
-  CustomersNodesDevice,
-  CustomersNodesDeviceProvider,
-} from "./ProdTtSasportal/CustomersNodesDevice.ts";
-import {
-  CustomersNodesNode,
-  CustomersNodesNodeProvider,
-} from "./ProdTtSasportal/CustomersNodesNode.ts";
-import {
-  NodesDeploymentsDevice,
-  NodesDeploymentsDeviceProvider,
-} from "./ProdTtSasportal/NodesDeploymentsDevice.ts";
-import {
-  NodesNodesDeployment,
-  NodesNodesDeploymentProvider,
-} from "./ProdTtSasportal/NodesNodesDeployment.ts";
-import {
-  NodesNodesDevice,
-  NodesNodesDeviceProvider,
-} from "./ProdTtSasportal/NodesNodesDevice.ts";
-import {
-  NodesNodesNode,
-  NodesNodesNodeProvider,
-} from "./ProdTtSasportal/NodesNodesNode.ts";
-import {
-  SignedCustomersDeploymentsDevice,
-  SignedCustomersDeploymentsDeviceProvider,
-} from "./ProdTtSasportal/SignedCustomersDeploymentsDevice.ts";
-import {
-  SignedCustomersDevice,
-  SignedCustomersDeviceProvider,
-} from "./ProdTtSasportal/SignedCustomersDevice.ts";
-import {
-  SignedCustomersNodesDevice,
-  SignedCustomersNodesDeviceProvider,
-} from "./ProdTtSasportal/SignedCustomersNodesDevice.ts";
-import {
-  SignedNodesDeploymentsDevice,
-  SignedNodesDeploymentsDeviceProvider,
-} from "./ProdTtSasportal/SignedNodesDeploymentsDevice.ts";
-import {
-  SignedNodesDevice,
-  SignedNodesDeviceProvider,
-} from "./ProdTtSasportal/SignedNodesDevice.ts";
-import {
-  SignedNodesNodesDevice,
-  SignedNodesNodesDeviceProvider,
-} from "./ProdTtSasportal/SignedNodesNodesDevice.ts";
 import {
   CustomersDeploymentsDevice as SasportalCustomersDeploymentsDevice,
   CustomersDeploymentsDeviceProvider as SasportalCustomersDeploymentsDeviceProvider,
-} from "./Sasportal/CustomersDeploymentsDevice.ts";
+} from "./SasPortal/CustomersDeploymentsDevice.ts";
 import {
   CustomersNodesDeployment as SasportalCustomersNodesDeployment,
   CustomersNodesDeploymentProvider as SasportalCustomersNodesDeploymentProvider,
-} from "./Sasportal/CustomersNodesDeployment.ts";
+} from "./SasPortal/CustomersNodesDeployment.ts";
 import {
   CustomersNodesDevice as SasportalCustomersNodesDevice,
   CustomersNodesDeviceProvider as SasportalCustomersNodesDeviceProvider,
-} from "./Sasportal/CustomersNodesDevice.ts";
+} from "./SasPortal/CustomersNodesDevice.ts";
 import {
   CustomersNodesNode as SasportalCustomersNodesNode,
   CustomersNodesNodeProvider as SasportalCustomersNodesNodeProvider,
-} from "./Sasportal/CustomersNodesNode.ts";
+} from "./SasPortal/CustomersNodesNode.ts";
 import {
   NodesDeploymentsDevice as SasportalNodesDeploymentsDevice,
   NodesDeploymentsDeviceProvider as SasportalNodesDeploymentsDeviceProvider,
-} from "./Sasportal/NodesDeploymentsDevice.ts";
+} from "./SasPortal/NodesDeploymentsDevice.ts";
 import {
   NodesNodesDeployment as SasportalNodesNodesDeployment,
   NodesNodesDeploymentProvider as SasportalNodesNodesDeploymentProvider,
-} from "./Sasportal/NodesNodesDeployment.ts";
+} from "./SasPortal/NodesNodesDeployment.ts";
 import {
   NodesNodesDevice as SasportalNodesNodesDevice,
   NodesNodesDeviceProvider as SasportalNodesNodesDeviceProvider,
-} from "./Sasportal/NodesNodesDevice.ts";
+} from "./SasPortal/NodesNodesDevice.ts";
 import {
   NodesNodesNode as SasportalNodesNodesNode,
   NodesNodesNodeProvider as SasportalNodesNodesNodeProvider,
-} from "./Sasportal/NodesNodesNode.ts";
+} from "./SasPortal/NodesNodesNode.ts";
 import {
   SignedCustomersDevice as SasportalSignedCustomersDevice,
   SignedCustomersDeviceProvider as SasportalSignedCustomersDeviceProvider,
-} from "./Sasportal/SignedCustomersDevice.ts";
+} from "./SasPortal/SignedCustomersDevice.ts";
 import {
   SignedCustomersNodesDevice as SasportalSignedCustomersNodesDevice,
   SignedCustomersNodesDeviceProvider as SasportalSignedCustomersNodesDeviceProvider,
-} from "./Sasportal/SignedCustomersNodesDevice.ts";
+} from "./SasPortal/SignedCustomersNodesDevice.ts";
 import {
   SignedNodesDevice as SasportalSignedNodesDevice,
   SignedNodesDeviceProvider as SasportalSignedNodesDeviceProvider,
-} from "./Sasportal/SignedNodesDevice.ts";
+} from "./SasPortal/SignedNodesDevice.ts";
 import {
   SignedNodesNodesDevice as SasportalSignedNodesNodesDevice,
   SignedNodesNodesDeviceProvider as SasportalSignedNodesNodesDeviceProvider,
-} from "./Sasportal/SignedNodesNodesDevice.ts";
-import { Video, VideoProvider } from "./Youtube/Video.ts";
-import {
-  Job as YoutubeReportingJob,
-  JobProvider as YoutubeReportingJobProvider,
-} from "./Youtubereporting/Job.ts";
+} from "./SasPortal/SignedNodesNodesDevice.ts";
 import {
   ScanConfig,
   ScanConfigProvider,
-} from "./Websecurityscanner/ScanConfig.ts";
+} from "./WebSecurityScanner/ScanConfig.ts";
 import {
   FeaturestoresEntityTypesFeature,
   FeaturestoresEntityTypesFeatureProvider,
@@ -3735,9 +3236,9 @@ import {
   FeatureOnlineStoresFeatureViewProvider,
 } from "./AIPlatform/FeatureOnlineStoresFeatureView.ts";
 import {
-  EnvironmentsKeystoresAliases,
-  EnvironmentsKeystoresAliasesProvider,
-} from "./Apigee/EnvironmentsKeystoresAliases.ts";
+  EnvironmentsKeystoresAlias,
+  EnvironmentsKeystoresAliasProvider,
+} from "./Apigee/EnvironmentsKeystoresAlias.ts";
 import {
   EnvironmentsKeyvaluemapsEntry,
   EnvironmentsKeyvaluemapsEntryProvider,
@@ -3759,10 +3260,6 @@ import {
   EnvironmentsApisRevisionsDebugsessionProvider,
 } from "./Apigee/EnvironmentsApisRevisionsDebugsession.ts";
 import {
-  UserProfilesGuardianInvitation,
-  UserProfilesGuardianInvitationProvider,
-} from "./Classroom/UserProfilesGuardianInvitation.ts";
-import {
   HostServiceAccount,
   HostServiceAccountProvider,
 } from "./IAM/HostServiceAccount.ts";
@@ -3777,15 +3274,11 @@ import {
 import {
   SignedCustomersDeploymentsDevice as SasportalSignedCustomersDeploymentsDevice,
   SignedCustomersDeploymentsDeviceProvider as SasportalSignedCustomersDeploymentsDeviceProvider,
-} from "./Sasportal/SignedCustomersDeploymentsDevice.ts";
+} from "./SasPortal/SignedCustomersDeploymentsDevice.ts";
 import {
   SignedNodesDeploymentsDevice as SasportalSignedNodesDeploymentsDevice,
   SignedNodesDeploymentsDeviceProvider as SasportalSignedNodesDeploymentsDeviceProvider,
-} from "./Sasportal/SignedNodesDeploymentsDevice.ts";
-import {
-  Query as DoubleclickbidmanagerQuery,
-  QueryProvider as DoubleclickbidmanagerQueryProvider,
-} from "./Doubleclickbidmanager/Query.ts";
+} from "./SasPortal/SignedNodesDeploymentsDevice.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "GCP",
@@ -3833,10 +3326,14 @@ const gcpLive = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-export const providers = () =>
+const makeProviders = () =>
   Layer.effect(
     Providers,
     Effect.gen(function* () {
+      // Each `Provider.collection` chunk is erased to its runtime shape:
+      // its requirements (one Provider<X> per resource type) are satisfied
+      // by the `Layer.provide` below, and letting tsc infer ~1,000 of them
+      // exhausts the type-checker's memory.
       const merged: Record<string, any> = {};
       Object.assign(
         merged,
@@ -3933,9 +3430,9 @@ export const providers = () =>
         (yield* Provider.collection([
           Database,
           DatabasesBackupSchedule,
-          DatabasesCollectionGroupsIndexe,
+          DatabasesCollectionGroupsIndex,
           DatabasesUserCred,
-          Indexe,
+          DatastoreIndex,
           RedisInstance,
           AclPolicy,
           CatalogsBranchesProduct,
@@ -4422,33 +3919,6 @@ export const providers = () =>
           OrganizationsLocationsInspectTemplate,
           OrganizationsLocationsJobTrigger,
           OrganizationsLocationsStoredInfoType,
-          AnalyticsadminProperty,
-          PropertiesConversionEvent,
-          PropertiesDataStream,
-          PropertiesDataStreamsMeasurementProtocolSecret,
-          PropertiesKeyEvent,
-          Courses,
-          CoursesAnnouncement,
-          CoursesAnnouncementsAddOnAttachment,
-          CoursesCourseWork,
-          CoursesCourseWorkAddOnAttachment,
-          CoursesCourseWorkMaterial,
-          CoursesCourseWorkMaterialsAddOnAttachment,
-          CoursesCourseWorkRubric,
-          CoursesPostsAddOnAttachment,
-          CoursesStudent,
-          CoursesTeacher,
-          CoursesTopic,
-          Invitation,
-          UsersDraft,
-          UsersLabel,
-          UsersMessage,
-          UsersSettingsCseIdentity,
-          UsersSettingsDelegate,
-          UsersSettingsFilter,
-          UsersSettingsForwardingAddresse,
-          UsersSettingsSendA,
-          UsersSettingsSendAsSmimeInfo,
           GmailpostmastertoolsDomain,
           DomainsUser,
           SettingsDatasource,
@@ -4467,10 +3937,6 @@ export const providers = () =>
         (yield* Provider.collection([
           MattersHold,
           MattersSavedQuery,
-          CustomEmoji,
-          ChatSpace,
-          SpacesMember,
-          SpacesMessage,
           WorkspaceeventsSubscription,
           TasksPushNotificationConfig,
           JobsTenant,
@@ -4479,7 +3945,7 @@ export const providers = () =>
           VisionProductSet,
           VisionProduct,
           ProductsReferenceImage,
-          CustomClasse,
+          CustomClass,
           PhraseSet,
           MonetizationSubscription,
           MonetizationSubscriptionsBasePlansOffer,
@@ -4501,30 +3967,9 @@ export const providers = () =>
           AppsServicesVersion,
           ApplicationsAuthorizedCertificate,
           ApplicationsDomainMapping,
-          Comment,
-          Drive,
-          DriveFile,
-          DrivePermission,
-          Reply,
-          Teamdrive,
-          CalendarAcl,
-          CalendarResource,
-          CalendarList,
-          CalendarEvent,
-          Tasklist,
-          TasksTask,
-          UsersDataSource,
           UsersSshPublicKey,
-          KeepNote,
-          ContactGroup,
-          ContactPeople,
           LicenseAssignment,
           WebResource,
-          ScriptDeployment,
-          BloggerPage,
-          BloggerPost,
-          StreetviewPhoto,
-          PhotoSequence,
           CloudassetFeed,
           CloudassetSavedQuery,
           CloudidentityDevice,
@@ -4538,7 +3983,6 @@ export const providers = () =>
           CustomersCustomerRepricingConfig,
           ChannelPartnerLinksChannelPartnerRepricingConfig,
           CloudcontrolspartnerCustomer,
-          ResellerSubscription,
           DeploymentmanagerDeployment,
           HealthcareDataset,
           DatasetsConsentStore,
@@ -4598,42 +4042,6 @@ export const providers = () =>
           ObservationJob,
           ObservationSource,
           ApisConfig,
-          TagmanagerContainer,
-          ContainersEnvironment,
-          ContainersWorkspace,
-          ContainersWorkspacesClient,
-          ContainersWorkspacesFolder,
-          ContainersWorkspacesGtag,
-          ContainersWorkspacesTag,
-          ContainersWorkspacesTemplate,
-          ContainersWorkspacesTransformation,
-          ContainersWorkspacesTrigger,
-          ContainersWorkspacesVariable,
-          ContainersWorkspacesZone,
-          TagmanagerUser,
-          Advertiser,
-          AdvertisersAdGroup,
-          AdvertisersAdGroupAd,
-          AdvertisersAdGroupsTargetingTypesAssignedTargetingOption,
-          AdvertisersCampaign,
-          AdvertisersChannel,
-          AdvertisersCreative,
-          AdvertisersInsertionOrder,
-          AdvertisersLineItem,
-          AdvertisersLineItemsTargetingTypesAssignedTargetingOption,
-          AdvertisersLocationList,
-          AdvertisersNegativeKeywordList,
-          AdvertisersTargetingTypesAssignedTargetingOption,
-          InventorySource,
-          InventorySourceGroup,
-          InventorySourceGroupsAssignedInventorySource,
-          PartnersChannel,
-          PartnersTargetingTypesAssignedTargetingOption,
-          DisplayvideoUser,
-          UserRole,
-          AdvertiserGroup,
-          ContentCategory,
-          CreativeField,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
           never,
@@ -4643,21 +4051,6 @@ export const providers = () =>
       Object.assign(
         merged,
         (yield* Provider.collection([
-          CreativeFieldValue,
-          EventTag,
-          FloodlightActivity,
-          PlacementStrategy,
-          DfareportingReport,
-          Po,
-          ContentProduct,
-          ContentAccount,
-          ContentCollection,
-          Conversionsource,
-          ContentDatafeed,
-          FreelistingsprogramCheckoutsetting,
-          Productdeliverytime,
-          ContentRegion,
-          Returnpolicyonline,
           MerchantReview,
           ProductReview,
           ContentwarehouseDocumentSchema,
@@ -4706,7 +4099,7 @@ export const providers = () =>
           NetworkPoliciesExternalAccessRule,
           PrivateCloud,
           PrivateCloudsCluster,
-          PrivateCloudsExternalAddresse,
+          PrivateCloudsExternalAddress,
           PrivateCloudsLoggingServer,
           CesApp,
           AppsAgent,
@@ -4716,11 +4109,6 @@ export const providers = () =>
           AppsTool,
           AppsToolset,
           AppsVersion,
-          CustomersDeployment,
-          CustomersDevice,
-          CustomersNode,
-          NodesDevice,
-          NodesNode,
           SasportalCustomersDeployment,
           SasportalCustomersDevice,
         ]) as unknown as Effect.Effect<
@@ -4740,18 +4128,9 @@ export const providers = () =>
           DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage,
           DatalabelingEvaluationJob,
           DatalabelingInstruction,
-          Processe,
+          Process,
           ProcessesRun,
           ProcessesRunsLineageEvent,
-          ApigeeregistryApi,
-          ApigeeregistryApisVersion,
-          ApigeeregistryApisVersionsSpec,
-          ApigeeregistryArtifact,
-          ApisArtifact,
-          ApisDeployment,
-          ApisDeploymentsArtifact,
-          ApisVersionsArtifact,
-          ApisVersionsSpecsArtifact,
           DataExchange,
           DataExchangesListing,
           DataExchangesQueryTemplate,
@@ -4850,15 +4229,10 @@ export const providers = () =>
           BinaryauthorizationAttestor,
           PlatformsPolicy,
           BlockchainNode,
-          BiddersFilterSet,
-          BiddersAccountsFilterSet,
-          BuyersFilterSet,
           BuyersClientsUser,
-          AdclientsCustomchannel,
           AccountTypesUserList,
           BiddersPretargetingConfig,
           DatapipelinesPipeline,
-          PlatformsSite,
           AgentidentityAuthProvider,
           BiglakeCatalog,
           CatalogsDatabase,
@@ -4895,8 +4269,9 @@ export const providers = () =>
           FeaturestoresEntityType,
           HyperparameterTuningJob,
           TuningJob,
-          Index,
+          AIPlatformIndex,
           IndexEndpoint,
+          AIPlatformEndpoint,
           MetadataStore,
           MetadataStoresArtifact,
           MetadataStoresContext,
@@ -4933,7 +4308,7 @@ export const providers = () =>
           EnvironmentsSecurityAction,
           EnvironmentsTargetserver,
           InstancesAttachment,
-          InstancesNatAddresses,
+          InstancesNatAddress,
           Keyvaluemap,
           KeyvaluemapsEntry,
           Organization,
@@ -4943,27 +4318,7 @@ export const providers = () =>
           SitesApicategory,
           SitesApidoc,
           Assignment,
-          Placement,
-          Label,
           AndroidApp,
-          Form,
-          FactchecktoolsPage,
-          AccountsLocation,
-          PlaceActionLink,
-          CustomersDeploymentsDevice,
-          CustomersNodesDeployment,
-          CustomersNodesDevice,
-          CustomersNodesNode,
-          NodesDeploymentsDevice,
-          NodesNodesDeployment,
-          NodesNodesDevice,
-          NodesNodesNode,
-          SignedCustomersDeploymentsDevice,
-          SignedCustomersDevice,
-          SignedCustomersNodesDevice,
-          SignedNodesDeploymentsDevice,
-          SignedNodesDevice,
-          SignedNodesNodesDevice,
           SasportalCustomersDeploymentsDevice,
           SasportalCustomersNodesDeployment,
           SasportalCustomersNodesDevice,
@@ -4976,19 +4331,16 @@ export const providers = () =>
           SasportalSignedCustomersNodesDevice,
           SasportalSignedNodesDevice,
           SasportalSignedNodesNodesDevice,
-          Video,
-          YoutubeReportingJob,
           ScanConfig,
           FeaturestoresEntityTypesFeature,
           ModelDeploymentMonitoringJob,
           FeatureOnlineStoresFeatureView,
-          EnvironmentsKeystoresAliases,
+          EnvironmentsKeystoresAlias,
           EnvironmentsKeyvaluemapsEntry,
           SecurityMonitoringCondition,
           EnvironmentsArchiveDeployment,
           EnvironmentsTraceConfigOverride,
           EnvironmentsApisRevisionsDebugsession,
-          UserProfilesGuardianInvitation,
           IamPolicy,
           HostServiceAccount,
           IamMember,
@@ -5003,7 +4355,6 @@ export const providers = () =>
         (yield* Provider.collection([
           SasportalSignedCustomersDeploymentsDevice,
           SasportalSignedNodesDeploymentsDevice,
-          DoubleclickbidmanagerQuery,
           JobTemplate,
         ]) as unknown as Effect.Effect<
           { providers: Record<string, any> },
@@ -5066,9 +4417,9 @@ export const providers = () =>
           Layer.mergeAll(
             DatabaseProvider(),
             DatabasesBackupScheduleProvider(),
-            DatabasesCollectionGroupsIndexeProvider(),
+            DatabasesCollectionGroupsIndexProvider(),
             DatabasesUserCredProvider(),
-            IndexeProvider(),
+            DatastoreIndexProvider(),
           ),
           Layer.mergeAll(RedisInstanceProvider(), AclPolicyProvider()),
           MemcacheInstanceProvider(),
@@ -5641,35 +4992,6 @@ export const providers = () =>
           ),
           Layer.mergeAll(PostureProvider(), PostureDeploymentProvider()),
           Layer.mergeAll(
-            AnalyticsadminPropertyProvider(),
-            PropertiesConversionEventProvider(),
-            PropertiesDataStreamProvider(),
-            PropertiesDataStreamsMeasurementProtocolSecretProvider(),
-            PropertiesKeyEventProvider(),
-            CoursesProvider(),
-            CoursesAnnouncementProvider(),
-            CoursesAnnouncementsAddOnAttachmentProvider(),
-            CoursesCourseWorkProvider(),
-            CoursesCourseWorkAddOnAttachmentProvider(),
-            CoursesCourseWorkMaterialProvider(),
-            CoursesCourseWorkMaterialsAddOnAttachmentProvider(),
-            CoursesCourseWorkRubricProvider(),
-            CoursesPostsAddOnAttachmentProvider(),
-            CoursesStudentProvider(),
-            CoursesTeacherProvider(),
-            CoursesTopicProvider(),
-            InvitationProvider(),
-          ),
-          Layer.mergeAll(
-            UsersDraftProvider(),
-            UsersLabelProvider(),
-            UsersMessageProvider(),
-            UsersSettingsCseIdentityProvider(),
-            UsersSettingsDelegateProvider(),
-            UsersSettingsFilterProvider(),
-            UsersSettingsForwardingAddresseProvider(),
-            UsersSettingsSendAProvider(),
-            UsersSettingsSendAsSmimeInfoProvider(),
             GmailpostmastertoolsDomainProvider(),
             DomainsUserProvider(),
             SettingsDatasourceProvider(),
@@ -5702,12 +5024,6 @@ export const providers = () =>
             CustomersConnectorConfigProvider(),
           ),
           Layer.mergeAll(
-            CustomEmojiProvider(),
-            ChatSpaceProvider(),
-            SpacesMemberProvider(),
-            SpacesMessageProvider(),
-          ),
-          Layer.mergeAll(
             WorkspaceeventsSubscriptionProvider(),
             TasksPushNotificationConfigProvider(),
             SupportEventSubscriptionProvider(),
@@ -5719,7 +5035,7 @@ export const providers = () =>
             VisionProductSetProvider(),
             VisionProductProvider(),
             ProductsReferenceImageProvider(),
-            CustomClasseProvider(),
+            CustomClassProvider(),
             PhraseSetProvider(),
           ),
           Layer.mergeAll(
@@ -5731,40 +5047,15 @@ export const providers = () =>
             ApplicationsDomainMappingProvider(),
           ),
           Layer.mergeAll(
-            CommentProvider(),
-            DriveProvider(),
-            DriveFileProvider(),
-            DrivePermissionProvider(),
-            ReplyProvider(),
-            TeamdriveProvider(),
-          ),
-          Layer.mergeAll(
             EssentialcontactsContactProvider(),
             FolderContactProvider(),
             OrganizationContactProvider(),
           ),
-          Layer.mergeAll(
-            CalendarAclProvider(),
-            CalendarProvider(),
-            CalendarListProvider(),
-            CalendarEventProvider(),
-          ),
-          Layer.mergeAll(TasklistProvider(), TasksTaskProvider()),
-          Layer.mergeAll(
-            UsersDataSourceProvider(),
-            UsersSshPublicKeyProvider(),
-          ),
-          Layer.mergeAll(KeepNoteProvider()),
-          Layer.mergeAll(ContactGroupProvider(), ContactPeopleProvider()),
-          Layer.mergeAll(
-            LicenseAssignmentProvider(),
-            ScriptDeploymentProvider(),
-          ),
+          Layer.mergeAll(UsersSshPublicKeyProvider()),
+          Layer.mergeAll(LicenseAssignmentProvider()),
           Layer.mergeAll(WebResourceProvider()),
-          Layer.mergeAll(BloggerPageProvider(), BloggerPostProvider()),
         ),
         Layer.mergeAll(
-          Layer.mergeAll(StreetviewPhotoProvider(), PhotoSequenceProvider()),
           Layer.mergeAll(
             CloudassetFeedProvider(),
             CloudassetSavedQueryProvider(),
@@ -5785,7 +5076,6 @@ export const providers = () =>
           ),
           Layer.mergeAll(
             CloudcontrolspartnerCustomerProvider(),
-            ResellerSubscriptionProvider(),
             DeploymentmanagerDeploymentProvider(),
           ),
           Layer.mergeAll(
@@ -5874,13 +5164,6 @@ export const providers = () =>
             AppsVersionProvider(),
           ),
           Layer.mergeAll(
-            CustomersDeploymentProvider(),
-            CustomersDeviceProvider(),
-            CustomersNodeProvider(),
-            NodesDeviceProvider(),
-            NodesNodeProvider(),
-          ),
-          Layer.mergeAll(
             SasportalCustomersDeploymentProvider(),
             SasportalCustomersDeviceProvider(),
             SasportalCustomersNodeProvider(),
@@ -5895,7 +5178,7 @@ export const providers = () =>
             DatalabelingInstructionProvider(),
           ),
           Layer.mergeAll(
-            ProcesseProvider(),
+            ProcessProvider(),
             ProcessesRunProvider(),
             ProcessesRunsLineageEventProvider(),
           ),
@@ -5971,67 +5254,6 @@ export const providers = () =>
                 ApisConfigProvider(),
               ),
               Layer.mergeAll(
-                TagmanagerContainerProvider(),
-                ContainersEnvironmentProvider(),
-                ContainersWorkspaceProvider(),
-                ContainersWorkspacesClientProvider(),
-                ContainersWorkspacesFolderProvider(),
-                ContainersWorkspacesGtagProvider(),
-                ContainersWorkspacesTagProvider(),
-                ContainersWorkspacesTemplateProvider(),
-                ContainersWorkspacesTransformationProvider(),
-                ContainersWorkspacesTriggerProvider(),
-                ContainersWorkspacesVariableProvider(),
-                ContainersWorkspacesZoneProvider(),
-                TagmanagerUserProvider(),
-              ),
-              Layer.mergeAll(
-                Layer.mergeAll(
-                  AdvertiserProvider(),
-                  AdvertisersAdGroupProvider(),
-                  AdvertisersAdGroupAdProvider(),
-                  AdvertisersAdGroupsTargetingTypesAssignedTargetingOptionProvider(),
-                  AdvertisersCampaignProvider(),
-                  AdvertisersChannelProvider(),
-                  AdvertisersCreativeProvider(),
-                  AdvertisersInsertionOrderProvider(),
-                  AdvertisersLineItemProvider(),
-                  AdvertisersLineItemsTargetingTypesAssignedTargetingOptionProvider(),
-                  AdvertisersLocationListProvider(),
-                  AdvertisersNegativeKeywordListProvider(),
-                  AdvertisersTargetingTypesAssignedTargetingOptionProvider(),
-                  InventorySourceProvider(),
-                  InventorySourceGroupProvider(),
-                  InventorySourceGroupsAssignedInventorySourceProvider(),
-                ),
-                Layer.mergeAll(
-                  PartnersChannelProvider(),
-                  PartnersTargetingTypesAssignedTargetingOptionProvider(),
-                  DisplayvideoUserProvider(),
-                  UserRoleProvider(),
-                ),
-              ),
-              Layer.mergeAll(
-                AdvertiserGroupProvider(),
-                ContentCategoryProvider(),
-                CreativeFieldProvider(),
-                CreativeFieldValueProvider(),
-                EventTagProvider(),
-                FloodlightActivityProvider(),
-                PlacementStrategyProvider(),
-                DfareportingReportProvider(),
-              ),
-              Layer.mergeAll(
-                PoProvider(),
-                ContentProductProvider(),
-                ContentAccountProvider(),
-                ContentCollectionProvider(),
-                ConversionsourceProvider(),
-                ContentDatafeedProvider(),
-                FreelistingsprogramCheckoutsettingProvider(),
-                ProductdeliverytimeProvider(),
-                ContentRegionProvider(),
-                ReturnpolicyonlineProvider(),
                 MerchantReviewProvider(),
                 ProductReviewProvider(),
                 ContentwarehouseDocumentSchemaProvider(),
@@ -6086,19 +5308,10 @@ export const providers = () =>
                 NetworkPoliciesExternalAccessRuleProvider(),
                 PrivateCloudProvider(),
                 PrivateCloudsClusterProvider(),
-                PrivateCloudsExternalAddresseProvider(),
+                PrivateCloudsExternalAddressProvider(),
                 PrivateCloudsLoggingServerProvider(),
               ),
               Layer.mergeAll(
-                ApigeeregistryApiProvider(),
-                ApigeeregistryApisVersionProvider(),
-                ApigeeregistryApisVersionsSpecProvider(),
-                ApigeeregistryArtifactProvider(),
-                ApisArtifactProvider(),
-                ApisDeploymentProvider(),
-                ApisDeploymentsArtifactProvider(),
-                ApisVersionsArtifactProvider(),
-                ApisVersionsSpecsArtifactProvider(),
                 DataExchangeProvider(),
                 DataExchangesListingProvider(),
                 DataExchangesQueryTemplateProvider(),
@@ -6177,11 +5390,6 @@ export const providers = () =>
                 RepositoriesIssueProvider(),
                 RepositoriesIssuesIssueCommentProvider(),
                 RepositoriesPullRequestsPullRequestCommentProvider(),
-                BiddersFilterSetProvider(),
-                BiddersAccountsFilterSetProvider(),
-                BuyersFilterSetProvider(),
-                AdclientsCustomchannelProvider(),
-                PlatformsSiteProvider(),
                 DocumentaiProcessorProvider(),
                 DocumentaiSchemaProvider(),
                 SchemasSchemaVersionProvider(),
@@ -6228,10 +5436,11 @@ export const providers = () =>
                 FeaturestoresEntityTypeProvider(),
                 HyperparameterTuningJobProvider(),
                 TuningJobProvider(),
-                IndexProvider(),
+                AIPlatformIndexProvider(),
               ),
               Layer.mergeAll(
                 IndexEndpointProvider(),
+                AIPlatformEndpointProvider(),
                 MetadataStoreProvider(),
                 MetadataStoresArtifactProvider(),
                 MetadataStoresContextProvider(),
@@ -6261,7 +5470,7 @@ export const providers = () =>
                 EnvironmentsSecurityActionProvider(),
                 EnvironmentsTargetserverProvider(),
                 InstancesAttachmentProvider(),
-                InstancesNatAddressesProvider(),
+                InstancesNatAddressProvider(),
                 KeyvaluemapProvider(),
                 KeyvaluemapsEntryProvider(),
                 OrganizationProvider(),
@@ -6273,28 +5482,9 @@ export const providers = () =>
                 SitesApicategoryProvider(),
                 SitesApidocProvider(),
                 AssignmentProvider(),
-                PlacementProvider(),
-                LabelProvider(),
                 AndroidAppProvider(),
-                FormProvider(),
-                AccountsLocationProvider(),
-                PlaceActionLinkProvider(),
-                CustomersDeploymentsDeviceProvider(),
-                CustomersNodesDeploymentProvider(),
-                CustomersNodesDeviceProvider(),
-                CustomersNodesNodeProvider(),
-                NodesDeploymentsDeviceProvider(),
               ),
               Layer.mergeAll(
-                NodesNodesDeploymentProvider(),
-                NodesNodesDeviceProvider(),
-                NodesNodesNodeProvider(),
-                SignedCustomersDeploymentsDeviceProvider(),
-                SignedCustomersDeviceProvider(),
-                SignedCustomersNodesDeviceProvider(),
-                SignedNodesDeploymentsDeviceProvider(),
-                SignedNodesDeviceProvider(),
-                SignedNodesNodesDeviceProvider(),
                 SasportalCustomersDeploymentsDeviceProvider(),
                 SasportalCustomersNodesDeploymentProvider(),
                 SasportalCustomersNodesDeviceProvider(),
@@ -6309,28 +5499,23 @@ export const providers = () =>
                 SasportalSignedCustomersNodesDeviceProvider(),
                 SasportalSignedNodesDeviceProvider(),
                 SasportalSignedNodesNodesDeviceProvider(),
-                VideoProvider(),
-                YoutubeReportingJobProvider(),
                 ScanConfigProvider(),
-                FactchecktoolsPageProvider(),
               ),
               Layer.mergeAll(
                 FeaturestoresEntityTypesFeatureProvider(),
                 ModelDeploymentMonitoringJobProvider(),
                 FeatureOnlineStoresFeatureViewProvider(),
-                EnvironmentsKeystoresAliasesProvider(),
+                EnvironmentsKeystoresAliasProvider(),
                 EnvironmentsKeyvaluemapsEntryProvider(),
                 SecurityMonitoringConditionProvider(),
                 EnvironmentsArchiveDeploymentProvider(),
                 EnvironmentsTraceConfigOverrideProvider(),
                 EnvironmentsApisRevisionsDebugsessionProvider(),
-                UserProfilesGuardianInvitationProvider(),
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
                 IamMemberProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
-                DoubleclickbidmanagerQueryProvider(),
               ),
             ),
           ),
@@ -6485,12 +5670,7 @@ export const providers = () =>
           QueryReasoningEngineHttp,
           ResumeSandboxEnvironmentHttp,
         ),
-        Layer.mergeAll(
-          GetCustomClasseHttp,
-          GetPhraseSetHttp,
-          RecognizeHttp,
-          GetUsersSshPublicKeyHttp,
-        ),
+        Layer.mergeAll(GetCustomClassHttp, GetPhraseSetHttp, RecognizeHttp),
         Layer.mergeAll(
           RunPipelineHttp,
           StopPipelineHttp,
@@ -6553,3 +5733,12 @@ export const providers = () =>
     // Erased on purpose: checking every consumer against the inferred union
     // of ~1,000 provider layers exhausts the type-checker's memory.
   ) as Layer.Layer<any, never, never>;
+
+let cachedProviders: ReturnType<typeof makeProviders> | undefined;
+
+/**
+ * The GCP provider layer. Memoized: constructing it instantiates ~1,000
+ * provider layers (several MB), and a Layer is an immutable description,
+ * so every caller — each test file, each stack — shares one instance.
+ */
+export const providers = () => (cachedProviders ??= makeProviders());

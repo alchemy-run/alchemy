@@ -4,7 +4,6 @@ import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
 
@@ -38,22 +37,20 @@ const waitUntilGone = (name: string) =>
     );
 
 test.provider(
-  "listProjectsLocationsReservationsAssignments on a missing reservation fails with a typed tag",
+  "listProjectsLocationsReservationsAssignments on a missing reservation is empty",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const result = yield* bigqueryreservation
-        .listProjectsLocationsReservationsAssignments({
-          parent: `projects/${project}/locations/us-central1/reservations/alchemy-bq-assignment-missing`,
-        })
-        .pipe(Effect.result);
-      if (Result.isSuccess(result)) {
-        expect(result.success.assignments ?? []).toEqual([]);
-      } else {
-        expect(["NotFound", "Forbidden"]).toContain(result.failure._tag);
-      }
+      // Listing under a missing reservation answers an empty page.
+      const page =
+        yield* bigqueryreservation.listProjectsLocationsReservationsAssignments(
+          {
+            parent: `projects/${project}/locations/us-central1/reservations/alchemy-bq-assignment-missing`,
+          },
+        );
+      expect(page.assignments).toBeUndefined();
 
       yield* stack.destroy();
     }).pipe(logLevel),

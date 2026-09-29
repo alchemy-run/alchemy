@@ -162,7 +162,6 @@ export type SavedQuery = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const query = yield* GCP.Logging.SavedQuery("Errors", {
- *   savedQueryId: existing.savedQueryId,
  *   displayName: "warnings and errors",
  *   loggingQuery: { filter: "severity>=WARNING" },
  * });

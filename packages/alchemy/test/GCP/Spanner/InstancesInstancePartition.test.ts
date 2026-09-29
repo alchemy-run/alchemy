@@ -14,7 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST;
+// Partitions need an ENTERPRISE_PLUS instance plus a partition at 1000 PU each
+// (~$10/h) and more node quota than the default testing project has
+// (`Project 457525637530 cannot add 1 nodes in region us-central1.`). Set
+// GCP_TEST_SPANNER_PARTITIONS=1 to opt in.
+const runLifecycle =
+  !!process.env.GCP_TEST_SPANNER_PARTITIONS && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   spanner.getProjectsInstancesInstancePartitions({ name }).pipe(

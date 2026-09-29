@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Pipeline create/delete LROs take several minutes (observed ~4m).
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_EVENTARC_PIPELINE === "1";
+// Pipeline create/update/delete LROs take ~14 minutes end to end.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 const LOCATION = "europe-west3";
 
 const waitUntilGone = (name: string) =>
@@ -42,7 +41,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/pipelines/alchemy-missing-pipeline`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -122,5 +121,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.pipeline.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:eventarc", "live"], timeout: 180_000 },
+  { timeout: 2_400_000 },
 );

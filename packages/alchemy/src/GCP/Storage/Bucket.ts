@@ -303,7 +303,7 @@ const emptyFolders = (bucketName: string) =>
         { concurrency: 1 },
       );
     }),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 
 const emptyManagedFolders = (bucketName: string) =>
@@ -327,7 +327,7 @@ const emptyManagedFolders = (bucketName: string) =>
         { concurrency: 1 },
       );
     }),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 
 export const BucketProvider = () =>
@@ -343,6 +343,16 @@ export const BucketProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
+      // Bucket names are immutable: a new name is a new bucket, and the
+      // old one must be deleted rather than left behind.
+      const recordedName = output?.bucketName ?? olds?.bucketName;
+      if (
+        news.bucketName !== undefined &&
+        recordedName !== undefined &&
+        news.bucketName !== recordedName
+      ) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
       const previous = olds?.location ?? output?.location;
       const next = news.location;
       if (

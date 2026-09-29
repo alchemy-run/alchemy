@@ -223,8 +223,6 @@ export type Instance = Resource<
  * **Example:** Change display name and maintenance window
  * ```typescript
  * const runtime = yield* GCP.Apigee.Instance("Runtime", {
- *   instanceId: existing.instanceId,
- *   location: existing.location,
  *   displayName: "app-runtime-prod",
  *   maintenanceUpdatePolicy: {
  *     maintenanceWindows: [{
@@ -342,7 +340,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
+
+/** Instance provisioning and deletion take 30–60 minutes. */
+const INSTANCE_BUDGET = "75 minutes";
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -499,7 +504,7 @@ export const InstanceProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as Instance["Attributes"][]),
             ),
           );
@@ -538,7 +543,10 @@ export const InstanceProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
+          yield* waitForOperation(created, {
+            alreadyExistsOk: true,
+            budget: INSTANCE_BUDGET,
+          });
         }
         current = yield* waitUntilExists(name);
       }
@@ -548,12 +556,7 @@ export const InstanceProvider = () =>
       }
 
       if ((current.state ?? "") === "CREATING") {
-        current =
-          (yield* waitUntilActive(name).pipe(
-            Effect.catchTag("GCP.Apigee.InstanceNotReady", () =>
-              getByName(name),
-            ),
-          )) ?? current;
+        current = (yield* waitUntilActive(name)) ?? current;
       }
 
       const desiredLogging = accessLoggingOf(news.accessLoggingConfig);
@@ -607,7 +610,7 @@ export const InstanceProvider = () =>
             consumerAcceptList: desiredAccept,
           },
         });
-        yield* waitForOperation(patched);
+        yield* waitForOperation(patched, { budget: INSTANCE_BUDGET });
         current = (yield* getByName(name)) ?? current;
       }
 
@@ -617,12 +620,17 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstances({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (deleted !== undefined) {
-        yield* waitForOperation(deleted, { notFoundOk: true });
+        yield* waitForOperation(deleted, {
+          notFoundOk: true,
+          budget: INSTANCE_BUDGET,
+        });
       }
-      yield* waitUntilGone(output.name).pipe(
-        Effect.catchTag("GCP.Apigee.InstanceStillExists", () => Effect.void),
-      );
+      yield* waitUntilGone(output.name);
     }),
   });

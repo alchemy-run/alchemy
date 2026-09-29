@@ -1,325 +1,319 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Core from "@/Test/Core";
+import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import AIPlatformBindingsHost, {
+  Agent,
+  Browser,
+  Code,
+  Paused,
+  Resumed,
+  runSandboxes,
+  runSandboxPause,
+  Train,
+} from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "AIPlatformBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let names: {
+  engine: string;
+  pipeline: string;
+  sandbox?: string;
+  template?: string;
+  paused?: string;
+  resumed?: string;
+};
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+/** Every project-level role (and its IAM Condition) `account` holds. */
+const projectGrantsOf = (account: string) =>
+  Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+    const policy = yield* resourcemanager.getIamPolicyProjects({
+      resource: `projects/${project}`,
+      body: { options: { requestedPolicyVersion: 3 } },
+    });
+    return (policy.bindings ?? [])
+      .filter((binding) =>
+        (binding.members ?? []).includes(`serviceAccount:${account}`),
+      )
+      .map((binding) => ({
+        role: binding.role,
+        condition: binding.condition?.expression,
+      }))
+      .sort((left, right) => (left.role ?? "").localeCompare(right.role ?? ""));
+  });
 
-test.provider.skipIf(!runLifecycle)(
-  "GetReasoningEngine invokes the HTTP binding",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+/**
+ * Vertex AI resources have no resource-level IAM policy, so every AI
+ * Platform binding grants on the project: aiplatform.viewer for reads,
+ * aiplatform.user for predict / cancel / pause / resume.
+ */
+const PROJECT_GRANTS = [
+  { role: "roles/aiplatform.user", condition: undefined },
+  { role: "roles/aiplatform.viewer", condition: undefined },
+];
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
-            location: "us-central1",
-            displayName: "alchemy-binding-engine",
-            spec: { agentFramework: "custom" },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* engine.name;
-              const getEngine =
-                yield* GCP.AIPlatform.GetReasoningEngine(engine);
-              const queryEngine =
-                yield* GCP.AIPlatform.QueryReasoningEngine(engine);
-              return Effect.fn(function* () {
-                const live = yield* getEngine();
-                const queried = yield* queryEngine({
-                  body: { input: { input: "hello" } },
-                }).pipe(
-                  Effect.map((result) => ({ tag: "ok" as const, result })),
-                  Effect.catchTag(
-                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                    (error) =>
-                      Effect.succeed({
-                        tag: error._tag,
-                        message: error.message,
-                      }),
-                  ),
-                );
-                return { live, queried };
-              });
-            }),
-          );
-          return { engine, probe: yield* Probe({}) };
-        }),
-      );
+const expectProjectGrants = Effect.gen(function* () {
+  expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
+});
 
-      expect(out.probe.live.name).toEqual(out.engine.name);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(out.probe.queried.tag);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
+describe.skipIf(!dockerAvailable)(
+  "AIPlatform Bindings",
   {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 120_000,
+    tags: [
+      "provider:gcp",
+      "provider:gcp:aiplatform",
+      "provider:gcp:run",
+      "live",
+    ],
   },
-);
-
-test.provider.skipIf(!runLifecycle)(
-  "GetTrainingPipeline and CancelTrainingPipeline invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const pipeline = yield* GCP.AIPlatform.TrainingPipeline("Train", {
-            location: "us-central1",
-            displayName: "alchemy-binding-pipeline",
-            trainingTaskDefinition:
-              "gs://google-cloud-aiplatform/schema/trainingjob/definition/custom_task_1.0.0.yaml",
-            trainingTaskInputs: {
-              workerPoolSpecs: [
-                {
-                  machineSpec: { machineType: "n1-standard-4" },
-                  replicaCount: "1",
-                  containerSpec: {
-                    imageUri:
-                      "us-docker.pkg.dev/vertex-ai/training/tf-cpu.2-12.py310:latest",
-                    command: ["echo", "ok"],
-                  },
-                },
-              ],
-            },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* pipeline.name;
-              const getPipeline =
-                yield* GCP.AIPlatform.GetTrainingPipeline(pipeline);
-              const cancel =
-                yield* GCP.AIPlatform.CancelTrainingPipeline(pipeline);
-              return Effect.fn(function* () {
-                const live = yield* getPipeline();
-                const cancelled = yield* cancel({ body: {} }).pipe(
-                  Effect.map((result) => ({ tag: "ok" as const, result })),
-                  Effect.catchTag(
-                    ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                    (error) =>
-                      Effect.succeed({
-                        tag: error._tag,
-                        message: error.message,
-                      }),
-                  ),
-                );
-                return { live, cancelled };
-              });
-            }),
-          );
-          return { pipeline, probe: yield* Probe({}) };
-        }),
-      );
-
-      expect(out.probe.live.name).toEqual(out.pipeline.name);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(out.probe.cancelled.tag);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
-  "GetSandboxEnvironment and PauseSandboxEnvironment invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const created = yield* stack
-        .deploy(
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
-              location: "us-central1",
-              displayName: "alchemy-binding-sandbox-engine",
-              spec: { agentFramework: "custom" },
-            });
-            const sandbox =
-              yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironment("Code", {
-                reasoningEngine: engine.name,
-                displayName: "code",
-                ttl: "600s",
-                spec: {
-                  codeExecutionEnvironment: {
-                    codeLanguage: "LANGUAGE_PYTHON",
-                    machineConfig: "MACHINE_CONFIG_VCPU4_RAM4GIB",
-                  },
-                },
-              });
-            const Probe = Action(
-              "Probe",
-              Effect.gen(function* () {
-                yield* sandbox.name;
-                const getSandbox =
-                  yield* GCP.AIPlatform.GetSandboxEnvironment(sandbox);
-                const pause =
-                  yield* GCP.AIPlatform.PauseSandboxEnvironment(sandbox);
-                const resume =
-                  yield* GCP.AIPlatform.ResumeSandboxEnvironment(sandbox);
-                return Effect.fn(function* () {
-                  const live = yield* getSandbox();
-                  const paused = yield* pause({ body: {} }).pipe(
-                    Effect.map((result) => ({ tag: "ok" as const, result })),
-                    Effect.catchTag(
-                      ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                      (error) =>
-                        Effect.succeed({
-                          tag: error._tag,
-                          message: error.message,
-                        }),
-                    ),
-                  );
-                  const resumed = yield* resume({ body: {} }).pipe(
-                    Effect.map((result) => ({ tag: "ok" as const, result })),
-                    Effect.catchTag(
-                      ["Forbidden", "BadRequest", "NotFound", "Conflict"],
-                      (error) =>
-                        Effect.succeed({
-                          tag: error._tag,
-                          message: error.message,
-                        }),
-                    ),
-                  );
-                  return { live, paused, resumed };
-                });
-              }),
-            );
-            return { sandbox, probe: yield* Probe({}) };
+            const host = yield* AIPlatformBindingsHost;
+            const engine = yield* Agent;
+            const pipeline = yield* Train;
+            const sandboxes = runSandboxes
+              ? {
+                  sandbox: (yield* Code).name,
+                  template: (yield* Browser).name,
+                }
+              : {};
+            const paused = runSandboxPause
+              ? {
+                  paused: (yield* Paused).name,
+                  resumed: (yield* Resumed).name,
+                }
+              : {};
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              names: {
+                engine: engine.name,
+                pipeline: pipeline.name,
+                ...sandboxes,
+                ...paused,
+              },
+            };
           }),
-        )
-        .pipe(
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
-            expect(error.message ?? "").toMatch(
-              /not implemented|not supported|not enabled/i,
-            );
-            return Effect.succeed(undefined);
-          }),
-          Effect.catchTag(
-            "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentNotResolved",
-            () => Effect.succeed(undefined),
-          ),
         );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        names = out.names;
+      }),
+      { timeout: 900_000 },
+    );
 
-      if (created === undefined) {
-        yield* stack.destroy();
-        return;
-      }
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
 
-      expect(created.probe.live.name).toEqual(created.sandbox.name);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(created.probe.paused.tag);
-      expect([
-        "ok",
-        "Forbidden",
-        "BadRequest",
-        "NotFound",
-        "Conflict",
-      ]).toContain(created.probe.resumed.tag);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
-  "GetSandboxEnvironmentTemplate invokes the HTTP binding",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const created = yield* stack
-        .deploy(
+    describe("GenerateContent", () => {
+      test.provider(
+        "calls Gemini (global and regional) as the host's service account",
+        (_stack) =>
           Effect.gen(function* () {
-            const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
-              location: "us-central1",
-              displayName: "alchemy-binding-template-engine",
-              spec: { agentFramework: "custom" },
+            const out = yield* expectProbe<{
+              text: string;
+              regional: string;
+              modelVersion?: string;
+            }>(baseUrl, "generateContent");
+            expect(out.text.toLowerCase()).toContain("pong");
+            expect(out.regional.toLowerCase()).toContain("ping");
+            expect(out.modelVersion).toContain("gemini-2.5-flash");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("GetReasoningEngine", () => {
+      test.provider(
+        "reads the reasoning engine as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<{
+              name?: string;
+              displayName?: string;
+            }>(baseUrl, "getReasoningEngine");
+            const expected = yield* aiplatform.getReasoningEngines({
+              name: names.engine,
             });
-            const template =
-              yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplate(
-                "Browser",
-                {
-                  reasoningEngine: engine.name,
-                  displayName: "browser",
-                  defaultContainerEnvironment: {
-                    defaultContainerCategory:
-                      "DEFAULT_CONTAINER_CATEGORY_COMPUTER_USE",
-                  },
-                },
+            expect(live.name).toEqual(names.engine);
+            expect(live.displayName).toEqual(expected.displayName);
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("QueryReasoningEngine", () => {
+      test.provider(
+        "queries the reasoning engine as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            // The engine has no deployed package, so the query is refused
+            // after authorization — the same answer the deployer gets.
+            const outcome = yield* callProbe(baseUrl, "queryReasoningEngine");
+            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual(
+              "ReasoningEngineNotRunning",
+            );
+            const expected = yield* aiplatform
+              .queryReasoningEngines({
+                name: names.engine,
+                body: { input: { input: "hello" } },
+              })
+              .pipe(
+                Effect.map(() => "ok"),
+                Effect.catchTag("ReasoningEngineNotRunning", (error) =>
+                  Effect.succeed(error._tag),
+                ),
               );
-            const Probe = Action(
-              "Probe",
-              Effect.gen(function* () {
-                yield* template.name;
-                const getTemplate =
-                  yield* GCP.AIPlatform.GetSandboxEnvironmentTemplate(template);
-                return Effect.fn(function* () {
-                  const live = yield* getTemplate();
-                  return { live };
-                });
-              }),
-            );
-            return { template, probe: yield* Probe({}) };
+            expect(expected).toEqual("ReasoningEngineNotRunning");
+            yield* expectProjectGrants;
           }),
-        )
-        .pipe(
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
-            expect(error.message ?? "").toMatch(
-              /not implemented|not supported|not enabled/i,
-            );
-            return Effect.succeed(undefined);
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("GetTrainingPipeline", () => {
+      test.provider(
+        "reads the training pipeline as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<{
+              name?: string;
+              displayName?: string;
+            }>(baseUrl, "getTrainingPipeline");
+            expect(live.name).toEqual(names.pipeline);
+            expect(live.displayName).toEqual("alchemy-binding-pipeline");
+            yield* expectProjectGrants;
           }),
-        );
+        { timeout: 600_000 },
+      );
+    });
 
-      if (created === undefined) {
-        yield* stack.destroy();
-        return;
-      }
+    describe("CancelTrainingPipeline", () => {
+      test.provider(
+        "cancels the training pipeline as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "cancelTrainingPipeline");
+            const pipeline = yield* aiplatform
+              .getProjectsLocationsTrainingPipelines({ name: names.pipeline })
+              .pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  // Wait for CANCELLED (not just CANCELLING): only a
+                  // settled pipeline can be deleted on teardown.
+                  until: (live) => live.state === "PIPELINE_STATE_CANCELLED",
+                  times: 36,
+                }),
+              );
+            expect(pipeline.state).toEqual("PIPELINE_STATE_CANCELLED");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
 
-      expect(created.probe.live.name).toEqual(created.template.name);
+    describe.skipIf(!runSandboxes)("GetSandboxEnvironment", () => {
+      test.provider(
+        "reads the sandbox environment as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<{
+              name?: string;
+              displayName?: string;
+            }>(baseUrl, "getSandboxEnvironment");
+            const expected =
+              yield* aiplatform.getReasoningEnginesSandboxEnvironments({
+                name: names.sandbox!,
+              });
+            expect(live.name).toEqual(names.sandbox);
+            expect(live.displayName).toEqual(expected.displayName);
+            expect(live.displayName).toContain("code");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
+    describe.skipIf(!runSandboxes)("GetSandboxEnvironmentTemplate", () => {
+      test.provider(
+        "reads the sandbox environment template as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<{
+              name?: string;
+              displayName?: string;
+            }>(baseUrl, "getSandboxEnvironmentTemplate");
+            const expected =
+              yield* aiplatform.getReasoningEnginesSandboxEnvironmentTemplates({
+                name: names.template!,
+              });
+            expect(live.name).toEqual(names.template);
+            expect(live.displayName).toEqual(expected.displayName);
+            expect(live.displayName).toContain("browser");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe.skipIf(!runSandboxPause)("PauseSandboxEnvironment", () => {
+      test.provider(
+        "pauses the sandbox environment as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "pauseSandboxEnvironment");
+            const live = yield* aiplatform
+              .getReasoningEnginesSandboxEnvironments({ name: names.paused! })
+              .pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  until: (sandbox) => sandbox.state === "STATE_PAUSED",
+                  times: 18,
+                }),
+              );
+            expect(live.state).toEqual("STATE_PAUSED");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe.skipIf(!runSandboxPause)("ResumeSandboxEnvironment", () => {
+      test.provider(
+        "resumes a paused sandbox environment as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "resumeSandboxEnvironment");
+            const live = yield* aiplatform
+              .getReasoningEnginesSandboxEnvironments({ name: names.resumed! })
+              .pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  until: (sandbox) => sandbox.state === "STATE_RUNNING",
+                  times: 18,
+                }),
+              );
+            expect(live.state).toEqual("STATE_RUNNING");
+            yield* expectProjectGrants;
+          }),
+        { timeout: 600_000 },
+      );
+    });
   },
 );

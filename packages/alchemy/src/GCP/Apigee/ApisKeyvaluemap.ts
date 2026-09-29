@@ -115,14 +115,22 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_KEY}`,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const ownershipValue = (labels: Record<string, string>) =>
   JSON.stringify(labels);
@@ -220,7 +228,7 @@ export const ApisKeyvaluemapProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ proxies: [] }),
             ),
           );
@@ -304,6 +312,11 @@ export const ApisKeyvaluemapProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApisKeyvaluemaps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

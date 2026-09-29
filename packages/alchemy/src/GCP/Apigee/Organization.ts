@@ -22,6 +22,8 @@ import {
 
 const DEFAULT_RUNTIME_TYPE = "CLOUD";
 const DEFAULT_BILLING_TYPE = "EVALUATION";
+/** Organization provisioning and deletion take tens of minutes. */
+const ORGANIZATION_BUDGET = "60 minutes";
 
 export type OrganizationAddonsConfig = {
   /** API Security add-on. */
@@ -261,7 +263,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   props: OrganizationProps,
@@ -338,7 +344,7 @@ export const OrganizationProvider = () =>
         const page = yield* apigee
           .listOrganizations({ parent: "organizations" })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ organizations: [] }),
             ),
           );
@@ -385,7 +391,9 @@ export const OrganizationProvider = () =>
             body: toBody(news, desiredDescription, analyticsRegion),
           })
           .pipe(
-            Effect.flatMap((operation) => waitForOperation(operation)),
+            Effect.flatMap((operation) =>
+              waitForOperation(operation, { budget: ORGANIZATION_BUDGET }),
+            ),
             Effect.flatMap(() => getByName(name)),
             Effect.catchTag("Conflict", () => getByName(name)),
           );
@@ -430,9 +438,16 @@ export const OrganizationProvider = () =>
           name: output.name,
           retention: "MINIMUM",
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForOperation(operation, {
+          notFoundOk: true,
+          budget: ORGANIZATION_BUDGET,
+        });
       }
     }),
   });

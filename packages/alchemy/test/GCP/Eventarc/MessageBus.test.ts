@@ -40,7 +40,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/messageBuses/alchemy-missing-bus`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

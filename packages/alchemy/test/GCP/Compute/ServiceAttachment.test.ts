@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -172,25 +173,22 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ProducerSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.40.0.0/16",
+            ipCidrRange: "172.20.2.0/24",
           });
           const nat = yield* GCP.Compute.Subnetwork("NatSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.41.0.0/16",
+            ipCidrRange: "172.20.3.0/24",
             purpose: "PRIVATE_SERVICE_CONNECT",
           });
           const rule = yield* GCP.Compute.ForwardingRule("ProducerFr", {
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: producer.backend.selfLink,
-            network: network.selfLink,
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink,
             ipProtocol: "TCP",
             allPorts: true,
@@ -204,7 +202,7 @@ test.provider(
             description: "psc producer",
             labels: { env: "test" },
           });
-          return { network, subnet, nat, rule, attachment };
+          return { subnet, nat, rule, attachment };
         }),
       );
 
@@ -241,21 +239,17 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ProducerSubnet", {
             subnetworkName: created.subnet.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.40.0.0/16",
+            ipCidrRange: "172.20.2.0/24",
           });
           const nat = yield* GCP.Compute.Subnetwork("NatSubnet", {
             subnetworkName: created.nat.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.41.0.0/16",
+            ipCidrRange: "172.20.3.0/24",
             purpose: "PRIVATE_SERVICE_CONNECT",
           });
           const rule = yield* GCP.Compute.ForwardingRule("ProducerFr", {
@@ -263,7 +257,7 @@ test.provider(
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: producer.backend.selfLink,
-            network: network.selfLink,
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink,
             ipProtocol: "TCP",
             allPorts: true,

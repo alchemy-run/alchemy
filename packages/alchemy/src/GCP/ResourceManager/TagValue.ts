@@ -1,6 +1,7 @@
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -8,16 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForCreate, waitForOperation } from "./internal.ts";
 
 const MAX_NAME_LENGTH = 63;
-const MAX_DESCRIPTION_LENGTH = 256;
-
 export type TagValueProps = {
   /**
    * Parent TagKey resource name (`tagKeys/{tagKey}`). Immutable —
@@ -33,10 +28,7 @@ export type TagValueProps = {
    */
   shortName?: string;
   /**
-   * Human-readable description (max 256 characters). TagValues have no
-   * labels field, so Alchemy ownership (`alchemy-stack` / `alchemy-stage`
-   * / `alchemy-id`) is stored in a `[alchemy …]` prefix for `list` / nuke
-   * and stripped from attributes.
+   * Human-readable description (max 256 characters).
    */
   description?: string;
 };
@@ -56,7 +48,7 @@ export type TagValue = Resource<
      * organization-id form).
      */
     namespacedName: string | undefined;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Description. */
     description: string | undefined;
     /** Project id of the deploying stack. */
     project: string;
@@ -75,11 +67,11 @@ export type TagValue = Resource<
  * A Cloud Resource Manager TagValue — a child of a TagKey used to group
  * resources for policy.
  *
- * TagValues have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. `parent` and `shortName` are identity —
- * changing either replaces the value. Description updates in place.
- * Create, update, and delete are long-running operations polled via
- * `getOperations`.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * `parent` and `shortName` are identity — changing either replaces the value.
+ * Description updates in place. Create, update, and delete are long-running
+ * operations polled via `getOperations`.
  *
  * ### Creating a TagValue
  * **Example:** Generated short name under a TagKey
@@ -127,19 +119,6 @@ export class TagValueParentRequired extends Data.TaggedError(
   parent: string;
 }> {}
 
-export class TagValueOperationFailed extends Data.TaggedError(
-  "GCP.ResourceManager.TagValueOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class TagValueOperationPending extends Data.TaggedError(
-  "GCP.ResourceManager.TagValueOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class TagValueStillExists extends Data.TaggedError(
   "GCP.ResourceManager.TagValueStillExists",
 )<{
@@ -176,55 +155,16 @@ const toShortName = (
     return named.replace(/-+$/g, "").slice(0, MAX_NAME_LENGTH);
   });
 
-const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  if (!description) return marker.slice(0, MAX_DESCRIPTION_LENGTH);
-  const budget = MAX_DESCRIPTION_LENGTH - marker.length - 1;
-  if (budget <= 0) return marker.slice(0, MAX_DESCRIPTION_LENGTH);
-  return `${marker}\n${description.slice(0, budget)}`;
-};
-
-const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
 const toAttrs = (
   value: crm.TagValue,
   project: string,
 ): TagValue["Attributes"] => {
-  const parsed = parseDescription(value.description);
   return {
     name: value.name ?? "",
     parent: value.parent ?? "",
     shortName: value.shortName ?? lastSegment(value.namespacedName ?? ""),
     namespacedName: value.namespacedName,
-    description: parsed.description,
+    description: value.description,
     project,
     etag: value.etag,
     createTime: value.createTime,
@@ -236,50 +176,19 @@ const getByName = (name: string) =>
   crm
     .getTagValues({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
 
 const listTagValuesUnder = (parent: string) =>
-  Effect.gen(function* () {
-    const found: crm.TagValue[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* crm.listTagValues({
-        parent,
-        pageSize: 300,
-        pageToken,
-      });
-      found.push(...(response.tagValues ?? []));
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+  crm.listTagValues.pages({ parent, pageSize: 300 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tagValues ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    // The parent TagKey is gone: it has no values.
+    Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
       Effect.succeed([] as crm.TagValue[]),
-    ),
-  );
-
-const listTagKeysUnder = (parent: string) =>
-  Effect.gen(function* () {
-    const found: crm.TagKey[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* crm.listTagKeys({
-        parent,
-        pageSize: 300,
-        pageToken,
-      });
-      found.push(...(response.tagKeys ?? []));
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as crm.TagKey[]),
     ),
   );
 
@@ -306,94 +215,12 @@ const observe = (
     return undefined;
   });
 
-const isAlreadyExists = (error: crm.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: crm.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: crm.Status | undefined,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  (options?.alreadyExistsOk === true && isAlreadyExists(error)) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
 const nameFromOperation = (operation: crm.Operation): string | undefined => {
   const name = operation.response?.name;
   return typeof name === "string" && name.startsWith("tagValues/")
     ? name
     : undefined;
 };
-
-const waitForOperation = (
-  operation: crm.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new TagValueOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new TagValueOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = crm.getOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies crm.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new TagValueOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new TagValueOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ResourceManager.TagValueOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -501,26 +328,9 @@ export const TagValueProvider = () =>
       const existing = yield* observe(output?.name, parent, shortName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const keys = yield* listTagKeysUnder(`projects/${env.project}`);
-        const values: TagValue["Attributes"][] = [];
-        for (const key of keys) {
-          if (key.name === undefined || key.name.length === 0) continue;
-          const children = yield* listTagValuesUnder(key.name);
-          for (const value of children) {
-            if (hasOwnershipMarker(value.description)) {
-              values.push(toAttrs(value, env.project));
-            }
-          }
-        }
-        return values;
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -530,8 +340,7 @@ export const TagValueProvider = () =>
         news.shortName,
         output?.shortName,
       );
-      const ownership = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(ownership, news.description);
+      const desiredDescription = news.description;
 
       let current = yield* observe(output?.name, parent, shortName);
 
@@ -546,9 +355,7 @@ export const TagValueProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (operation !== undefined) {
-          const done = yield* waitForOperation(operation, {
-            alreadyExistsOk: true,
-          });
+          const done = yield* waitForCreate(operation);
           const createdName = nameFromOperation(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(createdName).pipe(
@@ -569,7 +376,7 @@ export const TagValueProvider = () =>
         });
       }
 
-      if ((current.description ?? "") !== desiredDescription) {
+      if ((current.description ?? "") !== (desiredDescription ?? "")) {
         const patched = yield* crm.patchTagValues({
           name: current.name,
           updateMask: "description",
@@ -579,9 +386,8 @@ export const TagValueProvider = () =>
             etag: current.etag,
           },
         });
-        const done = yield* waitForOperation(patched);
-        const patchedName = nameFromOperation(done) ?? current.name;
-        current = yield* waitUntilExists(patchedName);
+        yield* waitForOperation(patched);
+        current = yield* waitUntilExists(current.name);
       }
 
       return toAttrs(current, env.project);
@@ -596,7 +402,7 @@ export const TagValueProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
             Effect.succeed(undefined),
           ),
         );

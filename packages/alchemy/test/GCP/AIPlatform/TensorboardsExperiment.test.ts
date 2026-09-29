@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsTensorboardsExperiments({ name }).pipe(
     Effect.as("found" as const),
@@ -38,10 +34,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsTensorboardsExperiments({
-          name: `projects/${project}/locations/us-central1/tensorboards/missing/experiments/missing`,
+          name: `projects/${project}/locations/us-central1/tensorboards/1234567890123456789/experiments/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -51,7 +47,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a tensorboard experiment",
   (stack) =>
     Effect.gen(function* () {

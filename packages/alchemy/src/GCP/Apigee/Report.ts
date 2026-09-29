@@ -253,7 +253,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsReports({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   news: ReportProps,
@@ -325,7 +329,7 @@ export const ReportProvider = () =>
             expand: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({
                 qualifier: [] as apigee.GoogleCloudApigeeV1CustomReport[],
               }),
@@ -393,6 +397,11 @@ export const ReportProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsReports({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

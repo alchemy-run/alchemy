@@ -271,7 +271,8 @@ const waitUntilReady = (name: string) =>
         error._tag === "GCP.Dataplex.LakesZoneNotResolved" ||
         error._tag === "GCP.Dataplex.NotResolved" ||
         error._tag === "TooManyRequests",
-      times: 10,
+      // Lakes provision a metastore-backed control plane for 2-5 minutes.
+      times: 36,
       schedule: Schedule.spaced("10 seconds"),
     }),
   );
@@ -411,6 +412,9 @@ export const LakesZoneProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          yield* waitForOperation(created);
+        }
         current = yield* waitUntilReady(name);
       }
 
@@ -450,7 +454,7 @@ export const LakesZoneProvider = () =>
             discoverySpec: desiredDiscovery,
           },
         });
-        yield* waitForOperation(operation, { interval: "5 seconds" });
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
 

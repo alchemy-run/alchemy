@@ -3,11 +3,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_CATALOG = "default_catalog";
@@ -158,114 +153,6 @@ export const toPhysical = (
     );
   });
 
-const markerOf = (labels: Record<string, string>) =>
-  `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-
-export const encodeOwnership = (
-  labels: Record<string, string>,
-  text: string | undefined,
-  separator: "\n" | " " = "\n",
-): string => {
-  const marker = markerOf(labels);
-  const trimmed = text?.trim();
-  return trimmed && trimmed.length > 0
-    ? `${marker}${separator}${trimmed}`
-    : marker;
-};
-
-const compactMarkerOf = (labels: Record<string, string>) =>
-  `[alc ${labels[alchemyLabelKeys.stack]}|${labels[alchemyLabelKeys.stage]}|${labels[alchemyLabelKeys.id]}]`;
-
-export const encodeOwnershipLine = (
-  labels: Record<string, string>,
-  text: string | undefined,
-  maxLength = MAX_DISPLAY_NAME_LENGTH,
-): string => {
-  const marker = compactMarkerOf(labels);
-  const trimmed = text?.trim();
-  if (!trimmed) return marker.slice(0, maxLength);
-  const combined = `${trimmed} ${marker}`;
-  if (combined.length <= maxLength) return combined;
-  const budget = maxLength - marker.length - 1;
-  if (budget <= 0) return marker.slice(0, maxLength);
-  return `${trimmed.slice(0, budget)} ${marker}`.slice(0, maxLength);
-};
-
-const parseOwnershipMarker = (text: string) => {
-  const labels: Record<string, string> = {};
-  const end = text.indexOf("]");
-  if (end < 0) return { labels, rest: text };
-  for (const part of text.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  return { labels, rest: text.slice(end + 1) };
-};
-
-const parseCompactMarker = (text: string) => {
-  const end = text.indexOf("]");
-  if (!text.startsWith("[alc ") || end < 0) {
-    return { labels: {} as Record<string, string>, rest: text };
-  }
-  const parts = text.slice("[alc ".length, end).split("|");
-  const labels: Record<string, string> = {};
-  if (parts[0]) labels[alchemyLabelKeys.stack] = parts[0];
-  if (parts[1]) labels[alchemyLabelKeys.stage] = parts[1];
-  if (parts[2]) labels[alchemyLabelKeys.id] = parts[2];
-  return { labels, rest: text.slice(end + 1) };
-};
-
-export const parseOwnership = (
-  text: string | undefined,
-): {
-  labels: Record<string, string>;
-  text: string | undefined;
-} => {
-  if (!text) return { labels: {}, text };
-  const compactAt = text.indexOf("[alc ");
-  const verboseAt = text.indexOf("[alchemy ");
-  if (verboseAt >= 0 && (compactAt < 0 || verboseAt <= compactAt)) {
-    const before = text.slice(0, verboseAt).trim();
-    const parsed = parseOwnershipMarker(text.slice(verboseAt));
-    const after = parsed.rest.replace(/^[\s\n]+/, "");
-    const combined = [before, after]
-      .filter((part) => part.length > 0)
-      .join(" ");
-    return {
-      labels: parsed.labels,
-      text: combined.length > 0 ? combined : undefined,
-    };
-  }
-  if (compactAt >= 0) {
-    const before = text.slice(0, compactAt).trim();
-    const parsed = parseCompactMarker(text.slice(compactAt));
-    const after = parsed.rest.replace(/^[\s\n]+/, "");
-    const combined = [before, after]
-      .filter((part) => part.length > 0)
-      .join(" ");
-    return {
-      labels: parsed.labels,
-      text: combined.length > 0 ? combined : undefined,
-    };
-  }
-  return { labels: {}, text };
-};
-
-export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
-export const ownedByAlchemy = (id: string, text: string | undefined) =>
-  Effect.gen(function* () {
-    const { labels } = parseOwnership(text);
-    return yield* hasAlchemyLabels(id, labels);
-  });
-
-export const ownershipLabels = (id: string) => createInternalLabels(id);
-
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
   if (typeof value === "boolean" || typeof value === "number") return value;
@@ -355,7 +242,7 @@ export const listCatalogs = (project: string, location: string) =>
     }),
     (page) => page.catalogs,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       emptyList<retail.GoogleCloudRetailV2Catalog>(),
     ),
   );
@@ -389,7 +276,7 @@ export const listControls = (parent: string) =>
         }),
         (page) => page.controls,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           emptyList<retail.GoogleCloudRetailV2Control>(),
         ),
       );
@@ -404,7 +291,7 @@ export const listServingConfigs = (parent: string) =>
         }),
         (page) => page.servingConfigs,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           emptyList<retail.GoogleCloudRetailV2ServingConfig>(),
         ),
       );
@@ -419,7 +306,7 @@ export const listModels = (parent: string) =>
         }),
         (page) => page.models,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           emptyList<retail.GoogleCloudRetailV2Model>(),
         ),
       );
@@ -435,25 +322,7 @@ export const listProducts = (parent: string) =>
         }),
         (page) => page.products,
       ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           emptyList<retail.GoogleCloudRetailV2Product>(),
         ),
       );
-
-export const productHasOwnership = (
-  product: retail.GoogleCloudRetailV2Product,
-) =>
-  hasOwnershipMarker(product.description) ||
-  (product.tags ?? []).some((tag) => hasOwnershipMarker(tag));
-
-export const productOwnedByAlchemy = (
-  id: string,
-  product: retail.GoogleCloudRetailV2Product,
-) =>
-  Effect.gen(function* () {
-    if (yield* ownedByAlchemy(id, product.description)) return true;
-    for (const tag of product.tags ?? []) {
-      if (yield* ownedByAlchemy(id, tag)) return true;
-    }
-    return false;
-  });

@@ -168,8 +168,8 @@ export type Dataset = Resource<
  * ### Updating a Dataset
  * **Example:** Rename and relabel
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const dataset = yield* GCP.AIPlatform.Dataset("Samples", {
- *   datasetId: existing.datasetId,
  *   displayName: "prod rows",
  *   labels: { env: "prod" },
  * });
@@ -239,10 +239,9 @@ const toAttrs = (
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : aiplatform.getDatasets({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+    : aiplatform
+        .getDatasets({ name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listDatasets = (project: string, region: string) =>
   Effect.forEach(listLocations(region), (location) =>
@@ -261,7 +260,6 @@ const listDatasetsAt = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (
@@ -374,7 +372,10 @@ export const DatasetProvider = () =>
       );
       if (existing === undefined) {
         if (output?.name) return undefined;
-        const datasetId = yield* toId(id, olds?.datasetId, output?.datasetId);
+        // Dataset ids are server-assigned numbers; only a caller-supplied
+        // id can be looked up by name.
+        const datasetId = olds?.datasetId;
+        if (datasetId === undefined) return undefined;
         const location = normalizeLocation(
           olds?.location ?? output?.location,
           env.region,
@@ -439,10 +440,7 @@ export const DatasetProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const done = yield* waitForOperation(created, {
-            times: 10,
-            space: "8 seconds",
-          });
+          const done = yield* waitForOperation(created);
           const createdName =
             resourceNameFromOperation(done) ??
             (yield* findOwned(id, env.project, env.region))?.name;

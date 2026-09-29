@@ -27,21 +27,20 @@ test.provider(
           },
         ),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* workstations
-        .listProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
+      const page =
+        yield* workstations.listProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
           {
             parent: `projects/${project}/locations/-/workstationClusters/-/workstationConfigs/-`,
             pageSize: 10,
           },
-        )
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ workstations: [] as const }),
-          ),
         );
-      expect(Array.isArray(page.workstations ?? [])).toEqual(true);
+      expect(
+        (page.workstations ?? []).filter((item) =>
+          (item.name ?? "").includes("alchemy-missing"),
+        ),
+      ).toEqual([]);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -72,13 +71,7 @@ test.provider(
           }),
         ),
       );
-      expect([
-        "BadRequest",
-        "NotFound",
-        "Forbidden",
-        "GCP.Workstations.OperationFailed",
-        "GCP.Workstations.ResourceNotResolved",
-      ]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

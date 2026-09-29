@@ -35,6 +35,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type IntentTrainingPhrasePart = {
@@ -175,11 +176,12 @@ export type AgentsIntent = Resource<
  * ```
  *
  * ### Updating an Intent
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Add a training phrase
  * ```typescript
  * const intent = yield* GCP.Dialogflow.AgentsIntent("Hello", {
- *   agent: existing.agent,
- *   intentId: existing.intentId,
+ *   agent: agentName,
  *   displayName: "hello",
  *   trainingPhrases: [
  *     { parts: [{ text: "hello" }], repeatCount: 1 },
@@ -285,7 +287,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -299,7 +300,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsIntentProvider = () =>
@@ -460,11 +460,11 @@ export const AgentsIntentProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsIntents({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

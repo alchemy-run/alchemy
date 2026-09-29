@@ -14,16 +14,17 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Live create against this project returns Forbidden:
-// "Connectors API has not been used in project alchemy-gcp-testing-83661
-// before or it is disabled." (reason SERVICE_DISABLED). Full CRUD runs
-// when create succeeds (API enabled + a real entity type parent).
+// Entity CRUD needs a running Integration Connectors connection. Without
+// one, the entity API answers HTTP 501 (EntitiesNotImplemented).
+const connectorsParent = process.env.GCP_TEST_CONNECTORS_PARENT?.trim();
+
+const missingParent = (project: string) =>
+  `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
 
 const waitUntilGone = (name: string) =>
   connectors.getProjectsLocationsConnectionsEntityTypesEntities({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,23 +33,19 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsLocationsConnectionsEntityTypesEntities on a missing entity fails with a typed tag",
+  "getProjectsLocationsConnectionsEntityTypesEntities under a missing connection fails with EntitiesNotImplemented",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const entityTypeParent =
-        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
-      const missingName = `${entityTypeParent}/entities/alchemy-missing-entity`;
 
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         connectors.getProjectsLocationsConnectionsEntityTypesEntities({
-          name: missingName,
+          name: `${missingParent(project)}/entities/alchemy-missing-entity`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("EntitiesNotImplemented");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -59,23 +56,20 @@ test.provider(
 );
 
 test.provider(
-  "createProjectsLocationsConnectionsEntityTypesEntities without a connection fails with a typed tag",
+  "createProjectsLocationsConnectionsEntityTypesEntities under a missing connection fails with EntitiesNotImplemented",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const entityTypeParent =
-        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
 
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         connectors.createProjectsLocationsConnectionsEntityTypesEntities({
-          parent: entityTypeParent,
+          parent: missingParent(project),
           body: { fields: { Name: "Alchemy Probe" } },
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("EntitiesNotImplemented");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -85,45 +79,15 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+// Set GCP_TEST_CONNECTORS_PARENT to an entity type
+// (`…/connections/{c}/entityTypes/{type}`) of a running connection.
+test.provider.skipIf(!connectorsParent)(
   "create, update, and delete an entity",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const entityTypeParent =
-        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
+      const entityTypeParent = connectorsParent!;
 
       yield* stack.destroy();
-
-      const probe = yield* connectors
-        .createProjectsLocationsConnectionsEntityTypesEntities({
-          parent: entityTypeParent,
-          body: { fields: { Name: "Alchemy Probe" } },
-        })
-        .pipe(
-          Effect.map((entity) => ({ _tag: "ok" as const, entity })),
-          Effect.catchTag(["Forbidden", "NotFound", "BadRequest"], (error) =>
-            Effect.succeed({
-              _tag: error._tag,
-              entity: undefined,
-            }),
-          ),
-        );
-
-      if (probe._tag !== "ok") {
-        expect(["Forbidden", "NotFound", "BadRequest"]).toContain(probe._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      if (probe.entity.name) {
-        yield* connectors
-          .deleteProjectsLocationsConnectionsEntityTypesEntities({
-            name: probe.entity.name,
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -144,14 +108,12 @@ test.provider.skipIf(!!process.env.FAST)(
           name: created.name,
         });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.fields?.alchemy).toEqual("true");
-      expect(fetched.fields?.["alchemy-id"]).toEqual(expect.any(String));
+      expect(fetched.fields).toMatchObject({ Name: "Alchemy Test" });
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Connectors.ConnectionsEntityTypesEntity("Account", {
-            parent: created.parent,
-            entityId: created.entityId,
+            parent: entityTypeParent,
             fields: { Name: "Alchemy Test Corp" },
           });
         }),

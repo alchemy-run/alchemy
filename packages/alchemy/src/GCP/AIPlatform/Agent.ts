@@ -246,15 +246,8 @@ const listAgents = (project: string, region: string) => {
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
 const isOwnedAgent = (

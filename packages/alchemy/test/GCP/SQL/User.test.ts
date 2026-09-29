@@ -22,6 +22,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Runs against an existing Cloud SQL instance (creating one takes well over
+// 5 minutes); set GCP_SQL_INSTANCE to its name.
 const sqlInstance =
   process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
 const runLifecycle = !!sqlInstance && !process.env.FAST;
@@ -42,9 +44,7 @@ const waitUntilGone = (
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (status) => status === "gone",
@@ -55,7 +55,7 @@ const waitUntilGone = (
   );
 
 test.provider(
-  "getUsers on a missing instance fails with Forbidden",
+  "getUsers on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -69,7 +69,7 @@ test.provider(
         }),
       );
       // Cloud SQL hides unknown instances behind 403 rather than 404.
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -77,31 +77,19 @@ test.provider(
 );
 
 test.provider(
-  "lists sql users",
+  "listUsers on a missing instance fails with SqlInstanceNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const page = yield* sqladmin.listInstances({
-        project,
-        maxResults: 10,
-      });
-      expect(Array.isArray(page.items ?? [])).toEqual(true);
-      for (const instance of page.items ?? []) {
-        if (!instance.name) continue;
-        const users = yield* sqladmin
-          .listUsers({
-            project,
-            instance: instance.name,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({ items: [] as sqladmin.UserList }),
-            ),
-          );
-        expect(Array.isArray(users.items ?? [])).toEqual(true);
-      }
+      const error = yield* Effect.flip(
+        sqladmin.listUsers({
+          project,
+          instance: "alchemy-sql-instance-does-not-exist",
+        }),
+      );
+      expect(error._tag).toBe("SqlInstanceNotAuthorized");
 
       yield* stack.destroy();
     }).pipe(logLevel),

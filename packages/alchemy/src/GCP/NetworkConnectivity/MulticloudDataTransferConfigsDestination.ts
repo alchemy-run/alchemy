@@ -155,9 +155,8 @@ export type MulticloudDataTransferConfigsDestination = Resource<
  *   yield* GCP.NetworkConnectivity.MulticloudDataTransferConfigsDestination(
  *     "OnPrem",
  *     {
- *       parent: existing.parent,
- *       destinationId: existing.destinationId,
- *       ipPrefix: existing.ipPrefix!,
+ *       parent: config.name,
+ *       ipPrefix: "203.0.113.0/24",
  *       endpoints: [
  *         { asn: "64512", csp: "aws" },
  *         { asn: "64513", csp: "azure" },

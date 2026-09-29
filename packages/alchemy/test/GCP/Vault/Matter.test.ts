@@ -14,7 +14,6 @@ const waitUntilGone = (matterId: string) =>
       matter.state === "DELETED" ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -31,7 +30,7 @@ test.provider(
       const error = yield* Effect.flip(
         vault.getMatters({ matterId: "alchemy-missing-matter" }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -39,7 +38,7 @@ test.provider(
 );
 
 test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
-  "createMatters without Vault access fails with Forbidden",
+  "createMatters without the Vault OAuth scope fails with VaultScopeInsufficient",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -52,7 +51,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
           },
         }),
       );
-      expect(["Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),

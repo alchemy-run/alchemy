@@ -123,14 +123,22 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee
@@ -257,6 +265,11 @@ export const KeyvaluemapProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsKeyvaluemaps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

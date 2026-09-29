@@ -231,7 +231,7 @@ export const FolderBucketsLinkProvider = () =>
               Stream.map((link) => toAttrs(link, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as ReturnType<typeof toAttrs>[]),
               ),
             );

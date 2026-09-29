@@ -30,7 +30,6 @@ const waitUntilGone = (parent: string, tagValue: string) =>
           : ("gone" as const),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",

@@ -195,7 +195,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityFeedback({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   news: SecurityFeedbackProps,
@@ -264,7 +268,7 @@ export const SecurityFeedbackProvider = () =>
             Stream.map((feedback) => toAttrs(feedback, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as SecurityFeedback["Attributes"][]),
             ),
           );
@@ -334,6 +338,11 @@ export const SecurityFeedbackProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSecurityFeedback({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

@@ -333,7 +333,6 @@ const collectSecretPages = (parent: string) =>
         Array.from(pages).flatMap((page) => page.secrets ?? []),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (
@@ -359,7 +358,6 @@ export const LocationsSecretProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.secretId ?? output?.secretId;
-      const nextId = news.secretId ?? previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         env.region,

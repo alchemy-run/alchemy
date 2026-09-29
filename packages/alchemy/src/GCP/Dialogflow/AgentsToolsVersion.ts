@@ -21,6 +21,7 @@ import {
   parseOwnership,
   projectOf,
   toResourceId,
+  retryQuota,
 } from "./internal.ts";
 
 export type AgentsToolsVersionProps = {
@@ -138,7 +139,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const listTools = (agent: string) =>
@@ -149,7 +149,6 @@ const listTools = (agent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -163,7 +162,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsToolsVersionProvider = () =>
@@ -190,14 +188,10 @@ export const AgentsToolsVersionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const tool = olds?.tool ?? output?.tool;
-      const versionId = yield* toResourceId(
-        id,
-        olds?.versionId,
-        output?.versionId,
-      );
       const name =
-        output?.name ??
-        (tool !== undefined ? resourceName(tool, versionId) : "");
+        // Version ids are assigned by the server, so only a recorded name can
+        // be fetched directly (a guessed id is rejected as malformed).
+        output?.name ?? "";
       let existing = yield* getByName(name);
       if (existing === undefined && tool !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -249,7 +243,7 @@ export const AgentsToolsVersionProvider = () =>
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
 
-      let current = yield* getByName(output?.name ?? name);
+      let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
         current = yield* findByDisplayName(tool, displayName);
       }
@@ -273,7 +267,7 @@ export const AgentsToolsVersionProvider = () =>
       }
 
       return toAttrs(current, env.project, tool);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -282,5 +276,5 @@ export const AgentsToolsVersionProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

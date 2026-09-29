@@ -22,7 +22,8 @@ const LOCATION = "us-central1";
 // Gen2 function create/update/delete is a multi-minute LRO. Set
 // GCP_TEST_CLOUDFUNCTIONS=1 to run the lifecycle; default recapture
 // keeps the list probe only.
-const runLifecycle = !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
+// gen2 function builds take 2-4 minutes.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   cloudfunctions.getProjectsLocationsFunctions({ name }).pipe(
@@ -92,7 +93,11 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.functions ?? [])).toEqual(true);
+      for (const fn of page.functions ?? []) {
+        expect(fn.name).toMatch(
+          new RegExp(`^projects/${project}/locations/[^/]+/functions/`),
+        );
+      }
       yield* stack.destroy();
     }).pipe(logLevel),
   {

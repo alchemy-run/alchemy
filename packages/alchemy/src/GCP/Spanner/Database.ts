@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_DIALECT = "GOOGLE_STANDARD_SQL";
 const MAX_DATABASE_ID_LENGTH = 30;
@@ -165,19 +166,6 @@ export class DatabaseNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class DatabaseOperationFailed extends Data.TaggedError(
-  "GCP.Spanner.DatabaseOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DatabaseOperationPending extends Data.TaggedError(
-  "GCP.Spanner.DatabaseOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class DatabaseStillExists extends Data.TaggedError(
   "GCP.Spanner.DatabaseStillExists",
 )<{
@@ -310,100 +298,6 @@ const getByName = (name: string) =>
     .getProjectsInstancesDatabases({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: spanner.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: spanner.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
-const waitForOperation = (
-  operation: spanner.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DatabaseOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new DatabaseOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = name.includes("/databases/")
-      ? spanner.getProjectsInstancesDatabasesOperations({ name })
-      : spanner.getProjectsInstancesOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies spanner.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DatabaseOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        if (status) {
-          if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
-            return Effect.succeed(current);
-          }
-          if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-            return Effect.succeed(current);
-          }
-          return Effect.fail(
-            new DatabaseOperationFailed({
-              operation: name,
-              message: status.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Spanner.DatabaseOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
@@ -485,9 +379,6 @@ const listAlchemyInstances = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as spanner.Instance[]),
-      ),
-      Effect.catchTag("Forbidden", () =>
         Effect.succeed([] as spanner.Instance[]),
       ),
     );
@@ -585,9 +476,6 @@ export const DatabaseProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as Database["Attributes"][]),
-                ),
-                Effect.catchTag("Forbidden", () =>
                   Effect.succeed([] as Database["Attributes"][]),
                 ),
               );

@@ -1,102 +1,259 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Core from "@/Test/Core";
+import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import SecretManagerBindingsHost, {
+  OpsSecret,
+  ReadOnlySecret,
+  ReadWriteOnlySecret,
+  RegionalSecret,
+  SEEDED,
+  WriteOnlySecret,
+} from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "SecretManagerBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let secrets: {
+  ops: string;
+  regional: string;
+  readOnly: string;
+  writeOnly: string;
+  readWrite: string;
+};
 
-test.provider(
-  "AddSecretVersion and AccessSecretVersion round-trip",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+const hostRoles = (policy: secretmanager.Policy) =>
+  (policy.bindings ?? [])
+    .filter((binding) =>
+      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+    )
+    .map((binding) => binding.role)
+    .sort();
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const secret = yield* GCP.SecretManager.Secret("ApiKey", {});
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* secret.name;
-              const addVersion =
-                yield* GCP.SecretManager.AddSecretVersion(secret);
-              const access =
-                yield* GCP.SecretManager.AccessSecretVersion(secret);
-              return Effect.fn(function* () {
-                const payload = btoa("super-secret");
-                const version = yield* addVersion({
-                  payload: { data: payload },
-                });
-                const accessed = yield* access();
-                return { version, accessed, payload };
-              });
-            }),
-          );
-          return yield* Probe({});
-        }),
-      );
+/** Roles the host's service account holds on a global secret. */
+const secretRoles = (name: string) =>
+  secretmanager
+    .getIamPolicyProjectsSecrets({ resource: name })
+    .pipe(Effect.map(hostRoles));
 
-      expect(out.version.name).toContain("/versions/");
-      expect(out.accessed.payload?.data).toEqual(out.payload);
+/** Roles the host's service account holds on a regional secret. */
+const regionalSecretRoles = (name: string) =>
+  secretmanager
+    .getIamPolicyProjectsLocationsSecrets({ resource: name })
+    .pipe(Effect.map(hostRoles));
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+/** Every version of a secret with its state, read out of band. */
+const versionStates = (parent: string) =>
+  Effect.gen(function* () {
+    const states: Record<string, string | undefined> = {};
+    let pageToken: string | undefined;
+    do {
+      const page = yield* secretmanager.listProjectsSecretsVersions({
+        parent,
+        pageToken,
+      });
+      for (const version of page.versions ?? []) {
+        if (version.name) states[version.name] = version.state;
+      }
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return states;
+  });
+
+describe.skipIf(!dockerAvailable)(
+  "SecretManager Bindings",
   {
-    tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
-    timeout: 90_000,
+    tags: [
+      "provider:gcp",
+      "provider:gcp:secretmanager",
+      "provider:gcp:run",
+      "live",
+    ],
   },
-);
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* SecretManagerBindingsHost;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              ops: (yield* OpsSecret).name,
+              regional: (yield* RegionalSecret).name,
+              readOnly: (yield* ReadOnlySecret).name,
+              writeOnly: (yield* WriteOnlySecret).name,
+              readWrite: (yield* ReadWriteOnlySecret).name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        secrets = {
+          ops: out.ops,
+          regional: out.regional,
+          readOnly: out.readOnly,
+          writeOnly: out.writeOnly,
+          readWrite: out.readWrite,
+        };
+      }),
+      { timeout: 900_000 },
+    );
 
-test.provider.skipIf(
-  !process.env.GCP_TEST_REGIONAL_SECRETS || !!process.env.FAST,
-)(
-  "AddSecretVersion and AccessSecretVersion round-trip a regional secret",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const secret = yield* GCP.SecretManager.LocationsSecret("ApiKey", {
-            location: "us-central1",
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* secret.name;
-              const addVersion =
-                yield* GCP.SecretManager.AddSecretVersion(secret);
-              const access =
-                yield* GCP.SecretManager.AccessSecretVersion(secret);
-              return Effect.fn(function* () {
-                const payload = btoa("super-secret-regional");
-                const version = yield* addVersion({
-                  payload: { data: payload },
-                });
-                const accessed = yield* access();
-                return { version, accessed, payload };
-              });
-            }),
-          );
-          return yield* Probe({});
-        }),
+    describe("AddSecretVersion / AccessSecretVersion", () => {
+      test.provider(
+        "round-trip a global secret as the host's service account, granted on the secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              version: string;
+              accessedName: string;
+              data: string;
+              payload: string;
+            }>(baseUrl, "ops");
+            expect(out.version.startsWith(`${secrets.ops}/versions/`)).toBe(
+              true,
+            );
+            expect(out.accessedName).toEqual(out.version);
+            expect(out.data).toEqual(out.payload);
+
+            const states = yield* versionStates(secrets.ops);
+            expect(states[out.version]).toEqual("ENABLED");
+
+            expect(yield* secretRoles(secrets.ops)).toEqual([
+              "roles/secretmanager.secretAccessor",
+              "roles/secretmanager.secretVersionAdder",
+            ]);
+          }),
+        { timeout: 600_000 },
       );
 
-      expect(out.version.name).toContain("/locations/us-central1/secrets/");
-      expect(out.version.name).toContain("/versions/");
-      expect(out.accessed.payload?.data).toEqual(out.payload);
+      test.provider(
+        "round-trip a regional secret as the host's service account, granted on the secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              version: string;
+              accessedName: string;
+              data: string;
+              payload: string;
+            }>(baseUrl, "opsRegional");
+            expect(
+              out.version.startsWith(`${secrets.regional}/versions/`),
+            ).toBe(true);
+            expect(out.version).toContain("/locations/us-central1/secrets/");
+            expect(out.accessedName).toEqual(out.version);
+            expect(out.data).toEqual(out.payload);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
-    timeout: 90_000,
+            expect(yield* regionalSecretRoles(secrets.regional)).toEqual([
+              "roles/secretmanager.secretAccessor",
+              "roles/secretmanager.secretVersionAdder",
+            ]);
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("ReadSecret", () => {
+      test.provider(
+        "reads a seeded version as the host's service account, granted secretAccessor on the secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* secretmanager.addVersionProjectsSecrets({
+              parent: secrets.readOnly,
+              body: {
+                payload: { data: btoa(SEEDED) },
+              },
+            });
+            const out = yield* expectProbe<{
+              latest: string;
+              bytes: string;
+              missing: boolean;
+            }>(baseUrl, "read");
+            expect(out).toEqual({
+              latest: SEEDED,
+              bytes: SEEDED,
+              missing: true,
+            });
+
+            expect(yield* secretRoles(secrets.readOnly)).toEqual([
+              "roles/secretmanager.secretAccessor",
+            ]);
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("WriteSecret", () => {
+      test.provider(
+        "adds, disables and destroys versions as the host's service account, granted secretVersionManager on the secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ v1: string; v2: string }>(
+              baseUrl,
+              "write",
+            );
+            expect(out.v1.startsWith(`${secrets.writeOnly}/versions/`)).toBe(
+              true,
+            );
+            expect(out.v2.startsWith(`${secrets.writeOnly}/versions/`)).toBe(
+              true,
+            );
+
+            const states = yield* versionStates(secrets.writeOnly);
+            expect(states[out.v1]).toEqual("DESTROYED");
+            expect(states[out.v2]).toEqual("DISABLED");
+
+            expect(yield* secretRoles(secrets.writeOnly)).toEqual([
+              "roles/secretmanager.secretVersionManager",
+            ]);
+          }),
+        { timeout: 600_000 },
+      );
+    });
+
+    describe("ReadWriteSecret", () => {
+      test.provider(
+        "rotates and reads back as the host's service account, granted accessor + versionManager on the secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              v1: string;
+              v2: string;
+              latest: string;
+              first: string;
+              disabledReadsUndefined: boolean;
+              destroyedReadsUndefined: boolean;
+            }>(baseUrl, "readWrite");
+            expect(out).toEqual({
+              v1: expect.stringContaining(`${secrets.readWrite}/versions/`),
+              v2: expect.stringContaining(`${secrets.readWrite}/versions/`),
+              latest: "two",
+              first: "one",
+              disabledReadsUndefined: true,
+              destroyedReadsUndefined: true,
+            });
+
+            const states = yield* versionStates(secrets.readWrite);
+            expect(states[out.v1]).toEqual("DESTROYED");
+            expect(states[out.v2]).toEqual("DISABLED");
+
+            expect(yield* secretRoles(secrets.readWrite)).toEqual([
+              "roles/secretmanager.secretAccessor",
+              "roles/secretmanager.secretVersionManager",
+            ]);
+          }),
+        { timeout: 600_000 },
+      );
+    });
   },
 );

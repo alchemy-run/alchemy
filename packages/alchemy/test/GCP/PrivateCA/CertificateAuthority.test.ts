@@ -14,7 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -52,14 +51,18 @@ test.provider(
           parent: `projects/${project}/locations/${location}/caPools/-`,
           pageSize: 10,
         });
-      expect(Array.isArray(page.certificateAuthorities ?? [])).toEqual(true);
+      expect(
+        (page.certificateAuthorities ?? []).map((authority) => authority.name),
+      ).not.toContain(
+        `projects/${project}/locations/${location}/caPools/alchemy-capool-missing/certificateAuthorities/alchemy-ca-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:privateca", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a certificate authority",
   (stack) =>
     Effect.gen(function* () {

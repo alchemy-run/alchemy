@@ -18,6 +18,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type InstancesLogicalViewProps = {
@@ -142,11 +143,7 @@ const toAttrs = (view: bigtable.LogicalView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesLogicalViews({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -243,17 +240,17 @@ export const InstancesLogicalViewProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesLogicalViews({
+            collectPages(
+              bigtable.listProjectsInstancesLogicalViews.pages({
                 parent: instance.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.logicalViews ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.LogicalView[]),
-                ),
+              }),
+              (page) => page.logicalViews,
+            ).pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as bigtable.LogicalView[]),
               ),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((view) => toAttrs(view, env.project));
@@ -336,7 +333,7 @@ export const InstancesLogicalViewProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

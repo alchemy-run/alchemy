@@ -183,14 +183,6 @@ export class RegionInstanceTemplateNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionInstanceTemplateOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstanceTemplateOperationFailed",
-)<{
-  templateName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const DEFAULT_DISKS: RegionInstanceTemplateDisk[] = [
   {
     boot: true,
@@ -384,13 +376,6 @@ const awaitResource = (project: string, region: string, templateName: string) =>
     }),
   );
 
-const failOp = (templateName: string, operation: string, message: string) =>
-  new RegionInstanceTemplateOperationFailed({
-    templateName,
-    operation,
-    message,
-  });
-
 export const RegionInstanceTemplateProvider = () =>
   Provider.succeed(RegionInstanceTemplate, {
     stables: [
@@ -479,11 +464,8 @@ export const RegionInstanceTemplateProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.InstanceTemplateAggregatedList[],
@@ -530,7 +512,6 @@ export const RegionInstanceTemplateProvider = () =>
               properties: toProperties(news, desiredLabels),
             },
           }),
-          (operation, message) => failOp(templateName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, templateName);
@@ -557,7 +538,6 @@ export const RegionInstanceTemplateProvider = () =>
           region,
           instanceTemplate: output.templateName,
         }),
-        (operation, message) => failOp(output.templateName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

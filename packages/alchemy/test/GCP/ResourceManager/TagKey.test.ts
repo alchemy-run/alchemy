@@ -16,9 +16,8 @@ const logLevel = Effect.provideService(
 const waitUntilGone = (name: string) =>
   resourcemanager.getTagKeys({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    // A deleted TagKey answers 403 "... (or it may not exist)".
+    Effect.catchTag("TagKeyNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -51,8 +50,7 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.shortName).toEqual(created.shortName);
-      expect(fetched.description).toContain("alchemy-id=");
-      expect(fetched.description).toContain("deployment environment");
+      expect(fetched.description).toEqual("deployment environment");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -71,8 +69,7 @@ test.provider(
       const fetchedUpdate = yield* resourcemanager.getTagKeys({
         name: updated.name,
       });
-      expect(fetchedUpdate.description).toContain("prod vs staging");
-      expect(fetchedUpdate.description).toContain("alchemy-id=");
+      expect(fetchedUpdate.description).toEqual("prod vs staging");
 
       const last = created.shortName.at(-1) ?? "a";
       const nextShortName = `${created.shortName.slice(0, -1)}${last === "z" ? "0" : "z"}`;
@@ -95,7 +92,7 @@ test.provider(
         name: replaced.name,
       });
       expect(fetchedReplace.shortName).toEqual(nextShortName);
-      expect(fetchedReplace.description).toContain("replaced key");
+      expect(fetchedReplace.description).toEqual("replaced key");
 
       const oldGone = yield* waitUntilGone(created.name);
       expect(oldGone).toEqual("gone");

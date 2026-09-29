@@ -118,7 +118,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesAttachments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesAttachments
@@ -130,7 +134,7 @@ const listByInstance = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.attachments ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1InstanceAttachment[]),
       ),
     );
@@ -281,7 +285,11 @@ export const InstancesAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesAttachments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

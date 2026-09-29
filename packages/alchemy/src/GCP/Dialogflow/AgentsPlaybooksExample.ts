@@ -24,7 +24,7 @@ import {
   projectOf,
   sameText,
   toResourceId,
-  updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type ExampleConversationState =
@@ -253,7 +253,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const listPlaybooks = (agent: string) =>
@@ -264,7 +263,6 @@ const listPlaybooks = (agent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -278,7 +276,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsPlaybooksExampleProvider = () =>
@@ -434,22 +431,15 @@ export const AgentsPlaybooksExampleProvider = () =>
       ) {
         current =
           yield* dialogflow.patchProjectsLocationsAgentsPlaybooksExamples({
+            // Repeated fields named in an update mask (`actions`) are
+            // silently ignored; the body is complete, so replace it whole.
             name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "display_name" : undefined,
-              descriptionChanged ? "description" : undefined,
-              stateChanged ? "conversation_state" : undefined,
-              actionsChanged ? "actions" : undefined,
-              languageChanged ? "language_code" : undefined,
-              inputChanged ? "playbook_input" : undefined,
-              outputChanged ? "playbook_output" : undefined,
-            ),
             body: { ...body, name: currentName },
           });
       }
 
       return toAttrs(current, env.project, playbook);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -457,5 +447,5 @@ export const AgentsPlaybooksExampleProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

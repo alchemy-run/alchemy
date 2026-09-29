@@ -37,7 +37,6 @@ export default class Indexer extends GCP.Function<Indexer>()(
   "Indexer",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     const bucket = yield* Uploads;

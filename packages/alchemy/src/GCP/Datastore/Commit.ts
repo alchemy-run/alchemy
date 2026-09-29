@@ -2,27 +2,29 @@ import type * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Indexe } from "./Indexe.ts";
+import type { Database } from "../Firestore/Database.ts";
+import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
 
-export interface CommitRequest extends Omit<
-  datastore.CommitProjectsRequest,
-  "projectId"
-> {
-  /** Project id. Defaults to the bound index's project. */
-  projectId?: string;
-}
+/** Request for {@link Commit}; project and database come from the bound database. */
+export type CommitRequest =
+  DatastoreDatabaseRequest<datastore.CommitProjectsRequest>;
 
 /**
  * Runtime binding for Datastore `projects.commit`.
  *
- * Bind this operation to a {@link Indexe} in a Function/Action init
- * phase. Provide {@link CommitHttp}. The bound index supplies the
- * project id; mutations run against the default Datastore-mode database.
+ * Bind this operation to a Datastore-mode `GCP.Firestore.Database` in a Function/Action init
+ * phase. Provide {@link CommitHttp}. The bound database supplies the
+ * project and database id; mutations run against that database only.
+ * The host is granted the role on the project under an IAM Condition
+ * matching the database.
  *
  * ### Committing Mutations
  * **Example:** Upsert an entity
  * ```typescript
- * const commit = yield* GCP.Datastore.Commit(index);
+ * const database = yield* GCP.Firestore.Database("Tasks", {
+ *   type: "DATASTORE_MODE",
+ * });
+ * const commit = yield* GCP.Datastore.Commit(database);
  * const result = yield* commit({
  *   body: {
  *     mode: "NON_TRANSACTIONAL",
@@ -45,7 +47,7 @@ export interface Commit extends Binding.Service<
   Commit,
   "GCP.Datastore.Commit",
   (
-    index: Indexe,
+    database: Database,
   ) => Effect.Effect<
     (
       request: CommitRequest,

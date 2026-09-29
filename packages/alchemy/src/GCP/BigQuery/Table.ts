@@ -530,9 +530,6 @@ export const TableProvider = () =>
             Effect.catchTag("NotFound", () =>
               Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
-            ),
           );
         const pages = yield* Effect.forEach(
           datasets,
@@ -560,9 +557,6 @@ export const TableProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-                ),
-                Effect.catchTag("Forbidden", () =>
                   Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                 ),
               );
@@ -611,7 +605,17 @@ export const TableProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
+      if (removed.length > 0) {
+        // PATCH merges labels; removing one needs a JSON null the typed body
+        // cannot carry, so replace the labels with PUT (get-modify-put).
+        current = yield* bigquery.updateTables({
+          projectId: env.project,
+          datasetId,
+          tableId,
+          body: { ...current, labels: desiredLabels },
+        });
+      }
+      const labelsChanged = removed.length === 0 && upsert.length > 0;
       const descriptionChanged =
         news.description !== undefined &&
         !sameOptionalString(news.description, current.description);
@@ -650,15 +654,7 @@ export const TableProvider = () =>
         requireFilterChanged
       ) {
         const body: bigquery.Table = {};
-        if (labelsChanged) {
-          const nextLabels: Record<string, string | null> = {
-            ...desiredLabels,
-          };
-          for (const key of removed) {
-            nextLabels[key] = null;
-          }
-          body.labels = nextLabels as unknown as Record<string, string>;
-        }
+        if (labelsChanged) body.labels = desiredLabels;
         if (descriptionChanged) body.description = news.description;
         if (friendlyNameChanged) body.friendlyName = news.friendlyName;
         if (expirationChanged) body.expirationTime = news.expirationTime;

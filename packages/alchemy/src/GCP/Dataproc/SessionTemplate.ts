@@ -15,8 +15,9 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
-  MAX_WORKLOAD_ID_LENGTH,
+  MAX_SESSION_TEMPLATE_ID_LENGTH,
   emptyOnMissing,
   fingerprint,
   hasAlchemyLabelMap,
@@ -137,11 +138,14 @@ export class SessionTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, templateId: string) =>
   `${locationParent(project, location)}/sessionTemplates/${templateId}`;
 
+// Dataproc rejects a Jupyter session template without a display name.
 const defaultJupyter = (
   news: SessionTemplateProps,
+  templateId: string,
 ): dataproc.JupyterConfig | undefined => {
   if (news.sparkConnectSession !== undefined) return undefined;
-  return news.jupyterSession ?? { kernel: "PYTHON" };
+  const jupyter = news.jupyterSession ?? { kernel: "PYTHON" };
+  return { ...jupyter, displayName: jupyter.displayName ?? templateId };
 };
 
 const toAttrs = (
@@ -168,12 +172,13 @@ const toAttrs = (
 const desiredBody = (
   news: SessionTemplateProps,
   name: string,
+  templateId: string,
   desiredLabels: Record<string, string>,
 ): dataproc.SessionTemplate => ({
   name,
   description: news.description,
   labels: desiredLabels,
-  jupyterSession: defaultJupyter(news),
+  jupyterSession: defaultJupyter(news, templateId),
   sparkConnectSession: news.sparkConnectSession,
   runtimeConfig: news.runtimeConfig,
   environmentConfig: news.environmentConfig,
@@ -186,18 +191,19 @@ const getByName = (name: string) =>
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsLocationsSessionTemplates({
+    collectPages(
+      dataproc.listProjectsLocationsSessionTemplates.pages({
         parent: locationParent(project, location),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.sessionTemplates ?? [])
-            .filter((template) => hasAlchemyLabelMap(template.labels))
-            .map((template) => toAttrs(template, project, location)),
-        ),
+      }),
+      (page) => page.sessionTemplates,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((template) => hasAlchemyLabelMap(template.labels))
+          .map((template) => toAttrs(template, project, location)),
       ),
+    ),
   );
 
 const templateChanged = (
@@ -263,7 +269,7 @@ export const SessionTemplateProvider = () =>
         id,
         olds?.templateId,
         output?.templateId,
-        MAX_WORKLOAD_ID_LENGTH,
+        MAX_SESSION_TEMPLATE_ID_LENGTH,
         "session",
       );
       const name =
@@ -297,7 +303,7 @@ export const SessionTemplateProvider = () =>
         id,
         news.templateId,
         output?.templateId,
-        MAX_WORKLOAD_ID_LENGTH,
+        MAX_SESSION_TEMPLATE_ID_LENGTH,
         "session",
       );
       const name = resourceName(env.project, location, templateId);
@@ -305,7 +311,7 @@ export const SessionTemplateProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desired = desiredBody(news, name, desiredLabels);
+      const desired = desiredBody(news, name, templateId, desiredLabels);
 
       let current = yield* getByName(name);
 

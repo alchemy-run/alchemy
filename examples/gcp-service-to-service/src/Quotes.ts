@@ -21,7 +21,6 @@ export default class Quotes extends GCP.Function<Quotes>()(
   "Quotes",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     return {

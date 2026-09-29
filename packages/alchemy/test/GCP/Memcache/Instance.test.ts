@@ -14,7 +14,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_MEMCACHE && !process.env.FAST;
+// Memcached instances need Private Service Access on the project's default
+// network — without it create fails with BadRequest "Google private service
+// access is not enabled." — and take ~10 minutes to provision. Set
+// GCP_TEST_PRIVATE_SERVICE_ACCESS=1 on a project with PSA configured.
+const privateServiceAccess = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS;
+const runLifecycle =
+  privateServiceAccess && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   memcache.getProjectsLocationsInstances({ name }).pipe(
@@ -45,11 +51,36 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.instances ?? [])).toEqual(true);
+      expect(
+        (page.instances ?? []).map((instance) => instance.name),
+      ).not.toContain(
+        `projects/${project}/locations/us-central1/instances/alchemy-memcache-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:memcache", "live"], timeout: 90_000 },
+);
+
+test.provider.skipIf(privateServiceAccess)(
+  "createProjectsLocationsInstances without private service access fails with PrivateServiceAccessNotEnabled",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+      const error = yield* Effect.flip(
+        memcache.createProjectsLocationsInstances({
+          parent: `projects/${project}/locations/us-central1`,
+          instanceId: "alchemy-memcache-psa-probe",
+          body: {
+            nodeCount: 1,
+            nodeConfig: { cpuCount: 1, memorySizeMb: 1024 },
+          },
+        }),
+      );
+      expect(error._tag).toEqual("PrivateServiceAccessNotEnabled");
+    }).pipe(logLevel),
+  { timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -117,5 +148,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:memcache", "live"], timeout: 120_000 },
+  { timeout: 1_800_000 },
 );

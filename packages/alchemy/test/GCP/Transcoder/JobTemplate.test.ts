@@ -15,8 +15,6 @@ const logLevel = Effect.provideService(
 );
 const location = "us-central1";
 
-const DISABLED_MESSAGE = "Transcoder API has not been used";
-
 const sdConfig: GCP.Transcoder.JobConfig = {
   elementaryStreams: [
     {
@@ -75,24 +73,11 @@ const waitUntilGone = (name: string) =>
   transcoder.getProjectsLocationsJobTemplates({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
       times: 10,
     }),
-  );
-
-const probeAccess = () =>
-  GcpEnvironment.current.pipe(
-    Effect.flatMap(({ project }) =>
-      transcoder.getProjectsLocationsJobTemplates({
-        name: `projects/${project}/locations/${location}/jobTemplates/alchemy-missing-template`,
-      }),
-    ),
-    Effect.as("ok" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
-    Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
   );
 
 test.provider(
@@ -108,22 +93,7 @@ test.provider(
       const error = yield* Effect.flip(
         transcoder.getProjectsLocationsJobTemplates({ name: missingName }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain(DISABLED_MESSAGE);
-      }
-
-      const page = yield* transcoder
-        .listProjectsLocationsJobTemplates({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ jobTemplates: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.jobTemplates ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -138,14 +108,6 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const access = yield* probeAccess();
-      if (access !== "ok") {
-        expect(access._tag).toEqual("Forbidden");
-        expect(access.message).toContain(DISABLED_MESSAGE);
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

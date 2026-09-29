@@ -129,14 +129,6 @@ export class RegionCompositeHealthCheckNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionCompositeHealthCheckOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionCompositeHealthCheckOperationFailed",
-)<{
-  healthCheckName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toAttrs = (
   check: compute.CompositeHealthCheck,
   project: string,
@@ -190,13 +182,6 @@ const awaitResource = (
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const failOp = (healthCheckName: string, operation: string, message: string) =>
-  new RegionCompositeHealthCheckOperationFailed({
-    healthCheckName,
-    operation,
-    message,
-  });
 
 export const RegionCompositeHealthCheckProvider = () =>
   Provider.succeed(RegionCompositeHealthCheck, {
@@ -267,11 +252,8 @@ export const RegionCompositeHealthCheckProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.CompositeHealthCheckAggregatedList[],
@@ -312,7 +294,6 @@ export const RegionCompositeHealthCheckProvider = () =>
               healthSources: news.healthSources,
             },
           }),
-          (operation, message) => failOp(healthCheckName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, healthCheckName);
@@ -354,7 +335,6 @@ export const RegionCompositeHealthCheckProvider = () =>
             compositeHealthCheck: healthCheckName,
             body: patch,
           }),
-          (operation, message) => failOp(healthCheckName, operation, message),
         );
         current =
           (yield* getByName(env.project, region, healthCheckName)) ?? current;
@@ -374,8 +354,6 @@ export const RegionCompositeHealthCheckProvider = () =>
           region,
           compositeHealthCheck: output.healthCheckName,
         }),
-        (operation, message) =>
-          failOp(output.healthCheckName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

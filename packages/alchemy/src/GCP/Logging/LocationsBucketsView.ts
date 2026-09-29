@@ -105,8 +105,7 @@ export type LocationsBucketsView = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const view = yield* GCP.Logging.LocationsBucketsView("Stdout", {
- *   bucketName: existing.bucketName,
- *   viewId: existing.viewId,
+ *   bucketName: bucket.name,
  *   filter: 'LOG_ID("stderr")',
  *   description: "stderr only",
  * });
@@ -205,7 +204,7 @@ export const LocationsBucketsViewProvider = () =>
               Stream.map((view) => toAttrs(view, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as ReturnType<typeof toAttrs>[]),
               ),
             );

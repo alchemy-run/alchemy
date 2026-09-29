@@ -207,7 +207,7 @@ export const listJobTemplatesAt = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.jobTemplates ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => emptyList()),
+      Effect.catchTag("NotFound", () => emptyList()),
     );
 
 export const listOwnedJobTemplates = (project: string, region: string) =>

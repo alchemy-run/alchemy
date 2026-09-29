@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsNotebookRuntimeTemplates({ name }).pipe(
     Effect.as("found" as const),
@@ -42,23 +38,15 @@ test.provider(
           name: `${parent}/notebookRuntimeTemplates/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsNotebookRuntimeTemplates({
+      expect(error._tag).toEqual("NotFound");
+      const page =
+        yield* aiplatform.listProjectsLocationsNotebookRuntimeTemplates({
           parent,
           pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ notebookRuntimeTemplates: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.notebookRuntimeTemplates ?? [])).toEqual(true);
+        });
+      expect(
+        (page.notebookRuntimeTemplates ?? []).map((item) => item.name),
+      ).not.toContain(`${parent}/notebookRuntimeTemplates/alchemy-missing`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +56,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a notebook runtime template",
   (stack) =>
     Effect.gen(function* () {
@@ -104,18 +92,18 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.AIPlatform.NotebookRuntimeTemplate("Runtime", {
             notebookRuntimeTemplateId: created.notebookRuntimeTemplateId,
             location: "us-central1",
-            displayName: "alchemy-colab",
-            description: "colab default v2",
+            displayName: "alchemy-colab-v2",
+            description: "colab default",
             machineSpec: { machineType: "e2-standard-4" },
             networkSpec: { enableInternetAccess: true },
-            labels: { env: "prod", role: "notebook" },
+            labels: { env: "test" },
           });
         }),
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.description).toEqual("colab default v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "notebook" });
+      expect(updated.displayName).toEqual("alchemy-colab-v2");
+      expect(updated.labels).toMatchObject({ env: "test" });
 
       yield* stack.destroy();
 

@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation } from "./operations.ts";
 import {
   createOwnership,
   encodeDescription,
@@ -230,7 +230,7 @@ export const LocationsBucketsLinkProvider = () =>
               Stream.map((link) => toAttrs(link, bucket.name ?? "")),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as ReturnType<typeof toAttrs>[]),
               ),
             );
@@ -284,18 +284,7 @@ export const LocationsBucketsLinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       yield* logging.deleteLocationsBucketsLinks({ name: output.name }).pipe(
-        Effect.flatMap((operation) =>
-          waitForOperation(operation, { notFoundOk: true }).pipe(
-            Effect.catchTag(
-              [
-                "GCP.Logging.OperationPending",
-                "GCP.Logging.OperationFailed",
-                "NotFound",
-              ],
-              () => Effect.void,
-            ),
-          ),
-        ),
+        Effect.flatMap((operation) => waitForDeleteOperation(operation)),
         Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
       );
       yield* getByName(output.name).pipe(

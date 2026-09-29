@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -170,19 +171,6 @@ export class DnsAuthorizationNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class DnsAuthorizationOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.DnsAuthorizationOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DnsAuthorizationOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.DnsAuthorizationOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class DnsAuthorizationStillExists extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationStillExists",
 )<{
@@ -298,93 +286,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsDnsAuthorizations({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: certificatemanager.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (isAlreadyExists(operation.error)) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DnsAuthorizationOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new DnsAuthorizationOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies certificatemanager.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DnsAuthorizationOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error || isAlreadyExists(error)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new DnsAuthorizationOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.CertificateManager.DnsAuthorizationOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
@@ -434,7 +335,6 @@ const listOwnedDnsAuthorizations = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const DnsAuthorizationProvider = () =>

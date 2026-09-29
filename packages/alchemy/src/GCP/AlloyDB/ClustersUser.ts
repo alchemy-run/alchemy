@@ -453,7 +453,6 @@ export const ClustersUserProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
 
         const pages = yield* Effect.forEach(
@@ -477,7 +476,6 @@ export const ClustersUserProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               );
           },
           { concurrency: 4 },

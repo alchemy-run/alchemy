@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -139,26 +139,11 @@ export class RolloutPlanNotResolved extends Data.TaggedError(
   rolloutPlanName: string;
 }> {}
 
-export class RolloutPlanOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RolloutPlanOperationFailed",
-)<{
-  rolloutPlanName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class RolloutPlanStillExists extends Data.TaggedError(
   "GCP.Compute.RolloutPlanStillExists",
 )<{
   rolloutPlanName: string;
 }> {}
-
-const lastSegment = (value: string | undefined): string => {
-  if (value === undefined || value.length === 0) return "";
-  const trimmed = value.replace(/\/+$/, "");
-  const parts = trimmed.split("/");
-  return parts[parts.length - 1] || trimmed;
-};
 
 const defaultWaves = (): compute.RolloutPlanWave[] => [
   {
@@ -262,84 +247,6 @@ const getByName = (project: string, rolloutPlan: string) =>
     .getRolloutPlans({ project, rolloutPlan })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (
-  rolloutPlanName: string,
-  operation: compute.Operation,
-) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new RolloutPlanOperationFailed({
-        rolloutPlanName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitGlobalOperation = (
-  project: string,
-  operation: compute.Operation,
-  rolloutPlanName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(rolloutPlanName, operation);
-      return operation;
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitGlobalOperations(
-        { project, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    yield* failIfErrored(rolloutPlanName, current);
-    return current;
-  });
-
 const waitPlanGone = (project: string, rolloutPlanName: string) =>
   getByName(project, rolloutPlanName).pipe(
     Effect.flatMap((plan) =>
@@ -433,9 +340,7 @@ export const RolloutPlanProvider = () =>
             Stream.map((plan) => toAttrs(plan, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 
@@ -459,7 +364,9 @@ export const RolloutPlanProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitGlobalOperation(env.project, inserted, rolloutPlanName);
+          yield* waitGlobalOperation(env.project, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* getByName(env.project, rolloutPlanName).pipe(
           Effect.filterOrFail(
@@ -499,18 +406,9 @@ export const RolloutPlanProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitGlobalOperation(
-          project,
-          deleted,
-          output.rolloutPlanName,
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RolloutPlanOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitGlobalOperation(project, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitPlanGone(project, output.rolloutPlanName);
     }),

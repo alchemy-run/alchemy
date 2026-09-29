@@ -260,7 +260,7 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
                 ),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                   Effect.succeed(
                     [] as EnvironmentsArchiveDeployment["Attributes"][],
                   ),
@@ -350,6 +350,11 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         .deleteOrganizationsEnvironmentsArchiveDeployments({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

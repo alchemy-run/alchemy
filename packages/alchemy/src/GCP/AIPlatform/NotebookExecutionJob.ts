@@ -309,7 +309,12 @@ export const NotebookExecutionJobProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+      // Vertex AI replaces a job's labels with its runtime template's, so a
+      // job at the generated (instance-unique) id is ours even when the
+      // ownership labels name the template.
+      const generated = olds?.notebookExecutionJobId === undefined;
+      return generated ||
+        (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -325,10 +330,7 @@ export const NotebookExecutionJobProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.notebookExecutionJobs ?? [])

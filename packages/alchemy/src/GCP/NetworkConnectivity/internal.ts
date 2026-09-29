@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 
 export const DEFAULT_GLOBAL = "global";
 export const MAX_NAME_LENGTH = 63;
@@ -27,19 +28,6 @@ export class NetworkConnectivityFailed extends Data.TaggedError(
 )<{
   name: string;
   state: string | undefined;
-}> {}
-
-export class NetworkConnectivityOperationFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class NetworkConnectivityOperationPending extends Data.TaggedError(
-  "GCP.NetworkConnectivity.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -171,94 +159,34 @@ export const changedFields = (
   pairs: ReadonlyArray<readonly [string, boolean]>,
 ) => pairs.filter(([, changed]) => changed).map(([field]) => field);
 
-const alreadyExists = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
+/**
+ * Wait for a Network Connectivity Center long-running operation. Transports,
+ * gateway spokes and internal ranges can take tens of minutes.
+ * `ALREADY_EXISTS` (a concurrent create won) always succeeds;
+ * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
+ * already been garbage-collected (deletes).
+ */
 export const waitForOperation = (
   operation: networkconnectivity.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; times?: number },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new NetworkConnectivityOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new NetworkConnectivityOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = networkconnectivity.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies networkconnectivity.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new NetworkConnectivityOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error || alreadyExists(error)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new NetworkConnectivityOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.NetworkConnectivity.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+  waitForLongRunning(
+    operation,
+    (name) => networkconnectivity.getProjectsLocationsOperations({ name }),
+    { budget: "30 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    Effect.catchIf(
+      (error) => options?.notFoundOk === true && error._tag === "NotFound",
+      () => Effect.void,
+    ),
+  );
 
 export const waitUntilPresent = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -337,14 +265,22 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
     }),
   );
 
-export const collectPages = <Page, Item, E, R>(
+/** Collect every page; a missing parent (`NotFound`) lists as empty. */
+export const collectPages = <
+  Page,
+  Item,
+  E extends { readonly _tag: string },
+  R,
+>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>
   stream.pipe(
     Stream.flatMap((page) => Stream.fromIterable(pick(page) ?? [])),
     Stream.runCollect,
-    Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound" as never, () => Effect.succeed([] as Item[])),
-    Effect.catchTag("Forbidden" as never, () => Effect.succeed([] as Item[])),
+    Effect.map((chunk): Item[] => Array.from(chunk)),
+    Effect.catchIf(
+      (error) => error._tag === "NotFound",
+      () => Effect.succeed<Item[]>([]),
+    ),
   );

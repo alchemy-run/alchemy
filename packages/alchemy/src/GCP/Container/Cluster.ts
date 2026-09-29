@@ -19,6 +19,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -308,12 +309,6 @@ export class ClusterOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class ClusterOperationPending extends Data.TaggedError(
-  "GCP.Container.ClusterOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ClusterStillExists extends Data.TaggedError(
   "GCP.Container.ClusterStillExists",
 )<{
@@ -496,24 +491,6 @@ const operationResourceName = (
   return `projects/${project}/locations/${loc}/operations/${lastSegment(raw)}`;
 };
 
-const operationErrorText = (operation: container.Operation) =>
-  operation.error?.message ??
-  operation.statusMessage ??
-  operation.detail ??
-  "operation failed";
-
-const isAlreadyExists = (operation: container.Operation) => {
-  if (operation.error?.code === 6) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("already exists") || text.includes("alreadyexist");
-};
-
-const isNotFoundOperation = (operation: container.Operation) => {
-  if (operation.error?.code === 5) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("not found") || text.includes("notfound");
-};
-
 // Cluster create / delete runs 5–10 min (Autopilot included) and most
 // updates several minutes; bounded at 15 min.
 const clusterOperationSchedule = Schedule.max([
@@ -521,71 +498,35 @@ const clusterOperationSchedule = Schedule.max([
   Schedule.recurs(90),
 ]);
 
+/**
+ * Wait for a GKE operation (create/delete runs 5–10 min, Autopilot and
+ * large updates longer). ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete
+ * race) and an operation that is already gone.
+ */
 const waitForOperation = (
   project: string,
   location: string,
   operation: container.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operationResourceName(project, location, operation);
-    if (name.length === 0 || name.endsWith("/operations/")) {
-      return yield* new ClusterOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const failIfErrored = (current: container.Operation) => {
-      const ignore =
-        isAlreadyExists(current) ||
-        (options?.notFoundOk === true && isNotFoundOperation(current));
-      return current.error && !ignore
-        ? Effect.fail(
-            new ClusterOperationFailed({
-              operation: name,
-              message: operationErrorText(current),
-            }),
-          )
-        : Effect.succeed(current);
-    };
-
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(operation);
-    }
-
-    const getOperation = container.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                status: "DONE",
-              } satisfies container.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        () => new ClusterOperationPending({ operation: name }),
-      ),
-      Effect.flatMap(failIfErrored),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Container.ClusterOperationPending",
-        schedule: clusterOperationSchedule,
-      }),
-    );
-  });
+  waitForGcpOperation(
+    {
+      ...operation,
+      name: operationResourceName(project, location, operation),
+    },
+    (name) => container.getProjectsLocationsOperations({ name }),
+    { budget: "30 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -792,11 +733,6 @@ export const ClusterProvider = () =>
                 clusters: [],
               } satisfies container.ListClustersResponse),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed({
-                clusters: [],
-              } satisfies container.ListClustersResponse),
-            ),
           );
         return (page.clusters ?? [])
           .filter((cluster) =>
@@ -869,28 +805,25 @@ export const ClusterProvider = () =>
         live = yield* waitUntilReady(name);
       }
 
+      // GKE rejects a logging-only or monitoring-only change that would
+      // implicitly flip the other service, so both are always sent together.
+      const desiredLogging = news.loggingService ?? live.loggingService;
+      const desiredMonitoring =
+        news.monitoringService ?? live.monitoringService;
       if (
-        news.loggingService !== undefined &&
-        (live.loggingService ?? "") !== news.loggingService
+        (live.loggingService ?? "") !== (desiredLogging ?? "") ||
+        (live.monitoringService ?? "") !== (desiredMonitoring ?? "")
       ) {
-        const logged = yield* container.setLoggingProjectsLocationsClusters({
+        const serviced = yield* container.updateProjectsLocationsClusters({
           name,
-          body: { loggingService: news.loggingService },
+          body: {
+            update: {
+              desiredLoggingService: desiredLogging,
+              desiredMonitoringService: desiredMonitoring,
+            },
+          },
         });
-        yield* waitForOperation(env.project, location, logged);
-        live = yield* waitUntilReady(name);
-      }
-
-      if (
-        news.monitoringService !== undefined &&
-        (live.monitoringService ?? "") !== news.monitoringService
-      ) {
-        const monitored =
-          yield* container.setMonitoringProjectsLocationsClusters({
-            name,
-            body: { monitoringService: news.monitoringService },
-          });
-        yield* waitForOperation(env.project, location, monitored);
+        yield* waitForOperation(env.project, location, serviced);
         live = yield* waitUntilReady(name);
       }
 

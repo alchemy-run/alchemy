@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -250,15 +250,6 @@ export class AutoscalerNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class AutoscalerOperationFailed extends Data.TaggedError(
-  "GCP.Compute.AutoscalerOperationFailed",
-)<{
-  operation: string;
-  zone: string;
-  message: string;
-  codes: readonly string[];
-}> {}
-
 export class AutoscalerStillExists extends Data.TaggedError(
   "GCP.Compute.AutoscalerStillExists",
 )<{
@@ -459,103 +450,10 @@ const samePolicy = (
   JSON.stringify(canonPolicy(observed)) ===
   JSON.stringify(canonPolicy(desired));
 
-const alreadyExists = (operation: compute.Operation) => {
-  const codes = (operation.error?.errors ?? []).map((error) =>
-    (error.code ?? "").toUpperCase(),
-  );
-  const message = (operation.error?.errors ?? [])
-    .map((error) => error.message ?? "")
-    .join("; ")
-    .toLowerCase();
-  return (
-    codes.includes("ALREADYEXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    message.includes("already exists") ||
-    operation.httpErrorStatusCode === 409
-  );
-};
-
-const isGoneCode = (code: string | undefined) => {
-  const normalized = (code ?? "").toUpperCase();
-  return (
-    normalized === "NOTFOUND" ||
-    normalized === "RESOURCE_NOT_FOUND" ||
-    normalized === "RESOURCE_NOT_FOUND_BY_NAME"
-  );
-};
-
 const getByName = (project: string, zone: string, autoscaler: string) =>
   compute
     .getAutoscalers({ project, zone, autoscaler })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitZonal = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) {
-      return yield* new AutoscalerOperationFailed({
-        operation: "",
-        zone,
-        message: "Compute operation returned no name",
-        codes: [],
-      });
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: name,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: name,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-    const errors = current.error?.errors ?? [];
-    if (alreadyExists(current)) {
-      return current;
-    }
-    if (
-      errors.length > 0 ||
-      current.status !== "DONE" ||
-      current.httpErrorStatusCode
-    ) {
-      return yield* new AutoscalerOperationFailed({
-        operation: name,
-        zone,
-        message:
-          errors
-            .map((error) => error.message ?? "")
-            .filter(Boolean)
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-        codes: errors.map((error) => error.code ?? ""),
-      });
-    }
-    return current;
-  });
 
 const waitPresent = (project: string, zone: string, autoscalerName: string) =>
   getByName(project, zone, autoscalerName).pipe(
@@ -644,7 +542,7 @@ export const AutoscalerProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.autoscalers ?? [])
@@ -693,7 +591,9 @@ export const AutoscalerProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitZonal(env.project, zone, operation).pipe(Effect.asVoid),
+                : waitZoneOperation(env.project, zone, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* waitPresent(env.project, zone, autoscalerName);
@@ -724,7 +624,7 @@ export const AutoscalerProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitZonal(env.project, zone, operation),
+              waitZoneOperation(env.project, zone, operation),
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -751,15 +651,9 @@ export const AutoscalerProvider = () =>
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void
-              : waitZonal(output.project, output.zone, operation).pipe(
-                  Effect.asVoid,
-                ),
-          ),
-          Effect.catchIf(
-            (error) =>
-              error._tag === "GCP.Compute.AutoscalerOperationFailed" &&
-              error.codes.some(isGoneCode),
-            () => Effect.void,
+              : waitZoneOperation(output.project, output.zone, operation, {
+                  ignore: ["RESOURCE_NOT_FOUND"],
+                }).pipe(Effect.asVoid),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

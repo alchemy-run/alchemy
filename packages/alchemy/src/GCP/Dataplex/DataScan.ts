@@ -232,7 +232,6 @@ const listScans = (project: string, region: string) => {
         items.filter((item) => hasAlchemyLabelMap(item.labels)),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
 };
@@ -338,15 +337,7 @@ export const DataScanProvider = () =>
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, {
-            interval: "5 seconds",
-            times: 10,
-          }).pipe(
-            Effect.catchIf(
-              (error) => error._tag === "GCP.Dataplex.OperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -421,10 +412,7 @@ export const DataScanProvider = () =>
             },
           }),
         );
-        yield* waitForOperation(operation, {
-          interval: "5 seconds",
-          times: 10,
-        });
+        yield* waitForOperation(operation);
         current = yield* waitUntilExists(
           getByName(current.name ?? name),
           current.name ?? name,
@@ -449,11 +437,7 @@ export const DataScanProvider = () =>
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, {
-          notFoundOk: true,
-          interval: "5 seconds",
-          times: 10,
-        });
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

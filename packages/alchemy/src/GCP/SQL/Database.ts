@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -147,20 +148,6 @@ export class DatabaseNotResolved extends Data.TaggedError(
   databaseName: string;
 }> {}
 
-export class DatabaseOperationFailed extends Data.TaggedError(
-  "GCP.SQL.DatabaseOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DatabaseOperationPending extends Data.TaggedError(
-  "GCP.SQL.DatabaseOperationPending",
-)<{
-  operation: string;
-  status: string | undefined;
-}> {}
-
 export class DatabaseStillExists extends Data.TaggedError(
   "GCP.SQL.DatabaseStillExists",
 )<{
@@ -240,112 +227,19 @@ const toAttrs = (
 });
 
 const getByName = (project: string, instance: string, databaseName: string) =>
-  sqladmin
-    .getDatabases({ project, instance, database: databaseName })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
-
-const operationNameOf = (operation: sqladmin.Operation) =>
-  lastSegment(operation.name ?? "") || lastSegment(operation.selfLink ?? "");
-
-const operationErrors = (operation: sqladmin.Operation) =>
-  operation.error?.errors ?? [];
-
-const isAlreadyExists = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return (
-      code.includes("ALREADY_EXISTS") || message.includes("already exists")
-    );
-  });
-
-const isNotFoundOp = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return code.includes("NOT_FOUND") || message.includes("not found");
-  });
-
-const assertOperationOk = (
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) => {
-  if (isAlreadyExists(operation)) return Effect.void;
-  if (options?.notFoundOk === true && isNotFoundOp(operation)) {
-    return Effect.void;
-  }
-  const errors = operationErrors(operation)
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((message) => message.length > 0);
-  if (errors.length > 0) {
-    return Effect.fail(
-      new DatabaseOperationFailed({
-        operation: operationNameOf(operation),
-        message: errors.join("; "),
-      }),
-    );
-  }
-  return Effect.void;
-};
+  sqladmin.getDatabases({ project, instance, database: databaseName }).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    recoverIfInstanceMissing(project, instance, () => undefined),
+  );
 
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operationNameOf(operation);
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation, options);
-      return;
-    }
-    if (name.length === 0) {
-      if (operation.status === undefined) return;
-      return yield* new DatabaseOperationFailed({
-        operation: "",
-        message: "sql operation is missing a name",
-      });
-    }
-
-    const getOperation = sqladmin.getOperations({ project, operation: name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                status: "DONE",
-              } satisfies sqladmin.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        (current) =>
-          new DatabaseOperationPending({
-            operation: name,
-            status: current.status,
-          }),
-      ),
-      Effect.flatMap((current) => assertOperationOk(current, options)),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.SQL.DatabaseOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
+  waitForSqlOperation(project, operation, {
+    budget: "10 minutes",
+    notFoundOk: options?.notFoundOk,
   });
 
 const waitUntilExists = (
@@ -451,7 +345,7 @@ export const DatabaseProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as sqladmin.DatabaseInstance[]),
             ),
           );
@@ -475,8 +369,14 @@ export const DatabaseProvider = () =>
                       toAttrs(database, env.project, instanceName),
                     ),
                 ),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                // The instance may be deleted mid-listing.
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as Database["Attributes"][]),
+                ),
+                recoverIfInstanceMissing(
+                  env.project,
+                  instanceName,
+                  () => [] as Database["Attributes"][],
                 ),
               );
           },
@@ -563,7 +463,8 @@ export const DatabaseProvider = () =>
           Effect.flatMap((operation) =>
             waitForOperation(project, operation, { notFoundOk: true }),
           ),
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
+          recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

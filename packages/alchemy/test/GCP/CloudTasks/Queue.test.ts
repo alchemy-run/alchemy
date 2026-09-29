@@ -59,21 +59,11 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.retryConfig?.maxAttempts).toEqual(3);
       expect(fetched.rateLimits?.maxDispatchesPerSecond).toEqual(5);
-      const ownership = (fetched.httpTarget?.headerOverrides ?? []).map(
-        (item) => item.header?.key?.toLowerCase(),
-      );
-      expect(ownership).toEqual(
-        expect.arrayContaining([
-          "x-alchemy-stack",
-          "x-alchemy-stage",
-          "x-alchemy-id",
-        ]),
-      );
+      expect(fetched.httpTarget?.headerOverrides ?? []).toEqual([]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.CloudTasks.Queue("Jobs", {
-            queueId: created.queueId,
             location: "us-central1",
             rateLimits: {
               maxDispatchesPerSecond: 8,

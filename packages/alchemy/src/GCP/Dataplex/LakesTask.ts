@@ -451,6 +451,9 @@ export const LakesTaskProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          yield* waitForOperation(created);
+        }
         current = yield* waitUntilReady(name);
       }
 

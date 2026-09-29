@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,13 +61,10 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ConsumerSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.53.0.0/24",
+            ipCidrRange: "172.20.0.0/24",
           });
           const attachment = yield* GCP.Compute.NetworkAttachment(
             "ConsumerAttachment",
@@ -77,7 +75,7 @@ test.provider(
               description: "psc consumer",
             },
           );
-          return { network, subnet, attachment };
+          return { subnet, attachment };
         }),
       );
 
@@ -104,15 +102,11 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ConsumerSubnet", {
             subnetworkName: created.subnet.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.53.0.0/24",
+            ipCidrRange: "172.20.0.0/24",
           });
           return yield* GCP.Compute.NetworkAttachment("ConsumerAttachment", {
             networkAttachmentName: created.attachment.networkAttachmentName,

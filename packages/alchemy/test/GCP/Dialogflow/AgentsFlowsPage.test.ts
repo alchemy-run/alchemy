@@ -5,7 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent } from "./parent.ts";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   dialogflow.getProjectsLocationsAgentsFlowsPages({ name }).pipe(
@@ -37,17 +37,14 @@ test.provider(
 
       const error = yield* Effect.flip(
         dialogflow.getProjectsLocationsAgentsFlowsPages({
-          name: `projects/${project}/locations/us-central1/agents/alchemy-missing/flows/alchemy-missing/pages/alchemy-missing`,
+          name: `projects/${project}/locations/global/agents/alchemy-missing/flows/alchemy-missing/pages/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-    timeout: 90_000,
-  },
+    }).pipe(logLevel, quotaTolerant),
+  { timeout: 90_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -109,9 +106,6 @@ test.provider.skipIf(!runLifecycle)(
         const gone = yield* waitUntilGone(created.page.name);
         expect(gone).toEqual("gone");
       }).pipe(Effect.ensuring(deleteAgent(agent.name ?? "")));
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-    timeout: 120_000,
-  },
+    }).pipe(logLevel, quotaTolerant),
+  { timeout: 120_000 },
 );

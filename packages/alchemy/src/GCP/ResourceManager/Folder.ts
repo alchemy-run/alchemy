@@ -9,24 +9,20 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import {
   FOLDER_DISPLAY_MAX,
-  FOLDER_DISPLAY_PREFIX,
   collectPages,
   isDeleteRequested,
   resolveParent,
   resourceNameFromOperation,
   sameHierarchyParent,
-  tryResolveParent,
   waitForOperation,
+  waitForCreate,
 } from "./internal.ts";
 
 export type FolderProps = {
   /**
    * User-visible display name. Unique among sibling folders. 1-30
-   * characters, starting and ending with a letter or digit. Generated
-   * names (and names that do not already start with `az-`) are prefixed
-   * with `az-` so `list` / nuke can find them — folders have no labels
-   * or description field. Immutable among siblings at a given parent
-   * except via update.
+   * characters, starting and ending with a letter or digit. If omitted,
+   * a unique name is generated from the stack, stage, and logical id.
    */
   displayName?: string;
   /**
@@ -69,9 +65,9 @@ export type Folder = Resource<
  * A Cloud Resource Manager folder — a node in an organization's resource
  * hierarchy used to group projects and other folders.
  *
- * Folders have no labels. Alchemy prefixes generated display names with
- * `az-` so `list` / `pnpm nuke:gcp` can find them. `displayName` updates
- * in place; changing `parent` moves the folder. Delete is a 30-day
+ * Folders have no labels, so a folder found without prior state is
+ * reported as unowned and only taken over with `--adopt`. `displayName`
+ * updates in place; changing `parent` moves the folder. Delete is a 30-day
  * soft-delete (`DELETE_REQUESTED`).
  *
  * ### Creating a Folder
@@ -118,9 +114,6 @@ const sanitizeDisplayName = (value: string) => {
     .replace(/[^a-zA-Z0-9_ \-]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
-  if (!next.startsWith(FOLDER_DISPLAY_PREFIX)) {
-    next = `${FOLDER_DISPLAY_PREFIX}${next}`;
-  }
   if (next.length > FOLDER_DISPLAY_MAX) {
     next = next.slice(0, FOLDER_DISPLAY_MAX);
   }
@@ -141,7 +134,6 @@ const toDisplayName = (
     if (existing !== undefined) return existing;
     const generated = yield* createPhysicalName({
       id,
-      prefix: FOLDER_DISPLAY_PREFIX,
       maxLength: FOLDER_DISPLAY_MAX,
       lowercase: true,
       suffixLength: 8,
@@ -162,14 +154,11 @@ const toAttrs = (folder: resourcemanager.Folder) => ({
   managementProject: folder.managementProject,
 });
 
-const hasOwnershipName = (displayName: string | undefined) =>
-  (displayName ?? "").startsWith(FOLDER_DISPLAY_PREFIX);
-
 const getByName = (name: string) =>
   resourcemanager
     .getFolders({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "FolderNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -183,7 +172,7 @@ const listChildren = (parent: string, showDeleted = true) =>
     }),
     (page) => page.folders,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as resourcemanager.Folder[]),
     ),
   );
@@ -291,34 +280,9 @@ export const FolderProvider = () =>
       );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return hasOwnershipName(existing.displayName) ? attrs : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const parent = yield* tryResolveParent();
-        const fromSearch = yield* collectPages(
-          resourcemanager.searchFolders.pages({
-            query: `displayName=${FOLDER_DISPLAY_PREFIX}*`,
-            pageSize: 300,
-          }),
-          (page) => page.folders,
-        ).pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed([] as resourcemanager.Folder[]),
-          ),
-        );
-        const fromParent =
-          parent !== undefined
-            ? yield* listChildren(parent, true)
-            : ([] as resourcemanager.Folder[]);
-        const byName = new Map<string, resourcemanager.Folder>();
-        for (const folder of [...fromSearch, ...fromParent]) {
-          if (!hasOwnershipName(folder.displayName)) continue;
-          if (folder.name) byName.set(folder.name, folder);
-        }
-        return [...byName.values()].map(toAttrs);
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const displayName = yield* toDisplayName(
@@ -340,9 +304,7 @@ export const FolderProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const settled = yield* waitForOperation(created, {
-            allowAlreadyExists: true,
-          });
+          const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
             resourceNameFromOperation(settled, "folders/") ??
               resourceNameFromOperation(created, "folders/"),
@@ -415,7 +377,7 @@ export const FolderProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "FolderNotFound"], () =>
             Effect.succeed(undefined),
           ),
         );

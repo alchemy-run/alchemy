@@ -15,6 +15,7 @@ export interface StopWorkstationRequest extends Omit<
  * Bind this operation to a
  * {@link WorkstationClustersWorkstationConfigsWorkstation} in a
  * Function/Action init phase. Provide {@link StopWorkstationHttp}.
+ * Grants `roles/workstations.user` on the workstation only.
  *
  * ### Stopping a Workstation
  * **Example:** Stop the bound workstation

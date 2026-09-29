@@ -146,14 +146,6 @@ export class RegionHealthCheckServiceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionHealthCheckServiceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthCheckServiceOperationFailed",
-)<{
-  serviceName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const aggregationOf = (value: string | undefined) =>
   (value ?? DEFAULT_AGGREGATION).toUpperCase();
 
@@ -206,13 +198,6 @@ const awaitResource = (project: string, region: string, serviceName: string) =>
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (serviceName: string, operation: string, message: string) =>
-  new RegionHealthCheckServiceOperationFailed({
-    serviceName,
-    operation,
-    message,
-  });
 
 export const RegionHealthCheckServiceProvider = () =>
   Provider.succeed(RegionHealthCheckService, {
@@ -283,11 +268,8 @@ export const RegionHealthCheckServiceProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.HealthCheckServiceAggregatedList[],
@@ -340,7 +322,6 @@ export const RegionHealthCheckServiceProvider = () =>
               healthStatusAggregationPolicy: aggregation,
             },
           }),
-          (operation, message) => failOp(serviceName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, serviceName);
@@ -395,7 +376,6 @@ export const RegionHealthCheckServiceProvider = () =>
             healthCheckService: serviceName,
             body: patch,
           }),
-          (operation, message) => failOp(serviceName, operation, message),
         );
         current =
           (yield* getByName(env.project, region, serviceName)) ?? current;
@@ -415,7 +395,6 @@ export const RegionHealthCheckServiceProvider = () =>
           region,
           healthCheckService: output.serviceName,
         }),
-        (operation, message) => failOp(output.serviceName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

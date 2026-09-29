@@ -14,8 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_SERVICE_CONNECTION_MAP;
+// A service connection map publishes a producer service class, which must be
+// registered for the project first (BadRequest "serviceClass gcp-cloud-sql
+// does not exist: invalid argument"). Set GCP_TEST_SERVICE_CONNECTION_MAP=1 on
+// a producer project with the class registered.
+const runLifecycle = !!process.env.GCP_TEST_SERVICE_CONNECTION_MAP;
 
 const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsServiceConnectionMaps({ name }).pipe(
@@ -40,7 +43,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/serviceConnectionMaps/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

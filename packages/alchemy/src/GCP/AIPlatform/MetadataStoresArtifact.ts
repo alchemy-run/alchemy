@@ -27,6 +27,8 @@ import {
 } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 
+const DEFAULT_SCHEMA_TITLE = "system.Artifact";
+
 export type MetadataStoresArtifactProps = {
   /**
    * Parent MetadataStore resource name
@@ -60,7 +62,9 @@ export type MetadataStoresArtifactProps = {
    */
   state?: aiplatform.GoogleCloudAiplatformV1ArtifactStateEnum | (string & {});
   /**
-   * Schema title registered in the MetadataStore.
+   * Schema title registered in the MetadataStore. Vertex AI rejects
+   * entries without one.
+   * @default "system.Artifact"
    */
   schemaTitle?: string;
   /**
@@ -191,7 +195,7 @@ const listArtifacts = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.artifacts ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Artifact[]),
       ),
     );
@@ -204,7 +208,7 @@ const listStores = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.metadataStores ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
       ),
     );
@@ -334,7 +338,7 @@ export const MetadataStoresArtifactProvider = () =>
               labels: desiredLabels,
               uri: news.uri,
               state: news.state,
-              schemaTitle: news.schemaTitle,
+              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
               schemaVersion: news.schemaVersion,
               metadata: news.metadata,
             },
@@ -354,7 +358,8 @@ export const MetadataStoresArtifactProvider = () =>
       const uriChanged = (current.uri ?? "") !== (news.uri ?? "");
       const stateChanged = (current.state ?? "") !== (news.state ?? "");
       const schemaTitleChanged =
-        (current.schemaTitle ?? "") !== (news.schemaTitle ?? "");
+        (current.schemaTitle ?? "") !==
+        (news.schemaTitle ?? DEFAULT_SCHEMA_TITLE);
       const schemaVersionChanged =
         (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
       const metadataChanged =
@@ -393,7 +398,7 @@ export const MetadataStoresArtifactProvider = () =>
               labels: desiredLabels,
               uri: news.uri,
               state: news.state,
-              schemaTitle: news.schemaTitle,
+              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
               schemaVersion: news.schemaVersion,
               metadata: news.metadata,
               etag: current.etag,

@@ -162,14 +162,6 @@ export class GlobalNetworkEndpointGroupNotResolved extends Data.TaggedError(
   networkEndpointGroupName: string;
 }> {}
 
-export class GlobalNetworkEndpointGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.GlobalNetworkEndpointGroupOperationFailed",
-)<{
-  networkEndpointGroupName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class GlobalNetworkEndpointGroupStillExists extends Data.TaggedError(
   "GCP.Compute.GlobalNetworkEndpointGroupStillExists",
 )<{
@@ -300,17 +292,6 @@ const waitUntilGone = (project: string, networkEndpointGroupName: string) =>
     ),
   );
 
-const failOp = (
-  networkEndpointGroupName: string,
-  operation: string,
-  message: string,
-) =>
-  new GlobalNetworkEndpointGroupOperationFailed({
-    networkEndpointGroupName,
-    operation,
-    message,
-  });
-
 const listEndpoints = (project: string, networkEndpointGroup: string) =>
   compute.listNetworkEndpointsGlobalNetworkEndpointGroups
     .items({
@@ -319,7 +300,6 @@ const listEndpoints = (project: string, networkEndpointGroup: string) =>
       maxResults: 500,
     })
     .pipe(
-      Stream.take(50),
       Stream.runCollect,
       Effect.map((chunk) =>
         Array.from(chunk)
@@ -417,12 +397,11 @@ export const GlobalNetworkEndpointGroupProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(500),
             Stream.filter((item) => hasOwnershipMarker(item.description)),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as GlobalNetworkEndpointGroup["Attributes"][]),
             ),
           );
@@ -448,8 +427,6 @@ export const GlobalNetworkEndpointGroupProvider = () =>
             project: env.project,
             body: desired,
           }),
-          (operation, message) =>
-            failOp(networkEndpointGroupName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, networkEndpointGroupName);
@@ -483,8 +460,6 @@ export const GlobalNetworkEndpointGroupProvider = () =>
               networkEndpointGroup: networkEndpointGroupName,
               body: { networkEndpoints: toAdd },
             }),
-            (operation, message) =>
-              failOp(networkEndpointGroupName, operation, message),
             { ignoreAlreadyExists: true },
           ).pipe(Effect.catchTag(["Conflict", "NotFound"], () => Effect.void));
         }
@@ -496,8 +471,6 @@ export const GlobalNetworkEndpointGroupProvider = () =>
               networkEndpointGroup: networkEndpointGroupName,
               body: { networkEndpoints: toRemove },
             }),
-            (operation, message) =>
-              failOp(networkEndpointGroupName, operation, message),
             { ignoreNotFound: true },
           ).pipe(Effect.catchTag(["Conflict", "NotFound"], () => Effect.void));
         }
@@ -518,8 +491,6 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           project,
           networkEndpointGroup: output.networkEndpointGroupName,
         }),
-        (operation, message) =>
-          failOp(output.networkEndpointGroupName, operation, message),
         { ignoreNotFound: true },
       ).pipe(
         Effect.catchTag(["NotFound", "Conflict"], () =>

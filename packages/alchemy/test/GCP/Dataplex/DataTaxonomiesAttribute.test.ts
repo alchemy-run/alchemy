@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -101,6 +102,6 @@ test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.attribute.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 120_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { timeout: 900_000 },
 );

@@ -149,7 +149,7 @@ const listOverrides = (parent: string) =>
       ),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1TraceConfigOverride[]),
       ),
     );
@@ -293,6 +293,11 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
         .deleteOrganizationsEnvironmentsTraceConfigOverrides({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

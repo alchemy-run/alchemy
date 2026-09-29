@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -376,19 +377,6 @@ export class CertificateAuthorityNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class CertificateAuthorityOperationFailed extends Data.TaggedError(
-  "GCP.PrivateCA.CertificateAuthorityOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateAuthorityOperationPending extends Data.TaggedError(
-  "GCP.PrivateCA.CertificateAuthorityOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CertificateAuthorityStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityStillExists",
 )<{
@@ -612,98 +600,30 @@ const getByName = (name: string) =>
     .getProjectsLocationsCaPoolsCertificateAuthorities({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: privateca.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: privateca.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
-
+/**
+ * Wait for a Certificate Authority Service operation; CA creation and
+ * activation take a few minutes. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
+ */
 const waitForOperation = (
   operation: privateca.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new CertificateAuthorityOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateAuthorityOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = privateca.getProjectsLocationsOperations({ name });
-    const resolved: Effect.Effect<
-      privateca.Operation,
-      privateca.GetProjectsLocationsOperationsError,
-      privateca.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<privateca.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      privateca.Operation,
-      | CertificateAuthorityOperationFailed
-      | CertificateAuthorityOperationPending
-      | privateca.GetProjectsLocationsOperationsError,
-      privateca.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CertificateAuthorityOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => {
-          const error = current.error;
-          const ignoreNotFound =
-            options?.notFoundOk === true && isNotFoundStatus(error);
-          return !error || isAlreadyExists(error) || ignoreNotFound;
-        },
-        (current) =>
-          new CertificateAuthorityOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.PrivateCA.CertificateAuthorityOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => privateca.getProjectsLocationsOperations({ name }),
+    { budget: "15 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -790,7 +710,6 @@ const listOwned = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const disableIfNeeded = (current: privateca.CertificateAuthority) => {

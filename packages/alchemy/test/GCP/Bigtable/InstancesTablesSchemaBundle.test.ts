@@ -14,11 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Cloud Bigtable Admin API is disabled on the default testing project
-// (`Forbidden`: "Cloud Bigtable Admin API has not been used in project
-// 457525637530 before or it is disabled."). Set GCP_TEST_BIGTABLE=1 on an
-// entitled project to run the full lifecycle.
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+// Lifecycles provision a Bigtable instance; skipped with --fast.
+const runLifecycle = !process.env.FAST;
 
 // FileDescriptorSet for `message Row { optional string name = 1; optional int64 count = 2; }`
 const PROTO_V1 =
@@ -30,9 +27,7 @@ const PROTO_V2 =
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesTablesSchemaBundles({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -41,7 +36,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesTablesSchemaBundles on a missing instance fails with Forbidden or NotFound",
+  "getProjectsInstancesTablesSchemaBundles on a missing instance fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -53,7 +48,7 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/tables/missing/schemaBundles/missing`,
         }),
       );
-      expect(error._tag).toBeOneOf(["Forbidden", "NotFound"]);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -180,7 +180,7 @@ const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* servicedirectory.listProjectsLocationsNamespaces({
         parent,
         pageSize: 1000,
@@ -196,11 +196,10 @@ const listNamespacesAt = (parent: string, project: string, region: string) =>
         }
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ReturnType<typeof toAttrs>[]),
     ),
   );
@@ -260,7 +259,7 @@ export const NamespaceProvider = () =>
         const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
+        do {
           const response = yield* servicedirectory
             .listProjectsLocations({
               name: `projects/${env.project}`,
@@ -268,7 +267,7 @@ export const NamespaceProvider = () =>
               pageToken,
             })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed({
                   locations: [
                     {
@@ -292,8 +291,7 @@ export const NamespaceProvider = () =>
             found.push(...namespaces);
           }
           pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
+        } while (pageToken !== undefined && pageToken !== "");
         return found;
       }),
 

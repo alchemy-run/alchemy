@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,7 +50,7 @@ test.provider(
           responsePolicyRule: "alchemy-missing-rule",
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -133,6 +134,6 @@ test.provider(
         created.rule.ruleName,
       );
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dns", "live"], timeout: 120_000 },
+    }).pipe(logLevel, withNetworkSlot),
+  { timeout: 120_000 },
 );

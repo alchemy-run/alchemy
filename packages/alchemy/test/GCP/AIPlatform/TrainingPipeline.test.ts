@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsTrainingPipelines({ name }).pipe(
     Effect.as("found" as const),
@@ -38,26 +34,19 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsTrainingPipelines({
-          name: `projects/${project}/locations/us-central1/trainingPipelines/alchemy-missing-pipeline`,
+          name: `projects/${project}/locations/us-central1/trainingPipelines/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsTrainingPipelines({
-          parent: `projects/${project}/locations/us-central1`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ trainingPipelines: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.trainingPipelines ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsTrainingPipelines({
+        parent: `projects/${project}/locations/us-central1`,
+        pageSize: 10,
+      });
+      expect(
+        (page.trainingPipelines ?? []).map((item) => item.name),
+      ).not.toContain(
+        `projects/${project}/locations/us-central1/trainingPipelines/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -67,7 +56,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, refresh, and delete a training pipeline",
   (stack) =>
     Effect.gen(function* () {
