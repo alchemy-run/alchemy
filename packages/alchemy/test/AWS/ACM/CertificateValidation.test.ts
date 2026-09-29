@@ -1,27 +1,26 @@
 /**
- * External ACM validation: `Certificate({ dnsValidation: "external" })` →
- * the DNS adapter's validation records → `AWS.ACM.CertificateValidation`.
+ * ACM certificate validation through DNS adapters, live.
  *
- * The ungated tests are plan-level (registration only — no cloud calls) plus
- * a unit test of `validationRecordsOf`. The live test issues a real
- * certificate validated through the standing Cloudflare test zone and is
- * gated behind AWS_TEST_SLOW=1 (ACM issuance takes minutes).
+ * - `Certificate({ dnsValidation: "external" })` → the adapter's retained
+ *   validation records → `AWS.ACM.CertificateValidation`, published in
+ *   Cloudflare and in a Route 53 zone delegated from the Cloudflare test
+ *   zone.
+ * - The Route 53 default: `Certificate({ hostedZoneId })` validates inline.
+ *
+ * Gated behind AWS_TEST_SLOW=1: ACM issuance takes minutes.
  */
 import * as AWS from "@/AWS";
-import { validationRecordsOf } from "@/AWS/ACM/Certificate.ts";
-import { domainCertificate } from "@/AWS/CustomDomain.ts";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Hetzner from "@/Hetzner";
+import * as DNS from "@/DNS";
+import * as Alchemy from "@/index.ts";
 import * as Output from "@/Output";
-import type { ResourceLike } from "@/Resource";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import { inMemoryState, InMemoryService, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { withProviders } from "@/Test/Core.ts";
 import * as acm from "@distilled.cloud/aws/acm";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { describe, expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -30,324 +29,280 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-const { test } = Test.make({
-  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+const providers = Layer.mergeAll(AWS.providers(), Cloudflare.providers());
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers,
 });
 
-type Resources = Record<string, ResourceLike>;
+const zoneName =
+  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+/** Validated through the Cloudflare zone. */
+const CF_DOMAIN = `acm-dns-cf.${zoneName}`;
+/** Route 53 zone delegated from the Cloudflare zone. */
+const R53_ZONE = `acm-dns-r53.${zoneName}`;
+/** Validated inline by the Route 53 default path. */
+const INLINE_DOMAIN = `inline.${R53_ZONE}`;
 
-const compile = (build: Effect.Effect<unknown, any, any>) =>
-  Effect.scoped(
-    (build as Effect.Effect<unknown>).pipe(
-      Stack.make({
-        name: "acm-external-validation",
-        providers: Layer.mergeAll(
-          Cloudflare.DNS.AdapterLive,
-          Hetzner.DNS.AdapterLive,
-        ),
-        state: inMemoryState(),
-      } as any) as any,
-      Effect.map((compiled: any) => ({
-        resources: compiled.resources as Resources,
-        output: compiled.output as unknown,
-      })),
-    ),
-  ).pipe(Effect.provideService(Stage, "test")) as Effect.Effect<{
-    resources: Resources;
-    output: unknown;
-  }>;
+const skipSlow = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
 
-/**
- * Resolve Output references against `upstream` attributes; any other
- * resource attribute `a` of `fqn` reads `<fqn.a>`.
- */
-const resolve = (
-  resources: Resources,
-  value: unknown,
-  upstream: Record<string, unknown> = {},
-) =>
-  Output.evaluate(value, {
-    ...Object.fromEntries(
-      Object.keys(resources).map((fqn) => [
-        fqn,
-        new Proxy(
-          {},
-          {
-            get: (_, attr) =>
-              typeof attr === "string" ? `<${fqn}.${attr}>` : undefined,
-          },
-        ),
-      ]),
-    ),
-    ...upstream,
-  }).pipe(
-    Effect.provideService(State, InMemoryService()),
-  ) as Effect.Effect<any>;
-
-const typesOf = (resources: Resources) =>
-  Object.fromEntries(
-    Object.entries(resources).map(([fqn, resource]) => [fqn, resource.Type]),
-  );
-
-/** ACM's `DomainValidationOptions` for `example.com` + `*.example.com`. */
-const domainValidationOptions: acm.DomainValidation[] = [
-  {
-    DomainName: "example.com",
-    ValidationMethod: "DNS",
-    ResourceRecord: {
-      Name: "_abc.example.com.",
-      Type: "CNAME",
-      Value: "_xyz.acm-validations.aws.",
-    },
-  },
-  {
-    DomainName: "*.example.com",
-    ValidationMethod: "DNS",
-    ResourceRecord: {
-      Name: "_ABC.example.com.",
-      Type: "CNAME",
-      Value: "_xyz.acm-validations.aws.",
-    },
-  },
-  {
-    DomainName: "www.example.org",
-    ValidationMethod: "DNS",
-    ResourceRecord: {
-      Name: "_def.www.example.org.",
-      Type: "CNAME",
-      Value: "_uvw.acm-validations.aws.",
-    },
-  },
-  // ACM has not computed this one's record yet.
-  { DomainName: "pending.example.org", ValidationMethod: "DNS" },
+const tags = [
+  "provider:aws",
+  "provider:aws:acm",
+  "provider:aws:route53",
+  "provider:cloudflare",
+  "provider:cloudflare:dns",
+  "live",
 ];
 
-describe(
-  "ACM external validation (plan)",
-  { tags: ["unit", "provider:aws", "provider:aws:acm", "local"] },
+const normalize = (name: string) => name.replace(/\.$/, "").toLowerCase();
+
+// Certificates default to us-east-1 (CloudFront's region).
+const withUsEast1 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
+
+const describeCertificate = (certificateArn: string) =>
+  withUsEast1(
+    acm
+      .describeCertificate({ CertificateArn: certificateArn })
+      .pipe(Effect.map((response) => response.Certificate)),
+  );
+
+const waitForCertificateGone = (certificateArn: string) =>
+  withUsEast1(
+    acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+      Effect.as("present" as const),
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed("gone" as const),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (status) => status === "gone",
+        times: 10,
+      }),
+    ),
+  );
+
+/** Distinct validation CNAMEs ACM asks for (one per name, deduped). */
+const distinctValidationRecords = (
+  options: acm.DomainValidation[] | undefined,
+) => [
+  ...new Map(
+    (options ?? []).flatMap((option) =>
+      option.ResourceRecord
+        ? [[normalize(option.ResourceRecord.Name), option.ResourceRecord]]
+        : [],
+    ),
+  ).values(),
+];
+
+const lookupParentZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found`));
+  }
+  return zone.id;
+});
+
+const cloudflareRecords = (
+  zoneId: string,
+  name: string,
+  type: "CNAME" | "NS",
+) =>
+  dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).filter(
+        (record) => normalize(record.name) === name && record.type === type,
+      ),
+    ),
+  );
+
+/** Route 53 CNAME record sets at `name`. */
+const route53Cnames = (hostedZoneId: string, name: string) =>
+  route53
+    .listResourceRecordSets({
+      HostedZoneId: hostedZoneId,
+      StartRecordName: `${name}.`,
+      StartRecordType: "CNAME",
+      MaxItems: 1,
+    })
+    .pipe(
+      Effect.map((response) =>
+        (response.ResourceRecordSets ?? []).filter(
+          (set) => normalize(set.Name) === name && set.Type === "CNAME",
+        ),
+      ),
+    );
+
+/**
+ * Exactly one validation CNAME per distinct name exists in Route 53,
+ * pointing at ACM's value.
+ */
+const expectRoute53ValidationRecords = (
+  hostedZoneId: string,
+  options: acm.DomainValidation[] | undefined,
+) =>
+  Effect.forEach(distinctValidationRecords(options), (record) =>
+    Effect.gen(function* () {
+      const sets = yield* route53Cnames(hostedZoneId, normalize(record.Name));
+      expect(sets).toHaveLength(1);
+      expect(
+        (sets[0]!.ResourceRecords ?? []).map((r) => normalize(r.Value)),
+      ).toEqual([normalize(record.Value)]);
+    }),
+  );
+
+describe.skipIf(skipSlow)(
+  "ACM validation through Cloudflare DNS (live)",
+  { tags },
   () => {
-    test(
-      "validationRecordsOf dedupes a wildcard and its apex and skips pending records",
-      Effect.sync(() => {
-        // Names compare case-insensitively; the record keeps its first
-        // position (the later duplicate's spelling).
-        expect(validationRecordsOf(domainValidationOptions)).toEqual([
-          {
-            name: "_ABC.example.com.",
-            type: "CNAME",
-            value: "_xyz.acm-validations.aws.",
-          },
-          {
-            name: "_def.www.example.org.",
-            type: "CNAME",
-            value: "_uvw.acm-validations.aws.",
-          },
-        ]);
-        expect(validationRecordsOf(undefined)).toEqual([]);
-        expect(validationRecordsOf([])).toEqual([]);
-      }),
-    );
+    test.provider(
+      "an external-validated wildcard + apex certificate publishes one CNAME in Cloudflare and reaches ISSUED",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const zoneId = yield* lookupParentZoneId;
 
-    test(
-      "domainCertificate with a Cloudflare adapter declares Certificate(external) + RecordList + CertificateValidation",
-      Effect.gen(function* () {
-        const { resources, output } = yield* compile(
-          domainCertificate(
-            "Certificate",
-            {
-              domainName: "example.com",
-              subjectAlternativeNames: ["*.example.com"],
-              // Route 53-only: dropped for another DNS host.
-              hostedZoneId: "Z1234567890ABC",
-              tags: { team: "web" },
-            },
-            Cloudflare.DNS.Adapter({ zone: "example.com" }),
-          ).pipe(Effect.map(({ certificateArn }) => ({ certificateArn }))),
-        );
-        expect(typesOf(resources)).toEqual({
-          Certificate: "AWS.ACM.Certificate",
-          CertificateValidation: "Cloudflare.DNS.RecordList",
-          CertificateIssued: "AWS.ACM.CertificateValidation",
-        });
-
-        const certificate = yield* resolve(
-          resources,
-          resources["Certificate"]!.Props,
-        );
-        expect(certificate).toEqual({
-          domainName: "example.com",
-          subjectAlternativeNames: ["*.example.com"],
-          tags: { team: "web" },
-          dnsValidation: "external",
-        });
-        expect("hostedZoneId" in certificate).toBe(false);
-
-        // The validation records are computed from the certificate's
-        // `domainValidationOptions` and retained on destroy.
-        expect(
-          yield* resolve(resources, resources["CertificateValidation"]!.Props, {
-            Certificate: { domainValidationOptions },
-          }),
-        ).toEqual({
-          zone: "example.com",
-          records: validationRecordsOf(domainValidationOptions),
-        });
-        expect(resources["CertificateValidation"]!.RemovalPolicy).toBe(
-          "retain",
-        );
-
-        expect(
-          yield* resolve(resources, resources["CertificateIssued"]!.Props),
-        ).toEqual({ certificateArn: "<Certificate.certificateArn>" });
-        // Consumers get the ARN only once the certificate is issued.
-        expect(yield* resolve(resources, output)).toEqual({
-          certificateArn: "<CertificateIssued.certificateArn>",
-        });
-      }),
-    );
-
-    test(
-      "domainCertificate with a Hetzner adapter publishes through Hetzner.DNS.RecordList",
-      Effect.gen(function* () {
-        const { resources } = yield* compile(
-          domainCertificate(
-            "Certificate",
-            { domainName: "example.com" },
-            Hetzner.DNS.Adapter(),
-          ),
-        );
-        expect(typesOf(resources)).toEqual({
-          Certificate: "AWS.ACM.Certificate",
-          CertificateValidation: "Hetzner.DNS.RecordList",
-          CertificateIssued: "AWS.ACM.CertificateValidation",
-        });
-      }),
-    );
-
-    test(
-      "domainCertificate on Route 53 (default, explicit, or dns: false) is one inline-validated Certificate",
-      Effect.gen(function* () {
-        for (const dnsConfig of [
-          undefined,
-          AWS.Route53.Adapter({ hostedZoneId: "Z1" }),
-          false as const,
-        ]) {
-          const { resources, output } = yield* compile(
-            domainCertificate(
-              "Certificate",
-              { domainName: "example.com", hostedZoneId: "Z1" },
-              dnsConfig,
-            ).pipe(Effect.map(({ certificateArn }) => ({ certificateArn }))),
+          const [elapsed, deployed] = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const cert = yield* AWS.ACM.Certificate("Cert", {
+                  domainName: CF_DOMAIN,
+                  subjectAlternativeNames: [`*.${CF_DOMAIN}`],
+                  dnsValidation: "external",
+                });
+                const adapter = yield* DNS.resolve(
+                  Cloudflare.DNS.Adapter({ zone: zoneName }),
+                );
+                yield* adapter.records("CertValidation", {
+                  records: Output.map(
+                    cert.domainValidationOptions,
+                    AWS.ACM.validationRecordsOf,
+                  ),
+                  retain: true,
+                });
+                const issued = yield* AWS.ACM.CertificateValidation(
+                  "CertIssued",
+                  { certificateArn: cert.certificateArn },
+                );
+                return {
+                  certificateArn: issued.certificateArn,
+                  status: issued.status,
+                };
+              }),
+            )
+            .pipe(Effect.timed);
+          yield* Effect.logInfo(
+            `ACM via Cloudflare DNS: issued in ${Duration.format(elapsed)}`,
           );
-          expect(typesOf(resources)).toEqual({
-            Certificate: "AWS.ACM.Certificate",
-          });
-          expect(resources["Certificate"]!.Props).toEqual({
-            domainName: "example.com",
-            hostedZoneId: "Z1",
-          });
-          expect(yield* resolve(resources, output)).toEqual({
-            certificateArn: "<Certificate.certificateArn>",
-          });
-        }
-      }),
+          expect(deployed.status).toBe("ISSUED");
+
+          const described = yield* describeCertificate(deployed.certificateArn);
+          expect(described?.Status).toBe("ISSUED");
+          // Apex + wildcard: two validations sharing one CNAME name.
+          expect(described?.DomainValidationOptions).toHaveLength(2);
+          const records = distinctValidationRecords(
+            described?.DomainValidationOptions,
+          );
+          expect(records).toHaveLength(1);
+          expect(
+            AWS.ACM.validationRecordsOf(described?.DomainValidationOptions),
+          ).toHaveLength(1);
+
+          // Exactly one DNS-only CNAME per distinct name in Cloudflare.
+          for (const record of records) {
+            const cnames = yield* cloudflareRecords(
+              zoneId,
+              normalize(record.Name),
+              "CNAME",
+            );
+            expect(cnames).toHaveLength(1);
+            expect(normalize(cnames[0]!.content ?? "")).toBe(
+              normalize(record.Value),
+            );
+            expect(cnames[0]!.proxied).toBe(false);
+          }
+
+          yield* stack.destroy();
+
+          expect(yield* waitForCertificateGone(deployed.certificateArn)).toBe(
+            "gone",
+          );
+
+          // The validation CNAMEs are retained (ACM reuses one per name
+          // across certificates). Remove this test's copies.
+          for (const record of records) {
+            const retained = yield* cloudflareRecords(
+              zoneId,
+              normalize(record.Name),
+              "CNAME",
+            );
+            expect(retained).toHaveLength(1);
+            yield* Effect.forEach(
+              retained,
+              (r) => dns.deleteRecord({ zoneId, dnsRecordId: r.id }),
+              { discard: true },
+            );
+          }
+        }),
+      { timeout: 900_000 },
     );
   },
 );
 
-// ---------------------------------------------------------------------------
-// Live — gated on AWS_TEST_SLOW=1: ACM issuance through public DNS takes
-// minutes.
-// ---------------------------------------------------------------------------
-
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const DOMAIN = `alchemy-acm-validation.${zoneName}`;
-
-// Certificates for CloudFront are pinned to us-east-1.
-const withUsEast1 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
-
-const listCnames = (zoneId: string, name: string) =>
-  dns.listRecords.items({ zoneId, name: { exact: name }, type: "CNAME" }).pipe(
-    Stream.runCollect,
-    Effect.map((chunk) => Array.from(chunk)),
-  );
-
-const normalize = (name: string) => name.replace(/\.$/, "").toLowerCase();
-
-describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
-  "ACM external validation (live)",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:acm",
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "live",
-    ],
-  },
+describe.skipIf(skipSlow)(
+  "ACM validation through a delegated Route 53 zone (live)",
+  { tags },
   () => {
-    test.provider(
-      "a certificate validated through Cloudflare DNS reaches ISSUED",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const zone = yield* findZoneByName({ accountId, name: zoneName });
-          if (!zone) {
-            return yield* Effect.die(new Error(`zone "${zoneName}" not found`));
-          }
+    const parentZoneId = beforeAll(
+      withProviders(lookupParentZoneId, { providers }, "AcmDnsR53Delegation"),
+    );
 
-          const [elapsed, deployed] = yield* stack
-            .deploy(
-              domainCertificate(
-                "Cert",
-                {
-                  domainName: DOMAIN,
-                  // Shares the apex's validation CNAME (deduped to one record).
-                  subjectAlternativeNames: [`*.${DOMAIN}`],
-                },
-                Cloudflare.DNS.Adapter({ zone: zoneName }),
-              ).pipe(
-                Effect.map(({ certificate, certificateArn }) => ({
-                  certificateArn,
-                  domainValidationOptions: certificate.domainValidationOptions,
-                })),
-              ),
-            )
-            .pipe(Effect.timed);
-          yield* Effect.logInfo(
-            `ACM external validation: deployed + issued in ${Duration.format(elapsed)}`,
-          );
+    // A Route 53 zone the internet resolves: delegated from the Cloudflare
+    // test zone with one NS record per Route 53 nameserver.
+    const Delegation = Alchemy.Stack(
+      "AcmDnsR53Delegation",
+      { providers, state: Alchemy.localState() },
+      Effect.gen(function* () {
+        const zoneId = yield* parentZoneId;
+        const zone = yield* AWS.Route53.HostedZone("Zone", {
+          name: R53_ZONE,
+          // Removes the retained validation CNAMEs with the zone.
+          forceDestroy: true,
+        });
+        // Route 53 always assigns four nameservers.
+        yield* Effect.forEach([0, 1, 2, 3], (index) =>
+          Cloudflare.DNS.Record(`Delegation${index}`, {
+            zoneId,
+            name: R53_ZONE,
+            type: "NS",
+            content: Output.map(
+              zone.nameServers,
+              (nameServers) => nameServers[index]!,
+            ),
+          }),
+        );
+        return { hostedZoneId: zone.id, nameServers: zone.nameServers };
+      }),
+    );
 
-          const described = yield* withUsEast1(
-            acm.describeCertificate({
-              CertificateArn: deployed.certificateArn,
-            }),
-          );
-          expect(described.Certificate?.Status).toBe("ISSUED");
+    const delegated = beforeAll(deploy(Delegation), { timeout: 300_000 });
 
-          // One CNAME for the apex + wildcard, published DNS-only.
-          const [record, ...others] = validationRecordsOf(
-            deployed.domainValidationOptions,
-          );
-          expect(others).toHaveLength(0);
-          const [cname] = yield* listCnames(zone.id, normalize(record!.name));
-          expect(normalize(cname?.content ?? "")).toBe(
-            normalize(record!.value),
-          );
-          expect(cname?.proxied).toBe(false);
-
-          yield* stack.destroy();
-
-          // The certificate is deleted …
-          const status = yield* withUsEast1(
-            acm
-              .describeCertificate({ CertificateArn: deployed.certificateArn })
+    afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.gen(function* () {
+        const zone = yield* delegated;
+        const zoneId = yield* parentZoneId;
+        yield* destroy(Delegation);
+        if (zone === undefined || zoneId === undefined) return;
+        yield* withProviders(
+          Effect.gen(function* () {
+            const status = yield* route53
+              .getHostedZone({ Id: zone.hostedZoneId })
               .pipe(
-                Effect.map(() => "present" as const),
-                Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.as("present" as const),
+                Effect.catchTag("NoSuchHostedZone", () =>
                   Effect.succeed("gone" as const),
                 ),
                 Effect.repeat({
@@ -355,18 +310,131 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
                   until: (s) => s === "gone",
                   times: 10,
                 }),
-              ),
-          );
-          expect(status).toBe("gone");
+              );
+            expect(status).toBe("gone");
+            expect(
+              yield* cloudflareRecords(zoneId, R53_ZONE, "NS"),
+            ).toHaveLength(0);
+          }),
+          { providers },
+          "AcmDnsR53Delegation",
+        );
+      }),
+      { timeout: 300_000 },
+    );
 
-          // … while the validation CNAME is retained (ACM reuses it for any
-          // certificate covering the name). Remove this test's copy.
-          const retained = yield* listCnames(zone.id, normalize(record!.name));
-          expect(retained).toHaveLength(1);
-          yield* Effect.forEach(
-            retained,
-            (r) => dns.deleteRecord({ zoneId: zone.id, dnsRecordId: r.id }),
-            { discard: true },
+    test.provider(
+      "an external-validated certificate publishes its CNAME through the Route 53 adapter and reaches ISSUED",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { hostedZoneId, nameServers } = yield* delegated;
+          const zoneId = yield* parentZoneId;
+
+          // The delegation is live in Cloudflare.
+          const ns = yield* cloudflareRecords(zoneId, R53_ZONE, "NS");
+          expect(ns.map((r) => normalize(r.content ?? "")).sort()).toEqual(
+            nameServers.map(normalize).sort(),
+          );
+
+          const [elapsed, deployed] = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const cert = yield* AWS.ACM.Certificate("Cert", {
+                  domainName: R53_ZONE,
+                  subjectAlternativeNames: [`*.${R53_ZONE}`],
+                  dnsValidation: "external",
+                });
+                const adapter = yield* DNS.resolve(
+                  AWS.Route53.Adapter({ hostedZoneId }),
+                );
+                yield* adapter.records("CertValidation", {
+                  records: Output.map(
+                    cert.domainValidationOptions,
+                    AWS.ACM.validationRecordsOf,
+                  ),
+                  retain: true,
+                });
+                const issued = yield* AWS.ACM.CertificateValidation(
+                  "CertIssued",
+                  { certificateArn: cert.certificateArn },
+                );
+                return {
+                  certificateArn: issued.certificateArn,
+                  status: issued.status,
+                };
+              }),
+            )
+            .pipe(Effect.timed);
+          yield* Effect.logInfo(
+            `ACM via Route 53 adapter: issued in ${Duration.format(elapsed)}`,
+          );
+          expect(deployed.status).toBe("ISSUED");
+
+          const described = yield* describeCertificate(deployed.certificateArn);
+          expect(described?.Status).toBe("ISSUED");
+          expect(described?.DomainValidationOptions).toHaveLength(2);
+          expect(
+            distinctValidationRecords(described?.DomainValidationOptions),
+          ).toHaveLength(1);
+          yield* expectRoute53ValidationRecords(
+            hostedZoneId,
+            described?.DomainValidationOptions,
+          );
+
+          yield* stack.destroy();
+
+          expect(yield* waitForCertificateGone(deployed.certificateArn)).toBe(
+            "gone",
+          );
+          // Retained: the zone's `forceDestroy` removes them with the zone.
+          yield* expectRoute53ValidationRecords(
+            hostedZoneId,
+            described?.DomainValidationOptions,
+          );
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "the Route 53 default validates inline and reaches ISSUED",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { hostedZoneId } = yield* delegated;
+
+          const [elapsed, deployed] = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const cert = yield* AWS.ACM.Certificate("Cert", {
+                  domainName: INLINE_DOMAIN,
+                  hostedZoneId,
+                });
+                return {
+                  certificateArn: cert.certificateArn,
+                  status: cert.status,
+                  hostedZoneId: cert.hostedZoneId,
+                };
+              }),
+            )
+            .pipe(Effect.timed);
+          yield* Effect.logInfo(
+            `ACM inline Route 53 validation: issued in ${Duration.format(elapsed)}`,
+          );
+          expect(deployed.status).toBe("ISSUED");
+          expect(deployed.hostedZoneId).toBe(hostedZoneId);
+
+          const described = yield* describeCertificate(deployed.certificateArn);
+          expect(described?.Status).toBe("ISSUED");
+          yield* expectRoute53ValidationRecords(
+            hostedZoneId,
+            described?.DomainValidationOptions,
+          );
+
+          yield* stack.destroy();
+
+          expect(yield* waitForCertificateGone(deployed.certificateArn)).toBe(
+            "gone",
           );
         }),
       { timeout: 900_000 },

@@ -1,149 +1,278 @@
 /**
- * `domain.dns` on Hetzner website composites. Compiles real compositions
- * (registration only — no plan, no apply, no cloud calls) and asserts on
- * the resources the engine collects.
+ * Custom domains on a Hetzner website, deployed for real: `domain.dns`
+ * publishes the `A` record through another DNS host (Cloudflare, resolved
+ * publicly), and the default path (no `dns`) keeps the `Hetzner.RecordSet`
+ * in `zone`. Hetzner sites serve plain HTTP (no TLS).
  */
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Hetzner from "@/Hetzner";
-import * as Output from "@/Output";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as servers from "@distilled.cloud/hetzner/servers";
+import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
+import * as zones from "@distilled.cloud/hetzner/zones";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as pathe from "pathe";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
-const providers = Layer.mergeAll(Hetzner.providers(), Cloudflare.providers());
+const { test } = Test.make({
+  providers: Layer.mergeAll(Hetzner.providers(), Cloudflare.providers()),
+});
 
-const { test } = Test.make({ providers });
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
 
-const ZONE = "alchemy-test-2.us";
-const HOSTNAME = `hetzner-site.${ZONE}`;
+const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-interface CompiledResource {
-  Type: string;
-  Props: any;
-}
+const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const CLOUDFLARE_HOST = `hz-dns.${ZONE}`;
+/**
+ * Hetzner DNS only hosts zones for registrable domains ("unsupported tld"
+ * for any subdomain). A unique, non-delegated zone keeps this suite off the
+ * shared `alchemy-test-2.us` apex zone; its records are queried from
+ * Hetzner's authoritative name servers directly.
+ */
+const HETZNER_ZONE = "hz-dns-zone-alchemy-test.us";
+const HETZNER_RECORD_NAME = "www";
+const HETZNER_HOST = `${HETZNER_RECORD_NAME}.${HETZNER_ZONE}`;
+/** Hetzner assigns three name servers to every primary zone. */
+const HETZNER_NAME_SERVER_COUNT = 3;
 
-const compile = (build: Effect.Effect<any, any, any>) =>
-  Effect.scoped(
-    (build as Effect.Effect<any, any, never>).pipe(
-      Stack.make({
-        name: "hetzner-website-dns",
-        providers,
-        state: inMemoryState(),
-      } as any),
-      Effect.map(
-        (compiled: any) =>
-          compiled.resources as Record<string, CompiledResource>,
+const fixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "../../Cloudflare/Website/staticsite-fixture",
+);
+const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+
+const normalize = (name: string | undefined) =>
+  (name ?? "").replace(/\.$/, "").toLowerCase();
+
+class NotPublished extends Data.TaggedError("NotPublished")<{
+  readonly server: string;
+  readonly name: string;
+}> {}
+
+const cloudflareZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: ZONE });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${ZONE}" not found in account`));
+  }
+  return zone.id;
+});
+
+const cloudflareRecords = (zoneId: string, name: string, type: "A") =>
+  dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+  );
+
+const waitUntilServerGone = (id: number) =>
+  servers.getServer({ id }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
+
+const waitUntilZoneGone = (zoneId: number) =>
+  zones.getZone({ id_or_name: String(zoneId) }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
+
+/**
+ * Wait until every authoritative name server answers `name` with the
+ * `expected` A records, so the first HTTP request never resolves (and
+ * negatively caches) the hostname before it exists.
+ */
+const waitForAuthoritativeA = (
+  nameServers: readonly string[],
+  name: string,
+  expected: readonly string[],
+) =>
+  Effect.gen(function* () {
+    const addresses = (yield* Effect.forEach(nameServers, (ns) =>
+      Effect.tryPromise(() => resolve4(normalize(ns))).pipe(Effect.orDie),
+    )).flat();
+    yield* Effect.forEach(addresses, (server) =>
+      Effect.gen(function* () {
+        const resolver = yield* Effect.sync(() => {
+          const r = new Resolver();
+          r.setServers([server]);
+          return r;
+        });
+        const answers = yield* Effect.tryPromise(() =>
+          resolver.resolve4(name),
+        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        if (!expected.every((ip) => answers.includes(ip))) {
+          return yield* Effect.fail(new NotPublished({ server, name }));
+        }
+      }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
       ),
-    ),
-  ).pipe(Effect.provideService(Stage, "test")) as Effect.Effect<
-    Record<string, CompiledResource>
-  >;
+    );
+  });
 
-/** Evaluate a compiled prop against fake upstream attributes. */
-const evaluate = (value: unknown, upstream: Record<string, unknown>) =>
-  Output.evaluate(value, upstream).pipe(
-    Effect.provide(inMemoryState()),
-    Effect.orDie,
-  );
+const cloneSite = cloneFixture(fixtureDir, {
+  prefix: "alchemy-hetzner-dns-",
+  tempRoot,
+  entries: ["src", "build.sh"],
+});
 
-const typesOf = (resources: Record<string, CompiledResource>) =>
-  Object.fromEntries(
-    Object.entries(resources).map(([fqn, resource]) => [fqn, resource.Type]),
-  );
+const siteProps = (cwd: string) => ({
+  cwd,
+  command: "bash build.sh",
+  outdir: "dist",
+});
 
-const recordTypes = (resources: Record<string, CompiledResource>) =>
-  Object.values(typesOf(resources)).filter(
-    (type) => type.includes("DNS") || type === "Hetzner.RecordSet",
-  );
+const tags = [
+  "provider:hetzner",
+  "provider:hetzner:service",
+  "provider:hetzner:website",
+  "provider:cloudflare",
+  "provider:cloudflare:dns",
+  "live",
+];
 
-describe(
-  "Hetzner.Website domain.dns (composition)",
+test.provider.skipIf(!hasHetznerCreds)(
+  "Cloudflare DNS (no zone): A record at the Server IPv4, HTTP 200 on the hostname, removed on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* cloudflareZoneId;
+      const cwd = yield* cloneSite;
+
+      yield* Effect.gen(function* () {
+        const { site } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* Hetzner.Website.StaticSite("Site", {
+              ...siteProps(cwd),
+              domain: {
+                name: CLOUDFLARE_HOST,
+                dns: Cloudflare.DNS.Adapter(),
+              },
+            });
+            return { site };
+          }),
+        );
+        const ipv4 = site.server!.ipv4!;
+        const url = site.url!;
+        expect(url).toMatch(
+          new RegExp(`^http://${CLOUDFLARE_HOST.replaceAll(".", "\\.")}:\\d+$`),
+        );
+
+        const a = yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A");
+        expect(a.map((record) => record.content)).toEqual([ipv4]);
+        expect(a[0]?.proxied).toBe(false);
+
+        const nameServers = yield* Effect.tryPromise(() =>
+          resolveNs(ZONE),
+        ).pipe(Effect.orDie);
+        yield* waitForAuthoritativeA(nameServers, CLOUDFLARE_HOST, [ipv4]);
+        yield* expectUrlContains(`${url}/`, "StaticSite fixture v1", {
+          timeout: "120 seconds",
+          label: "hetzner site on cloudflare dns",
+        });
+
+        const serverId = site.server!.serverId;
+        yield* stack.destroy();
+        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A")).toEqual(
+          [],
+        );
+        expect(yield* waitUntilServerGone(serverId)).toEqual("gone");
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+    }).pipe(logLevel),
+  { tags, timeout: 600_000 },
+);
+
+test.provider.skipIf(!hasHetznerCreds)(
+  "default path (no dns): the A RecordSet in a Hetzner.Zone points the hostname at the Server",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const cwd = yield* cloneSite;
+
+      yield* Effect.gen(function* () {
+        const { site, zone } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* Hetzner.Zone("Zone", {
+              name: HETZNER_ZONE,
+              ttl: 300,
+            });
+            const site = yield* Hetzner.Website.StaticSite("Site", {
+              ...siteProps(cwd),
+              domain: HETZNER_HOST,
+              zone,
+            });
+            return { site, zone };
+          }),
+        );
+        expect(zone.assignedNameservers).toHaveLength(
+          HETZNER_NAME_SERVER_COUNT,
+        );
+        const ipv4 = site.server!.ipv4!;
+        const url = site.url!;
+        const port = new URL(url).port;
+        expect(url).toBe(`http://${HETZNER_HOST}:${port}`);
+
+        // The unchanged default: an A RecordSet in the Hetzner zone.
+        const { rrset } = yield* zoneRrsets.getZoneRrset({
+          id_or_name: String(zone.zoneId),
+          rr_name: HETZNER_RECORD_NAME,
+          rr_type: "A",
+        });
+        expect(rrset.records.map((record) => record.value)).toEqual([ipv4]);
+
+        // Hetzner's name servers serve it (the zone is not delegated).
+        yield* waitForAuthoritativeA(zone.assignedNameservers, HETZNER_HOST, [
+          ipv4,
+        ]);
+        yield* expectUrlContains(
+          `http://${ipv4}:${port}/`,
+          "StaticSite fixture v1",
+          {
+            headers: { host: `${HETZNER_HOST}:${port}` },
+            timeout: "120 seconds",
+            label: "hetzner site on hetzner zone",
+          },
+        );
+
+        const serverId = site.server!.serverId;
+        yield* stack.destroy();
+        expect(yield* waitUntilZoneGone(zone.zoneId)).toEqual("gone");
+        expect(yield* waitUntilServerGone(serverId)).toEqual("gone");
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+    }).pipe(logLevel),
   {
     tags: [
-      "unit",
       "provider:hetzner",
+      "provider:hetzner:recordset",
+      "provider:hetzner:service",
       "provider:hetzner:website",
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "local",
+      "provider:hetzner:zone",
+      "live",
     ],
-  },
-  () => {
-    test(
-      "Cloudflare DNS publishes an A record at the Server without a zone",
-      Effect.gen(function* () {
-        const resources = yield* compile(
-          Hetzner.Website.Vite("Web", {
-            domain: {
-              name: HOSTNAME,
-              dns: Cloudflare.DNS.Adapter({ zone: ZONE }),
-            },
-          }),
-        );
-        const addresses = resources["Web/Domain-Addresses"];
-        expect(addresses?.Type).toBe("Cloudflare.DNS.RecordList");
-        expect(addresses?.Props.zone).toBe(ZONE);
-        expect(recordTypes(resources)).toEqual(["Cloudflare.DNS.RecordList"]);
-        expect(
-          yield* evaluate(addresses?.Props.records, {
-            "Web/Server": { ipv4: "203.0.113.10" },
-          }),
-        ).toEqual([{ name: HOSTNAME, type: "A", value: "203.0.113.10" }]);
-      }),
-    );
-
-    test(
-      "Hetzner DNS adapter publishes a Hetzner record list",
-      Effect.gen(function* () {
-        const resources = yield* compile(
-          Hetzner.Website.Vite("Web", {
-            domain: {
-              name: HOSTNAME,
-              dns: Hetzner.DNS.Adapter({ zone: ZONE }),
-            },
-          }),
-        );
-        expect(resources["Web/Domain-Addresses"]?.Type).toBe(
-          "Hetzner.DNS.RecordList",
-        );
-        expect(recordTypes(resources)).toEqual(["Hetzner.DNS.RecordList"]);
-      }),
-    );
-
-    test(
-      "a plain hostname keeps the A RecordSet in `zone`",
-      Effect.gen(function* () {
-        const plain = yield* compile(
-          Effect.gen(function* () {
-            const zone = yield* Hetzner.Zone("Zone", { name: ZONE });
-            return yield* Hetzner.Website.Vite("Web", {
-              domain: HOSTNAME,
-              zone,
-            });
-          }),
-        );
-        const record = plain["Web/Domain"];
-        expect(record?.Type).toBe("Hetzner.RecordSet");
-        expect(record?.Props.type).toBe("A");
-        expect(recordTypes(plain)).toEqual(["Hetzner.RecordSet"]);
-
-        // `{ name }` without `dns` is the same composition as the string.
-        const named = yield* compile(
-          Effect.gen(function* () {
-            const zone = yield* Hetzner.Zone("Zone", { name: ZONE });
-            return yield* Hetzner.Website.Vite("Web", {
-              domain: { name: HOSTNAME },
-              zone,
-            });
-          }),
-        );
-        expect(typesOf(named)).toEqual(typesOf(plain));
-        expect(named["Web/Domain"]?.Props.type).toBe("A");
-      }),
-    );
+    timeout: 600_000,
   },
 );

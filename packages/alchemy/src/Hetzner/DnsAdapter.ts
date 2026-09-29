@@ -68,9 +68,12 @@ export const Adapter = (
   };
 };
 
-/** A Hetzner zone can't hold a CNAME at its apex. */
-const rejectApexCname = (zone: string | undefined, name: string) =>
-  zone !== undefined && normalizeDnsName(name) === normalizeDnsName(zone)
+/**
+ * A Hetzner zone can't hold a CNAME at its apex. Only a zone pinned by name
+ * is checkable here — a `Hetzner.Zone` reference is an unresolved Output.
+ */
+const rejectApexCname = (zone: Input<string> | undefined, name: string) =>
+  typeof zone === "string" && normalizeDnsName(name) === normalizeDnsName(zone)
     ? Effect.die(
         new DnsAdapterError({
           message:

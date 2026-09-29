@@ -56,7 +56,7 @@ Hetzner can't, so an apex hostname on those hosts needs an AWS alias target
 | `Fly.Website.*` | You publish the records | The ACME challenge `CNAME`; `A`/`AAAA` records at the site |
 | `Railway.Website.*` | You publish the records | The `CNAME` and verification `TXT` Railway requires |
 | `Neon.Website.*` | You publish the records | A `CNAME` to the custom domain's target |
-| `Prisma.Website.*` | You publish the records | The records the custom domain lists |
+| `Prisma.Website.*` | You publish the records | A `CNAME` to the app's regional switchboard, published before the domain is registered |
 | `Hetzner.Website.*` | An `A` record in `zone` | An `A` record at the server |
 
 A plain string `domain` keeps each platform's default. Setting `dns` never
@@ -363,14 +363,30 @@ const stack = Alchemy.Stack(
 
 ### Test it
 
-Test the adapter in two layers:
+Test against the real DNS host. Deploy a stack that calls each adapter
+function, check the records out of band with the host's API, update the
+stack and check that the records converge, then destroy it and check that
+they're gone. Start and end every test with `stack.destroy()`:
 
-- A test that only plans the stack, asserting that each method declares the
-  expected resource types and logical IDs. It needs no credentials; see
-  `packages/alchemy/test/DNS/Adapter.test.ts`.
-- A live lifecycle test for each record resource that creates, updates, and
-  destroys records and checks the DNS host out of band, starting and ending
-  with `stack.destroy()`.
+```typescript
+test.provider("publishes an alias", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        const dns = yield* DNS.resolve(AcmeDns.Adapter({ zone: "example.com" }));
+        yield* dns.alias("Web", { name: "www.example.com", target: { hostname: "example.net" } });
+      }),
+    );
+    // read the CNAME back through the Acme DNS API and assert on it
+    yield* stack.destroy();
+    // assert the CNAME is gone
+  }),
+);
+```
+
+`packages/alchemy/test/DNS/Adapter.test.ts` does this for the built-in
+adapters.
 
 ## Troubleshooting
 

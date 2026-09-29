@@ -1,675 +1,812 @@
 /**
- * The DNS adapter contract (`alchemy/DNS`) and its three built-in hosts.
+ * The DNS adapter contract (`alchemy/DNS`) against its three built-in hosts.
  *
- * Plan-level only: each case compiles a stack program (resource
- * registration — no plan, no apply, no cloud calls) and asserts what an
- * adapter method DECLARES: resource types, logical ids, and props (Output
- * references are resolved against `<fqn.attr>` placeholders).
+ * Every test deploys a real stack whose program resolves an adapter with
+ * `DNS.resolve(config)` and calls its functions (`alias`, `aliasSet`,
+ * `records`), then verifies the published records out-of-band through the
+ * host's distilled SDK and — for the Route 53 sub-zone (delegated from the
+ * Cloudflare test zone) and the Hetzner zone — by querying the zone's
+ * authoritative nameservers directly.
  */
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as DNS from "@/DNS";
 import * as Hetzner from "@/Hetzner";
 import * as Output from "@/Output";
-import type { ResourceLike } from "@/Resource";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import { inMemoryState, InMemoryService, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as cfdns from "@distilled.cloud/cloudflare/dns";
+import * as HetznerErrors from "@distilled.cloud/hetzner";
+import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
+import * as hetznerZones from "@distilled.cloud/hetzner/zones";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { resolve4, Resolver } from "node:dns/promises";
 
-const adapters = Layer.mergeAll(
-  Cloudflare.DNS.AdapterLive,
-  AWS.Route53.AdapterLive,
-  Hetzner.DNS.AdapterLive,
-);
+const { test } = Test.make({
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    AWS.providers(),
+    Hetzner.providers(),
+  ),
+});
 
-const { test } = Test.make({ providers: adapters });
+// A stack WITHOUT the Hetzner (or AWS) host registered.
+const cloudflareOnly = Test.make({ providers: Cloudflare.providers() });
 
-interface Compiled {
-  resources: Record<string, ResourceLike>;
-}
+const CF_ZONE =
+  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
-/**
- * Compile a stack program with `providers` (default: every built-in DNS
- * adapter) and return the resources it declared, keyed by FQN.
- */
-const compile = (
-  build: Effect.Effect<unknown, any, any>,
-  providers: Layer.Layer<any, never, any> = adapters,
-): Effect.Effect<Compiled> =>
-  Effect.scoped(
-    (build as Effect.Effect<unknown>).pipe(
-      Stack.make({
-        name: "dns-adapter",
-        providers,
-        state: inMemoryState(),
-      } as any) as any,
-      Effect.map((compiled: any) => ({
-        resources: compiled.resources as Record<string, ResourceLike>,
-      })),
-    ),
-  ).pipe(Effect.provideService(Stage, "test")) as Effect.Effect<Compiled>;
+const TARGET_1 = "example.net";
+const TARGET_2 = "example.org";
+const TXT_1 = "dns-adapter=v1";
+const TXT_2 = "dns-adapter=v2";
 
-/**
- * Resolve Output references in `value`: every declared resource's
- * attributes read as `<fqn.attr>` unless overridden in `upstream`.
- */
-const resolve = (
-  compiled: Compiled,
-  value: unknown,
-  upstream: Record<string, unknown> = {},
+const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+type RecordType = "A" | "AAAA" | "CNAME" | "TXT";
+
+/** Lowercase, no trailing dot, TXT unquoted. */
+const normalize = (value: string) =>
+  value.replace(/^"|"$/g, "").replace(/\.$/, "").toLowerCase();
+
+const sorted = (values: readonly string[]) => [...values].map(normalize).sort();
+
+const resolveCloudflareZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: CF_ZONE });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${CF_ZONE}" not found`));
+  }
+  return zone.id;
+});
+
+/** Cloudflare records at `(name, type)` (the harness's fresh token may 403 briefly). */
+const cloudflareRecords = (
+  zoneId: string,
+  name: string,
+  type: RecordType | "NS",
 ) =>
-  Output.evaluate(value, {
-    ...Object.fromEntries(
-      Object.keys(compiled.resources).map((fqn) => [
-        fqn,
-        new Proxy(
-          {},
-          {
-            get: (_, attr) =>
-              typeof attr === "string" ? `<${fqn}.${attr}>` : undefined,
-          },
-        ),
-      ]),
-    ),
-    ...upstream,
-  }).pipe(
-    Effect.provideService(State, InMemoryService()),
-  ) as Effect.Effect<any>;
-
-/** `fqn → type` of every declared resource. */
-const typesOf = (compiled: Compiled) =>
-  Object.fromEntries(
-    Object.entries(compiled.resources).map(([fqn, r]) => [fqn, r.Type]),
+  cfdns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
+    Stream.filter((r) => normalize(r.name) === name && r.type === type),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
   );
 
-/** Resolved props of one declared resource. */
-const propsOf = (compiled: Compiled, fqn: string) => {
-  const resource = compiled.resources[fqn];
-  expect(resource).toBeDefined();
-  return resolve(compiled, resource!.Props);
+const cloudflareValues = (zoneId: string, name: string, type: RecordType) =>
+  cloudflareRecords(zoneId, name, type).pipe(
+    Effect.map((records) => sorted(records.map((r) => r.content ?? ""))),
+  );
+
+/**
+ * Delegate `name` from the standing Cloudflare zone to a sub-zone's
+ * nameservers — one `NS` record per nameserver.
+ */
+const delegate = <Req>(
+  cfZoneId: string,
+  name: string,
+  nameServers: Output.Output<string[], Req>,
+  count: number,
+) =>
+  Effect.forEach(
+    Array.from({ length: count }, (_, index) => index),
+    (index) =>
+      Cloudflare.DNS.Record(`Delegation${index + 1}`, {
+        zoneId: cfZoneId,
+        name,
+        type: "NS",
+        content: Output.map(nameServers, (servers) =>
+          normalize(servers[index]!),
+        ),
+      }),
+  );
+
+class DnsQueryFailed extends Data.TaggedError("DnsQueryFailed")<{
+  readonly code: string;
+  readonly server: string;
+  readonly name: string;
+}> {}
+
+class AnswerMismatch extends Data.TaggedError("AnswerMismatch")<{
+  readonly server: string;
+  readonly name: string;
+  readonly type: RecordType;
+  readonly answer: string[];
+  readonly expected: string[];
+}> {}
+
+/** IPv4 addresses of a zone's nameservers. */
+const nameServerAddresses = (nameServers: readonly string[]) =>
+  Effect.forEach(nameServers, (ns) =>
+    Effect.tryPromise(() => resolve4(normalize(ns))).pipe(
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 5 }),
+      Effect.orDie,
+    ),
+  ).pipe(Effect.map((addresses) => addresses.flat()));
+
+/** One non-recursive-style query against a single authoritative server. */
+const queryServer = (server: string, name: string, type: RecordType) =>
+  Effect.gen(function* () {
+    const resolver = yield* Effect.sync(() => {
+      const r = new Resolver({ timeout: 3_000, tries: 1 });
+      r.setServers([server]);
+      return r;
+    });
+    const answer = yield* Effect.tryPromise({
+      try: (): Promise<string[] | string[][]> =>
+        type === "A"
+          ? resolver.resolve4(name)
+          : type === "AAAA"
+            ? resolver.resolve6(name)
+            : type === "CNAME"
+              ? resolver.resolveCname(name)
+              : resolver.resolveTxt(name),
+      catch: (error) =>
+        new DnsQueryFailed({
+          code:
+            error instanceof Error && "code" in error
+              ? String(error.code)
+              : "UNKNOWN",
+          server,
+          name,
+        }),
+    }).pipe(
+      // No record (or no name) is an answer: the empty set.
+      Effect.catchIf(
+        (e) => e.code === "ENODATA" || e.code === "ENOTFOUND",
+        () => Effect.succeed([] as string[]),
+      ),
+    );
+    return sorted(answer.map((v) => (Array.isArray(v) ? v.join("") : v)));
+  });
+
+/**
+ * Wait until EVERY authoritative server answers `(name, type)` with exactly
+ * `expected` (the empty list = no such record).
+ */
+const waitForAuthoritative = (
+  servers: readonly string[],
+  name: string,
+  type: RecordType,
+  expected: readonly string[],
+) =>
+  Effect.forEach(
+    servers,
+    (server) =>
+      queryServer(server, name, type).pipe(
+        Effect.flatMap((answer) =>
+          JSON.stringify(answer) === JSON.stringify(sorted(expected))
+            ? Effect.void
+            : Effect.fail(
+                new AnswerMismatch({
+                  server,
+                  name,
+                  type,
+                  answer,
+                  expected: sorted(expected),
+                }),
+              ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
+      ),
+    { concurrency: "unbounded", discard: true },
+  );
+
+/** The value of type `T` a deploy died (or failed) with, if any. */
+const failureOf = <A, E, R, T>(
+  deploy: Effect.Effect<A, E, R>,
+  cls: abstract new (...args: never[]) => T,
+) =>
+  deploy.pipe(
+    Effect.as(undefined),
+    Effect.catchCause((cause) =>
+      Effect.succeed(
+        cause.reasons
+          .map((reason) =>
+            Cause.isFailReason(reason)
+              ? reason.error
+              : Cause.isDieReason(reason)
+                ? reason.defect
+                : undefined,
+          )
+          .find((value): value is T => value instanceof cls),
+      ),
+    ),
+  );
+
+// ---------------------------------------------------------------------------
+// Cloudflare
+// ---------------------------------------------------------------------------
+
+const CF = {
+  cname: `dns-adapter-cname.${CF_ZONE}`,
+  addresses: `dns-adapter-addr.${CF_ZONE}`,
+  proxied: `dns-adapter-proxied.${CF_ZONE}`,
+  setA: `dns-adapter-set-a.${CF_ZONE}`,
+  setB: `dns-adapter-set-b.${CF_ZONE}`,
+  txt: `dns-adapter-txt.${CF_ZONE}`,
+  recordCname: `dns-adapter-rec-cname.${CF_ZONE}`,
 };
 
-/** The defect (or error) an effect exits with. */
-const failureOf = <A, E>(effect: Effect.Effect<A, E>) =>
-  Effect.exit(effect).pipe(
-    Effect.map((exit) =>
-      Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
+const cloudflareProgram = (version: 1 | 2) =>
+  Effect.gen(function* () {
+    const dns = yield* DNS.resolve(Cloudflare.DNS.Adapter({ zone: CF_ZONE }));
+    const proxied = yield* DNS.resolve(
+      Cloudflare.DNS.Adapter({ zone: CF_ZONE, proxied: true }),
+    );
+    const target = version === 1 ? TARGET_1 : TARGET_2;
+
+    yield* dns.alias("Cname", { name: CF.cname, target: { hostname: target } });
+    yield* dns.alias("Addresses", {
+      name: CF.addresses,
+      target:
+        version === 1
+          ? { ipv4: ["192.0.2.10"], ipv6: ["2001:db8::10"] }
+          : { ipv4: ["192.0.2.11"] },
+    });
+    yield* proxied.alias("Proxied", {
+      name: CF.proxied,
+      target: { hostname: TARGET_1 },
+    });
+    const set = yield* dns.aliasSet("Set", {
+      names: version === 1 ? [CF.setA] : [],
+      target: { hostname: target },
+    });
+    yield* set.bind`BoundSite`({ names: [CF.setB] });
+    yield* dns.records("Records", {
+      records:
+        version === 1
+          ? [
+              { name: CF.txt, type: "TXT", value: TXT_1 },
+              { name: CF.recordCname, type: "CNAME", value: TARGET_1 },
+            ]
+          : [{ name: CF.txt, type: "TXT", value: TXT_2 }],
+    });
+  });
+
+describe("Cloudflare.DNS adapter", () => {
+  test.provider(
+    "alias, aliasSet (+ bound names) and records converge in Cloudflare",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveCloudflareZoneId;
+        yield* stack.destroy();
+
+        yield* stack.deploy(cloudflareProgram(1));
+
+        const cname = yield* cloudflareRecords(zoneId, CF.cname, "CNAME");
+        expect(sorted(cname.map((r) => r.content ?? ""))).toEqual([TARGET_1]);
+        expect(cname[0]?.proxied).toBe(false);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual([
+          "192.0.2.10",
+        ]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual([
+          "2001:db8::10",
+        ]);
+        const proxiedCname = yield* cloudflareRecords(
+          zoneId,
+          CF.proxied,
+          "CNAME",
+        );
+        expect(proxiedCname).toHaveLength(1);
+        expect(proxiedCname[0]?.proxied).toBe(true);
+        for (const name of [CF.setA, CF.setB]) {
+          const [record, ...extra] = yield* cloudflareRecords(
+            zoneId,
+            name,
+            "CNAME",
+          );
+          expect(extra).toHaveLength(0);
+          expect(normalize(record?.content ?? "")).toBe(TARGET_1);
+          expect(record?.proxied).toBe(false);
+        }
+        expect(yield* cloudflareValues(zoneId, CF.txt, "TXT")).toEqual([TXT_1]);
+        const recordCname = yield* cloudflareRecords(
+          zoneId,
+          CF.recordCname,
+          "CNAME",
+        );
+        expect(sorted(recordCname.map((r) => r.content ?? ""))).toEqual([
+          TARGET_1,
+        ]);
+        expect(recordCname[0]?.proxied).toBe(false);
+
+        // Change targets, drop a declared set name, an address and a record.
+        yield* stack.deploy(cloudflareProgram(2));
+
+        expect(yield* cloudflareValues(zoneId, CF.cname, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual([
+          "192.0.2.11",
+        ]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual(
+          [],
+        );
+        expect(yield* cloudflareValues(zoneId, CF.setA, "CNAME")).toEqual([]);
+        expect(yield* cloudflareValues(zoneId, CF.setB, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* cloudflareValues(zoneId, CF.txt, "TXT")).toEqual([TXT_2]);
+        expect(
+          yield* cloudflareValues(zoneId, CF.recordCname, "CNAME"),
+        ).toEqual([]);
+
+        yield* stack.destroy();
+
+        for (const name of Object.values(CF)) {
+          for (const type of ["A", "AAAA", "CNAME", "TXT"] as const) {
+            expect(yield* cloudflareValues(zoneId, name, type)).toEqual([]);
+          }
+        }
+      }),
+    {
+      tags: ["provider:dns", "provider:cloudflare:dns", "live"],
+      timeout: 180_000,
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Route 53 — a hosted zone delegated from the Cloudflare test zone
+// ---------------------------------------------------------------------------
+
+const R53_ZONE = `dns-adapter-r53.${CF_ZONE}`;
+const R53 = {
+  origin: `origin.${R53_ZONE}`,
+  www: `www.${R53_ZONE}`,
+  cname: `cname.${R53_ZONE}`,
+  setA: `set-a.${R53_ZONE}`,
+  setB: `set-b.${R53_ZONE}`,
+  txt: `txt.${R53_ZONE}`,
+  recordCname: `rec-cname.${R53_ZONE}`,
+};
+
+const route53Program = (cfZoneId: string, version: 1 | 2) =>
+  Effect.gen(function* () {
+    const zone = yield* AWS.Route53.HostedZone("Zone", { name: R53_ZONE });
+    yield* delegate(cfZoneId, R53_ZONE, zone.nameServers, 4);
+
+    const dns = yield* DNS.resolve(
+      AWS.Route53.Adapter({ hostedZoneId: zone.id }),
+    );
+    const target = version === 1 ? TARGET_1 : TARGET_2;
+
+    // An address target: the Route 53 adapter declares an
+    // `AWS.Route53.RecordList`, which is also the alias target below.
+    const origin = (yield* dns.alias("Origin", {
+      name: R53.origin,
+      target: {
+        ipv4: [version === 1 ? "192.0.2.20" : "192.0.2.21"],
+        ipv6: ["2001:db8::20"],
+      },
+    })) as AWS.Route53.RecordList;
+
+    // A dual-stack Route 53 alias at a record in the same zone — a real
+    // AWS alias target that needs no billable resource.
+    yield* dns.alias("Www", {
+      name: R53.www,
+      ipv6: true,
+      target: {
+        hostname: Output.map(origin.records, () => R53.origin),
+        route53Alias: { hostedZoneId: zone.id, evaluateTargetHealth: false },
+      },
+    });
+    yield* dns.alias("Cname", {
+      name: R53.cname,
+      target: { hostname: target },
+    });
+    const set = yield* dns.aliasSet("Set", {
+      names: version === 1 ? [R53.setA] : [],
+      target: { hostname: target },
+    });
+    yield* set.bind`BoundSite`({ names: [R53.setB] });
+    yield* dns.records("Records", {
+      records:
+        version === 1
+          ? [
+              { name: R53.txt, type: "TXT", value: TXT_1 },
+              { name: R53.recordCname, type: "CNAME", value: TARGET_1 },
+            ]
+          : [{ name: R53.txt, type: "TXT", value: TXT_2 }],
+    });
+    return zone;
+  });
+
+/** The simple record set `(name, type)` in a hosted zone, if any. */
+const route53Set = (hostedZoneId: string, name: string, type: RecordType) =>
+  route53
+    .listResourceRecordSets({
+      HostedZoneId: hostedZoneId,
+      StartRecordName: `${name}.`,
+      StartRecordType: type,
+      MaxItems: 1,
+    })
+    .pipe(
+      Effect.map((response) =>
+        (response.ResourceRecordSets ?? []).find(
+          (set) => normalize(set.Name) === name && set.Type === type,
+        ),
+      ),
+    );
+
+const route53Values = (hostedZoneId: string, name: string, type: RecordType) =>
+  route53Set(hostedZoneId, name, type).pipe(
+    Effect.map((set) =>
+      sorted((set?.ResourceRecords ?? []).map((r) => r.Value)),
     ),
   );
 
-/** An upstream resource whose attributes the adapters point records at. */
-const target = AWS.S3.Bucket("Target", {});
-
-/** The attributes of {@link target} the adapters point records at. */
-type TargetAttrs = { bucketName: any; bucketArn: any };
-
-const hostnameTarget = (bucket: TargetAttrs) => ({
-  hostname: bucket.bucketName,
-});
-const route53AliasTarget = (bucket: TargetAttrs) => ({
-  hostname: bucket.bucketName,
-  route53Alias: { hostedZoneId: bucket.bucketArn },
-});
-
-const tags = ["unit", "provider:dns", "local"];
-
-describe("DNS.resolve", { tags }, () => {
-  test(
-    "dies with DnsAdapterNotRegistered for an unregistered type",
-    Effect.gen(function* () {
-      const failure = yield* failureOf(DNS.resolve({ type: "Nope.DNS" }));
-      expect(failure).toBeInstanceOf(DNS.DnsAdapterNotRegistered);
-      expect((failure as DNS.DnsAdapterNotRegistered).type).toBe("Nope.DNS");
-      expect((failure as DNS.DnsAdapterNotRegistered).message).toContain(
-        "Nope.providers()",
-      );
+const waitUntilHostedZoneGone = (hostedZoneId: string) =>
+  route53.getHostedZone({ Id: hostedZoneId }).pipe(
+    Effect.as("present" as const),
+    Effect.catchTag("NoSuchHostedZone", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
     }),
   );
 
-  test(
-    "dies when the DNS host's providers() layer is missing from the stack",
-    Effect.gen(function* () {
-      const failure = yield* failureOf(
-        compile(DNS.resolve(Cloudflare.DNS.Adapter()), AWS.Route53.AdapterLive),
-      );
-      expect(failure).toBeInstanceOf(DNS.DnsAdapterNotRegistered);
-      expect((failure as DNS.DnsAdapterNotRegistered).type).toBe(
-        "Cloudflare.DNS",
-      );
-    }),
-  );
+describe("AWS.Route53 adapter", () => {
+  test.provider(
+    "alias (Route 53 alias, CNAME, addresses), aliasSet and records converge in a delegated hosted zone",
+    (stack) =>
+      Effect.gen(function* () {
+        const cfZoneId = yield* resolveCloudflareZoneId;
+        yield* stack.destroy();
 
-  test(
-    "resolves each built-in adapter by type",
-    Effect.gen(function* () {
-      const resolved = yield* Effect.all([
-        DNS.resolve(Cloudflare.DNS.Adapter()),
-        DNS.resolve(AWS.Route53.Adapter()),
-        DNS.resolve(Hetzner.DNS.Adapter()),
-      ]).pipe(Effect.provide(adapters));
-      expect(resolved).toHaveLength(3);
-      for (const adapter of resolved) {
-        expect(typeof adapter.alias).toBe("function");
-        expect(typeof adapter.aliasSet).toBe("function");
-        expect(typeof adapter.records).toBe("function");
-      }
-    }),
-  );
-});
+        const zone = yield* stack.deploy(route53Program(cfZoneId, 1));
+        const zoneId = zone.id;
 
-describe("DNS config constructors", { tags }, () => {
-  test(
-    "are plain data",
-    Effect.sync(() => {
-      expect(Cloudflare.DNS.Adapter()).toEqual({ type: "Cloudflare.DNS" });
-      expect(
-        Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true }),
-      ).toEqual({
-        type: "Cloudflare.DNS",
-        zone: "example.com",
-        options: { proxied: true },
-      });
-      expect(Cloudflare.DNS.Adapter({ zone: { zoneId: "abc123" } })).toEqual({
-        type: "Cloudflare.DNS",
-        zone: "abc123",
-      });
-      expect(AWS.Route53.Adapter()).toEqual({ type: "AWS.Route53" });
-      expect(AWS.Route53.Adapter({ hostedZoneId: "Z1" })).toEqual({
-        type: "AWS.Route53",
-        zone: "Z1",
-      });
-      expect(Hetzner.DNS.Adapter()).toEqual({ type: "Hetzner.DNS" });
-      expect(Hetzner.DNS.Adapter({ zone: "example.com" })).toEqual({
-        type: "Hetzner.DNS",
-        zone: "example.com",
-      });
-      // Round-trips through JSON (state, the dev sidecar).
-      const config = Cloudflare.DNS.Adapter({ zone: "example.com" });
-      expect(JSON.parse(JSON.stringify(config))).toEqual(config);
-    }),
-  );
-
-  test(
-    "a Hetzner.Zone reference becomes its zone id",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const zone = yield* Hetzner.Zone("Zone", { name: "example.com" });
-          const dns = yield* DNS.resolve(Hetzner.DNS.Adapter({ zone }));
-          yield* dns.records("Records", {
-            records: [{ name: "a.example.com", type: "TXT", value: "v" }],
-          });
-        }),
-      );
-      const props = yield* resolve(
-        compiled,
-        compiled.resources["Records"]!.Props,
-        { Zone: { zoneId: 42 } },
-      );
-      expect(props.zone).toBe("42");
-    }),
-  );
-});
-
-describe("Cloudflare.DNS adapter", { tags }, () => {
-  test(
-    "alias to a hostname declares a Cloudflare.DNS.Records CNAME `{id}-CNAME`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(
-            Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true }),
-          );
-          // `route53Alias` and `ipv6` are Route 53 concerns: still one CNAME.
-          yield* dns.alias("Alias", {
-            name: "www.example.com",
-            ipv6: true,
-            target: route53AliasTarget(bucket),
-          });
-          yield* DNS.resolve(Cloudflare.DNS.Adapter()).pipe(
-            Effect.flatMap((plain) =>
-              plain.alias("Plain", {
-                name: "app.example.com",
-                target: hostnameTarget(bucket),
-              }),
+        // Publicly delegated from the Cloudflare zone.
+        expect(
+          sorted(
+            (yield* cloudflareRecords(cfZoneId, R53_ZONE, "NS")).map(
+              (r) => r.content ?? "",
             ),
-          );
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        "Alias-CNAME": "Cloudflare.DNS.Records",
-        "Plain-CNAME": "Cloudflare.DNS.Records",
-      });
-      expect(yield* propsOf(compiled, "Alias-CNAME")).toEqual({
-        zone: "example.com",
-        proxied: true,
-        type: "CNAME",
-        content: "<Target.bucketName>",
-        names: ["www.example.com"],
-      });
-      expect(yield* propsOf(compiled, "Plain-CNAME")).toEqual({
-        type: "CNAME",
-        content: "<Target.bucketName>",
-        names: ["app.example.com"],
-      });
-      expect(compiled.resources["Alias-CNAME"]!.RemovalPolicy).toBe("destroy");
-    }),
-  );
+          ),
+        ).toEqual(sorted(zone.nameServers));
 
-  test(
-    "alias to addresses declares a Cloudflare.DNS.RecordList `{id}-Addresses`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(
-            Cloudflare.DNS.Adapter({ zone: "example.com" }),
-          );
-          yield* dns.alias("Literal", {
-            name: "a.example.com",
-            target: { ipv4: ["192.0.2.1", "192.0.2.2"], ipv6: ["2001:db8::1"] },
-          });
-          // Address values may be Outputs (e.g. a server's IPs).
-          yield* dns.alias("FromOutput", {
-            name: "b.example.com",
-            target: {
-              ipv4: bucket.bucketName.pipe(Output.map((ip: string) => [ip])),
-            },
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        "Literal-Addresses": "Cloudflare.DNS.RecordList",
-        "FromOutput-Addresses": "Cloudflare.DNS.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Literal-Addresses")).toEqual({
-        zone: "example.com",
-        records: [
-          { name: "a.example.com", type: "A", value: "192.0.2.1" },
-          { name: "a.example.com", type: "A", value: "192.0.2.2" },
-          { name: "a.example.com", type: "AAAA", value: "2001:db8::1" },
-        ],
-      });
-      expect(
-        yield* resolve(
-          compiled,
-          compiled.resources["FromOutput-Addresses"]!.Props,
-          { Target: { bucketName: "198.51.100.7" } },
-        ),
-      ).toEqual({
-        zone: "example.com",
-        records: [{ name: "b.example.com", type: "A", value: "198.51.100.7" }],
-      });
-    }),
-  );
+        // Route 53 state.
+        const www = yield* route53Set(zoneId, R53.www, "A");
+        expect(normalize(www?.AliasTarget?.DNSName ?? "")).toBe(R53.origin);
+        expect(www?.AliasTarget?.HostedZoneId).toBe(zoneId);
+        expect(
+          normalize(
+            (yield* route53Set(zoneId, R53.www, "AAAA"))?.AliasTarget
+              ?.DNSName ?? "",
+          ),
+        ).toBe(R53.origin);
+        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual([
+          "192.0.2.20",
+        ]);
+        expect(yield* route53Values(zoneId, R53.origin, "AAAA")).toEqual([
+          "2001:db8::20",
+        ]);
+        for (const name of [R53.cname, R53.setA, R53.setB, R53.recordCname]) {
+          expect(yield* route53Values(zoneId, name, "CNAME")).toEqual([
+            TARGET_1,
+          ]);
+        }
+        expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_1]);
 
-  test(
-    "aliasSet declares a bindable Cloudflare.DNS.Records `{id}-CNAME`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(Cloudflare.DNS.Adapter());
-          yield* dns.aliasSet("Empty", { target: route53AliasTarget(bucket) });
-          yield* dns.aliasSet("Named", {
-            names: ["x.example.com"],
-            target: hostnameTarget(bucket),
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        "Empty-CNAME": "Cloudflare.DNS.Records",
-        "Named-CNAME": "Cloudflare.DNS.Records",
-      });
-      expect(yield* propsOf(compiled, "Empty-CNAME")).toEqual({
-        type: "CNAME",
-        content: "<Target.bucketName>",
-      });
-      expect(yield* propsOf(compiled, "Named-CNAME")).toEqual({
-        type: "CNAME",
-        content: "<Target.bucketName>",
-        names: ["x.example.com"],
-      });
-    }),
-  );
+        // Authoritative answers from the zone's own nameservers.
+        const servers = yield* nameServerAddresses(zone.nameServers);
+        yield* waitForAuthoritative(servers, R53.www, "A", ["192.0.2.20"]);
+        yield* waitForAuthoritative(servers, R53.www, "AAAA", ["2001:db8::20"]);
+        yield* waitForAuthoritative(servers, R53.cname, "CNAME", [TARGET_1]);
+        yield* waitForAuthoritative(servers, R53.setB, "CNAME", [TARGET_1]);
+        yield* waitForAuthoritative(servers, R53.txt, "TXT", [TXT_1]);
 
-  test(
-    "records declares a Cloudflare.DNS.RecordList `{id}`, retained on request",
-    Effect.gen(function* () {
-      const records: DNS.DnsRecord[] = [
-        { name: "_v.example.com", type: "TXT", value: "token" },
-        { name: "_acme.example.com", type: "CNAME", value: "x.acm.aws." },
-      ];
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const dns = yield* DNS.resolve(
-            Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true }),
-          );
-          yield* dns.records("Kept", { records, retain: true });
-          yield* dns.records("Dropped", { records });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Kept: "Cloudflare.DNS.RecordList",
-        Dropped: "Cloudflare.DNS.RecordList",
-      });
-      // Records are always DNS-only: no `proxied`.
-      expect(yield* propsOf(compiled, "Kept")).toEqual({
-        zone: "example.com",
-        records,
-      });
-      expect(compiled.resources["Kept"]!.RemovalPolicy).toBe("retain");
-      expect(compiled.resources["Dropped"]!.RemovalPolicy).toBe("destroy");
-    }),
+        // Change targets and addresses, drop a declared set name and a record.
+        yield* stack.deploy(route53Program(cfZoneId, 2));
+
+        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual([
+          "192.0.2.21",
+        ]);
+        expect(yield* route53Values(zoneId, R53.cname, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* route53Values(zoneId, R53.setA, "CNAME")).toEqual([]);
+        expect(yield* route53Values(zoneId, R53.setB, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_2]);
+        expect(yield* route53Values(zoneId, R53.recordCname, "CNAME")).toEqual(
+          [],
+        );
+        // The alias follows its target's new address.
+        yield* waitForAuthoritative(servers, R53.www, "A", ["192.0.2.21"]);
+        yield* waitForAuthoritative(servers, R53.cname, "CNAME", [TARGET_2]);
+        yield* waitForAuthoritative(servers, R53.setA, "CNAME", []);
+        yield* waitForAuthoritative(servers, R53.txt, "TXT", [TXT_2]);
+        yield* waitForAuthoritative(servers, R53.recordCname, "CNAME", []);
+
+        yield* stack.destroy();
+
+        expect(yield* waitUntilHostedZoneGone(zoneId)).toBe("gone");
+        expect(yield* cloudflareRecords(cfZoneId, R53_ZONE, "NS")).toEqual([]);
+      }),
+    {
+      tags: ["provider:dns", "provider:aws:route53", "live"],
+      timeout: 360_000,
+    },
   );
 });
 
-describe("AWS.Route53 adapter", { tags }, () => {
-  test(
-    "alias with route53Alias declares A (+ AAAA) alias records",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(
-            AWS.Route53.Adapter({ hostedZoneId: "Z1" }),
-          );
-          yield* dns.alias("Single", {
-            name: "www.example.com",
-            target: route53AliasTarget(bucket),
-          });
-          yield* dns.alias("Dual", {
-            name: "api.example.com",
-            ipv6: true,
-            target: {
-              hostname: bucket.bucketName,
-              route53Alias: {
-                hostedZoneId: bucket.bucketArn,
-                evaluateTargetHealth: false,
-              },
-            },
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        Single: "AWS.Route53.Record",
-        "Dual-A": "AWS.Route53.Record",
-        "Dual-AAAA": "AWS.Route53.Record",
-      });
-      expect(yield* propsOf(compiled, "Single")).toEqual({
-        hostedZoneId: "Z1",
-        name: "www.example.com",
-        type: "A",
-        aliasTarget: {
-          hostedZoneId: "<Target.bucketArn>",
-          dnsName: "<Target.bucketName>",
-        },
-      });
-      for (const type of ["A", "AAAA"]) {
-        expect(yield* propsOf(compiled, `Dual-${type}`)).toEqual({
-          hostedZoneId: "Z1",
-          name: "api.example.com",
-          type,
-          aliasTarget: {
-            hostedZoneId: "<Target.bucketArn>",
-            dnsName: "<Target.bucketName>",
-            evaluateTargetHealth: false,
-          },
-        });
-      }
+// ---------------------------------------------------------------------------
+// Hetzner — Hetzner DNS only hosts registrable domains (a sub-zone such as
+// `dns-adapter-hz.alchemy-test-2.us` is rejected with `unsupported tld`, see
+// the probe below), so the zone can't be delegated from the Cloudflare test
+// zone. Hetzner's authoritative nameservers answer for every zone they host,
+// delegated or not, so the records are verified against them directly.
+// ---------------------------------------------------------------------------
+
+const HZ_SUBZONE = `dns-adapter-hz.${CF_ZONE}`;
+const HZ_ZONE = "dns-adapter-hz-alchemy-test.us";
+const HZ = {
+  cname: `cname.${HZ_ZONE}`,
+  addresses: `addr.${HZ_ZONE}`,
+  setA: `set-a.${HZ_ZONE}`,
+  setB: `set-b.${HZ_ZONE}`,
+  txt: `txt.${HZ_ZONE}`,
+  recordCname: `rec-cname.${HZ_ZONE}`,
+};
+
+const hetznerProgram = (version: 1 | 2) =>
+  Effect.gen(function* () {
+    const zone = yield* Hetzner.Zone("Zone", { name: HZ_ZONE, ttl: 60 });
+    const dns = yield* DNS.resolve(Hetzner.DNS.Adapter({ zone }));
+    const target = version === 1 ? TARGET_1 : TARGET_2;
+
+    yield* dns.alias("Cname", { name: HZ.cname, target: { hostname: target } });
+    yield* dns.alias("Addresses", {
+      name: HZ.addresses,
+      target:
+        version === 1
+          ? { ipv4: ["192.0.2.30"], ipv6: ["2001:db8::30"] }
+          : { ipv4: ["192.0.2.31"] },
+    });
+    const set = yield* dns.aliasSet("Set", {
+      names: version === 1 ? [HZ.setA] : [],
+      target: { hostname: target },
+    });
+    yield* set.bind`BoundSite`({ names: [HZ.setB] });
+    yield* dns.records("Records", {
+      records:
+        version === 1
+          ? [
+              { name: HZ.txt, type: "TXT", value: TXT_1 },
+              { name: HZ.recordCname, type: "CNAME", value: TARGET_1 },
+            ]
+          : [{ name: HZ.txt, type: "TXT", value: TXT_2 }],
+    });
+    return zone;
+  });
+
+/** Live values of the RRSet `(name, type)`, normalized and sorted. */
+const hetznerValues = (zoneId: number, name: string, type: RecordType) =>
+  zoneRrsets
+    .getZoneRrset({
+      id_or_name: String(zoneId),
+      rr_name: name === HZ_ZONE ? "@" : name.slice(0, -(HZ_ZONE.length + 1)),
+      rr_type: type,
+    })
+    .pipe(
+      Effect.map(({ rrset }) => sorted(rrset.records.map((r) => r.value))),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+    );
+
+const waitUntilHetznerZoneGone = (zoneId: number) =>
+  hetznerZones.getZone({ id_or_name: String(zoneId) }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
     }),
   );
 
-  test(
-    "alias to a non-AWS hostname declares a CNAME record `{id}`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(AWS.Route53.Adapter());
-          yield* dns.alias("Cname", {
-            name: "www.example.com",
-            ipv6: true,
-            target: hostnameTarget(bucket),
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        Cname: "AWS.Route53.Record",
-      });
-      const props = yield* propsOf(compiled, "Cname");
-      expect(props).toEqual({
-        hostedZoneId: undefined,
-        name: "www.example.com",
-        type: "CNAME",
-        ttl: "300 seconds",
-        records: ["<Target.bucketName>"],
-      });
-      // The key is present (undefined) — the exact props AWS composites
-      // declared before adapters existed.
-      expect("hostedZoneId" in compiled.resources["Cname"]!.Props).toBe(true);
-    }),
+describe("Hetzner.DNS adapter", () => {
+  test.provider.skipIf(!hasHetznerCreds)(
+    "alias, aliasSet (+ bound names) and records converge in a Hetzner zone",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const zone = yield* stack.deploy(hetznerProgram(1));
+        const zoneId = zone.zoneId;
+
+        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([
+          TARGET_1,
+        ]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual([
+          "192.0.2.30",
+        ]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "AAAA")).toEqual([
+          "2001:db8::30",
+        ]);
+        for (const name of [HZ.setA, HZ.setB, HZ.recordCname]) {
+          expect(yield* hetznerValues(zoneId, name, "CNAME")).toEqual([
+            TARGET_1,
+          ]);
+        }
+        expect(yield* hetznerValues(zoneId, HZ.txt, "TXT")).toEqual([TXT_1]);
+
+        const servers = yield* nameServerAddresses(zone.assignedNameservers);
+        yield* waitForAuthoritative(servers, HZ.cname, "CNAME", [TARGET_1]);
+        yield* waitForAuthoritative(servers, HZ.addresses, "A", ["192.0.2.30"]);
+        yield* waitForAuthoritative(servers, HZ.setB, "CNAME", [TARGET_1]);
+        yield* waitForAuthoritative(servers, HZ.txt, "TXT", [TXT_1]);
+
+        yield* stack.deploy(hetznerProgram(2));
+
+        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual([
+          "192.0.2.31",
+        ]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "AAAA")).toEqual([]);
+        expect(yield* hetznerValues(zoneId, HZ.setA, "CNAME")).toEqual([]);
+        expect(yield* hetznerValues(zoneId, HZ.setB, "CNAME")).toEqual([
+          TARGET_2,
+        ]);
+        expect(yield* hetznerValues(zoneId, HZ.txt, "TXT")).toEqual([TXT_2]);
+        expect(yield* hetznerValues(zoneId, HZ.recordCname, "CNAME")).toEqual(
+          [],
+        );
+        yield* waitForAuthoritative(servers, HZ.cname, "CNAME", [TARGET_2]);
+        yield* waitForAuthoritative(servers, HZ.addresses, "A", ["192.0.2.31"]);
+        yield* waitForAuthoritative(servers, HZ.setA, "CNAME", []);
+        yield* waitForAuthoritative(servers, HZ.txt, "TXT", [TXT_2]);
+
+        yield* stack.destroy();
+
+        expect(yield* waitUntilHetznerZoneGone(zoneId)).toBe("gone");
+      }),
+    {
+      tags: ["provider:dns", "provider:hetzner:dns", "live"],
+      timeout: 300_000,
+    },
   );
 
-  test(
-    "alias to addresses declares an AWS.Route53.RecordList `{id}-Addresses`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const dns = yield* DNS.resolve(
-            AWS.Route53.Adapter({ hostedZoneId: "Z1" }),
-          );
-          yield* dns.alias("Server", {
-            name: "a.example.com",
-            target: { ipv4: ["192.0.2.1"], ipv6: ["2001:db8::1"] },
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        "Server-Addresses": "AWS.Route53.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Server-Addresses")).toEqual({
-        hostedZoneId: "Z1",
-        records: [
-          { name: "a.example.com", type: "A", value: "192.0.2.1" },
-          { name: "a.example.com", type: "AAAA", value: "2001:db8::1" },
-        ],
-      });
-    }),
+  test.provider.skipIf(!hasHetznerCreds)(
+    "a CNAME alias at the pinned zone apex dies with DnsAdapterError",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const alias = yield* failureOf(
+          stack.deploy(
+            Effect.gen(function* () {
+              const dns = yield* DNS.resolve(
+                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
+              );
+              yield* dns.alias("Apex", {
+                name: `${HZ_ZONE.toUpperCase()}.`,
+                target: { hostname: TARGET_1 },
+              });
+            }),
+          ),
+          DNS.DnsAdapterError,
+        );
+        expect(alias).toBeInstanceOf(DNS.DnsAdapterError);
+        expect(alias?.message).toContain("zone apex");
+
+        const aliasSet = yield* failureOf(
+          stack.deploy(
+            Effect.gen(function* () {
+              const dns = yield* DNS.resolve(
+                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
+              );
+              yield* dns.aliasSet("Set", {
+                names: [`www.${HZ_ZONE}`, HZ_ZONE],
+                target: { hostname: TARGET_1 },
+              });
+            }),
+          ),
+          DNS.DnsAdapterError,
+        );
+        expect(aliasSet).toBeInstanceOf(DNS.DnsAdapterError);
+
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:dns", "provider:hetzner:dns", "live"] },
   );
 
-  test(
-    "aliasSet declares an AWS.Route53.Records `{id}` (alias or CNAME)",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(AWS.Route53.Adapter());
-          yield* dns.aliasSet("AliasSet", {
-            target: route53AliasTarget(bucket),
-          });
-          yield* dns.aliasSet("CnameSet", {
-            names: ["x.example.com"],
-            target: hostnameTarget(bucket),
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        AliasSet: "AWS.Route53.Records",
-        CnameSet: "AWS.Route53.Records",
-      });
-      expect(yield* propsOf(compiled, "AliasSet")).toEqual({
-        hostedZoneId: undefined,
-        type: "A",
-        aliasTarget: {
-          hostedZoneId: "<Target.bucketArn>",
-          dnsName: "<Target.bucketName>",
-        },
-      });
-      expect(yield* propsOf(compiled, "CnameSet")).toEqual({
-        hostedZoneId: undefined,
-        names: ["x.example.com"],
-        type: "CNAME",
-        ttl: "300 seconds",
-        records: ["<Target.bucketName>"],
-      });
-    }),
-  );
+  test.provider.skipIf(!hasHetznerCreds)(
+    "Hetzner DNS rejects a sub-zone of the Cloudflare test zone (why the zone is not delegated)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-  test(
-    "records declares an AWS.Route53.RecordList `{id}`, retained on request",
-    Effect.gen(function* () {
-      const records: DNS.DnsRecord[] = [
-        { name: "_v.example.com", type: "TXT", value: "token", ttl: 60 },
-      ];
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const dns = yield* DNS.resolve(
-            AWS.Route53.Adapter({ hostedZoneId: "Z1" }),
-          );
-          yield* dns.records("Validation", { records, retain: true });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Validation: "AWS.Route53.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Validation")).toEqual({
-        hostedZoneId: "Z1",
-        records,
-      });
-      expect(compiled.resources["Validation"]!.RemovalPolicy).toBe("retain");
-    }),
+        const failure = yield* failureOf(
+          stack.deploy(Hetzner.Zone("SubZone", { name: HZ_SUBZONE })),
+          HetznerErrors.UnprocessableEntity,
+        );
+        expect(failure).toBeInstanceOf(HetznerErrors.UnprocessableEntity);
+        expect(failure?.message).toContain("unsupported tld");
+
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:dns", "provider:hetzner:dns", "live"] },
   );
 });
 
-describe("Hetzner.DNS adapter", { tags }, () => {
-  test(
-    "alias to a hostname declares a Hetzner.DNS.RecordList CNAME `{id}-CNAME`",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(
-            Hetzner.DNS.Adapter({ zone: "example.com" }),
-          );
-          yield* dns.alias("Alias", {
-            name: "www.example.com",
-            ipv6: true,
-            target: route53AliasTarget(bucket),
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        "Alias-CNAME": "Hetzner.DNS.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Alias-CNAME")).toEqual({
-        zone: "example.com",
-        names: ["www.example.com"],
-        target: "<Target.bucketName>",
-      });
-    }),
+// ---------------------------------------------------------------------------
+// Unregistered DNS hosts
+// ---------------------------------------------------------------------------
+
+describe("DNS.resolve", () => {
+  cloudflareOnly.test.provider(
+    "a deploy naming a DNS host whose providers() are not in the stack dies with DnsAdapterNotRegistered",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const failure = yield* failureOf(
+          stack.deploy(
+            Effect.gen(function* () {
+              const dns = yield* DNS.resolve(
+                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
+              );
+              yield* dns.records("Records", {
+                records: [{ name: HZ.txt, type: "TXT", value: TXT_1 }],
+              });
+            }),
+          ),
+          DNS.DnsAdapterNotRegistered,
+        );
+        expect(failure).toBeInstanceOf(DNS.DnsAdapterNotRegistered);
+        expect(failure?.type).toBe("Hetzner.DNS");
+        expect(failure?.message).toContain("Hetzner.providers()");
+
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:dns", "live"] },
   );
 
-  test(
-    "alias to addresses declares a Hetzner.DNS.RecordList `{id}-Addresses` (apex allowed)",
-    Effect.gen(function* () {
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const dns = yield* DNS.resolve(
-            Hetzner.DNS.Adapter({ zone: "example.com" }),
-          );
-          yield* dns.alias("Apex", {
-            name: "example.com",
-            target: { ipv4: ["192.0.2.1"] },
-          });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        "Apex-Addresses": "Hetzner.DNS.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Apex-Addresses")).toEqual({
-        zone: "example.com",
-        records: [{ name: "example.com", type: "A", value: "192.0.2.1" }],
-      });
-    }),
-  );
+  test.provider(
+    "a deploy naming an unknown DNS host type dies with DnsAdapterNotRegistered",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-  test(
-    "aliasSet and records declare Hetzner.DNS.RecordLists",
-    Effect.gen(function* () {
-      const records: DNS.DnsRecord[] = [
-        { name: "_v.example.com", type: "TXT", value: "token" },
-      ];
-      const compiled = yield* compile(
-        Effect.gen(function* () {
-          const bucket = yield* target;
-          const dns = yield* DNS.resolve(Hetzner.DNS.Adapter());
-          yield* dns.aliasSet("Set", { target: hostnameTarget(bucket) });
-          yield* dns.records("Verify", { records, retain: true });
-        }),
-      );
-      expect(typesOf(compiled)).toEqual({
-        Target: "AWS.S3.Bucket",
-        "Set-CNAME": "Hetzner.DNS.RecordList",
-        Verify: "Hetzner.DNS.RecordList",
-      });
-      expect(yield* propsOf(compiled, "Set-CNAME")).toEqual({
-        target: "<Target.bucketName>",
-      });
-      expect(yield* propsOf(compiled, "Verify")).toEqual({ records });
-      expect(compiled.resources["Verify"]!.RemovalPolicy).toBe("retain");
-    }),
-  );
+        const failure = yield* failureOf(
+          stack.deploy(
+            Effect.gen(function* () {
+              const dns = yield* DNS.resolve({ type: "Nope.DNS" });
+              yield* dns.records("Records", {
+                records: [{ name: CF.txt, type: "TXT", value: TXT_1 }],
+              });
+            }),
+          ),
+          DNS.DnsAdapterNotRegistered,
+        );
+        expect(failure?.type).toBe("Nope.DNS");
+        expect(failure?.message).toContain("Nope.providers()");
 
-  test(
-    "a CNAME at a pinned zone's apex dies with DnsAdapterError",
-    Effect.gen(function* () {
-      const alias = yield* failureOf(
-        compile(
-          Effect.gen(function* () {
-            const bucket = yield* target;
-            const dns = yield* DNS.resolve(
-              Hetzner.DNS.Adapter({ zone: "example.com" }),
-            );
-            yield* dns.alias("Apex", {
-              name: "Example.com.",
-              target: hostnameTarget(bucket),
-            });
-          }),
-        ),
-      );
-      expect(alias).toBeInstanceOf(DNS.DnsAdapterError);
-      expect((alias as DNS.DnsAdapterError).message).toContain("zone apex");
-
-      const aliasSet = yield* failureOf(
-        compile(
-          Effect.gen(function* () {
-            const bucket = yield* target;
-            const dns = yield* DNS.resolve(
-              Hetzner.DNS.Adapter({ zone: "example.com" }),
-            );
-            yield* dns.aliasSet("Set", {
-              names: ["www.example.com", "example.com"],
-              target: hostnameTarget(bucket),
-            });
-          }),
-        ),
-      );
-      expect(aliasSet).toBeInstanceOf(DNS.DnsAdapterError);
-    }),
+        yield* stack.destroy();
+      }),
+    { tags: ["provider:dns", "live"] },
   );
 });

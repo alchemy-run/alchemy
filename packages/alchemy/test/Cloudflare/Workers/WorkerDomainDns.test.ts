@@ -1,396 +1,51 @@
 /**
- * `Cloudflare.Worker` custom domains whose DNS lives outside Cloudflare,
- * served through Cloudflare for SaaS (`domain.dns` = a non-Cloudflare
- * adapter).
+ * `Cloudflare.Worker` `domain.dns`, deployed live:
  *
- * The composition tests compile real stack programs (registration only —
- * no plan, no apply, no cloud calls) and assert on the declared resources.
- * The entitlement probe runs ungated; the full live lifecycle is gated
- * behind CLOUDFLARE_TEST_SAAS=1 + AWS_TEST_DOMAIN because Cloudflare for
- * SaaS is not provisioned on the test account (see the probe).
+ * - a Cloudflare adapter keeps the native custom-domain path;
+ * - invalid SaaS configurations die with `WorkerDomainDnsError` on deploy;
+ * - an ungated Cloudflare for SaaS entitlement probe;
+ * - the full Cloudflare for SaaS lifecycle (a Worker on a Route 53
+ *   hostname), gated behind CLOUDFLARE_TEST_SAAS=1 because Cloudflare for
+ *   SaaS is not provisioned on the test account (see the probe).
  */
-import { AlchemyContext } from "@/AlchemyContext";
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { customHostnameVerificationRecords } from "@/Cloudflare/Workers/WorkerDomainDns";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Output from "@/Output";
-import * as Stack from "@/Stack";
-import { Stage } from "@/Stage";
-import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import * as pathe from "pathe";
+import { expectUrlContains } from "../Utils/Http.ts";
+import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
 });
 
 const main = pathe.resolve(import.meta.dirname, "fixtures", "saas-worker.ts");
-
-const SAAS_ZONE_ID = "0123456789abcdef0123456789abcdef";
-const HOSTED_ZONE_ID = "Z0000000000000";
-
-interface CompiledResource {
-  Type: string;
-  Props: any;
-}
-
-/**
- * Compile a stack program (registration only) and return the declared
- * resources keyed by FQN. The stack gets no resource providers, only the
- * DNS adapter registrations `AWS.providers()` / `Cloudflare.providers()`
- * contribute.
- */
-const compileStack = (
-  build: Effect.Effect<any, any, any>,
-): Effect.Effect<Record<string, CompiledResource>> =>
-  Effect.scoped(
-    (
-      build.pipe(
-        Effect.provide(
-          Layer.mergeAll(AWS.Route53.AdapterLive, Cloudflare.DNS.AdapterLive),
-        ),
-      ) as Effect.Effect<any, any, never>
-    ).pipe(
-      Stack.make({
-        name: "worker-domain-dns",
-        providers: Layer.empty,
-        state: inMemoryState(),
-      } as any),
-      Effect.map(
-        (compiled: any) =>
-          compiled.resources as Record<string, CompiledResource>,
-      ),
-    ),
-  ).pipe(Effect.provideService(Stage, "test")) as Effect.Effect<
-    Record<string, CompiledResource>
-  >;
-
-/** Evaluate a compiled prop against fake upstream attributes. */
-const evaluate = (value: unknown, upstream: Record<string, unknown>) =>
-  Output.evaluate(value, upstream).pipe(
-    Effect.provide(inMemoryState()),
-    Effect.orDie,
-  );
-
-const typesOf = (resources: Record<string, CompiledResource>) =>
-  Object.values(resources).map((resource) => resource.Type);
-
-/** The defect a failed compile died with. */
-const compileDefect = (build: Effect.Effect<any, any, any>) =>
-  compileStack(build).pipe(
-    Effect.exit,
-    Effect.map((exit) =>
-      Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
-    ),
-  );
-
-const route53Domain = {
-  name: "app.example.com",
-  aliases: ["www.example.com"],
-  zoneId: SAAS_ZONE_ID,
-  cnameTarget: "customers.saas.example",
-  dns: AWS.Route53.Adapter({ hostedZoneId: HOSTED_ZONE_ID }),
-};
-
-describe(
-  "Cloudflare.Worker domain.dns (composition)",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:workers",
-      "provider:cloudflare:customhostname",
-      "provider:aws",
-      "local",
-    ],
-  },
-  () => {
-    test(
-      "a Route 53 domain composes custom hostnames, Route 53 records and SaaS-zone routes",
-      Effect.gen(function* () {
-        const resources = yield* compileStack(
-          Cloudflare.Worker("Api", {
-            main,
-            routes: [{ pattern: "api.saas.example/*", zoneId: SAAS_ZONE_ID }],
-            domain: route53Domain,
-          }),
-        );
-
-        // Fake attributes of the deployed custom hostnames.
-        const upstream = Object.fromEntries(
-          ["app.example.com", "www.example.com"].map((hostname) => [
-            `Api/CustomHostname-${hostname.replaceAll(".", "-")}`,
-            {
-              hostname,
-              ownershipVerification: {
-                name: `_cf-custom-hostname.${hostname}`,
-                type: "txt",
-                value: `ownership-${hostname}`,
-              },
-              validationRecords: [
-                {
-                  txtName: `_acme-challenge.${hostname}`,
-                  txtValue: `dcv-${hostname}`,
-                },
-              ],
-            },
-          ]),
-        );
-
-        for (const [hostname, key] of [
-          ["app.example.com", "app-example-com"],
-          ["www.example.com", "www-example-com"],
-        ] as const) {
-          const customHostname = resources[`Api/CustomHostname-${key}`]!;
-          expect(customHostname.Type).toBe(
-            "Cloudflare.CustomHostname.CustomHostname",
-          );
-          expect(customHostname.Props.zoneId).toBe(SAAS_ZONE_ID);
-          expect(customHostname.Props.hostname).toBe(hostname);
-          expect(customHostname.Props.ssl).toEqual({
-            method: "txt",
-            type: "dv",
-          });
-
-          const verification = resources[`Api/Hostname-${key}-Verification`]!;
-          expect(verification.Type).toBe("AWS.Route53.RecordList");
-          expect(verification.Props.hostedZoneId).toBe(HOSTED_ZONE_ID);
-          expect(yield* evaluate(verification.Props.records, upstream)).toEqual(
-            [
-              {
-                name: `_cf-custom-hostname.${hostname}`,
-                type: "TXT",
-                value: `ownership-${hostname}`,
-              },
-              {
-                name: `_acme-challenge.${hostname}`,
-                type: "TXT",
-                value: `dcv-${hostname}`,
-              },
-            ],
-          );
-
-          const cname = resources[`Api/Hostname-${key}`]!;
-          expect(cname.Type).toBe("AWS.Route53.Record");
-          expect(cname.Props).toMatchObject({
-            hostedZoneId: HOSTED_ZONE_ID,
-            name: hostname,
-            type: "CNAME",
-            records: ["customers.saas.example"],
-          });
-        }
-
-        const worker = resources["Api"]!;
-        expect(worker.Type).toBe("Cloudflare.Worker");
-        expect("domain" in worker.Props).toBe(false);
-        // Route patterns derive from the custom hostnames, so the Worker
-        // (and its routes) deploy after them.
-        expect(yield* evaluate(worker.Props.routes, upstream)).toEqual([
-          { pattern: "api.saas.example/*", zoneId: SAAS_ZONE_ID },
-          { pattern: "app.example.com/*", zoneId: SAAS_ZONE_ID },
-          { pattern: "www.example.com/*", zoneId: SAAS_ZONE_ID },
-        ]);
-      }),
-    );
-
-    test(
-      "without `dns` the native custom-domain props are untouched",
-      Effect.gen(function* () {
-        const domain = {
-          name: "app.example.com",
-          aliases: ["www.example.com"],
-          redirects: ["old.example.com"],
-          zoneId: SAAS_ZONE_ID,
-        };
-        const resources = yield* compileStack(
-          Cloudflare.Worker("Api", { main, domain }),
-        );
-        expect(typesOf(resources)).not.toContain(
-          "Cloudflare.CustomHostname.CustomHostname",
-        );
-        expect(resources["Api"]!.Props.domain).toBe(domain);
-        expect(resources["Api"]!.Props.routes).toBeUndefined();
-      }),
-    );
-
-    test(
-      "a Cloudflare adapter keeps the native path and drops `dns`",
-      Effect.gen(function* () {
-        const resources = yield* compileStack(
-          Cloudflare.Worker("Api", {
-            main,
-            domain: {
-              name: "app.example.com",
-              dns: Cloudflare.DNS.Adapter({ zone: "example.com" }),
-            },
-          }),
-        );
-        expect(typesOf(resources)).not.toContain(
-          "Cloudflare.CustomHostname.CustomHostname",
-        );
-        expect(resources["Api"]!.Props.domain).toEqual({
-          name: "app.example.com",
-          zone: "example.com",
-        });
-      }),
-    );
-
-    test(
-      "a bare Worker tag without its Layer still registers undefined props",
-      Effect.gen(function* () {
-        // `Plan.make` fails fast on `undefined` platform props (#1054); the
-        // `transformProps` hook must not turn them into `{}`.
-        // Bare-tag form (no props); the typed overloads require props.
-        class Bare extends (Cloudflare.Worker as any)()("Bare") {}
-        const resources = yield* compileStack(
-          Bare as unknown as Effect.Effect<unknown>,
-        );
-        expect(resources["Bare"]!.Props).toBeUndefined();
-      }),
-    );
-
-    test(
-      "a Worker running locally under `alchemy dev` declares no SaaS resources",
-      Effect.gen(function* () {
-        const ctx = yield* AlchemyContext;
-        const resources = yield* compileStack(
-          Cloudflare.Worker("Api", { main, domain: route53Domain }),
-        ).pipe(Effect.provideService(AlchemyContext, { ...ctx, dev: true }));
-        expect(typesOf(resources)).not.toContain(
-          "Cloudflare.CustomHostname.CustomHostname",
-        );
-        expect(resources["Api"]!.Props.domain).toBe(route53Domain);
-      }),
-    );
-
-    test(
-      "`redirects` with a non-Cloudflare `dns` dies with WorkerDomainDnsError",
-      Effect.gen(function* () {
-        const defect = yield* compileDefect(
-          Cloudflare.Worker("Api", {
-            main,
-            domain: { ...route53Domain, redirects: ["old.example.com"] },
-          }),
-        );
-        expect(defect).toBeInstanceOf(Cloudflare.WorkerDomainDnsError);
-        expect((defect as Cloudflare.WorkerDomainDnsError).message).toContain(
-          "domain.redirects",
-        );
-      }),
-    );
-
-    test(
-      "`previews` with a non-Cloudflare `dns` dies with WorkerDomainDnsError",
-      Effect.gen(function* () {
-        const defect = yield* compileDefect(
-          Cloudflare.Worker("Api", {
-            main,
-            domain: { ...route53Domain, previews: true },
-          }),
-        );
-        expect(defect).toBeInstanceOf(Cloudflare.WorkerDomainDnsError);
-        expect((defect as Cloudflare.WorkerDomainDnsError).message).toContain(
-          "domain.previews",
-        );
-      }),
-    );
-
-    test(
-      "a missing SaaS zone or cnameTarget dies with WorkerDomainDnsError",
-      Effect.gen(function* () {
-        const { zoneId: _zoneId, ...withoutZone } = route53Domain;
-        const noZone = yield* compileDefect(
-          Cloudflare.Worker("Api", { main, domain: withoutZone }),
-        );
-        expect(noZone).toBeInstanceOf(Cloudflare.WorkerDomainDnsError);
-        expect((noZone as Cloudflare.WorkerDomainDnsError).message).toContain(
-          "domain.zoneId",
-        );
-
-        const { cnameTarget: _cnameTarget, ...withoutTarget } = route53Domain;
-        const noTarget = yield* compileDefect(
-          Cloudflare.Worker("Api", { main, domain: withoutTarget }),
-        );
-        expect(noTarget).toBeInstanceOf(Cloudflare.WorkerDomainDnsError);
-        expect((noTarget as Cloudflare.WorkerDomainDnsError).message).toContain(
-          "domain.cnameTarget",
-        );
-      }),
-    );
-
-    test(
-      "verification records collect the ownership and DCV TXT records",
-      Effect.sync(() => {
-        expect(
-          customHostnameVerificationRecords(
-            {
-              name: "_cf-custom-hostname.app.example.com",
-              type: "txt",
-              value: "ownership-token",
-            },
-            [
-              {
-                cname: undefined,
-                cnameTarget: undefined,
-                emails: undefined,
-                httpBody: undefined,
-                httpUrl: undefined,
-                status: "pending",
-                txtName: "_acme-challenge.app.example.com",
-                txtValue: "dcv-token",
-              },
-              {
-                cname: undefined,
-                cnameTarget: undefined,
-                emails: undefined,
-                httpBody: undefined,
-                httpUrl: undefined,
-                status: "pending",
-                txtName: undefined,
-                txtValue: undefined,
-              },
-            ],
-          ),
-        ).toEqual([
-          {
-            name: "_cf-custom-hostname.app.example.com",
-            type: "TXT",
-            value: "ownership-token",
-          },
-          {
-            name: "_acme-challenge.app.example.com",
-            type: "TXT",
-            value: "dcv-token",
-          },
-        ]);
-        expect(customHostnameVerificationRecords(undefined, undefined)).toEqual(
-          [],
-        );
-      }),
-    );
-  },
-);
-
-// ---------------------------------------------------------------------------
-// Live: entitlement probe (ungated) + full lifecycle (gated)
-// ---------------------------------------------------------------------------
+const MARKER = "worker-dns-ok";
 
 const zoneName =
   process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const PROBE_HOSTNAME = "alchemy-worker-saas-probe.alchemy-saas-example.com";
+
+// Deterministic hostnames under this suite's `worker-dns` prefix.
+const NATIVE_HOSTNAME = `worker-dns.${zoneName}`;
+const INVALID_HOSTNAME = `worker-dns-invalid.${zoneName}`;
+const PROBE_HOSTNAME = "worker-dns-probe.alchemy-saas-example.com";
+const ORIGIN_NAME = `worker-dns-origin.${zoneName}`;
+const R53_ZONE_NAME = `worker-dns-r53.${zoneName}`;
+const SAAS_HOSTNAME = `app.${R53_ZONE_NAME}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -403,8 +58,34 @@ const resolveZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-// A freshly minted scoped token 403s intermittently while it propagates.
-const forbiddenBlips = Schedule.exponential("500 millis");
+// Rate-limit blips and freshly minted scoped tokens that 403 while they
+// propagate.
+const transientBlips = Schedule.exponential("500 millis");
+
+class StillPresent extends Data.TaggedError("StillPresent")<{
+  readonly what: string;
+}> {}
+
+class NotPublished extends Data.TaggedError("NotPublished")<{
+  readonly server: string;
+  readonly hostname: string;
+}> {}
+
+/** The Worker custom-domain attachments of `hostname`. */
+const listAttachments = (hostname: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    return yield* workers.listDomains({ accountId, hostname }).pipe(
+      Effect.map((r) =>
+        (r.result ?? []).filter((d) => d.hostname === hostname),
+      ),
+      Effect.retry({
+        while: (e) => e._tag === "TooManyRequests",
+        schedule: transientBlips,
+        times: 8,
+      }),
+    );
+  });
 
 const findCustomHostname = (zoneId: string, hostname: string) =>
   customHostnames.listCustomHostnames
@@ -415,167 +96,376 @@ const findCustomHostname = (zoneId: string, hostname: string) =>
       Effect.map((chunk) => Array.from(chunk)[0]),
       Effect.retry({
         while: (e) => e._tag === "Forbidden",
-        schedule: forbiddenBlips,
+        schedule: transientBlips,
         times: 8,
       }),
     );
 
-describe(
-  "Cloudflare.Worker domain.dns (live)",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:workers",
-      "provider:cloudflare:customhostname",
-      "live",
-    ],
-  },
-  () => {
-    // Cloudflare for SaaS needs a one-time dashboard enablement (payment on
-    // file). On a zone without it, creating a custom hostname is rejected
-    // with the typed `SaasQuotaNotAllocated` (code 1404). On an entitled
-    // zone the probe hostname is created and removed again.
-    test.provider(
-      "custom hostname creation on the test zone is typed (entitlement probe)",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const zoneId = yield* resolveZoneId;
-          const created = yield* customHostnames
-            .createCustomHostname({
-              zoneId,
-              hostname: PROBE_HOSTNAME,
-              ssl: { method: "txt", type: "dv" },
-            })
-            .pipe(
-              Effect.map((hostname) => ({ entitled: true, hostname }) as const),
-              Effect.catchTag("SaasQuotaNotAllocated", (error) =>
-                Effect.succeed({ entitled: false, error } as const),
-              ),
-            );
-          yield* Effect.logInfo(
-            created.entitled
-              ? `Cloudflare for SaaS is enabled on ${zoneName}`
-              : `Cloudflare for SaaS is not enabled on ${zoneName}: ${created.error.message}`,
-          );
-          if (!created.entitled) {
-            expect(created.error._tag).toBe("SaasQuotaNotAllocated");
-          } else {
-            yield* customHostnames
-              .deleteCustomHostname({
-                zoneId,
-                customHostnameId: created.hostname.id,
-              })
-              .pipe(
-                Effect.catchTag("CustomHostnameNotFound", () => Effect.void),
-              );
-            expect(yield* findCustomHostname(zoneId, PROBE_HOSTNAME)).toBe(
-              undefined,
-            );
-          }
-          yield* stack.destroy();
-        }),
-      { timeout: 60_000 },
-    );
+const listWorkerRoutes = (zoneId: string, pattern: string) =>
+  workers.listRoutes.items({ zoneId }).pipe(
+    Stream.filter((route) => route.pattern === pattern),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+  );
 
-    test.provider(
-      "a SaaS zone given by name is looked up in the account",
-      () =>
-        Effect.gen(function* () {
-          const zoneId = yield* resolveZoneId;
-          const { zoneId: _zoneId, ...byName } = route53Domain;
-          const resources = yield* compileStack(
-            Cloudflare.Worker("Api", {
+/** Retry `check` (bounded) until it stops failing with `StillPresent`. */
+const waitUntilGone = <E, R>(check: Effect.Effect<void, E, R>) =>
+  check.pipe(
+    Effect.retry({
+      while: (e) => e instanceof StillPresent,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
+
+/**
+ * Wait until every authoritative nameserver answers `lookup` for
+ * `hostname`, so the first HTTPS request never resolves (and negatively
+ * caches) the hostname before it exists.
+ */
+const waitForAuthoritative = (
+  nameServers: readonly string[],
+  hostname: string,
+  lookup: (resolver: Resolver, hostname: string) => Promise<string[]>,
+) =>
+  Effect.gen(function* () {
+    const servers = (yield* Effect.forEach(nameServers, (ns) =>
+      Effect.tryPromise(() => resolve4(ns)).pipe(
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        Effect.orDie,
+      ),
+    )).flat();
+    yield* Effect.forEach(servers, (server) =>
+      Effect.gen(function* () {
+        const resolver = yield* Effect.sync(() => {
+          const r = new Resolver();
+          r.setServers([server]);
+          return r;
+        });
+        const answers = yield* Effect.tryPromise(() =>
+          lookup(resolver, hostname),
+        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        if (answers.length === 0) {
+          return yield* Effect.fail(new NotPublished({ server, hostname }));
+        }
+      }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
+      ),
+    );
+  });
+
+/** Die defects of a failed exit. */
+const defectsOf = <A, E>(exit: Exit.Exit<A, E>): unknown[] =>
+  Exit.isFailure(exit)
+    ? exit.cause.reasons.flatMap((reason) =>
+        reason._tag === "Die" ? [reason.defect] : [],
+      )
+    : [];
+
+const workerDomainDnsError = (exit: Exit.Exit<unknown, unknown>) =>
+  defectsOf(exit).find(
+    (defect): defect is Cloudflare.WorkerDomainDnsError =>
+      defect instanceof Cloudflare.WorkerDomainDnsError,
+  );
+
+const tags = [
+  "provider:cloudflare",
+  "provider:cloudflare:workers",
+  "provider:cloudflare:customhostname",
+  "live",
+];
+
+describe("Cloudflare.Worker domain.dns", { tags }, () => {
+  test.provider(
+    "a Cloudflare adapter attaches a native custom domain that serves the Worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* stack.destroy();
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("NativeDomainWorker", {
               main,
-              domain: { ...byName, zoneName },
-            }),
-          );
-          expect(
-            resources["Api/CustomHostname-app-example-com"]!.Props.zoneId,
-          ).toBe(zoneId);
-          expect(resources["Api"]!.Props.routes[0].zoneId).toBe(zoneId);
-        }),
-      { timeout: 60_000 },
-    );
+              domain: { name: NATIVE_HOSTNAME, dns: Cloudflare.DNS.Adapter() },
+            });
+          }),
+        );
 
-    const awsTestDomain = process.env.AWS_TEST_DOMAIN;
-    const SAAS_HOSTNAME = `alchemy-worker-saas.${awsTestDomain}`;
-    const ORIGIN_NAME = `alchemy-worker-saas-origin.${zoneName}`;
+        // The native path: the hostname is the Worker's canonical URL and
+        // domain output — a SaaS-served domain would keep workers.dev.
+        expect(worker.url).toBe(`https://${NATIVE_HOSTNAME}`);
+        expect(worker.domain).toEqual({
+          name: NATIVE_HOSTNAME,
+          aliases: [],
+          redirects: [],
+        });
 
-    class NotServing extends Data.TaggedError("NotServing")<{
-      readonly status: number;
-    }> {}
+        // Out-of-band: the custom domain is attached to the script.
+        const attachments = yield* listAttachments(NATIVE_HOSTNAME);
+        expect(attachments.map((d) => d.service)).toEqual([worker.workerName]);
 
-    test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SAAS || !awsTestDomain)(
-      "a Worker on a Route 53 hostname serves through Cloudflare for SaaS",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const zoneId = yield* resolveZoneId;
+        const nameServers = yield* Effect.tryPromise(() =>
+          resolveNs(zoneName),
+        ).pipe(Effect.orDie);
+        yield* waitForAuthoritative(nameServers, NATIVE_HOSTNAME, (r, h) =>
+          r.resolve4(h),
+        );
+        yield* expectUrlContains(`https://${NATIVE_HOSTNAME}/`, MARKER, {
+          label: "native custom domain serves the worker",
+          timeout: "180 seconds",
+        });
 
-          const deployed = yield* stack.deploy(
+        yield* stack.destroy();
+        yield* waitUntilGone(
+          listAttachments(NATIVE_HOSTNAME).pipe(
+            Effect.flatMap((remaining) =>
+              remaining.length === 0
+                ? Effect.void
+                : Effect.fail(
+                    new StillPresent({ what: `domain ${NATIVE_HOSTNAME}` }),
+                  ),
+            ),
+          ),
+        );
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
+    "`redirects` with a Route 53 adapter fails the deploy with WorkerDomainDnsError",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const zoneId = yield* resolveZoneId;
+
+        const exit = yield* stack
+          .deploy(
             Effect.gen(function* () {
-              const origin = yield* Cloudflare.DNS.Record("SaasOrigin", {
-                zoneId,
-                name: ORIGIN_NAME,
-                type: "AAAA",
-                content: "100::",
-                proxied: true,
-              });
-              const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
-                "SaasFallback",
-                { zoneId, origin: origin.name },
-              );
-              const worker = yield* Cloudflare.Worker("SaasWorker", {
+              return yield* Cloudflare.Worker("RedirectsWorker", {
                 main,
                 domain: {
-                  name: SAAS_HOSTNAME,
+                  name: INVALID_HOSTNAME,
+                  redirects: [`old-${INVALID_HOSTNAME}`],
                   zoneId,
-                  cnameTarget: fallback.origin,
+                  cnameTarget: ORIGIN_NAME,
                   dns: AWS.Route53.Adapter(),
                 },
               });
-              return { workerName: worker.workerName };
             }),
-          );
+          )
+          .pipe(Effect.exit);
 
-          // Out-of-band: the custom hostname and the SaaS-zone route exist.
-          const customHostname = yield* findCustomHostname(
+        expect(Exit.isFailure(exit)).toBe(true);
+        const error = workerDomainDnsError(exit);
+        expect(error?.workerId).toBe("RedirectsWorker");
+        expect(error?.message).toContain("domain.redirects");
+
+        yield* stack.destroy();
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "a missing `cnameTarget` fails the deploy with WorkerDomainDnsError",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const zoneId = yield* resolveZoneId;
+
+        const exit = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("NoTargetWorker", {
+                main,
+                domain: {
+                  name: INVALID_HOSTNAME,
+                  zoneId,
+                  dns: AWS.Route53.Adapter(),
+                },
+              });
+            }),
+          )
+          .pipe(Effect.exit);
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        const error = workerDomainDnsError(exit);
+        expect(error?.workerId).toBe("NoTargetWorker");
+        expect(error?.message).toContain("domain.cnameTarget");
+
+        yield* stack.destroy();
+      }),
+    { timeout: 120_000 },
+  );
+
+  // Cloudflare for SaaS needs a one-time dashboard enablement (payment on
+  // file). On a zone without it, creating a custom hostname is rejected
+  // with the typed `SaasQuotaNotAllocated` (code 1404). On an entitled
+  // zone the probe hostname is created and removed again.
+  test.provider(
+    "custom hostname creation on the test zone is typed (entitlement probe)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const zoneId = yield* resolveZoneId;
+        const created = yield* customHostnames
+          .createCustomHostname({
             zoneId,
-            SAAS_HOSTNAME,
-          );
-          expect(customHostname?.hostname).toBe(SAAS_HOSTNAME);
-          const routes = yield* workers.listRoutes.items({ zoneId }).pipe(
-            Stream.filter((route) => route.pattern === `${SAAS_HOSTNAME}/*`),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
-          expect(routes.map((route) => route.script)).toEqual([
-            deployed.workerName,
-          ]);
-
-          // Ownership + DCV complete asynchronously once Route 53 serves
-          // the TXT records and the CNAME — bounded retry until it serves.
-          const client = yield* HttpClient.HttpClient;
-          const response = yield* client.get(`https://${SAAS_HOSTNAME}/`).pipe(
-            Effect.flatMap((res) =>
-              res.status === 200
-                ? Effect.succeed(res)
-                : Effect.fail(new NotServing({ status: res.status })),
+            hostname: PROBE_HOSTNAME,
+            ssl: { method: "txt", type: "dv" },
+          })
+          .pipe(
+            Effect.map((hostname) => ({ entitled: true, hostname }) as const),
+            Effect.catchTag("SaasQuotaNotAllocated", (error) =>
+              Effect.succeed({ entitled: false, error } as const),
             ),
-            Effect.retry({
-              schedule: Schedule.spaced("10 seconds"),
-              times: 18,
-            }),
           );
-          expect(yield* response.text).toBe("saas-ok");
-
-          yield* stack.destroy();
-          expect(yield* findCustomHostname(zoneId, SAAS_HOSTNAME)).toBe(
+        yield* Effect.logInfo(
+          created.entitled
+            ? `Cloudflare for SaaS is enabled on ${zoneName}`
+            : `Cloudflare for SaaS is not enabled on ${zoneName}: ${created.error.message}`,
+        );
+        if (!created.entitled) {
+          expect(created.error._tag).toBe("SaasQuotaNotAllocated");
+        } else {
+          yield* customHostnames
+            .deleteCustomHostname({
+              zoneId,
+              customHostnameId: created.hostname.id,
+            })
+            .pipe(Effect.catchTag("CustomHostnameNotFound", () => Effect.void));
+          expect(yield* findCustomHostname(zoneId, PROBE_HOSTNAME)).toBe(
             undefined,
           );
-        }),
-      { timeout: 300_000 },
-    );
-  },
-);
+        }
+        yield* stack.destroy();
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SAAS)(
+    "a Worker on a Route 53 hostname serves through Cloudflare for SaaS",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* stack.destroy();
+        const zoneId = yield* resolveZoneId;
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            // The SaaS zone's fallback origin: an originless proxied record.
+            const origin = yield* Cloudflare.DNS.Record("SaasOrigin", {
+              zoneId,
+              name: ORIGIN_NAME,
+              type: "AAAA",
+              content: "100::",
+              proxied: true,
+            });
+            const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+              "SaasFallback",
+              { zoneId, origin: origin.name },
+            );
+
+            // A Route 53 zone publicly delegated from the Cloudflare zone:
+            // the custom hostname's DNS host.
+            const r53Zone = yield* AWS.Route53.HostedZone("R53Zone", {
+              name: R53_ZONE_NAME,
+              forceDestroy: true,
+            });
+            for (const index of [0, 1, 2, 3]) {
+              yield* Cloudflare.DNS.Record(`R53Delegation${index}`, {
+                zoneId,
+                name: R53_ZONE_NAME,
+                type: "NS",
+                content: Output.map(
+                  r53Zone.nameServers,
+                  (nameServers) => nameServers[index]!,
+                ),
+              });
+            }
+
+            const worker = yield* Cloudflare.Worker("SaasWorker", {
+              main,
+              domain: {
+                name: SAAS_HOSTNAME,
+                zoneId,
+                cnameTarget: fallback.origin,
+                dns: AWS.Route53.Adapter({ hostedZoneId: r53Zone.id }),
+              },
+            });
+            return {
+              workerName: worker.workerName,
+              hostedZoneId: r53Zone.id,
+              nameServers: r53Zone.nameServers,
+            };
+          }),
+        );
+
+        // Out-of-band: the custom hostname and the SaaS-zone route exist.
+        const customHostname = yield* findCustomHostname(zoneId, SAAS_HOSTNAME);
+        expect(customHostname?.hostname).toBe(SAAS_HOSTNAME);
+        const routes = yield* listWorkerRoutes(zoneId, `${SAAS_HOSTNAME}/*`);
+        expect(routes.map((route) => route.script)).toEqual([
+          deployed.workerName,
+        ]);
+
+        // Out-of-band: Route 53 publishes the CNAME to the fallback origin
+        // and the ownership-verification TXT record.
+        const { ResourceRecordSets = [] } =
+          yield* route53.listResourceRecordSets({
+            HostedZoneId: deployed.hostedZoneId,
+          });
+        const recordSet = (name: string, type: string) =>
+          ResourceRecordSets.find(
+            (set) => set.Name === `${name}.` && set.Type === type,
+          );
+        expect(
+          recordSet(SAAS_HOSTNAME, "CNAME")?.ResourceRecords?.map(
+            (record) => record.Value,
+          ),
+        ).toEqual([ORIGIN_NAME]);
+        expect(
+          recordSet(`_cf-custom-hostname.${SAAS_HOSTNAME}`, "TXT"),
+        ).toBeDefined();
+
+        // Ownership + DCV complete asynchronously once Route 53 serves the
+        // TXT records and the CNAME — bounded retry until it serves.
+        yield* waitForAuthoritative(
+          deployed.nameServers,
+          SAAS_HOSTNAME,
+          (r, h) => r.resolveCname(h),
+        );
+        yield* expectUrlContains(`https://${SAAS_HOSTNAME}/`, MARKER, {
+          label: "SaaS custom hostname serves the worker",
+          timeout: "240 seconds",
+        });
+
+        yield* stack.destroy();
+        yield* waitUntilGone(
+          findCustomHostname(zoneId, SAAS_HOSTNAME).pipe(
+            Effect.flatMap((remaining) =>
+              remaining === undefined
+                ? Effect.void
+                : Effect.fail(
+                    new StillPresent({ what: `hostname ${SAAS_HOSTNAME}` }),
+                  ),
+            ),
+          ),
+        );
+        expect(
+          yield* listWorkerRoutes(zoneId, `${SAAS_HOSTNAME}/*`),
+        ).toHaveLength(0);
+        yield* waitUntilGone(
+          route53.getHostedZone({ Id: deployed.hostedZoneId }).pipe(
+            Effect.flatMap(() =>
+              Effect.fail(new StillPresent({ what: `zone ${R53_ZONE_NAME}` })),
+            ),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.void),
+          ),
+        );
+        yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
+      }),
+    { timeout: 600_000 },
+  );
+});
