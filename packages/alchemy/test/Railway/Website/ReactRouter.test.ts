@@ -1,4 +1,5 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
 import { suitePartition } from "../suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
@@ -31,14 +32,16 @@ const fixtureEntries = [
   "public",
 ];
 
+const readService = Query.fn((id: string) => ({
+  deletedAt: RailwayApi.service({ id }).deletedAt,
+}));
+
 const waitUntilGone = (serviceId: string) =>
-  railway.service({ id: serviceId }, { deletedAt: true }).pipe(
+  readService(serviceId).pipe(
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

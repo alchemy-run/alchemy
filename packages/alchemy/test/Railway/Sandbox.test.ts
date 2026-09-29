@@ -1,4 +1,5 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
 import { suitePartition } from "./suiteProject.ts";
@@ -19,15 +20,58 @@ const logLevel = Effect.provideService(
 
 const isGoneStatus = (status: string | undefined) => status === "DESTROYED";
 
+// Railway answers a missing sandbox with `null`, not an error.
+const readSandboxStatus = Query.fn((environmentId: string, id: string) =>
+  RailwayApi.sandbox({ environmentId, id }).pipe(
+    Query.map((sandbox) => ({ status: sandbox.status })),
+  ),
+);
+
+const readSandbox = Query.fn((environmentId: string, id: string) =>
+  RailwayApi.sandbox({ environmentId, id }).pipe(
+    Query.map((sandbox) => ({
+      id: sandbox.id,
+      environmentId: sandbox.environmentId,
+      status: sandbox.status,
+      idleTimeoutMinutes: sandbox.idleTimeoutMinutes,
+    })),
+  ),
+);
+
+const readSandboxDomains = Query.fn((environmentId: string, id: string) =>
+  RailwayApi.sandbox({ environmentId, id }).pipe(
+    Query.map((sandbox) => ({
+      domains: sandbox.domains.pipe(
+        Query.map((domain) => ({
+          domain: domain.domain,
+          port: domain.port,
+          prefix: domain.prefix,
+        })),
+      ),
+      networkIsolation: sandbox.networkIsolation,
+    })),
+  ),
+);
+
+const createSandbox = Query.fn(
+  (input: { environmentId: string; idleTimeoutMinutes: number }) => {
+    const sandbox = RailwayApi.sandboxCreate({ input });
+    return { environmentId: sandbox.environmentId, id: sandbox.id };
+  },
+);
+
+const destroySandbox = Query.fn((environmentId: string, id: string) =>
+  RailwayApi.sandboxDestroy({ environmentId, id }).pipe(
+    Query.map((sandbox) => ({ id: sandbox.id })),
+  ),
+);
+
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
-  railway.sandbox({ environmentId, id: sandboxId }, { status: true }).pipe(
+  readSandboxStatus(environmentId, sandboxId).pipe(
     Effect.map((sandbox) =>
       sandbox === null || isGoneStatus(sandbox.status)
         ? ("gone" as const)
         : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
     ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -37,8 +81,7 @@ const waitUntilGone = (environmentId: string, sandboxId: string) =>
   );
 
 const destroyLive = (environmentId: string, sandboxId: string) =>
-  railway.sandboxDestroy({ environmentId, id: sandboxId }, { id: true }).pipe(
-    railway.catchTags(["RailwayNotFound"], () => Effect.void),
+  destroySandbox(environmentId, sandboxId).pipe(
     Effect.flatMap(() => waitUntilGone(environmentId, sandboxId)),
   );
 
@@ -56,15 +99,10 @@ test.provider(
       );
 
       const result = yield* Effect.result(
-        railway.createSandbox(
-          {
-            input: {
-              environmentId: created.environment.environmentId,
-              idleTimeoutMinutes: 5,
-            },
-          },
-          { environmentId: true, id: true },
-        ),
+        createSandbox({
+          environmentId: created.environment.environmentId,
+          idleTimeoutMinutes: 5,
+        }),
       );
 
       if (Result.isSuccess(result)) {
@@ -76,7 +114,7 @@ test.provider(
         return;
       }
 
-      expect(railway.isErrorTag(result.failure, "RailwayForbidden")).toBe(true);
+      expect(result.failure._tag === "RailwayForbidden").toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -122,17 +160,9 @@ test.provider(
       expect(created.box.idleTimeoutMinutes).toEqual(5);
       expect(created.box.domains).toEqual([]);
 
-      const fetched = yield* railway.sandbox(
-        {
-          environmentId: created.box.environmentId,
-          id: created.box.sandboxId,
-        },
-        {
-          id: true,
-          environmentId: true,
-          status: true,
-          idleTimeoutMinutes: true,
-        },
+      const fetched = yield* readSandbox(
+        created.box.environmentId,
+        created.box.sandboxId,
       );
       if (fetched === null) {
         return yield* Effect.fail(
@@ -212,12 +242,9 @@ test.provider(
       expect(box.networkIsolation).toBe("PRIVATE");
       expect(box.domains).toHaveLength(1);
       expect(box.domains[0]?.port).toBe(8080);
-      const observed = yield* railway.sandbox(
-        { environmentId: box.environmentId, id: box.sandboxId },
-        {
-          domains: { domain: true, port: true, prefix: true },
-          networkIsolation: true,
-        },
+      const observed = yield* readSandboxDomains(
+        box.environmentId,
+        box.sandboxId,
       );
       expect(observed?.domains).toEqual(box.domains);
       const started = yield* Railway.execSandbox({

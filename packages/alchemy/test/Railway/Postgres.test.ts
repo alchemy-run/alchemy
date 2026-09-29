@@ -1,6 +1,7 @@
 import { RailwayAuth } from "@/Railway/AuthProvider.ts";
 import { fromAuthProvider } from "@/Railway/Credentials.ts";
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
@@ -30,7 +31,12 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
+    Effect.provide(
+      Layer.merge(
+        GraphQLLive,
+        fromAuthProvider().pipe(Layer.provide(RailwayAuth)),
+      ),
+    ),
   );
 
 const firstOk = (rows: unknown): unknown => {
@@ -63,6 +69,63 @@ const selectOne = (url: string) =>
     // bound backoff to 50 seconds; each connection attempt also has a timeout.
   }).pipe(Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 10 }));
 
+const readVariables = Query.fn(
+  (projectId: string, environmentId: string, serviceId: string) =>
+    RailwayApi.variables({
+      projectId,
+      environmentId,
+      serviceId,
+      unrendered: true,
+    }),
+);
+
+const readServiceDeletedAt = Query.fn((id: string) => ({
+  deletedAt: RailwayApi.service({ id }).deletedAt,
+}));
+
+const readService = Query.fn((id: string) => {
+  const service = RailwayApi.service({ id });
+  return {
+    id: service.id,
+    name: service.name,
+    projectId: service.projectId,
+    deletedAt: service.deletedAt,
+  };
+});
+
+const readServiceInstance = Query.fn(
+  (environmentId: string, serviceId: string) => {
+    const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
+    return {
+      serviceId: instance.serviceId,
+      image: instance.source.image,
+    };
+  },
+);
+
+const readVolumeInstance = Query.fn((id: string) => {
+  const volume = RailwayApi.volumeInstance({ id });
+  return {
+    id: volume.id,
+    volumeId: volume.volumeId,
+    mountPath: volume.mountPath,
+    serviceId: volume.serviceId,
+  };
+});
+
+const readTcpProxies = Query.fn((environmentId: string, serviceId: string) =>
+  RailwayApi.tcpProxies({ environmentId, serviceId }).pipe(
+    Query.map((proxy) => ({
+      id: proxy.id,
+      domain: proxy.domain,
+      proxyPort: proxy.proxyPort,
+      applicationPort: proxy.applicationPort,
+      deletedAt: proxy.deletedAt,
+      syncStatus: proxy.syncStatus,
+    })),
+  ),
+);
+
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -81,28 +144,19 @@ const readServiceVariables = (
   environmentId: string,
   serviceId: string,
 ) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
+  readVariables(projectId, environmentId, serviceId).pipe(
+    Effect.map(asVariableMap),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed({} as Record<string, string>),
+    ),
+  );
 
 const waitUntilServiceGone = (serviceId: string) =>
-  railway.service({ id: serviceId }, { deletedAt: true }).pipe(
+  readServiceDeletedAt(serviceId).pipe(
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -201,51 +255,28 @@ test.provider(
         created.db.publicConnectionUri.includes(created.db.tcpProxyDomain!),
       ).toEqual(true);
 
-      const fetched = yield* railway.service(
-        { id: created.db.serviceId },
-        { id: true, name: true, projectId: true, deletedAt: true },
-      );
+      const fetched = yield* readService(created.db.serviceId);
       expect(fetched.id).toEqual(created.db.serviceId);
       expect(fetched.name).toEqual(created.db.name);
       expect(fetched.projectId).toEqual(created.db.projectId);
       expect(fetched.deletedAt).toBeNull();
 
-      const instance = yield* railway.serviceInstance(
-        {
-          environmentId: created.db.environmentId,
-          serviceId: created.db.serviceId,
-        },
-        { serviceId: true, source: { image: true } },
+      const instance = yield* readServiceInstance(
+        created.db.environmentId,
+        created.db.serviceId,
       );
       expect(instance.serviceId).toEqual(created.db.serviceId);
-      expect(instance.source?.image).toEqual(
-        expect.stringContaining("postgres-ssl"),
-      );
+      expect(instance.image).toEqual(expect.stringContaining("postgres-ssl"));
 
-      const volume = yield* railway.volumeInstance(
-        {
-          id: created.db.volumeInstanceId,
-        },
-        { id: true, volumeId: true, mountPath: true, serviceId: true },
-      );
+      const volume = yield* readVolumeInstance(created.db.volumeInstanceId);
       expect(volume.id).toEqual(created.db.volumeInstanceId);
       expect(volume.volumeId).toEqual(created.db.volumeId);
       expect(volume.mountPath).toEqual("/var/lib/postgresql/data");
       expect(volume.serviceId).toEqual(created.db.serviceId);
 
-      const proxies = yield* railway.tcpProxies(
-        {
-          environmentId: created.db.environmentId,
-          serviceId: created.db.serviceId,
-        },
-        {
-          id: true,
-          domain: true,
-          proxyPort: true,
-          applicationPort: true,
-          deletedAt: true,
-          syncStatus: true,
-        },
+      const proxies = yield* readTcpProxies(
+        created.db.environmentId,
+        created.db.serviceId,
       );
       const liveProxy = proxies.find(
         (proxy) => proxy.deletedAt == null && proxy.syncStatus !== "DELETED",
@@ -290,12 +321,7 @@ test.provider(
         updated.db.connectionUri.includes(`${nextName}.railway.internal`),
       ).toEqual(true);
 
-      const fetchedUpdate = yield* railway.service(
-        {
-          id: updated.db.serviceId,
-        },
-        { id: true, name: true },
-      );
+      const fetchedUpdate = yield* readService(updated.db.serviceId);
       expect(fetchedUpdate.id).toEqual(updated.db.serviceId);
       expect(fetchedUpdate.name).toEqual(nextName);
 
@@ -358,9 +384,7 @@ describe(
         expect(out.url).toEqual(expect.any(String));
         expect(out.url).toContain("up.railway.app");
 
-        const fetched = yield* distilled(
-          railway.service({ id: out.serviceId }, { id: true, deletedAt: true }),
-        );
+        const fetched = yield* distilled(readService(out.serviceId));
         expect(fetched.id).toEqual(out.serviceId);
         expect(fetched.deletedAt).toBeNull();
 
