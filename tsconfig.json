@@ -143,6 +143,12 @@
       "path": "./examples/gcp-vertex-ai/tsconfig.json"
     },
     {
+      "path": "./examples/gcp-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-website-nextjs/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {

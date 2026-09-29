@@ -107,7 +107,8 @@ test.provider.skipIf(!runLifecycle)(
         yield* kafka.getProjectsLocationsSchemaRegistriesContextsSubjectsVersions(
           { name: created.version.name },
         );
-      expect(fetched.subject).toEqual("shipments");
+      // The API qualifies context-scoped subjects as `:.{context}:{subject}`.
+      expect(fetched.subject).toEqual(":.dev:shipments");
 
       yield* stack.destroy();
 

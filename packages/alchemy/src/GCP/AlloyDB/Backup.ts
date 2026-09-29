@@ -589,7 +589,7 @@ export const BackupProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toId(id, news.backupId, output?.backupId);
       const ref = parseClusterRef(
@@ -653,8 +653,10 @@ export const BackupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
+      const observedDisplayName =
+        current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+        (observedDisplayName ?? "") !== (news.displayName ?? "");
       const descriptionChanged =
         news.description !== undefined &&
         (current.description ?? "") !== news.description;
@@ -699,7 +701,12 @@ export const BackupProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // AlloyDB omits `displayName` from backup reads (like clusters); the
+      // desired value is what was applied.
+      return toAttrs(
+        { ...current, displayName: current.displayName ?? news.displayName },
+        env.project,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

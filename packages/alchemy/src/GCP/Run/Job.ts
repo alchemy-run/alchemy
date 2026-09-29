@@ -843,7 +843,7 @@ export const JobProvider = () =>
             bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
         const container = news.containers?.[0];
         containers = [
@@ -898,7 +898,7 @@ export const JobProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);

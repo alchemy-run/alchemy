@@ -131,6 +131,8 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
                   executionId: started.executionId,
                   pod: started.pod,
                   podNamespace: started.podNamespace,
+                  // The API rejects a missing or zero line number.
+                  nextLineNumber: 1,
                 },
               })
               .pipe(

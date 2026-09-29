@@ -15,6 +15,10 @@ export interface GetSchemaRegistryRequest extends Omit<
  * Bind this operation to a {@link SchemaRegistry} in a Function/Action
  * init phase. Provide {@link GetSchemaRegistryHttp}.
  *
+ * Grants `roles/managedkafka.schemaRegistryViewer` (read-only) on the
+ * project: schema-registry permission checks do not honor an IAM
+ * Condition scoped to the registry's resource name.
+ *
  * ### Observing Schema Registries
  * **Example:** Read the bound registry
  * ```typescript

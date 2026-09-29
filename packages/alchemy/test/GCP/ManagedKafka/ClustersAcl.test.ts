@@ -42,7 +42,10 @@ test.provider(
           name: `projects/${project}/locations/us-central1/clusters/alchemy-missing/acls/cluster`,
         }),
       );
-      expect(error._tag).toEqual("AclClusterNotFound");
+      // GCP has answered a missing parent cluster with both 404 NOT_FOUND
+      // and 400 FAILED_PRECONDITION "cluster must exist"
+      // (AclClusterNotFound); both are typed.
+      expect(["NotFound", "AclClusterNotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -976,7 +976,7 @@ export const FunctionProvider = () =>
             build: news.build,
             isExternal: news.isExternal,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = bundled.codeHash;
         const deployed = current?.buildConfig?.source?.storageSource;
         const storageSource =
@@ -990,7 +990,7 @@ export const FunctionProvider = () =>
                   files: bundled.files,
                   kmsKeyName: news.kmsKeyName,
                 })
-                .pipe(Effect.tapError(() => identity.cleanup));
+                .pipe(Effect.onError(() => identity.cleanup));
         buildConfig = {
           ...news.buildConfig,
           runtime: news.buildConfig?.runtime ?? DEFAULT_NODE_RUNTIME,
@@ -1018,7 +1018,7 @@ export const FunctionProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });

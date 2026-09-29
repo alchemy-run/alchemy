@@ -1,7 +1,7 @@
 import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import { serveProbes } from "../../bindingHost.ts";
-import { CAPACITY_REGION, CAPACITY_ZONE } from "../../zones.ts";
+import { CAPACITY_REGION } from "../../zones.ts";
 
 /**
  * Cluster the bindings target: GetCluster is granted on it
@@ -9,7 +9,8 @@ import { CAPACITY_REGION, CAPACITY_ZONE } from "../../zones.ts";
  */
 export const Jobs = GCP.Dataproc.Cluster("Jobs", {
   region: CAPACITY_REGION,
-  zone: CAPACITY_ZONE,
+  // No zone: Dataproc Auto Zone Placement picks a zone in the region with
+  // capacity, so a single-zone stockout cannot fail the deploy.
 });
 
 /**

@@ -49,6 +49,9 @@ const hostProjectGrants = Effect.gen(function* () {
     }));
 });
 
+/** Granted on the project, unconditioned (see GetSchemaRegistryHttp). */
+const SCHEMA_REGISTRY_ROLE = "roles/managedkafka.schemaRegistryViewer";
+
 const scopedTo = (name: string) =>
   `resource.name == "${name}" || resource.name.startsWith("${name}/")`;
 
@@ -57,7 +60,17 @@ const expectScopedGrant = (role: string, name: string) =>
   Effect.gen(function* () {
     const grants = yield* hostProjectGrants;
     expect(grants).toContainEqual({ role, condition: scopedTo(name) });
-    expect(grants.every((grant) => grant.condition !== undefined)).toBe(true);
+    expect(grants).toEqual(
+      expect.arrayContaining([
+        { role: SCHEMA_REGISTRY_ROLE, condition: undefined },
+      ]),
+    );
+    // Every grant except the schema-registry viewer is condition-scoped.
+    expect(
+      grants
+        .filter((grant) => grant.role !== SCHEMA_REGISTRY_ROLE)
+        .every((grant) => grant.condition !== undefined),
+    ).toBe(true);
     expect(grants).toHaveLength(4);
   });
 
@@ -179,10 +192,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             });
             expect(out.name).toEqual(registryName);
             expect(out.contexts).toEqual(direct.contexts);
-            yield* expectScopedGrant(
-              "roles/managedkafka.schemaRegistryViewer",
-              registryName,
-            );
+            const grants = yield* hostProjectGrants;
+            expect(grants).toContainEqual({
+              role: SCHEMA_REGISTRY_ROLE,
+              condition: undefined,
+            });
+            expect(grants).toHaveLength(4);
           }),
         { timeout: 600_000 },
       );

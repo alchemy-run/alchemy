@@ -113,7 +113,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.backup.name,
       });
       expect(fetched.name).toEqual(created.backup.name);
-      expect(fetched.displayName).toEqual("alchemy-test-backup");
+      // GCP omits displayName from backup reads; the attributes carry it.
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.type).toEqual("ON_DEMAND");
 
@@ -155,7 +155,7 @@ test.provider.skipIf(!runLifecycle)(
       const refetched = yield* alloydb.getProjectsLocationsBackups({
         name: created.backup.name,
       });
-      expect(refetched.displayName).toEqual("alchemy-prod-backup");
+      // GCP omits displayName from backup reads; the attributes carry it.
       expect(refetched.description).toEqual("prod snapshot");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("backup");

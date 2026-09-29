@@ -373,15 +373,19 @@ const parseName = (name: string) => {
   const parts = path.split("/").filter((part) => part.length > 0);
   const poolsAt = parts.lastIndexOf("nodePools");
   const clustersAt = parts.lastIndexOf("clusters");
-  const locationsAt = parts.lastIndexOf("locations");
+  // `selfLink` spells the location as `zones/{zone}` (zonal clusters) or
+  // `regions/{region}`; resource names use `locations/{location}`.
+  const locationsAt = Math.max(
+    parts.lastIndexOf("locations"),
+    parts.lastIndexOf("zones"),
+    parts.lastIndexOf("regions"),
+  );
   const projectsAt = parts.lastIndexOf("projects");
   return {
     project:
       projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     clusterId:
       clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
     nodePoolId:

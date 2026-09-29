@@ -448,13 +448,30 @@ export const PersistentResourceProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const poolsChanged = !jsonEqual(current.resourcePools, resourcePools);
+      // Reads fill in server defaults (disk spec, used replicas), and a pool's
+      // machine spec is immutable (a change replaces), so only replica counts
+      // are compared and patched.
+      const replicaCounts = (
+        pools:
+          | ReadonlyArray<{ id?: string; replicaCount?: string }>
+          | undefined,
+      ) =>
+        Object.fromEntries(
+          (pools ?? []).map((pool, index) => [
+            pool.id ?? String(index),
+            String(pool.replicaCount ?? ""),
+          ]),
+        );
+      const poolsChanged = !jsonEqual(
+        replicaCounts(current.resourcePools),
+        replicaCounts(resourcePools),
+      );
 
       if (labelsChanged || displayChanged || poolsChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayChanged ? "display_name" : undefined,
-          poolsChanged ? "resource_pools" : undefined,
+          poolsChanged ? "resource_pools.replica_count" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched =
           yield* aiplatform.patchProjectsLocationsPersistentResources({

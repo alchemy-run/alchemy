@@ -89,7 +89,8 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(fetched.displayName).toEqual("alchemy-test-cluster");
+      // GCP omits displayName from cluster reads, so only the resource
+      // attributes (asserted above) carry it.
       expect(fetched.pscConfig?.pscEnabled).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -113,7 +114,8 @@ test.provider.skipIf(!runLifecycle)(
       const refetched = yield* alloydb.getProjectsLocationsClusters({
         name: created.name,
       });
-      expect(refetched.displayName).toEqual("alchemy-prod-cluster");
+      // GCP omits displayName from cluster reads, so only the resource
+      // attributes (asserted above) carry it.
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("db");
 

@@ -1,6 +1,7 @@
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -261,6 +262,17 @@ export const ClustersTopicProvider = () =>
             .pipe(Effect.catchTag("Conflict", () => getTopic(name))),
         );
         current = created ?? undefined;
+        // A new topic reads back NotFound (UnknownTopicOrPartition) until its
+        // partitions are assigned; block until it is readable.
+        if (current !== undefined) {
+          current = yield* getTopic(name).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (topic) => topic !== undefined,
+              times: 24,
+            }),
+          );
+        }
       }
 
       if (current === undefined) {

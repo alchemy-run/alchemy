@@ -24,10 +24,10 @@ export const GetSchemaRegistryHttp: Layer.Layer<
     kafka.GetProjectsLocationsSchemaRegistriesError
   >({
     tag: "GCP.ManagedKafka.GetSchemaRegistry",
-    iam: {
-      role: "roles/managedkafka.schemaRegistryViewer",
-      scopeByCondition: true,
-    },
+    // Schema-registry permission checks do not match a resource-name IAM
+    // Condition on the registry (the conditioned grant stayed denied live),
+    // so the read-only viewer role is granted on the project.
+    iam: { role: "roles/managedkafka.schemaRegistryViewer" },
     operation: kafka.getProjectsLocationsSchemaRegistries,
   }),
 );

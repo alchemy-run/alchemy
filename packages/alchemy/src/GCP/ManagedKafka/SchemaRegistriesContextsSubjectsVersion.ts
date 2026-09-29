@@ -174,7 +174,8 @@ const toAttrs = (
     context,
     project: parsed.project || project,
     location: parsed.location || location,
-    subject: version.subject ?? "",
+    // Context-scoped subjects come back qualified as `:.{context}:{subject}`.
+    subject: (version.subject ?? "").replace(`:.${context}:`, ""),
     version: version.version ?? 0,
     schemaId: version.id,
     schema: version.schema,

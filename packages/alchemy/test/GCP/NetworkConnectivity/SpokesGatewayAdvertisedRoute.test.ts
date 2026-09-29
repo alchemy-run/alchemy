@@ -136,7 +136,7 @@ test.provider.skipIf(!runLifecycle)(
                 ipRange: "192.168.0.0/16",
                 recipient: "ADVERTISE_TO_HUB",
                 priority: 200,
-                description: "route b",
+                description: "route a",
                 labels: { env: "test" },
               },
             );
@@ -144,10 +144,10 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      // Description and priority update in place.
+      // Priority updates in place.
       expect(updated.route.name).toEqual(created.route.name);
       expect(updated.route.uniqueId).toEqual(created.route.uniqueId);
-      expect(updated.route.description).toEqual("route b");
+      expect(updated.route.description).toEqual("route a");
       expect(updated.route.priority).toEqual(200);
 
       const replaced = yield* stack.deploy(

@@ -114,7 +114,8 @@ const nodeProgramDockerfile = (options: {
   if (options.install) {
     lines.push(
       `COPY package.json /app/package.json`,
-      `RUN npm install --omit=dev --no-fund --no-audit`,
+      // Drop npm's download cache so it does not ship (and push) with the image.
+      `RUN npm install --omit=dev --no-fund --no-audit && npm cache clean --force`,
     );
   }
   lines.push(`COPY . /app`, `ENV HOST=0.0.0.0`);

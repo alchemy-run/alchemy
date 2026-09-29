@@ -65,7 +65,8 @@ export type SpokesGatewayAdvertisedRouteProps = {
    */
   recipient?: GatewayAdvertisedRouteRecipient;
   /**
-   * Human-readable description.
+   * Human-readable description. Immutable — changing it replaces the
+   * route (GCP rejects `description` in PATCH).
    */
   description?: string;
   /**
@@ -118,9 +119,9 @@ export type SpokesGatewayAdvertisedRoute = Resource<
  * A route a Network Connectivity Center gateway spoke advertises to a
  * hub (or other recipient).
  *
- * Changing `parent`, `gatewayAdvertisedRouteId`, `ipRange`, or `labels`
- * replaces the route (GCP does not allow updating labels). Description,
- * `priority`, and `recipient` update in place.
+ * Changing `parent`, `gatewayAdvertisedRouteId`, `ipRange`, `labels`, or
+ * `description` replaces the route (GCP does not allow updating labels or
+ * the description). `priority` and `recipient` update in place.
  *
  * ### Creating a GatewayAdvertisedRoute
  * **Example:** Advertise a CIDR to the hub
@@ -228,6 +229,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       const previousParent = olds?.parent ?? output?.parent;
       const previousRange = olds?.ipRange ?? output?.ipRange;
       const previousLabels = olds?.labels ?? output?.labels;
+      const previousDescription = olds?.description ?? output?.description;
       const idChanged =
         previousId !== undefined &&
         nextId !== undefined &&
@@ -245,7 +247,17 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       const labelsChanged =
         previousLabels !== undefined &&
         (labels.upsert.length > 0 || labels.removed.length > 0);
-      if (idChanged || parentChanged || rangeChanged || labelsChanged) {
+      // `description` is not mutable either.
+      const descriptionChanged =
+        (olds !== undefined || output !== undefined) &&
+        (previousDescription ?? "") !== (news.description ?? "");
+      if (
+        idChanged ||
+        parentChanged ||
+        rangeChanged ||
+        labelsChanged ||
+        descriptionChanged
+      ) {
         return {
           action: "replace" as const,
           // A route with a pinned id, or the same CIDR on the same spoke,
@@ -360,15 +372,13 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
         return yield* new NetworkConnectivityNotResolved({ name });
       }
 
-      // Labels are create-only; `diff` replaces the route when they change.
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      // Labels and description are create-only; `diff` replaces the route
+      // when they change.
       const priorityChanged =
         (current.priority ?? DEFAULT_PRIORITY) !== priority;
       const recipientChanged =
         (current.recipient ?? "") !== (news.recipient ?? "");
       const updateMask = changedFields([
-        ["description", descriptionChanged],
         ["priority", priorityChanged],
         ["recipient", recipientChanged],
       ]);

@@ -3,8 +3,13 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import * as Provider from "../Provider.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { GcpAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { ListDockerImagesHttp } from "./ArtifactRegistry/ListDockerImagesHttp.ts";
@@ -3532,6 +3537,7 @@ const makeProviders = () =>
           Job,
           CloudRunJob,
           Service,
+          WebsiteServer,
           WorkerPool,
           ManagedZone,
           DnsPolicy,
@@ -4449,6 +4455,7 @@ const makeProviders = () =>
           JobProvider(),
           CloudRunJobProvider(),
           ServiceProvider(),
+          WebsiteServerProvider(),
           WorkerPoolProvider(),
         ),
         Layer.mergeAll(
@@ -5729,6 +5736,7 @@ const makeProviders = () =>
     ),
     Layer.provideMerge(gcpLive),
     Layer.provideMerge(DockerLive),
+    Layer.provideMerge(Command.providers()),
     Layer.orDie,
     // Erased on purpose: checking every consumer against the inferred union
     // of ~1,000 provider layers exhausts the type-checker's memory.

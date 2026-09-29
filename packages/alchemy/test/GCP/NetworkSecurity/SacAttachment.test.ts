@@ -56,16 +56,32 @@ test.provider(
   },
 );
 
-test.provider(
+// GCP validates the gateway before the realm, so proving the typed
+// unpaired-realm rejection needs a real NCC gateway spoke (slow).
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "createProjectsLocationsSacAttachments on an unpaired realm fails with SacRealmNotPaired",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const { project } = yield* GcpEnvironment.current;
-      const realm = yield* stack.deploy(
-        GCP.NetworkSecurity.SacRealm("Unpaired", {
-          securityService: "PALO_ALTO_PRISMA_ACCESS",
+      const { realm, gateway } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const hub = yield* GCP.NetworkConnectivity.Hub("ProbeMesh", {
+            description: "sac unpaired probe hub",
+          });
+          const gateway = yield* GCP.NetworkConnectivity.Spoke("ProbeGateway", {
+            location: "us-central1",
+            hub: hub.name,
+            gateway: {
+              capacity: "CAPACITY_1_GBPS",
+              ipRangeReservations: [{ ipRange: "10.22.0.0/23" }],
+            },
+          });
+          const realm = yield* GCP.NetworkSecurity.SacRealm("Unpaired", {
+            securityService: "PALO_ALTO_PRISMA_ACCESS",
+          });
+          return { realm, gateway };
         }),
       );
 
@@ -73,17 +89,14 @@ test.provider(
         networksecurity.createProjectsLocationsSacAttachments({
           parent: `projects/${project}/locations/us-central1`,
           sacAttachmentId: "alchemy-unpaired-probe",
-          body: {
-            sacRealm: realm.name,
-            nccGateway: `projects/${project}/locations/us-central1/spokes/alchemy-missing`,
-          },
+          body: { sacRealm: realm.name, nccGateway: gateway.name },
         }),
       );
       expect(error._tag).toEqual("SacRealmNotPaired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 2_400_000, retry: 0 },
 );
 
 test.provider.skipIf(!runLifecycle)(
