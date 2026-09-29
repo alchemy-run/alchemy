@@ -10,6 +10,7 @@
  *   F              presentation mode: fullscreen, video only (F or Esc to leave)
  *
  * The current step lives in the URL hash, so a reload lands on the same step.
+ * `?deck=loop` opens the second talk (intro/loop.ts).
  */
 import { Player, type PlayerRef } from "@remotion/player";
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
@@ -39,7 +40,7 @@ function App() {
   /** Whether the current step should start playing once its player is ready. */
   const autoplay = useRef(false);
 
-  const reload = useCallback(() => loadDeck().then(setDeck), []);
+  const reload = useCallback(() => loadDeck(new URLSearchParams(location.search).get("deck") ?? "talk").then(setDeck), []);
   useEffect(() => {
     reload();
     // intro.json or a scene.json was rebuilt: reload the data, keep the step.
@@ -50,7 +51,7 @@ function App() {
   const item = step ? deck!.items[step.item] : undefined;
 
   useEffect(() => {
-    history.replaceState(null, "", `#${index + 1}`);
+    history.replaceState(null, "", `${location.search}#${index + 1}`);
   }, [index]);
 
   // Enter a step: play it from the start if we got here with → / ←; otherwise

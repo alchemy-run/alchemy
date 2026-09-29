@@ -169,7 +169,8 @@ export interface SceneItem {
 /** The story-telling intro (`intro/steps.ts`), one presenter step per intro step. */
 export interface IntroItem {
   kind: "intro";
-  id: "intro";
+  /** The deck's folder under out/capture (`intro` or `loop`). */
+  id: "intro" | "loop";
 }
 
 export type DeckItem = SlideItem | SceneItem | IntroItem;

@@ -1,4 +1,4 @@
-import { deck } from "../deck.ts";
+import { deck, loopDeck } from "../deck.ts";
 import { schedule } from "../remotion/scene/schedule.ts";
 import { introTimeline, type IntroJson } from "../shared/intro.ts";
 import { VIDEO, type DeckItem, type SceneCapture } from "../shared/types.ts";
@@ -46,20 +46,20 @@ const terminalPauses = async (id: string): Promise<number[]> => {
  * Loads every deck item the same way render.ts does, splits it into
  * presenter steps, and skips scenes that haven't been captured yet.
  */
-export const loadDeck = async () => {
+export const loadDeck = async (name = "talk") => {
   const items: LiveItem[] = [];
   const steps: LiveStep[] = [];
-  for (const item of deck) {
+  for (const item of name === "loop" ? loopDeck : deck) {
     const index = items.length;
     if (item.kind === "slide") {
       const frames = Math.round((item.seconds ?? 2) * VIDEO.fps);
       items.push({ item, durationInFrames: frames, inputProps: { layout: item.layout, props: item.props } });
       steps.push({ item: index, from: 0, to: frames, title: item.title, notes: item.notes });
     } else if (item.kind === "intro") {
-      const intro = await fetchJson<IntroJson>("intro/intro.json");
+      const intro = await fetchJson<IntroJson>(`${item.id}/intro.json`);
       if (!intro) continue;
       const ranges = introTimeline(intro.steps);
-      items.push({ item, durationInFrames: Math.max(1, ranges.at(-1)?.to ?? 1), inputProps: { intro } });
+      items.push({ item, durationInFrames: Math.max(1, ranges.at(-1)?.to ?? 1), inputProps: { intro, source: item.id } });
       ranges.forEach((range, k) =>
         steps.push({ item: index, ...range, title: intro.steps[k]!.title, notes: intro.steps[k]!.notes }),
       );

@@ -27,3 +27,9 @@ export const deck: DeckItem[] = [
     seconds: 3,
   },
 ];
+
+/**
+ * The second talk: the fastest feedback loop for an agent, built from
+ * `intro/loop.ts`. Open it in the presenter with `?deck=loop`.
+ */
+export const loopDeck: DeckItem[] = [{ kind: "intro", id: "loop" }];

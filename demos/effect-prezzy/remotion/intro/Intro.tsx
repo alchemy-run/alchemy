@@ -16,6 +16,8 @@ import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
 import { CodeSlide, SPLIT } from "./CodeSlide.tsx";
 import { LinksView } from "./Links.tsx";
+import { LoopView } from "./Loop.tsx";
+import { PullRequestView } from "./PullRequest.tsx";
 import { BrowserPane, TerminalPane } from "./Panes.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
@@ -23,10 +25,12 @@ const TITLE_WIDTH = 1920 - 2 * 110;
 
 export interface IntroProps extends Record<string, unknown> {
   intro?: IntroJson;
+  /** The deck's folder under out/capture: `intro` or `loop`. */
+  source?: string;
 }
 
 export const calculateIntroMetadata: CalculateMetadataFunction<IntroProps> = async ({ props }) => {
-  const response = await fetch(staticFile("intro/intro.json"));
+  const response = await fetch(staticFile(`${props.source ?? "intro"}/intro.json`));
   if (!response.ok) throw new Error("No intro build. Run `pnpm intro:build` first.");
   const intro = (await response.json()) as IntroJson;
   const total = intro.steps.reduce((sum, step) => sum + step.frames, 0);
@@ -93,6 +97,10 @@ export const Intro = ({ intro }: IntroProps) => {
         <TerminalPane step={step} prev={prev} local={local} />
       ) : step.kind === "browser" ? (
         <BrowserPane step={step} prev={prev} local={local} />
+      ) : step.kind === "loop" ? (
+        <LoopView step={step} prev={prev?.kind === "loop" ? prev : undefined} local={local} />
+      ) : step.kind === "comment" ? (
+        <PullRequestView step={step} prev={prev?.kind === "comment" ? prev : undefined} local={local} />
       ) : (
         <Board board={step.board} stage={step.stage} local={local} />
       )}

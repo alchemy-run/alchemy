@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { BundlePanel, Drill, MiniGraph, PhaseTimeline, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import type { BundlePanel, Drill, LoopPart, MiniGraph, PhaseTimeline, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
 import CLIENTS from "./bundle-clients.json" with { type: "json" };
 import { demo } from "./demo.ts";
 
@@ -28,7 +28,7 @@ export interface CodeSpec {
   file?: string;
   pseudo?: boolean;
   src: Source;
-  lang?: "typescript" | "yaml" | "ansi" | "shellscript";
+  lang?: "typescript" | "yaml" | "ansi" | "shellscript" | "json";
   fontSize?: number;
   /** Tint lines by phase: a snippet region, or the lines from one match to another. */
   tints?: (({ region: string } | { from: Find; to?: Find }) & { tone: Tone })[];
@@ -128,7 +128,30 @@ export interface BrowserSpec {
   frames?: number;
 }
 
-export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec;
+/** The whole path from an edit to production, with some parts lit up (loop deck). */
+export interface LoopSpec {
+  kind: "loop";
+  title: string;
+  notes?: string;
+  /** Parts shown at full strength; the rest are dimmed. Omit to light everything. */
+  lit?: LoopPart[];
+  /** Parts that glow: what this step is about. */
+  focus?: LoopPart[];
+  frames?: number;
+}
+
+/** A pull request page with its checks and comments (loop deck). */
+export interface CommentSpec {
+  kind: "comment";
+  title: string;
+  notes?: string;
+  pr: { number: number; title: string; branch: string };
+  checks: { name: string; state: "pending" | "passed" | "failed"; detail?: string }[];
+  comments: { author: string; bot?: boolean; lines: string[] }[];
+  frames?: number;
+}
+
+export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {

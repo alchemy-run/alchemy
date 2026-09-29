@@ -1,5 +1,5 @@
 import { Composition } from "remotion";
-import { deck } from "../deck.ts";
+import { deck, loopDeck } from "../deck.ts";
 import { VIDEO } from "../shared/types.ts";
 import { calculateIntroMetadata, Intro, IntroLive } from "./intro/Intro.tsx";
 import { calculateSceneMetadata, Scene } from "./scene/Scene.tsx";
@@ -17,7 +17,7 @@ export const Root = () => (
       width={VIDEO.width}
       height={VIDEO.height}
     />
-    {deck.map((item) =>
+    {[...deck, ...loopDeck].map((item) =>
       item.kind === "intro" ? (
         <Composition
           key={item.id}
@@ -28,7 +28,7 @@ export const Root = () => (
           fps={VIDEO.fps}
           width={VIDEO.width}
           height={VIDEO.height}
-          defaultProps={{}}
+          defaultProps={{ source: item.id }}
         />
       ) : item.kind === "slide" ? (
         <Composition

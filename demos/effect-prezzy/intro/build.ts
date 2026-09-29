@@ -15,11 +15,22 @@ import { createHighlighter } from "shiki";
 import { diffArrays } from "diff";
 import { API } from "tsgo/unstable/sync";
 import type { CodeError, CodeStep, IntroJson, IntroStep, Mark, Token } from "../shared/intro.ts";
-import { steps, type CodeSpec, type Find } from "./steps.ts";
+import type { CodeSpec, Find, StepSpec } from "./steps.ts";
+
+/** Which deck to build: `intro` (intro/steps.ts) or `loop` (intro/loop.ts). */
+const deckName = process.argv[2] ?? "intro";
+const decks: Record<string, () => Promise<StepSpec[]>> = {
+  intro: async () => (await import("./steps.ts")).steps,
+  loop: async () => (await import("./loop.ts")).steps,
+};
+if (!decks[deckName]) throw new Error(`unknown deck ${deckName}: expected ${Object.keys(decks).join(" | ")}`);
+const steps = await decks[deckName]();
 
 const root = path.resolve(import.meta.dirname, "..");
 const snippetsDir = path.join(import.meta.dirname, "snippets");
-const out = path.join(root, "out", "capture", "intro");
+/** Snippet diagnostics and shared assets live with the intro deck. */
+const shared = path.join(root, "out", "capture", "intro");
+const out = path.join(root, "out", "capture", deckName);
 
 // ── type-check the snippets ──────────────────────────────────────────────
 // With the tsgo 7.1 nightly's API: open the snippets project in a snapshot
@@ -41,7 +52,7 @@ const flatten = (chain: Chain, depth = 0): string[] => [
 ];
 
 // Type-checking is the slow part; skip it when no snippet changed since the last build.
-const cacheFile = path.join(out, "diagnostics.json");
+const cacheFile = path.join(shared, "diagnostics.json");
 /** Sub-projects with their own tsconfig (e.g. the demo's `shorty/` app), checked as a unit. */
 const projects = [
   "",
@@ -82,7 +93,7 @@ for (const file of await listTs(dir)) {
 }
 }
 api.close();
-await mkdir(out, { recursive: true });
+await mkdir(shared, { recursive: true });
 await writeFile(cacheFile, JSON.stringify({ stamp, diagnostics: [...diagnostics] }));
 }
 
@@ -148,9 +159,9 @@ const cut = (text: string, keep?: string[], omit: string[] = []): Cut => {
 };
 
 // ── highlighting ─────────────────────────────────────────────────────────
-const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml", "shellscript"] });
+const highlighter = await createHighlighter({ themes: ["dark-plus"], langs: ["typescript", "yaml", "shellscript", "json"] });
 const PSEUDO_KEYWORDS: Record<string, string> = { construct: "#a3c473", runtime: "#e0a86b" };
-const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" | "ansi" | "shellscript" = "typescript"): Token[][] =>
+const tokenize = (code: string, pseudo: boolean, lang: "typescript" | "yaml" | "ansi" | "shellscript" | "json" = "typescript"): Token[][] =>
   highlighter.codeToTokens(code, { lang, theme: "dark-plus" }).tokens.map((line) =>
     line.flatMap((token) => {
       // Shiki's FontStyle.Bold is bit 2 (terminal output uses it).
@@ -431,6 +442,6 @@ steps.forEach((spec, i) => {
 await mkdir(out, { recursive: true });
 const json: IntroJson = { steps: resolved };
 // Images the steps reference (e.g. an aside's photo), served next to intro.json.
-await cp(path.join(import.meta.dirname, "assets"), path.join(out, "assets"), { recursive: true });
+await cp(path.join(import.meta.dirname, "assets"), path.join(shared, "assets"), { recursive: true });
 await writeFile(path.join(out, "intro.json"), `${JSON.stringify(json, null, 2)}\n`);
-console.log(`✔ ${resolved.length} intro steps → out/capture/intro/intro.json`);
+console.log(`✔ ${resolved.length} ${deckName} steps → out/capture/${deckName}/intro.json`);

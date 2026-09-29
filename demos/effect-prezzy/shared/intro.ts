@@ -244,7 +244,44 @@ export interface BrowserStep {
   frames: number;
 }
 
-export type IntroStep = CodeStep | SlideStep | BoardStep | TerminalStep | BrowserStep;
+/** The parts of the path from an edit to production (the loop deck's map). */
+export type LoopPart =
+  | "edit"
+  | "types"
+  | "local"
+  | "live"
+  | "push"
+  | "pr"
+  | "prTest"
+  | "comment"
+  | "merge"
+  | "staging"
+  | "stagingTest"
+  | "prod"
+  | "feedback";
+
+/** The whole loop, drawn full screen, with some parts lit. */
+export interface LoopStep {
+  kind: "loop";
+  title: string;
+  notes: string;
+  lit?: LoopPart[];
+  focus?: LoopPart[];
+  frames: number;
+}
+
+/** A pull request page: its checks, and comments (e.g. the preview link). */
+export interface CommentStep {
+  kind: "comment";
+  title: string;
+  notes: string;
+  pr: { number: number; title: string; branch: string };
+  checks: { name: string; state: "pending" | "passed" | "failed"; detail?: string }[];
+  comments: { author: string; bot?: boolean; lines: string[] }[];
+  frames: number;
+}
+
+export type IntroStep = CodeStep | SlideStep | BoardStep | TerminalStep | BrowserStep | LoopStep | CommentStep;
 
 export interface IntroJson {
   steps: IntroStep[];
