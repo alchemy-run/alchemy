@@ -371,7 +371,10 @@ export const waitUntilGone = <A, E, R>(
 export const collectOrchestrators = (
   pages: Stream.Stream<
     osconfig.GoogleCloudOsconfigV2__ListPolicyOrchestratorsResponse,
-    osconfig.NotFound | osconfig.Forbidden | osconfig.GcpOpError,
+    | osconfig.NotFound
+    | osconfig.Forbidden
+    | osconfig.ServiceDisabled
+    | osconfig.GcpOpError,
     osconfig.GcpOpContext
   >,
 ) =>
@@ -381,7 +384,7 @@ export const collectOrchestrators = (
     ),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "Forbidden", "ServiceDisabled"], () =>
       Effect.succeed([] as PolicyOrchestratorBody[]),
     ),
   );

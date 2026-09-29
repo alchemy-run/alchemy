@@ -198,6 +198,7 @@ type AdsenseOpError =
   | adsense.Forbidden
   | adsense.BadRequest
   | adsense.Conflict
+  | adsense.InsufficientScopes
   | adsense.GcpOpError;
 
 export const collectPages = <A, Page, E, R>(

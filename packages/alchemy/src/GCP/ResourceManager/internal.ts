@@ -117,14 +117,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag(["NotFound", "Forbidden", "ProjectNotFound"], () =>
           Effect.succeed(undefined),
         ),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "Forbidden", "FolderNotFound"], () =>
             Effect.succeed(undefined),
           ),
         )
