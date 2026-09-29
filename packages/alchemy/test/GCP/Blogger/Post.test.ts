@@ -13,19 +13,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const blogId = process.env.GCP_TEST_BLOGGER_BLOG_ID;
 
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  !!process.env.GCP_TEST_BLOGGER &&
-  !!blogId;
+  !process.env.FAST && !!process.env.GCP_TEST_BLOGGER && !!blogId;
 
 const waitUntilGone = (parentBlogId: string, postId: string) =>
   blogger.getPosts({ blogId: parentBlogId, postId }).pipe(
@@ -39,7 +30,7 @@ const waitUntilGone = (parentBlogId: string, postId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPosts on a missing post fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -58,7 +49,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_BLOGGER)(
+test.provider.skipIf(!!process.env.GCP_TEST_BLOGGER)(
   "insertPosts without Blogger access fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {

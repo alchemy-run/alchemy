@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
@@ -13,16 +14,7 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const runOrgLifecycle =
-  hasGcpCreds &&
   !process.env.FAST &&
   process.env.GCP_TEST_NETWORKMANAGEMENT === "1" &&
   process.env.GCP_TEST_ORG_NETWORKMANAGEMENT === "1";
@@ -40,6 +32,8 @@ const waitUntilGone = (name: string) =>
 
 const resolveOrganization = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+
     const resource = yield* resourcemanager.getProjects({
       name: `projects/${project}`,
     });
@@ -50,7 +44,7 @@ const resolveOrganization = () =>
     return process.env.GOOGLE_ORGANIZATION_ID ?? "0";
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsVpcFlowLogsConfigs on a missing config fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -69,7 +63,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runOrgLifecycle)(
+test.provider.skipIf(runOrgLifecycle)(
   "createOrganizationsLocationsVpcFlowLogsConfigs without org IAM fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

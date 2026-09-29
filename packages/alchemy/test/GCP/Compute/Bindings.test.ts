@@ -13,16 +13,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Stop→TERMINATED on e2-micro often exceeds 60s. Set
 // GCP_TEST_COMPUTE_BINDINGS=1 to run the round-trip.
 const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_COMPUTE_BINDINGS && !process.env.FAST;
+  !!process.env.GCP_TEST_COMPUTE_BINDINGS && !process.env.FAST;
 
 test.provider.skipIf(!runLifecycle)(
   "GetInstance, StopInstance, and StartInstance round-trip",

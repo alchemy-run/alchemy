@@ -13,14 +13,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_TASKS;
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_TASKS;
 
 const waitUntilGone = (tasklistId: string) =>
   tasks.getTasklists({ tasklist: tasklistId }).pipe(
@@ -34,7 +27,7 @@ const waitUntilGone = (tasklistId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getTasklists on a missing list fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -52,7 +45,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_TASKS)(
+test.provider.skipIf(!!process.env.GCP_TEST_TASKS)(
   "insertTasklists without Tasks access fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {

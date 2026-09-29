@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,14 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   bigqueryreservation.getProjectsLocationsReservations({ name }).pipe(
@@ -32,10 +25,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsReservations on a missing reservation fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -58,7 +52,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a reservation",
   (stack) =>
     Effect.gen(function* () {

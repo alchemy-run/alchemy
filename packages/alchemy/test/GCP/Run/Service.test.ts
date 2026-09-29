@@ -19,18 +19,13 @@ import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
 import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
 import BoundService from "./fixtures/service.ts";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 const dockerAvailable = (() => {
@@ -43,8 +38,6 @@ const dockerAvailable = (() => {
     return false;
   }
 })();
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -59,7 +52,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a Cloud Run service",
   (stack) =>
     Effect.gen(function* () {
@@ -181,7 +174,7 @@ const fetchJson = <A>(url: string) =>
     return (yield* response.json) as A;
   });
 
-test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+test.provider.skipIf(!dockerAvailable)(
   "effect-native Function grants resource-scoped IAM and revokes it when a binding is removed",
   (stack) =>
     Effect.gen(function* () {
@@ -282,9 +275,7 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
   { timeout: 420_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds || !dockerAvailable || !process.env.GCP_TEST_REDIS,
-)(
+test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {
@@ -319,10 +310,11 @@ test.provider.skipIf(
   { timeout: 1_500_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "a failed first image build removes the repository it created",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const serviceId = `alchemy-test-broken-build-${Core.defaultStage()}`

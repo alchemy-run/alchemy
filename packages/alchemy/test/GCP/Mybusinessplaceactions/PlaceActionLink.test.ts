@@ -7,7 +7,6 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import {
   entitlementTags,
-  hasGcpCreds,
   logLevel,
   probeCreateAccess,
   probePlaceActionAccess,
@@ -30,7 +29,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getLocationsPlaceActionLinks on a missing link fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -46,7 +45,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createLocationsPlaceActionLinks without Business Profile access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -77,7 +76,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a place action link",
   (stack) =>
     Effect.gen(function* () {

@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import { expect } from "alchemy-test";
@@ -12,21 +13,11 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const remoteUri =
   process.env.GCP_CLOUDBUILD_REMOTE_URI ??
   "https://github.com/octocat/Hello-World.git";
 const standingConnection = process.env.GCP_CLOUDBUILD_CONNECTION;
-const runLifecycle = hasGcpCreds && !!standingConnection && !process.env.FAST;
-
-const missingRepositoryName = `projects/${project}/locations/us-central1/connections/alchemy-missing-connection/repositories/alchemy-missing-repository`;
+const runLifecycle = !!standingConnection && !process.env.FAST;
 
 const waitUntilRepositoryGone = (name: string) =>
   cloudbuild.getProjectsLocationsConnectionsRepositories({ name }).pipe(
@@ -50,10 +41,12 @@ const waitUntilConnectionGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "get and binding ops on a missing repository are NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingRepositoryName = `projects/${project}/locations/us-central1/connections/alchemy-missing-connection/repositories/alchemy-missing-repository`;
       yield* stack.destroy();
 
       const getError = yield* Effect.flip(
@@ -94,7 +87,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create repository on a pending GitHub connection is BadRequest",
   (stack) =>
     Effect.gen(function* () {

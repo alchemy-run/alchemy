@@ -4,7 +4,7 @@ import * as translate from "@distilled.cloud/gcp/translate_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { hasGcpCreds, location, logLevel, parent } from "./common.ts";
+import { location, logLevel, currentParent } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,10 +19,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsAdaptiveMtDatasets on a missing dataset fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -37,10 +38,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an Adaptive MT dataset",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const probe = yield* translate

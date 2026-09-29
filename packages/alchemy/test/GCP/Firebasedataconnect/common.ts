@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
@@ -6,34 +7,35 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Firebase Data Connect is entitlement-gated. Live create returns Forbidden:
 // "Firebase SQL Connect API has not been used in project
 // alchemy-gcp-testing-83661 before or it is disabled. Enable it by visiting
 // https://console.developers.google.com/apis/api/firebasedataconnect.googleapis.com/overview?project=alchemy-gcp-testing-83661"
 export const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_FIREBASE_DATA_CONNECT === "1";
+  !process.env.FAST && process.env.GCP_TEST_FIREBASE_DATA_CONNECT === "1";
 
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
+);
 export const location = "us-central1";
 
 export const probeTags = ["NotFound", "Forbidden", "BadRequest"];
 
 export const missingService = (serviceId = "alchemy-missing-service") =>
-  `projects/${project}/locations/${location}/services/${serviceId}`;
+  currentProject.pipe(
+    Effect.map(
+      (project) =>
+        `projects/${project}/locations/${location}/services/${serviceId}`,
+    ),
+  );
 
 export const missingSchema = (serviceId = "alchemy-missing-service") =>
-  `${missingService(serviceId)}/schemas/main`;
+  missingService(serviceId).pipe(Effect.map((name) => `${name}/schemas/main`));
 
 export const missingConnector = (serviceId = "alchemy-missing-service") =>
-  `${missingService(serviceId)}/connectors/alchemy-missing-connector`;
+  missingService(serviceId).pipe(
+    Effect.map((name) => `${name}/connectors/alchemy-missing-connector`),
+  );
 
 export const schemaSource = (extraField?: string) => ({
   files: [

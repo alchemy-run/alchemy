@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
@@ -13,16 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -40,10 +32,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCaPoolsCertificateAuthorities on a missing CA fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

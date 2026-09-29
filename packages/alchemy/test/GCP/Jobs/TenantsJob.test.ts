@@ -4,7 +4,7 @@ import * as jobs from "@distilled.cloud/gcp/jobs_v4";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { hasGcpCreds, logLevel, project, runLifecycle } from "./common.ts";
+import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -20,10 +20,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsTenantsJobs on a missing job fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -38,10 +39,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || process.env.GCP_TEST_JOBS === "1")(
+test.provider.skipIf(process.env.GCP_TEST_JOBS === "1")(
   "createProjectsTenantsJobs is Forbidden when Cloud Talent Solution is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

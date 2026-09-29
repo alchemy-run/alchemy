@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   customerName,
-  hasGcpCreds,
   logLevel,
   probeName,
   probeParent,
@@ -30,7 +29,7 @@ const probeBody: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfi
     },
   };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getCustomersConnectorConfigs on a missing connector config fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -48,7 +47,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CHROMEMANAGEMENT)(
+test.provider.skipIf(!!process.env.GCP_TEST_CHROMEMANAGEMENT)(
   "createCustomersConnectorConfigs without Chrome Management access fails with a typed entitlement error",
   (stack) =>
     Effect.gen(function* () {

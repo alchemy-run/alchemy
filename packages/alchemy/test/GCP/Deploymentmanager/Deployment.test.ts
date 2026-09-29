@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as deploymentmanager from "@distilled.cloud/gcp/deploymentmanager_v2";
@@ -13,16 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 const waitUntilGone = (deployment: string) =>
-  deploymentmanager.getDeployments({ project, deployment }).pipe(
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      deploymentmanager.getDeployments({ project, deployment }),
+    ),
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -54,10 +50,12 @@ resources:
   ],
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getDeployments on a missing deployment fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -73,10 +71,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a deployment",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const access = yield* deploymentmanager

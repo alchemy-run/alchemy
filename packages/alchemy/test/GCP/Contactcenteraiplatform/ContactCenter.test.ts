@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
@@ -13,16 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-const parent = `projects/${project}/locations/us-central1`;
-const missingName = `${parent}/contactCenters/alchemy-missing-cc`;
-
 const DISABLED_MESSAGE = "Contact Center AI Platform API has not been used";
 
 const waitUntilGone = (name: string) =>
@@ -37,20 +28,14 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeCreate = ccaip.createProjectsLocationsContactCenters({
-  parent,
-  contactCenterId: "alchemyccprobe",
-  body: {
-    displayName: "alchemy-probe",
-    customerDomainPrefix: "alchprobe",
-    instanceConfig: { instanceSize: "DEV_SMALL" },
-  },
-});
-
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsContactCenters on a missing contact center fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const missingName = `${parent}/contactCenters/alchemy-missing-cc`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -81,10 +66,22 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createProjectsLocationsContactCenters is rejected with Forbidden when Contact Center AI Platform is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const probeCreate = ccaip.createProjectsLocationsContactCenters({
+        parent,
+        contactCenterId: "alchemyccprobe",
+        body: {
+          displayName: "alchemy-probe",
+          customerDomainPrefix: "alchprobe",
+          instanceConfig: { instanceSize: "DEV_SMALL" },
+        },
+      });
+
       yield* stack.destroy();
 
       const result = yield* probeCreate.pipe(
@@ -131,10 +128,14 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a contact center",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const missingName = `${parent}/contactCenters/alchemy-missing-cc`;
+
       yield* stack.destroy();
 
       const access = yield* ccaip

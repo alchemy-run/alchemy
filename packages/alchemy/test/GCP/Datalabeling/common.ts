@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { none as noGcpRetry } from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -8,13 +9,9 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 /**
  * Data Labeling is shut down. Live GETs hang ~20s then return HTTP 502
@@ -22,7 +19,7 @@ export const project = process.env.GOOGLE_PROJECT_ID ?? "";
  * returns.
  */
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && process.env.GCP_TEST_DATALABELING === "1";
+  !process.env.FAST && process.env.GCP_TEST_DATALABELING === "1";
 
 export const probeErrorTags = ["NotFound", "Forbidden", "BadGateway"] as const;
 

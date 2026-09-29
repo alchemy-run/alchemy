@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,17 +15,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle = hasGcpCreds && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !process.env.FAST;
 const enterpriseDatabaseId = "alchfsucreds2";
-const enterpriseDatabaseName = `projects/${project}/databases/${enterpriseDatabaseId}`;
+const enterpriseDatabaseNameOf = (project: string) =>
+  `projects/${project}/databases/${enterpriseDatabaseId}`;
 
 const waitUntilGone = (name: string) =>
   firestore.getProjectsDatabasesUserCreds({ name }).pipe(
@@ -71,9 +65,10 @@ const waitForDatabaseOperation = (
   });
 
 const ensureEnterpriseDatabase = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
   const existing = yield* firestore
     .getProjectsDatabases({
-      name: enterpriseDatabaseName,
+      name: enterpriseDatabaseNameOf(project),
     })
     .pipe(
       Effect.map((database) =>
@@ -85,18 +80,18 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
     existing !== undefined &&
     (existing.databaseEdition ?? "").toUpperCase() === "ENTERPRISE"
   ) {
-    return enterpriseDatabaseName;
+    return enterpriseDatabaseNameOf(project);
   }
   if (existing !== undefined) {
     yield* firestore
-      .deleteProjectsDatabases({ name: enterpriseDatabaseName })
+      .deleteProjectsDatabases({ name: enterpriseDatabaseNameOf(project) })
       .pipe(
         Effect.catchTag(
           ["NotFound", "Forbidden", "BadRequest", "Conflict"],
           () => Effect.void,
         ),
       );
-    yield* waitUntilDatabase(enterpriseDatabaseName, "gone");
+    yield* waitUntilDatabase(enterpriseDatabaseNameOf(project), "gone");
   }
 
   const created = yield* firestore
@@ -115,14 +110,16 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
   if (created !== undefined) {
     yield* waitForDatabaseOperation(created);
   }
-  yield* waitUntilDatabase(enterpriseDatabaseName, "ready");
-  return enterpriseDatabaseName;
+  yield* waitUntilDatabase(enterpriseDatabaseNameOf(project), "ready");
+  return enterpriseDatabaseNameOf(project);
 });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsDatabasesUserCreds on a missing user creds fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -137,7 +134,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "createProjectsDatabasesUserCreds on Standard edition fails with a typed error",
   (stack) =>
     Effect.gen(function* () {

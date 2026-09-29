@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const entitlementTags = ["Forbidden", "NotFound", "BadRequest"] as const;
 
 const probeCustomerId =
@@ -57,7 +51,7 @@ const probeAccess = () =>
       ),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getSubscriptions on a missing subscription fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -76,7 +70,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "insertSubscriptions without Workspace Reseller access fails with a typed entitlement error",
   (stack) =>
     Effect.gen(function* () {
@@ -100,7 +94,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a subscription",
   (stack) =>
     Effect.gen(function* () {

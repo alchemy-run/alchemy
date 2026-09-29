@@ -6,18 +6,12 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const bidderId = process.env.GCP_ADEXCHANGEBUYER2_BIDDER_ID?.trim();
 export const accountId = process.env.GCP_ADEXCHANGEBUYER2_ACCOUNT_ID?.trim();
 export const buyerId = process.env.GCP_ADEXCHANGEBUYER2_BUYER_ID?.trim();
 
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_ADEXCHANGEBUYER2;
+  !process.env.FAST && !!process.env.GCP_TEST_ADEXCHANGEBUYER2;
 
 export const runBiddersLifecycle = runLifecycle && !!bidderId;
 export const runAccountsLifecycle = runBiddersLifecycle && !!accountId;

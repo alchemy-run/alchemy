@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({
   providers: GCP.providers() as Layer.Layer<
@@ -21,14 +22,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_SQL && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_SQL && !process.env.FAST;
 
 const waitUntilGone = (project: string, instance: string) =>
   sqladmin.getInstances({ project, instance }).pipe(
@@ -41,13 +35,13 @@ const waitUntilGone = (project: string, instance: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "lists sql instances and treats a missing instance as NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = process.env.GOOGLE_PROJECT_ID!;
+      const { project } = yield* GcpEnvironment.current;
       const page = yield* sqladmin.listInstances({
         project,
         maxResults: 10,

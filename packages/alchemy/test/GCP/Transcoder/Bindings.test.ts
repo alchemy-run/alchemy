@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
@@ -13,16 +14,7 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const location = "us-central1";
-const missingName = `projects/${project}/locations/${location}/jobTemplates/alchemy-missing-template`;
 const DISABLED_MESSAGE = "Transcoder API has not been used";
 
 const sdConfig: GCP.Transcoder.JobConfig = {
@@ -64,10 +56,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "CreateJob starts a job from a template",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingName = `projects/${project}/locations/${location}/jobTemplates/alchemy-missing-template`;
+
       yield* stack.destroy();
 
       const access = yield* transcoder

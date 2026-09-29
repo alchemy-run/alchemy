@@ -30,10 +30,10 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+// The project comes from the same credential the deploy uses.
+const currentProject = GCP.GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
+  Effect.provide(GCP.fromCredentials().pipe(Layer.provide(GcpHttp))),
 );
 
 // Both services are built from `main`, which needs a local image build.
@@ -48,7 +48,7 @@ const dockerAvailable = (() => {
   }
 })();
 
-const skip = !hasGcpCreds || !dockerAvailable;
+const skip = !dockerAvailable;
 
 // Kept for the post-destroy checks in `afterAll`.
 let deployed:
@@ -101,8 +101,9 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(
         Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
       );
     expect(database).toEqual("gone");
+    const project = yield* currentProject;
     const services = yield* run.listProjectsLocationsServices({
-      parent: `projects/${process.env.GOOGLE_PROJECT_ID}/locations/us-central1`,
+      parent: `projects/${project}/locations/us-central1`,
     });
     const uris = (services.services ?? []).flatMap((service) => [
       service.uri,

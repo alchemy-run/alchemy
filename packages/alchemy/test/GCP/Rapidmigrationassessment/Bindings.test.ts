@@ -1,4 +1,5 @@
 import { Action } from "@/Action";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
@@ -12,23 +13,16 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-const parent = `projects/${project}/locations/us-central1`;
-const missingName = `${parent}/collectors/alchemy-missing-collector`;
-const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;
 const DISABLED_MESSAGE = "Rapid Migration Assessment API has not been used";
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "PauseCollector, ResumeCollector, and RegisterCollector on a collector",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const missingName = `${parent}/collectors/alchemy-missing-collector`;
+      const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
       const access = yield* rma

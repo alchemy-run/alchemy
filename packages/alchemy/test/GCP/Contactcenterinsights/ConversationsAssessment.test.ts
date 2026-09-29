@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
@@ -14,16 +15,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const transcriptBucket = `alchemy-cci-transcripts-${project}`;
+const transcriptBucketOf = (project: string) =>
+  `alchemy-cci-transcripts-${project}`;
 const conversationId = "alchemy-cci-assess-conv";
-const conversationName = `projects/${project}/locations/us-central1/conversations/${conversationId}`;
+const conversationNameOf = (project: string) =>
+  `projects/${project}/locations/us-central1/conversations/${conversationId}`;
 
 const waitUntilGone = (name: string) =>
   cci.getProjectsLocationsConversationsAssessments({ name }).pipe(
@@ -36,42 +32,48 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const ensureConversation = Effect.gen(function* () {
-  yield* uploadChatTranscript(transcriptBucket);
-  const existing = yield* cci
-    .getProjectsLocationsConversations({
-      name: conversationName,
-      view: "BASIC",
-    })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-  if (existing !== undefined) return existing;
-  return yield* cci.createProjectsLocationsConversations({
-    parent: `projects/${project}/locations/us-central1`,
-    conversationId,
-    body: {
-      medium: "CHAT",
-      languageCode: "en-US",
-      labels: { "alchemy-test": "cci" },
-      dataSource: {
-        gcsSource: {
-          transcriptUri: `gs://${transcriptBucket}/transcript.json`,
+const ensureConversation = (project: string) =>
+  Effect.gen(function* () {
+    const transcriptBucket = transcriptBucketOf(project);
+    const conversationName = conversationNameOf(project);
+    yield* uploadChatTranscript(transcriptBucket);
+    const existing = yield* cci
+      .getProjectsLocationsConversations({
+        name: conversationName,
+        view: "BASIC",
+      })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    if (existing !== undefined) return existing;
+    return yield* cci.createProjectsLocationsConversations({
+      parent: `projects/${project}/locations/us-central1`,
+      conversationId,
+      body: {
+        medium: "CHAT",
+        languageCode: "en-US",
+        labels: { "alchemy-test": "cci" },
+        dataSource: {
+          gcsSource: {
+            transcriptUri: `gs://${transcriptBucket}/transcript.json`,
+          },
         },
       },
-    },
+    });
   });
-});
 
-const deleteConversation = cci
-  .deleteProjectsLocationsConversations({
-    name: conversationName,
-    force: true,
-  })
-  .pipe(Effect.catchTag("NotFound", () => Effect.void));
+const deleteConversation = (project: string) =>
+  cci
+    .deleteProjectsLocationsConversations({
+      name: conversationNameOf(project),
+      force: true,
+    })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsConversationsAssessments on a missing assessment fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const conversationName = conversationNameOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -86,12 +88,14 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a conversation assessment",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const conversationName = conversationNameOf(project);
       yield* stack.destroy();
-      const conversation = yield* ensureConversation;
+      const conversation = yield* ensureConversation(project);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -138,7 +142,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-      yield* deleteConversation;
+      yield* deleteConversation(project);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

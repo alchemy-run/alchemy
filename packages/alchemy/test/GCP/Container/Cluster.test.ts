@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,14 +15,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_GKE && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_GKE && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   container.getProjectsLocationsClusters({ name }).pipe(
@@ -34,13 +28,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "lists clusters and treats a missing cluster as NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = process.env.GOOGLE_PROJECT_ID!;
+      const { project } = yield* GcpEnvironment.current;
       const page = yield* container.listProjectsLocationsClusters({
         parent: `projects/${project}/locations/-`,
       });
@@ -61,7 +55,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "registers the gcp-gke kubernetes adapter",
   (stack) =>
     Effect.gen(function* () {
@@ -83,6 +77,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a cluster",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
@@ -113,9 +108,7 @@ test.provider.skipIf(!runLifecycle)(
         expect(created.connection.auth.clusterId).toEqual(created.clusterId);
       }
       expect(created.kubernetesObjects).toEqual([]);
-      expect(created.workloadPool).toEqual(
-        `${process.env.GOOGLE_PROJECT_ID}.svc.id.goog`,
-      );
+      expect(created.workloadPool).toEqual(`${project}.svc.id.goog`);
 
       const fetched = yield* container.getProjectsLocationsClusters({
         name: created.name,

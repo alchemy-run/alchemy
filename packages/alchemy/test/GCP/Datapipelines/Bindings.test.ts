@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Output from "@/Output";
@@ -12,21 +13,15 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const entitled = process.env.GCP_TEST_DATAPIPELINES === "1";
-const runBindings = hasGcpCreds && entitled && !process.env.FAST;
+const runBindings = entitled && !process.env.FAST;
 
 test.provider.skipIf(!runBindings)(
   "RunPipeline and StopPipeline on a data pipeline",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const out = yield* stack.deploy(

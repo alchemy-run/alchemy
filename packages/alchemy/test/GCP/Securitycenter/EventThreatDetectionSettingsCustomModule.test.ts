@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
@@ -12,16 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-
-const parent = `projects/${project}/eventThreatDetectionSettings`;
 
 const badIpConfig = {
   metadata: {
@@ -45,10 +36,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsEventThreatDetectionSettingsCustomModules on a missing module fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/eventThreatDetectionSettings`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -63,10 +57,13 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an event threat detection custom module",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/eventThreatDetectionSettings`;
+
       yield* stack.destroy();
 
       const access = yield* scc

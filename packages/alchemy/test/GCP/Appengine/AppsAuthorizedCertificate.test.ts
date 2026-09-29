@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CERT_A, CERT_B, KEY_A, KEY_B } from "./fixtures/cert.ts";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,16 +15,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_APPENGINE;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_APPENGINE;
 
 const waitUntilGone = (appsId: string, certificateId: string) =>
   appengine
@@ -42,10 +34,11 @@ const waitUntilGone = (appsId: string, certificateId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAppsAuthorizedCertificates on a missing certificate fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -61,10 +54,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_APPENGINE)(
+test.provider.skipIf(!!process.env.GCP_TEST_APPENGINE)(
   "createAppsAuthorizedCertificates without an App Engine app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -90,6 +84,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an authorized certificate",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
@@ -13,20 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Cloud Bigtable Admin API is disabled on the default testing project
 // (`Forbidden`: "Cloud Bigtable Admin API has not been used in project
 // 457525637530 before or it is disabled."). Set GCP_TEST_BIGTABLE=1 on an
 // entitled project to run the full lifecycle.
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesLogicalViews({ name }).pipe(
@@ -41,10 +33,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsInstancesLogicalViews on a missing instance fails with Forbidden or NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsDataTaxonomies({ name }).pipe(
     Effect.as("found" as const),
@@ -32,10 +25,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "creating a data taxonomy returns InternalServerError (API sunset)",
   () =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         dataplex.createProjectsLocationsDataTaxonomies({
           parent: `projects/${project}/locations/us-central1`,
@@ -54,7 +48,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 30_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_DATATAXONOMY)(
+test.provider.skipIf(!process.env.GCP_TEST_DATATAXONOMY)(
   "create, update, and delete a data taxonomy",
   (stack) =>
     Effect.gen(function* () {

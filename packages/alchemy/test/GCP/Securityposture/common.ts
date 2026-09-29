@@ -1,17 +1,13 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const project =
-  process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -26,6 +22,7 @@ export const organizationOf = () =>
         ? fromEnv
         : `organizations/${fromEnv}`;
     }
+    const project = yield* currentProject;
     let current: string | undefined = `projects/${project}`;
     for (let i = 0; i < 8; i++) {
       if (current === undefined) return "";

@@ -4,21 +4,21 @@ import * as datalabeling from "@distilled.cloud/gcp/datalabeling_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
   probe,
   probeErrorTags,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
 } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsEvaluationJobs on a missing job fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -39,6 +39,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an evaluation job",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

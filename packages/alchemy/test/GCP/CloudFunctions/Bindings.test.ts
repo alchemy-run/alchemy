@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -16,19 +17,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const LOCATION = "us-central1";
 
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
 
 const uploadSource = Effect.fn(function* () {
+  const { project } = yield* GcpEnvironment.current;
   const archive = yield* zipFiles([
     {
       path: "index.js",
@@ -61,6 +55,7 @@ const uploadSource = Effect.fn(function* () {
       HttpClientRequest.bodyUint8Array(bytes, "application/zip"),
     ),
   );
+
   return uploaded.storageSource;
 });
 

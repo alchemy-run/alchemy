@@ -5,13 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import {
-  hasGcpCreds,
-  location,
-  logLevel,
-  parent,
-  runLifecycle,
-} from "./common.ts";
+import { location, logLevel, currentParent, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +28,7 @@ const datasetNameFromOperation = (operation: translate.Operation) => {
 
 const createDataset = (displayName: string) =>
   Effect.gen(function* () {
+    const parent = yield* currentParent;
     const page = yield* translate.listProjectsLocationsDatasets({
       parent,
       pageSize: 100,
@@ -70,10 +65,11 @@ const deleteDataset = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.void),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsModels on a missing model fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -92,6 +88,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a translation model",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const probe = yield* translate

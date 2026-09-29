@@ -17,12 +17,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const dockerAvailable = (() => {
   try {
     return (
@@ -60,7 +54,7 @@ const getUntil = <A>(
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+test.provider.skipIf(!dockerAvailable)(
   "InvokeService calls a private service with a Google-signed ID token",
   (stack) =>
     Effect.gen(function* () {

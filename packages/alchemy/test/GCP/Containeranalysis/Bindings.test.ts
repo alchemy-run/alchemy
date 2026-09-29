@@ -3,16 +3,11 @@ import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  hasGcpCreds,
-  logLevel,
-  TEST_ATTESTATION,
-  TEST_RESOURCE_URI,
-} from "./common.ts";
+import { logLevel, TEST_ATTESTATION, TEST_RESOURCE_URI } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "GetNote and GetOccurrence invoke HTTP bindings",
   (stack) =>
     Effect.gen(function* () {

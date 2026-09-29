@@ -4,12 +4,7 @@ import * as dv from "@distilled.cloud/gcp/displayvideo_v4";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  advertiserProps,
-  hasGcpCreds,
-  logLevel,
-  runLifecycle,
-} from "./common.ts";
+import { advertiserProps, logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -33,7 +28,7 @@ const waitUntilGone = (
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getInventorySourceGroups on a missing group fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

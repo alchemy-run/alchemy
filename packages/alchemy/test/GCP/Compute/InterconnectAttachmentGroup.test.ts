@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,39 +14,34 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds &&
-  !!process.env.GCP_TEST_COMPUTE_INTERCONNECT &&
-  !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !!process.env.GCP_TEST_COMPUTE_INTERCONNECT && !process.env.FAST;
 
 const waitUntilGone = (interconnectAttachmentGroup: string) =>
-  compute
-    .getInterconnectAttachmentGroups({
-      project,
-      interconnectAttachmentGroup,
-    })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute
+        .getInterconnectAttachmentGroups({
+          project,
+          interconnectAttachmentGroup,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
+        ),
+    ),
+  );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getInterconnectAttachmentGroups on a missing group fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -61,10 +57,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "probe insertInterconnectAttachmentGroups entitlement",
   () =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       const result = yield* compute
         .insertInterconnectAttachmentGroups({
           project,

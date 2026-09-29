@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
@@ -13,21 +14,15 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const entityTypeParent =
-  process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-  `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
-
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "GetEntity round-trip",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const entityTypeParent =
+        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
+        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
+
       yield* stack.destroy();
 
       const probe = yield* connectors

@@ -4,7 +4,6 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
   TEST_ATTESTATION,
   TEST_POD,
@@ -13,7 +12,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "GetAttestor invokes the HTTP binding",
   (stack) =>
     Effect.gen(function* () {
@@ -53,7 +52,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_BINAUTHZ_VALIDATE)(
+test.provider.skipIf(!process.env.GCP_TEST_BINAUTHZ_VALIDATE)(
   "ValidateAttestation invokes the HTTP binding",
   (stack) =>
     Effect.gen(function* () {
@@ -96,7 +95,7 @@ test.provider.skipIf(!hasGcpCreds || !process.env.GCP_TEST_BINAUTHZ_VALIDATE)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "GetPlatformsPolicy and EvaluateGkePolicy invoke HTTP bindings",
   (stack) =>
     Effect.gen(function* () {

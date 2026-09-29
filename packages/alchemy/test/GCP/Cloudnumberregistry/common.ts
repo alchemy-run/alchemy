@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -8,15 +9,11 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const runLifecycle = !process.env.FAST;
+
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const runLifecycle = hasGcpCreds && !process.env.FAST;
-
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
 export const location = "global";
 
 export const entitlementTags = ["Forbidden", "NotFound"] as const;
@@ -25,53 +22,51 @@ export type ProbeResult =
   | { tag: "ok" }
   | { tag: (typeof entitlementTags)[number]; message: string | undefined };
 
-export const probeRegistryBooks = (
-  parent = `projects/${project}/locations/${location}`,
-) =>
-  cnr
-    .listProjectsLocationsRegistryBooks({
-      parent,
-      pageSize: 1,
-    })
-    .pipe(
-      Effect.map((): ProbeResult => ({ tag: "ok" })),
-      Effect.catchTag("Forbidden", (error) =>
-        Effect.succeed({
-          tag: "Forbidden" as const,
-          message: error.message,
-        }),
-      ),
-      Effect.catchTag("NotFound", (error) =>
-        Effect.succeed({
-          tag: "NotFound" as const,
-          message: error.message,
-        }),
-      ),
-    );
+export const probeRegistryBooks = (parent?: string) =>
+  currentProject.pipe(
+    Effect.flatMap((project) =>
+      cnr.listProjectsLocationsRegistryBooks({
+        parent: parent ?? `projects/${project}/locations/${location}`,
+        pageSize: 1,
+      }),
+    ),
+    Effect.map((): ProbeResult => ({ tag: "ok" })),
+    Effect.catchTag("Forbidden", (error) =>
+      Effect.succeed({
+        tag: "Forbidden" as const,
+        message: error.message,
+      }),
+    ),
+    Effect.catchTag("NotFound", (error) =>
+      Effect.succeed({
+        tag: "NotFound" as const,
+        message: error.message,
+      }),
+    ),
+  );
 
-export const probeIpamAdminScopes = (
-  parent = `projects/${project}/locations/${location}`,
-) =>
-  cnr
-    .listProjectsLocationsIpamAdminScopes({
-      parent,
-      pageSize: 1,
-    })
-    .pipe(
-      Effect.map((): ProbeResult => ({ tag: "ok" })),
-      Effect.catchTag("Forbidden", (error) =>
-        Effect.succeed({
-          tag: "Forbidden" as const,
-          message: error.message,
-        }),
-      ),
-      Effect.catchTag("NotFound", (error) =>
-        Effect.succeed({
-          tag: "NotFound" as const,
-          message: error.message,
-        }),
-      ),
-    );
+export const probeIpamAdminScopes = (parent?: string) =>
+  currentProject.pipe(
+    Effect.flatMap((project) =>
+      cnr.listProjectsLocationsIpamAdminScopes({
+        parent: parent ?? `projects/${project}/locations/${location}`,
+        pageSize: 1,
+      }),
+    ),
+    Effect.map((): ProbeResult => ({ tag: "ok" })),
+    Effect.catchTag("Forbidden", (error) =>
+      Effect.succeed({
+        tag: "Forbidden" as const,
+        message: error.message,
+      }),
+    ),
+    Effect.catchTag("NotFound", (error) =>
+      Effect.succeed({
+        tag: "NotFound" as const,
+        message: error.message,
+      }),
+    ),
+  );
 
 export const waitUntilGone = <E, R>(get: Effect.Effect<unknown, E, R>) =>
   get.pipe(

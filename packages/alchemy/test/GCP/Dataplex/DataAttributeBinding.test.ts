@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
@@ -13,17 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds &&
   !process.env.FAST &&
   process.env.GCP_TEST_DATAPLEX_DATA_ATTRIBUTE_BINDING === "1";
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsDataAttributeBindings({ name }).pipe(
@@ -36,10 +29,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsDataAttributeBindings on a missing binding fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

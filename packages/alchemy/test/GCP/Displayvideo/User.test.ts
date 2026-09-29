@@ -4,7 +4,7 @@ import * as dv from "@distilled.cloud/gcp/displayvideo_v4";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { hasGcpCreds, logLevel, partnerId, runLifecycle } from "./common.ts";
+import { logLevel, partnerId, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,7 +19,7 @@ const waitUntilGone = (userId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getUsers on a missing user fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

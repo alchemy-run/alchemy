@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,31 +14,31 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle = hasGcpCreds && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (indexId: string) =>
-  datastore.getProjectsIndexes({ projectId: project, indexId }).pipe(
-    Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.repeat({
-      schedule: Schedule.spaced("5 seconds"),
-      until: (status) => status === "gone",
-      times: 24,
-    }),
-  );
+  Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
 
-test.provider.skipIf(!hasGcpCreds)(
+    return yield* datastore
+      .getProjectsIndexes({ projectId: project, indexId })
+      .pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (status) => status === "gone",
+          times: 24,
+        }),
+      );
+  });
+
+test.provider(
   "getProjectsIndexes on a missing index fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -62,6 +63,8 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete a datastore composite index",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

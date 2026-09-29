@@ -7,7 +7,6 @@ import * as Schedule from "effect/Schedule";
 import {
   customer,
   domain,
-  hasGcpCreds,
   logLevel,
   memberEmail,
   runMembershipLifecycle,
@@ -27,7 +26,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getGroupsMemberships on a missing membership fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -45,7 +44,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CLOUDIDENTITY)(
+test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
   "createGroupsMemberships without Cloud Identity access fails with a typed entitlement error",
   (stack) =>
     Effect.gen(function* () {

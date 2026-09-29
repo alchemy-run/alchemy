@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
@@ -13,17 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds &&
   !process.env.FAST &&
   !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsFeatureGroupsFeatures({ name }).pipe(
@@ -36,7 +29,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const groupProps = {
+const groupPropsOf = (project: string) => ({
   location: "us-central1" as const,
   description: "user features",
   labels: { env: "test" },
@@ -44,12 +37,13 @@ const groupProps = {
     inputUri: `bq://${project}.alchemy_features.users`,
     entityIdColumns: ["entity_id"],
   },
-};
+});
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsFeatureGroupsFeatures on a missing feature fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -68,6 +62,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a feature group feature",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const groupProps = groupPropsOf(project);
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

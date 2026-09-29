@@ -5,21 +5,21 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   location,
   logLevel,
   probeSaasApi,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
 } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsUnits on a missing unit fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

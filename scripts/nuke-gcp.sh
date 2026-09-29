@@ -12,7 +12,7 @@ fi
 
 bun alchemy unsafe nuke --config ./stacks/nuke-gcp.ts \
   --include 'GCP.*' \
-  --profile testing \
+  --profile alchemy-testing \
   --concurrency 16 \
   --timeout 300 \
   "$@"

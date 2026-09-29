@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
@@ -12,14 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const templateA: dataplex.GoogleCloudDataplexV1AspectTypeMetadataTemplate = {
   name: "schema",
@@ -64,10 +57,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsAspectTypes on a missing type fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -82,9 +76,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
   "create, update, and delete an aspect type",
   (stack) =>
     Effect.gen(function* () {

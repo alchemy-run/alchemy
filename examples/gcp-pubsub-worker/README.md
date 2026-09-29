@@ -40,7 +40,7 @@ From the repository root:
 ```sh
 pnpm install
 cd examples/gcp-pubsub-worker
-pnpm deploy --profile testing
+pnpm deploy --profile alchemy-testing
 ```
 
 Deploying builds both container images locally, so Docker must be running. Set `GOOGLE_PROJECT_ID` and credentials as in the [GCP setup](https://alchemy.run/gcp/setup/).
@@ -48,7 +48,7 @@ Deploying builds both container images locally, so Docker must be running. Set `
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=testing bun test test/integ.test.ts
+ALCHEMY_PROFILE=alchemy-testing bun test test/integ.test.ts
 ```
 
 The test deploys the stack, submits several jobs, polls `GET /jobs/:id` until every job is done, checks each result against the Firestore document out of band, then destroys the stack and checks the topic, subscription, worker pool, and database are gone.
@@ -56,5 +56,5 @@ The test deploys the stack, submits several jobs, polls `GET /jobs/:id` until ev
 ## Destroy
 
 ```sh
-pnpm destroy --profile testing
+pnpm destroy --profile alchemy-testing
 ```

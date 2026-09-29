@@ -7,7 +7,6 @@ import * as Schedule from "effect/Schedule";
 import {
   advertiserProps,
   campaignGoal,
-  hasGcpCreds,
   logLevel,
   runLifecycle,
 } from "./common.ts";
@@ -25,7 +24,7 @@ const waitUntilGone = (advertiserId: string, adGroupId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAdvertisersAdGroups on a missing ad group fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

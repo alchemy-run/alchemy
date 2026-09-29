@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
@@ -14,16 +15,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_SERVICE_NETWORKING && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !!process.env.GCP_TEST_SERVICE_NETWORKING && !process.env.FAST;
 const parent = "services/servicenetworking.googleapis.com";
 
 const waitUntilGone = (consumerNetwork: string) =>
@@ -46,10 +39,12 @@ const waitUntilGone = (consumerNetwork: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "listServicesConnections on a missing network returns no connections",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const resource = yield* resourcemanager.getProjects({
@@ -72,6 +67,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a service networking connection",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

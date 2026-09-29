@@ -4,7 +4,7 @@ import * as chat from "@distilled.cloud/gcp/chat_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { hasGcpCreds, logLevel, runLifecycle } from "./common.ts";
+import { logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -20,7 +20,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getSpacesMessages on a missing message fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -38,7 +38,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CHAT)(
+test.provider.skipIf(!!process.env.GCP_TEST_CHAT)(
   "createSpacesMessages without Chat access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

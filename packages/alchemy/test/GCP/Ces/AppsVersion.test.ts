@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as ces from "@distilled.cloud/gcp/ces_v1";
@@ -13,16 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && process.env.GCP_TEST_CES === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_CES === "1";
 
 const waitUntilGone = (name: string) =>
   ces.getProjectsLocationsAppsVersions({ name }).pipe(
@@ -35,10 +27,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsAppsVersions on a missing version fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

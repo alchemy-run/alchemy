@@ -5,9 +5,9 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
+  currentProject,
   logLevel,
-  missingPullRequest,
+  missingPullRequestOf,
   runLifecycle,
 } from "./common.ts";
 
@@ -29,10 +29,12 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsRepositoriesPullRequestsPullRequestComments on a missing comment fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+      const missingPullRequest = missingPullRequestOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -47,10 +49,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create against a missing pull request is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+      const missingPullRequest = missingPullRequestOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -83,6 +87,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a pull request comment",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+      const missingPullRequest = missingPullRequestOf(project);
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

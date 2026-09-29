@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,18 +14,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const region = "us-central1";
 const healthCheckName = "alchemy-sa-probe";
 const backendName = "alchemy-sa-ilb";
 
-const waitUntilGone = (serviceAttachmentName: string, projectId = project) =>
+const waitUntilGone = (serviceAttachmentName: string, projectId: string) =>
   compute
     .getServiceAttachments({
       project: projectId,
@@ -44,29 +38,38 @@ const waitUntilGone = (serviceAttachmentName: string, projectId = project) =>
 const waitRegionOp = (operation: compute.Operation) => {
   if (operation.status === "DONE") return Effect.succeed(operation);
   const name = (operation.name ?? "").split("/").pop() ?? "";
-  return compute.getRegionOperations({ project, region, operation: name }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (op) => op.status === "DONE",
-      times: 20,
-    }),
+  return GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute.getRegionOperations({ project, region, operation: name }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (op) => op.status === "DONE",
+          times: 20,
+        }),
+      ),
+    ),
   );
 };
 
 const waitGlobalOp = (operation: compute.Operation) => {
   if (operation.status === "DONE") return Effect.succeed(operation);
   const name = (operation.name ?? "").split("/").pop() ?? "";
-  return compute.getGlobalOperations({ project, operation: name }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (op) => op.status === "DONE",
-      times: 20,
-    }),
+  return GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute.getGlobalOperations({ project, operation: name }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (op) => op.status === "DONE",
+          times: 20,
+        }),
+      ),
+    ),
   );
 };
 
 const ensureProducer = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
     const existingCheck = yield* compute
       .getHealthChecks({ project, healthCheck: healthCheckName })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -131,33 +134,38 @@ const ensureProducer = () =>
   });
 
 const deleteProducer = () =>
-  compute
-    .deleteRegionBackendServices({
-      project,
-      region,
-      backendService: backendName,
-    })
-    .pipe(
-      Effect.flatMap(waitRegionOp),
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.catchTag("Conflict", () => Effect.void),
-    )
-    .pipe(
-      Effect.flatMap(() =>
-        compute
-          .deleteHealthChecks({ project, healthCheck: healthCheckName })
-          .pipe(
-            Effect.flatMap(waitGlobalOp),
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.catchTag("Conflict", () => Effect.void),
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute
+        .deleteRegionBackendServices({
+          project,
+          region,
+          backendService: backendName,
+        })
+        .pipe(
+          Effect.flatMap(waitRegionOp),
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catchTag("Conflict", () => Effect.void),
+        )
+        .pipe(
+          Effect.flatMap(() =>
+            compute
+              .deleteHealthChecks({ project, healthCheck: healthCheckName })
+              .pipe(
+                Effect.flatMap(waitGlobalOp),
+                Effect.catchTag("NotFound", () => Effect.void),
+                Effect.catchTag("Conflict", () => Effect.void),
+              ),
           ),
-      ),
-    );
+        ),
+    ),
+  );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a service attachment",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
       const producer = yield* ensureProducer();
       expect(producer.backend.selfLink).toEqual(expect.any(String));
@@ -314,5 +322,5 @@ test.provider.skipIf(!hasGcpCreds)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel, Effect.ensuring(deleteProducer().pipe(Effect.ignore))),
-  { timeout: 180_000 },
+  { timeout: 360_000 },
 );

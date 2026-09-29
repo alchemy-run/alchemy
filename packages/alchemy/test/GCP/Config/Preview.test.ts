@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/gcp/config_v1";
 import { expect } from "alchemy-test";
@@ -13,22 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
-const serviceAccount = `projects/${project}/serviceAccounts/alchemy-testing@${project}.iam.gserviceaccount.com`;
-
 // Infra Manager (config.googleapis.com) is entitlement-gated. Live create
 // returns Forbidden: "Infrastructure Manager API has not been used in
 // project … before or it is disabled." Preview also invokes Cloud Build.
 // Set GCP_TEST_CONFIG=1 on an entitled project to run the full lifecycle.
 const entitled = process.env.GCP_TEST_CONFIG === "1";
-const runLifecycle = hasGcpCreds && entitled && !process.env.FAST;
+const runLifecycle = entitled && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   config.getProjectsLocationsPreviews({ name }).pipe(
@@ -41,10 +32,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsPreviews on a missing preview fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -71,10 +63,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || entitled)(
+test.provider.skipIf(entitled)(
   "createProjectsLocationsPreviews is rejected with Forbidden when Infra Manager is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const serviceAccount = `projects/${project}/serviceAccounts/alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -92,10 +86,12 @@ test.provider.skipIf(!hasGcpCreds || entitled)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !entitled)(
+test.provider.skipIf(!entitled)(
   "create preview without a blueprint is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const serviceAccount = `projects/${project}/serviceAccounts/alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -118,6 +114,8 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete a preview",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const serviceAccount = `projects/${project}/serviceAccounts/alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

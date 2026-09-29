@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,47 +14,49 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const region = "us-central1";
 const poolName = "alchemy-fr-test-pool";
 
 const waitUntilGone = (forwardingRuleName: string) =>
-  compute
-    .getForwardingRules({
-      project,
-      region,
-      forwardingRule: forwardingRuleName,
-    })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute
+        .getForwardingRules({
+          project,
+          region,
+          forwardingRule: forwardingRuleName,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
+        ),
+    ),
+  );
 
 const waitOp = (operation: compute.Operation) => {
   if (operation.status === "DONE") return Effect.succeed(operation);
   const name = (operation.name ?? "").split("/").pop() ?? "";
-  return compute.getRegionOperations({ project, region, operation: name }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (op) => op.status === "DONE",
-      times: 12,
-    }),
+  return GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute.getRegionOperations({ project, region, operation: name }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (op) => op.status === "DONE",
+          times: 12,
+        }),
+      ),
+    ),
   );
 };
 
 const ensureTargetPool = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
     const existing = yield* compute
       .getTargetPools({ project, region, targetPool: poolName })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
@@ -76,13 +79,17 @@ const ensureTargetPool = () =>
   });
 
 const deleteTargetPool = () =>
-  compute.deleteTargetPools({ project, region, targetPool: poolName }).pipe(
-    Effect.flatMap(waitOp),
-    Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catchTag("Conflict", () => Effect.void),
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute.deleteTargetPools({ project, region, targetPool: poolName }).pipe(
+        Effect.flatMap(waitOp),
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.catchTag("Conflict", () => Effect.void),
+      ),
+    ),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a regional forwarding rule",
   (stack) =>
     Effect.gen(function* () {

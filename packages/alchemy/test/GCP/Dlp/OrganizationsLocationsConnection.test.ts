@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,13 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -38,6 +32,7 @@ const waitUntilGone = (name: string) =>
 
 const organizationOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
     const fromEnv = process.env.GOOGLE_ORGANIZATION_ID;
     if (fromEnv && fromEnv.length > 0) {
       return fromEnv.startsWith("organizations/")
@@ -67,7 +62,7 @@ const organizationOf = () =>
     return "";
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsConnections on a missing connection fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -86,10 +81,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an organization DLP connection",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const organization = yield* organizationOf();

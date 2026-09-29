@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import {
   assertEntitlement,
   customerId,
-  hasGcpCreds,
   logLevel,
   missingUserId,
   probeAccess,
@@ -19,7 +18,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getLicenseAssignments on a missing assignment fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -39,7 +38,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "insertLicenseAssignments without License Manager access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -95,7 +94,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a license assignment",
   (stack) =>
     Effect.gen(function* () {

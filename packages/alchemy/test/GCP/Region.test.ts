@@ -19,12 +19,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 test(
   "regional endpoint routing",
   Effect.sync(() => {
@@ -97,7 +91,7 @@ test(
   }),
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "a stack-level GCP.Region sets the default region; regional secrets reach their endpoint",
   (stack) =>
     Effect.gen(function* () {
@@ -133,7 +127,7 @@ test.provider.skipIf(!hasGcpCreds)(
 
 const withoutOverride = Test.make({ providers: GCP.providers() });
 
-withoutOverride.test.provider.skipIf(!hasGcpCreds)(
+withoutOverride.test.provider(
   "without GCP.Region, the credential's region is the default",
   (stack) =>
     Effect.gen(function* () {

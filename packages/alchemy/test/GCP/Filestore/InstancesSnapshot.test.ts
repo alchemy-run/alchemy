@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as file from "@distilled.cloud/gcp/file_v1";
@@ -13,17 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Zonal instance + snapshot each take several minutes; skip unless enabled.
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_FILESTORE && !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !!process.env.GCP_TEST_FILESTORE && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   file.getProjectsLocationsInstancesSnapshots({ name }).pipe(
@@ -36,10 +28,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsInstancesSnapshots on a missing snapshot fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

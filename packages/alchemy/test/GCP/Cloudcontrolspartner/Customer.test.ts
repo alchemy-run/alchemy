@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as cloudcontrolspartner from "@distilled.cloud/gcp/cloudcontrolspartner_v1";
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const location = "us-central1";
 const entitlementTags = [
   "Forbidden",
@@ -31,6 +24,8 @@ const entitlementTags = [
 
 const organizationOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+
     const fromEnv =
       process.env.GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION ??
       process.env.GOOGLE_ORGANIZATION_ID;
@@ -79,7 +74,7 @@ const customerOrgId = (
   process.env.GOOGLE_CLOUDCONTROLSPARTNER_CUSTOMER_ID ?? ""
 ).trim();
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsCustomers on a missing customer fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -98,7 +93,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createOrganizationsLocationsCustomers without Cloud Controls Partner access fails with a typed entitlement error",
   (stack) =>
     Effect.gen(function* () {
@@ -119,7 +114,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a customer",
   (stack) =>
     Effect.gen(function* () {

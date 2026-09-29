@@ -7,7 +7,6 @@ import * as Schedule from "effect/Schedule";
 import {
   advertiserProps,
   campaignGoal,
-  hasGcpCreds,
   logLevel,
   runLifecycle,
 } from "./common.ts";
@@ -37,7 +36,7 @@ const waitUntilGone = (
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAdvertisersLineItemsTargetingTypesAssignedTargetingOptions on a missing option fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

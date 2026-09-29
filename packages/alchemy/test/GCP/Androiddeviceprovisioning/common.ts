@@ -8,12 +8,6 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -43,7 +37,6 @@ export const customerName = (() => {
 })();
 
 export const runLifecycle =
-  hasGcpCreds &&
   !process.env.FAST &&
   !!process.env.GCP_TEST_ANDROIDDEVICEPROVISIONING &&
   !!customerName;

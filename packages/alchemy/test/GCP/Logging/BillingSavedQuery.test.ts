@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 // Billing-account saved queries return BadRequest ("Billing account is
 // not supported") on this testing project. Set GCP_TEST_BILLING_SAVED_QUERY=1
@@ -39,14 +32,20 @@ const waitUntilGone = (name: string) =>
   );
 
 const billingAccountId = () =>
-  cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }).pipe(
-    Effect.map(
-      (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-    ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-  );
+  Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
 
-test.provider.skipIf(!hasGcpCreds)(
+    return yield* cloudbilling
+      .getBillingInfoProjects({ name: `projects/${project}` })
+      .pipe(
+        Effect.map(
+          (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
+        ),
+        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
+      );
+  });
+
+test.provider(
   "getBillingAccountsLocationsSavedQueries on a missing query fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -65,7 +64,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || entitled)(
+test.provider.skipIf(entitled)(
   "createBillingAccountsLocationsSavedQueries is rejected when the billing account is not supported",
   (stack) =>
     Effect.gen(function* () {
@@ -93,7 +92,7 @@ test.provider.skipIf(!hasGcpCreds || entitled)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !entitled)(
+test.provider.skipIf(!entitled)(
   "create, update, replace, and delete a billing saved query",
   (stack) =>
     Effect.gen(function* () {

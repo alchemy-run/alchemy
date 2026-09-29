@@ -76,7 +76,7 @@ curl "$webUrl"                                    # external nginx deployment
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=testing bun test --timeout 3000000
+ALCHEMY_PROFILE=alchemy-testing bun test --timeout 3000000
 ```
 
 The test deploys the stack, checks the Firestore grants landed on both KSA

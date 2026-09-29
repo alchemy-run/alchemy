@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import { expect } from "alchemy-test";
@@ -12,17 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-const parent = `projects/${project}/locations/us-central1`;
-const missingName = `${parent}/collectors/alchemy-missing-collector`;
-const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;
 const DISABLED_MESSAGE = "Rapid Migration Assessment API has not been used";
 
 const waitUntilGone = (name: string) =>
@@ -37,18 +27,20 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeAccess = rma
-  .getProjectsLocationsCollectors({ name: missingName })
-  .pipe(
+const probeAccess = (name: string) =>
+  rma.getProjectsLocationsCollectors({ name }).pipe(
     Effect.as("ok" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
     Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCollectors on a missing collector fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const missingName = `${parent}/collectors/alchemy-missing-collector`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -76,10 +68,13 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createProjectsLocationsCollectors is rejected with Forbidden when Rapid Migration Assessment is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
       const result = yield* rma
@@ -134,13 +129,17 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a collector",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us-central1`;
+      const missingName = `${parent}/collectors/alchemy-missing-collector`;
+      const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;
       yield* stack.destroy();
 
-      const access = yield* probeAccess;
+      const access = yield* probeAccess(missingName);
       if (access !== "ok") {
         expect(access._tag).toEqual("Forbidden");
         expect(access.message).toContain(DISABLED_MESSAGE);

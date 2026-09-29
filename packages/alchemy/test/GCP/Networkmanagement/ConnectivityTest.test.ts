@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
@@ -13,22 +14,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Network Management API is disabled on the default testing project
 // (`Forbidden`: "Network Management API has not been used in project
 // alchemy-gcp-testing-83661 before or it is disabled."). Set
 // GCP_TEST_NETWORKMANAGEMENT=1 on an entitled project to run the full
 // lifecycle.
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_NETWORKMANAGEMENT === "1";
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !process.env.FAST && process.env.GCP_TEST_NETWORKMANAGEMENT === "1";
 
 const waitUntilGone = (name: string) =>
   networkmanagement.getProjectsLocationsGlobalConnectivityTests({ name }).pipe(
@@ -41,10 +33,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsGlobalConnectivityTests on a missing test fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -59,10 +53,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create is rejected with Forbidden when the Network Management API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -88,6 +84,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a connectivity test",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

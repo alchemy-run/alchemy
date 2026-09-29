@@ -4,12 +4,7 @@ import * as vault from "@distilled.cloud/gcp/vault_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  hasGcpCreds,
-  logLevel,
-  runAccountLifecycle,
-  vaultAccount,
-} from "./common.ts";
+import { logLevel, runAccountLifecycle, vaultAccount } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +20,7 @@ const waitUntilGone = (matterId: string, holdId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getMattersHolds on a missing hold fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -44,7 +39,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_VAULT)(
+test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
   "createMattersHolds without Vault access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

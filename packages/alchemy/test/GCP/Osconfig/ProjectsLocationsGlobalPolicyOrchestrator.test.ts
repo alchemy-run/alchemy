@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as osconfig from "@distilled.cloud/gcp/osconfig_v2";
 import { expect } from "alchemy-test";
@@ -13,15 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const parent = `projects/${project}/locations/global`;
-
 const waitUntilGone = (name: string) =>
   osconfig.getProjectsLocationsGlobalPolicyOrchestrators({ name }).pipe(
     Effect.as("found" as const),
@@ -33,10 +25,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsGlobalPolicyOrchestrators on a missing orchestrator fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/global`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -54,10 +48,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a project policy orchestrator",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/global`;
       yield* stack.destroy();
 
       const access = yield* osconfig

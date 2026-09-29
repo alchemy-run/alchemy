@@ -12,16 +12,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Retail create returns Forbidden: "AI Commerce Search API has not been
 // used in project … or it is disabled."
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && process.env.GCP_TEST_RETAIL === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_RETAIL === "1";
 
 test.provider.skipIf(!runLifecycle)(
   "Search round-trip against a serving config",

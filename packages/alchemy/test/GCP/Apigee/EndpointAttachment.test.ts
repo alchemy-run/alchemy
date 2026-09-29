@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
@@ -13,23 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds &&
   !!process.env.GCP_TEST_APIGEE &&
   !!process.env.GCP_TEST_APIGEE_ENDPOINT &&
   !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const org = `organizations/${project}`;
-const serviceAttachment =
-  process.env.GCP_TEST_APIGEE_SERVICE_ATTACHMENT ??
-  `projects/${project}/regions/us-central1/serviceAttachments/alchemy-backend`;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsEndpointAttachments({ name }).pipe(
@@ -43,10 +31,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsEndpointAttachments on a missing attachment fails with NotFound or Forbidden",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const org = `organizations/${project}`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -65,6 +56,11 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete an endpoint attachment",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const serviceAttachment =
+        process.env.GCP_TEST_APIGEE_SERVICE_ATTACHMENT ??
+        `projects/${project}/regions/us-central1/serviceAttachments/alchemy-backend`;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

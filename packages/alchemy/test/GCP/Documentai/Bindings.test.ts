@@ -1,5 +1,6 @@
 import { Action } from "@/Action";
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as documentai from "@distilled.cloud/gcp/documentai_v1";
 import { expect } from "alchemy-test";
@@ -12,12 +13,6 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 const waitUntilGone = (name: string) =>
@@ -54,14 +49,15 @@ startxref
 %%EOF
 `;
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "Process and GetProcessor round-trip",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const probe = yield* Effect.gen(function* () {
-        const parent = `projects/${process.env.GOOGLE_PROJECT_ID ?? ""}/locations/us`;
+        const { project } = yield* GcpEnvironment.current;
+        const parent = `projects/${project}/locations/us`;
         return yield* documentai
           .listProjectsLocationsProcessors({
             parent,
@@ -172,13 +168,14 @@ const invoiceSchema: GCP.Documentai.DocumentSchemaSpec = {
   ],
 };
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "GetSchema and GetSchemaVersion round-trip",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const parent = `projects/${process.env.GOOGLE_PROJECT_ID ?? ""}/locations/us`;
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/us`;
       const probe = yield* documentai
         .listProjectsLocationsSchemas({
           parent,

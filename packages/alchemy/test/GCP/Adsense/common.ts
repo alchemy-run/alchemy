@@ -9,14 +9,7 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_ADSENSE;
+export const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_ADSENSE;
 
 export const probeParent =
   "accounts/pub-0000000000000000/adclients/ca-pub-0000000000000000";

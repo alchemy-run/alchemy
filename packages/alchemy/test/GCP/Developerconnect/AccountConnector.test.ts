@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,21 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Developer Connect is entitlement-gated. Live create returns Forbidden:
 // "Developer Connect API has not been used in project alchemy-gcp-testing-83661
 // before or it is disabled. Enable it by visiting
 // https://console.developers.google.com/apis/api/developerconnect.googleapis.com/overview?project=alchemy-gcp-testing-83661"
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_DEVELOPERCONNECT === "1";
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !process.env.FAST && process.env.GCP_TEST_DEVELOPERCONNECT === "1";
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -41,12 +33,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(
-  !hasGcpCreds || process.env.GCP_TEST_DEVELOPERCONNECT === "1",
-)(
+test.provider.skipIf(process.env.GCP_TEST_DEVELOPERCONNECT === "1")(
   "createProjectsLocationsAccountConnectors is Forbidden when Developer Connect is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -71,10 +62,11 @@ test.provider.skipIf(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsAccountConnectors on a missing connector fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

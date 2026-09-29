@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,14 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_BYOIP && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_BYOIP && !process.env.FAST;
 
 const parentPrefix = process.env.GCP_TEST_PAP_PARENT ?? "";
 const ipCidrRange = process.env.GCP_TEST_PDP_RANGE ?? "203.0.113.0/24";
@@ -38,11 +32,11 @@ const waitUntilGone = (project: string, publicDelegatedPrefix: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "probe insertGlobalPublicDelegatedPrefixes entitlement",
   () =>
     Effect.gen(function* () {
-      const project = process.env.GOOGLE_PROJECT_ID ?? "";
+      const { project } = yield* GcpEnvironment.current;
       const result = yield* compute
         .insertGlobalPublicDelegatedPrefixes({
           project,

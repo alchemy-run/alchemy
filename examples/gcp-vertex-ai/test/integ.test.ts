@@ -28,10 +28,10 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+// The project comes from the same credential the deploy uses.
+const currentProject = GCP.GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
+  Effect.provide(GCP.fromCredentials().pipe(Layer.provide(GcpHttp))),
 );
 
 // The service is built from `main`, which needs a local image build.
@@ -46,7 +46,7 @@ const dockerAvailable = (() => {
   }
 })();
 
-const skip = !hasGcpCreds || !dockerAvailable;
+const skip = !dockerAvailable;
 
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
@@ -59,20 +59,21 @@ const serviceState = (name: string) =>
   );
 
 /** Members holding `roles/aiplatform.user` on the project. */
-const aiplatformUsers = resourcemanager
-  .getIamPolicyProjects({
-    resource: `projects/${process.env.GOOGLE_PROJECT_ID}`,
-    body: { options: { requestedPolicyVersion: 3 } },
-  })
-  .pipe(
-    Effect.map((policy) =>
-      (policy.bindings ?? [])
-        .filter((binding) => binding.role === "roles/aiplatform.user")
-        .flatMap((binding) => binding.members ?? []),
-    ),
-    Effect.orDie,
-    Effect.provide(GcpHttp),
-  );
+const aiplatformUsers = currentProject.pipe(
+  Effect.flatMap((project) =>
+    resourcemanager.getIamPolicyProjects({
+      resource: `projects/${project}`,
+      body: { options: { requestedPolicyVersion: 3 } },
+    }),
+  ),
+  Effect.map((policy) =>
+    (policy.bindings ?? [])
+      .filter((binding) => binding.role === "roles/aiplatform.user")
+      .flatMap((binding) => binding.members ?? []),
+  ),
+  Effect.orDie,
+  Effect.provide(GcpHttp),
+);
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(
   Effect.gen(function* () {

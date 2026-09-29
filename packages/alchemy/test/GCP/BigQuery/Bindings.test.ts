@@ -12,13 +12,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "Query, InsertAll, and ListTabledata round-trip",
   (stack) =>
     Effect.gen(function* () {

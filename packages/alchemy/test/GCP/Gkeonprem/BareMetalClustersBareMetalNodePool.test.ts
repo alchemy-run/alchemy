@@ -11,10 +11,9 @@ import {
   bareMetalNetwork,
   bareMetalStorage,
   createErrorTags,
-  hasGcpCreds,
   missingBareMetalCluster,
   missingMembership,
-  project,
+  currentProject,
   runLifecycle,
 } from "./common.ts";
 
@@ -39,10 +38,12 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsBareMetalClustersBareMetalNodePools on a missing pool fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -57,10 +58,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_GKEONPREM)(
+test.provider.skipIf(!!process.env.GCP_TEST_GKEONPREM)(
   "create under a missing cluster is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -91,6 +94,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a bare metal node pool",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const DOMAIN_A = "a.alchemy-cm.example.com";
 const DOMAIN_B = "b.alchemy-cm.example.com";
 
@@ -33,7 +27,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a dns authorization",
   (stack) =>
     Effect.gen(function* () {

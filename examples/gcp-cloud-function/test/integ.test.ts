@@ -25,14 +25,6 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-// Cloud Functions builds from an uploaded source archive, so unlike the
-// Cloud Run examples no local Docker daemon is needed.
-const skip = !(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 interface Note {
   id: string;
   title: string;
@@ -42,7 +34,7 @@ interface Note {
 
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
-afterAll.skipIf(skip || !!process.env.NO_DESTROY)(
+afterAll.skipIf(!!process.env.NO_DESTROY)(
   Effect.gen(function* () {
     const { functionName, databaseName } = yield* stack;
     yield* destroy(Stack);
@@ -79,7 +71,7 @@ const baseUrlOf = (url: string | undefined) => {
   return url.replace(/\/+$/, "");
 };
 
-test.skipIf(skip)(
+test(
   "creates, reads, lists, and deletes notes over public HTTP",
   Effect.gen(function* () {
     const { url, databaseName } = yield* stack;

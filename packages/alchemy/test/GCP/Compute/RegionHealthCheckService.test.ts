@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,14 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_HCAAS && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_HCAAS && !process.env.FAST;
 
 const region = "us-central1";
 
@@ -45,12 +39,12 @@ const waitUntilGone = (
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "probe insertRegionHealthCheckServices entitlement",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const project = process.env.GOOGLE_PROJECT_ID ?? "";
+      const { project } = yield* GcpEnvironment.current;
       const result = yield* compute
         .insertRegionHealthCheckServices({
           project,

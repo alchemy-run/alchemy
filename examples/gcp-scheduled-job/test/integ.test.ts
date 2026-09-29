@@ -32,12 +32,6 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // The job and the service are built from `main`, which needs a local
 // image build.
 const dockerAvailable = (() => {
@@ -51,12 +45,12 @@ const dockerAvailable = (() => {
   }
 })();
 
-const skip = !hasGcpCreds || !dockerAvailable;
+const skip = !dockerAvailable;
 
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
 // Destroy even when the tests skip: `beforeAll` deploys regardless.
-afterAll.skipIf(!hasGcpCreds || !!process.env.NO_DESTROY)(
+afterAll.skipIf(!!process.env.NO_DESTROY)(
   Effect.gen(function* () {
     const { jobName, schedulerJobName, bucketName } = yield* stack;
     yield* destroy(Stack);

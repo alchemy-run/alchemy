@@ -10,18 +10,13 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 const WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
@@ -72,13 +67,13 @@ const uploadPluginWasm = (repositoryName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsWasmPluginsVersions on a missing version fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = process.env.GOOGLE_PROJECT_ID ?? "";
+      const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         networkservices.getProjectsLocationsWasmPluginsVersions({
           name: `projects/${project}/locations/global/wasmPlugins/alchemy-missing/versions/missing`,
@@ -92,9 +87,7 @@ test.provider.skipIf(!hasGcpCreds)(
 );
 
 test.provider.skipIf(
-  !hasGcpCreds ||
-    !!process.env.FAST ||
-    !process.env.GCP_TEST_WASM_PLUGIN_VERSION,
+  !!process.env.FAST || !process.env.GCP_TEST_WASM_PLUGIN_VERSION,
 )(
   "create and delete a wasm plugin version",
   (stack) =>

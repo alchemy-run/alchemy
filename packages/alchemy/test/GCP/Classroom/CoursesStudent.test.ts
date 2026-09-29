@@ -14,18 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const classroomUser = process.env.GCP_TEST_CLASSROOM_USER;
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  !!process.env.GCP_TEST_CLASSROOM &&
-  !!classroomUser;
+  !process.env.FAST && !!process.env.GCP_TEST_CLASSROOM && !!classroomUser;
 
 const waitUntilGone = (courseId: string, userId: string) =>
   classroom.getCoursesStudents({ courseId, userId }).pipe(
@@ -39,7 +30,7 @@ const waitUntilGone = (courseId: string, userId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getCoursesStudents on a missing student fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

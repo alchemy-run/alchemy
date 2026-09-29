@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
@@ -13,16 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle = hasGcpCreds && !process.env.FAST;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !process.env.FAST;
 const location = "us-central1";
-const parent = `projects/${project}/locations/${location}`;
 
 const waitUntilGone = (name: string) =>
   apim.getProjectsLocationsObservationSources({ name }).pipe(
@@ -36,22 +29,27 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeAccess = apim
-  .listProjectsLocationsObservationSources({
-    parent,
-    pageSize: 1,
-  })
-  .pipe(
-    Effect.as("ok" as const),
-    Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-      Effect.succeed(error._tag),
-    ),
-  );
+const probeAccess = GcpEnvironment.current.pipe(
+  Effect.flatMap(({ project }) =>
+    apim.listProjectsLocationsObservationSources({
+      parent: `projects/${project}/locations/${location}`,
+      pageSize: 1,
+    }),
+  ),
 
-test.provider.skipIf(!hasGcpCreds)(
+  Effect.as("ok" as const),
+  Effect.catchTag(["Forbidden", "NotFound"], (error) =>
+    Effect.succeed(error._tag),
+  ),
+);
+
+test.provider(
   "getProjectsLocationsObservationSources on a missing source fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/${location}`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -73,6 +71,9 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete an API Observation source",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/${location}`;
+
       yield* stack.destroy();
 
       const access = yield* probeAccess;

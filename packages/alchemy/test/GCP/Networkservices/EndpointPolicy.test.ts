@@ -5,18 +5,13 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 const waitUntilGone = (name: string) =>
@@ -37,13 +32,13 @@ const matcher = (value: string) => ({
   },
 });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsEndpointPolicies on a missing policy fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const project = process.env.GOOGLE_PROJECT_ID ?? "";
+      const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         networkservices.getProjectsLocationsEndpointPolicies({
           name: `projects/${project}/locations/global/endpointPolicies/alchemy-missing`,
@@ -56,7 +51,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an endpoint policy",
   (stack) =>
     Effect.gen(function* () {

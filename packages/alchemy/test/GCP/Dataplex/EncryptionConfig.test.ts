@@ -13,15 +13,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const organizationId = process.env.GOOGLE_ORGANIZATION_ID ?? "";
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && organizationId.length > 0;
+const runLifecycle = !process.env.FAST && organizationId.length > 0;
 
 const waitUntilGone = (name: string) =>
   dataplex.getOrganizationsLocationsEncryptionConfigs({ name }).pipe(
@@ -34,7 +27,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsEncryptionConfigs on a missing config fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

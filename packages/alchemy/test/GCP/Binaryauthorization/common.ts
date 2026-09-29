@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { MinimumLogLevel } from "effect/References";
 import * as Effect from "effect/Effect";
 
@@ -6,13 +7,9 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 export const TEST_PKIX_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWhkM5kl7ac/yZQwut5RYqCF6R9TA

@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
@@ -13,22 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
 
 // Apigee X organizations are 1:1 with the GCP project. Deploying
 // GCP.Apigee.Organization against that project would adopt/update (and
 // destroy would delete) the account org. Keep lifecycle skipped.
 const runOrgLifecycle = false;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const org = `organizations/${project}`;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizations({ name }).pipe(
@@ -42,7 +33,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizations on a missing organization fails with NotFound or Forbidden",
   (stack) =>
     Effect.gen(function* () {
@@ -64,6 +55,9 @@ test.provider.skipIf(!runLifecycle || !runOrgLifecycle)(
   "create, update, and delete an organization",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const org = `organizations/${project}`;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

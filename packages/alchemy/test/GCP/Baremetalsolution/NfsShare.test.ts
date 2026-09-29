@@ -5,18 +5,13 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 // Bare Metal Solution API is disabled on the default testing project
@@ -26,16 +21,12 @@ const hasGcpCreds = !!(
 // GCP_TEST_BAREMETALSOLUTION=1 on an entitled project to run the full
 // lifecycle.
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_BAREMETALSOLUTION === "1";
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !process.env.FAST && process.env.GCP_TEST_BAREMETALSOLUTION === "1";
 
 const missingNetwork = (projectId: string) =>
   `projects/${projectId}/locations/us-central1/networks/alchemy-missing-bms-net`;
 
-const dummyClients = [
+const dummyClientsFor = (project: string) => [
   {
     network: missingNetwork(project),
     allowedClientsCidr: "10.200.0.0/28",
@@ -55,10 +46,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsNfsShares on a missing share fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -85,10 +77,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create is rejected with Forbidden when the Bare Metal Solution API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -97,7 +90,7 @@ test.provider.skipIf(!hasGcpCreds || runLifecycle)(
             return yield* GCP.Baremetalsolution.NfsShare("Share", {
               requestedSizeGib: 100,
               storageType: "SSD",
-              allowedClients: dummyClients,
+              allowedClients: dummyClientsFor(project),
               labels: { env: "test" },
             });
           }),
@@ -115,6 +108,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an NFS share",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const network =

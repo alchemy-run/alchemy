@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const LOCATION = "us-central1";
 const PUBSUB_EVENT_TYPE = "google.cloud.pubsub.topic.v1.messagePublished";
 const WORKFLOW_SOURCE = `main:
@@ -43,7 +37,7 @@ const eventFilters: GCP.Eventarc.EventFilter[] = [
   { attribute: "type", value: PUBSUB_EVENT_TYPE },
 ];
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an Eventarc trigger",
   (stack) =>
     Effect.gen(function* () {

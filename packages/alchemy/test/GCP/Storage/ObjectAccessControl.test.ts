@@ -17,12 +17,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const ENTITY = "user-alchemy-gcp-testing-83661@appspot.gserviceaccount.com";
 const OBJECT_NAME = "hello.txt";
 
@@ -64,7 +58,7 @@ const uploadObject = (bucketName: string, object: string, body: string) =>
     }
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an object ACL",
   (stack) =>
     Effect.gen(function* () {

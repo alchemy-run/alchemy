@@ -38,7 +38,7 @@ From the repository root:
 pnpm install
 cd examples/gcp-eventarc-firestore
 source ~/.config/gcloud/alchemy-env   # GOOGLE_PROJECT_ID + GOOGLE_APPLICATION_CREDENTIALS
-pnpm deploy --profile testing
+pnpm deploy --profile alchemy-testing
 ```
 
 Docker must be running, because both services are built locally from `main`.
@@ -53,7 +53,7 @@ After a few seconds, `audit/{id}` shows up in the database. On a first deploy, t
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=testing bun test --timeout 1200000
+ALCHEMY_PROFILE=alchemy-testing bun test --timeout 1200000
 ```
 
 [The test](./test/integ.test.ts) deploys the stack and checks the trigger's filters. It then creates two orders and polls Firestore until each one has an audit entry. At the end it destroys the stack and confirms that the trigger and the database are gone.
@@ -63,7 +63,7 @@ A new trigger can take a couple of minutes after it reports healthy before Event
 ## Destroy
 
 ```sh
-pnpm destroy --profile testing
+pnpm destroy --profile alchemy-testing
 ```
 
 This deletes both services, the trigger, the IAM grants, and the database with all of its documents.

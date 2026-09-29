@@ -4,7 +4,6 @@ import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
   probeAccountName,
   probeCustomerBody,
@@ -16,7 +15,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const probePartner = `${probeAccountName}/channelPartnerLinks/alchemy-missing`;
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAccountsChannelPartnerLinksCustomers on a missing customer fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -34,7 +33,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CLOUDCHANNEL)(
+test.provider.skipIf(!!process.env.GCP_TEST_CLOUDCHANNEL)(
   "createAccountsChannelPartnerLinksCustomers without Cloud Channel access fails with a typed entitlement error",
   (stack) =>
     Effect.gen(function* () {

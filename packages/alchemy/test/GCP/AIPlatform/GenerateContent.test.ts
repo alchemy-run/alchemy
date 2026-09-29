@@ -6,13 +6,7 @@ import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "GenerateContent calls Gemini through the HTTP binding",
   (stack) =>
     Effect.gen(function* () {

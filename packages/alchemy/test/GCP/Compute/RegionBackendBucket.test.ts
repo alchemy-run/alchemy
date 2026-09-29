@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const region = "us-central1";
 
 const waitUntilGone = (project: string, regionName: string, name: string) =>
@@ -38,7 +32,7 @@ const waitUntilGone = (project: string, regionName: string, name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a region backend bucket",
   (stack) =>
     Effect.gen(function* () {

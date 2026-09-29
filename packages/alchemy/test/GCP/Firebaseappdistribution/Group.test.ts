@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as firebaseappdistribution from "@distilled.cloud/gcp/firebaseappdistribution_v1";
 import { expect } from "alchemy-test";
@@ -13,14 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+const currentParent = GcpEnvironment.current.pipe(
+  Effect.map(({ project }) => `projects/${project}`),
 );
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-const parent = `projects/${project}`;
 const entitlementTags = ["Forbidden", "NotFound", "BadRequest"] as const;
 const APP_DISTRIBUTION_DISABLED =
   "Firebase App Distribution API has not been used";
@@ -39,22 +35,24 @@ const waitUntilGone = (name: string) =>
   );
 
 const probeAccess = () =>
-  firebaseappdistribution
-    .listProjectsGroups({
-      parent,
-      pageSize: 1,
-    })
-    .pipe(
-      Effect.as("ok" as const),
-      Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-        Effect.succeed(error),
-      ),
-    );
+  currentParent.pipe(
+    Effect.flatMap((parent) =>
+      firebaseappdistribution.listProjectsGroups({
+        parent,
+        pageSize: 1,
+      }),
+    ),
+    Effect.as("ok" as const),
+    Effect.catchTag(["Forbidden", "NotFound"], (error) =>
+      Effect.succeed(error),
+    ),
+  );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsGroups on a missing group fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -69,7 +67,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a tester group",
   (stack) =>
     Effect.gen(function* () {

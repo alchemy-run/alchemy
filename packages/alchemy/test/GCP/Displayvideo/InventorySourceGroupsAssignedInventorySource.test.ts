@@ -5,12 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import {
-  advertiserProps,
-  hasGcpCreds,
-  logLevel,
-  runLifecycle,
-} from "./common.ts";
+import { advertiserProps, logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -54,7 +49,7 @@ const waitUntilGone = (
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "listInventorySourceGroupsAssignedInventorySources on a missing group fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

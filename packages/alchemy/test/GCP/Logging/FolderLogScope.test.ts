@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,15 +13,7 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const projectName = `projects/${project}`;
+const projectNameOf = (project: string) => `projects/${project}`;
 
 const waitUntilGone = (name: string) =>
   logging.getFoldersLocationsLogScopes({ name }).pipe(
@@ -33,16 +26,18 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete a folder logging log scope",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Logging.FolderLogScope("App", {
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "application logs",
           });
         }),
@@ -54,14 +49,14 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(created.name).toEqual(
         `projects/${project}/locations/global/logScopes/${created.logScopeId}`,
       );
-      expect(created.resourceNames).toEqual([projectName]);
+      expect(created.resourceNames).toEqual([projectNameOf(project)]);
       expect(created.description).toEqual("application logs");
 
       const fetched = yield* logging.getFoldersLocationsLogScopes({
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.resourceNames).toEqual([projectName]);
+      expect(fetched.resourceNames).toEqual([projectNameOf(project)]);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("application logs");
 
@@ -69,7 +64,7 @@ test.provider.skipIf(!hasGcpCreds)(
         Effect.gen(function* () {
           return yield* GCP.Logging.FolderLogScope("App", {
             logScopeId: created.logScopeId,
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "all application logs",
           });
         }),
@@ -86,7 +81,7 @@ test.provider.skipIf(!hasGcpCreds)(
         Effect.gen(function* () {
           return yield* GCP.Logging.FolderLogScope("App", {
             logScopeId: nextId,
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "replaced scope",
           });
         }),

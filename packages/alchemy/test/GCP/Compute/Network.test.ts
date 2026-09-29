@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilGone = (project: string, networkName: string) =>
   compute.getNetworks({ project, network: networkName }).pipe(
     Effect.as("found" as const),
@@ -30,7 +24,7 @@ const waitUntilGone = (project: string, networkName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete a network",
   (stack) =>
     Effect.gen(function* () {

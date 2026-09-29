@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -7,13 +8,9 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 export const waitUntilGone = <E extends { readonly _tag: string }, R>(
   get: Effect.Effect<unknown, E, R>,

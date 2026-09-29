@@ -18,12 +18,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const when = new Date("2026-01-02T03:04:05.678Z");
 const sample = {
   str: "hello",
@@ -144,7 +138,7 @@ describe("Values codec", () => {
   );
 });
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "ReadDatabase, WriteDatabase, and ReadWriteDatabase clients",
   (stack) =>
     Effect.gen(function* () {

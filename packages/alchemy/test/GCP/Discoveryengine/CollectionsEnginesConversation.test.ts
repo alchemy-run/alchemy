@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
@@ -13,15 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE;
 
 const waitUntilGone = (name: string) =>
   discoveryengine
@@ -36,10 +30,12 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCollectionsEnginesConversations on a missing conversation fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

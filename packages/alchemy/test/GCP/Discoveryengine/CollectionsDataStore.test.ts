@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
@@ -13,15 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle = hasGcpCreds && !process.env.FAST;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const collectionParent = `projects/${project}/locations/global/collections/default_collection`;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   discoveryengine.getProjectsLocationsCollectionsDataStores({ name }).pipe(
@@ -34,10 +27,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCollectionsDataStores on a missing store fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const collectionParent = `projects/${project}/locations/global/collections/default_collection`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

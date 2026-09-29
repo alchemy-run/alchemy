@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,24 +14,15 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const privateCloud = process.env.GCP_TEST_VMWAREENGINE_PRIVATE_CLOUD ?? "";
-const vpcNetwork =
+const vpcNetworkOf = (project: string) =>
   process.env.GCP_TEST_VMWAREENGINE_VPC_NETWORK ??
-  `projects/${process.env.GOOGLE_PROJECT_ID ?? ""}/global/networks/default`;
+  `projects/${project}/global/networks/default`;
 
 const runLifecycle =
-  hasGcpCreds &&
   !!process.env.GCP_TEST_VMWAREENGINE &&
   privateCloud.length > 0 &&
   !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   vmwareengine
@@ -46,10 +38,12 @@ const waitUntilGone = (name: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsPrivateCloudsManagementDnsZoneBindings on a missing binding fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -81,10 +75,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_VMWAREENGINE)(
+test.provider.skipIf(!!process.env.GCP_TEST_VMWAREENGINE)(
   "createProjectsLocationsPrivateCloudsManagementDnsZoneBindings without entitlement fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -93,7 +89,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_VMWAREENGINE)(
             parent: `projects/${project}/locations/us-central1-a/privateClouds/alchemy-pc-missing`,
             managementDnsZoneBindingId: "alchemy-dns-probe",
             body: {
-              vpcNetwork,
+              vpcNetwork: vpcNetworkOf(project),
               description: "alchemy probe",
             },
           },
@@ -110,6 +106,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a management dns zone binding",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
@@ -118,7 +116,7 @@ test.provider.skipIf(!runLifecycle)(
             "VpcDns",
             {
               privateCloud,
-              vpcNetwork,
+              vpcNetwork: vpcNetworkOf(project),
               description: "alchemy-test-dns",
             },
           );
@@ -147,7 +145,7 @@ test.provider.skipIf(!runLifecycle)(
             {
               privateCloud,
               managementDnsZoneBindingId: created.managementDnsZoneBindingId,
-              vpcNetwork,
+              vpcNetwork: vpcNetworkOf(project),
               description: "alchemy-prod-dns",
             },
           );

@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,20 +15,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_TRANSPORT;
 
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_TRANSPORT;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const location = "us-east4";
 const remoteProfile = "aws-us-east-1";
 
-const transportName = (id: string) =>
+const transportName = (project: string, id: string) =>
   `projects/${project}/locations/${location}/transports/${id}`;
 
 const waitUntilGone = (name: string) =>
@@ -42,7 +35,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeCreate = (transportId: string, profileId: string) =>
+const probeCreate = (project: string, transportId: string, profileId: string) =>
   networkconnectivity
     .createProjectsLocationsTransports({
       parent: `projects/${project}/locations/${location}`,
@@ -57,15 +50,16 @@ const probeCreate = (transportId: string, profileId: string) =>
     })
     .pipe(Effect.result);
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsTransports on a missing transport fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         networkconnectivity.getProjectsLocationsTransports({
-          name: transportName("alchemy-tp-missing"),
+          name: transportName(project, "alchemy-tp-missing"),
         }),
       );
       expect(["NotFound", "Forbidden"]).toContain(error._tag);
@@ -90,13 +84,15 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createProjectsLocationsTransports with a missing remote profile fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const result = yield* probeCreate(
+        project,
         "alchemy-tp-probe",
         "aws-profile-missing",
       );

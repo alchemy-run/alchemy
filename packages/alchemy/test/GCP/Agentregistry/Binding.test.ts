@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as registry from "@distilled.cloud/gcp/agentregistry_v1";
 import { expect } from "alchemy-test";
@@ -13,20 +14,15 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Agent Registry is entitlement-gated. Live calls currently return
 // Forbidden: "Agent Registry API has not been used in project
 // alchemy-gcp-testing-83661 before or it is disabled."
-const runLifecycle = hasGcpCreds && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const location = "us-central1";
-const parent = `projects/${project}/locations/${location}`;
+const currentParent = GcpEnvironment.current.pipe(
+  Effect.map(({ project }) => `projects/${project}/locations/${location}`),
+);
 
 const entitlementTags = ["Forbidden", "NotFound"] as const;
 
@@ -35,26 +31,27 @@ type ProbeResult =
   | { tag: (typeof entitlementTags)[number]; message: string | undefined };
 
 const probeBindings = () =>
-  registry
-    .listProjectsLocationsBindings({
-      parent,
-      pageSize: 1,
-    })
-    .pipe(
-      Effect.map((): ProbeResult => ({ tag: "ok" })),
-      Effect.catchTag("Forbidden", (error) =>
-        Effect.succeed({
-          tag: "Forbidden" as const,
-          message: error.message,
-        }),
-      ),
-      Effect.catchTag("NotFound", (error) =>
-        Effect.succeed({
-          tag: "NotFound" as const,
-          message: error.message,
-        }),
-      ),
-    );
+  currentParent.pipe(
+    Effect.flatMap((parent) =>
+      registry.listProjectsLocationsBindings({
+        parent,
+        pageSize: 1,
+      }),
+    ),
+    Effect.map((): ProbeResult => ({ tag: "ok" })),
+    Effect.catchTag("Forbidden", (error) =>
+      Effect.succeed({
+        tag: "Forbidden" as const,
+        message: error.message,
+      }),
+    ),
+    Effect.catchTag("NotFound", (error) =>
+      Effect.succeed({
+        tag: "NotFound" as const,
+        message: error.message,
+      }),
+    ),
+  );
 
 const waitUntilGone = (name: string) =>
   registry.getProjectsLocationsBindings({ name }).pipe(
@@ -81,6 +78,7 @@ const ensureService = (input: {
   body: registry.Service;
 }) =>
   Effect.gen(function* () {
+    const parent = yield* currentParent;
     const name = `${parent}/services/${input.serviceId}`;
     const existing = yield* getService(name);
     if (existing !== undefined) return existing;
@@ -151,6 +149,7 @@ const waitForIdentifier = (serviceName: string) =>
 
 const ensureFixtures = () =>
   Effect.gen(function* () {
+    const parent = yield* currentParent;
     const sourceService = yield* ensureService({
       serviceId: "alchagregsrc",
       displayName: "alchemy-agentregistry-source",
@@ -203,10 +202,11 @@ const ensureFixtures = () =>
     ),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsBindings on a missing binding fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -225,6 +225,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a binding",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const probe = yield* probeBindings();

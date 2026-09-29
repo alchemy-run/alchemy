@@ -5,11 +5,10 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   location,
   logLevel,
   probeRegistryBooks,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
 } from "./common.ts";
@@ -18,10 +17,12 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const CIDR = "10.250.0.0/22";
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCustomRanges on a missing range fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -40,6 +41,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a custom range",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const probe = yield* probeRegistryBooks();

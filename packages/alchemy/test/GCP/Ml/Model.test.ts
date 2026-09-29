@@ -4,13 +4,7 @@ import * as ml from "@distilled.cloud/gcp/ml_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  hasGcpCreds,
-  logLevel,
-  project,
-  region,
-  runLifecycle,
-} from "./common.ts";
+import { logLevel, currentProject, region, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -26,10 +20,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsModels on a missing model fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -49,7 +45,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "createProjectsModels is rejected with Forbidden when the ML API is disabled",
   (stack) =>
     Effect.gen(function* () {
@@ -78,6 +74,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a model",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

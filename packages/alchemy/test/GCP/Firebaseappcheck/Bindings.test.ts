@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import {
   APP_CHECK_DISABLED,
   FIREBASE_DISABLED,
-  hasGcpCreds,
   logLevel,
   probeAppCheck,
   resolveAppId,
@@ -14,7 +13,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "ExchangeDebugToken mints an App Check token",
   (stack) =>
     Effect.gen(function* () {

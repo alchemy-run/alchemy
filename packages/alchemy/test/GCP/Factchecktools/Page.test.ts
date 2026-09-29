@@ -8,7 +8,6 @@ import * as Schedule from "effect/Schedule";
 import { PROBE_NAME, PROBE_PAGE_URL } from "@/GCP/Factchecktools/internal.ts";
 import {
   entitlementTags,
-  hasGcpCreds,
   logLevel,
   probePageAccess,
   testPageUrl,
@@ -28,7 +27,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPages on a missing page fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -44,7 +43,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createPages without Fact Check Tools access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -80,7 +79,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a ClaimReview page",
   (stack) =>
     Effect.gen(function* () {

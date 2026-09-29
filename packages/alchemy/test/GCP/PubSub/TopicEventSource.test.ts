@@ -23,12 +23,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const dockerAvailable = (() => {
   try {
     return (
@@ -80,7 +74,7 @@ const publishAndAwaitMarker = (topic: string, bucket: string, data: string) =>
     };
   });
 
-test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+test.provider.skipIf(!dockerAvailable)(
   "topic messages are pushed to an effect-native Function",
   (stack) =>
     Effect.gen(function* () {
@@ -123,7 +117,7 @@ test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
   { timeout: 600_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+test.provider.skipIf(!dockerAvailable)(
   "topic messages are pulled by an effect-native WorkerPool",
   (stack) =>
     Effect.gen(function* () {

@@ -9,14 +9,8 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_ANALYTICSADMIN;
+  !process.env.FAST && !!process.env.GCP_TEST_ANALYTICSADMIN;
 
 export const toAccountName = (value: string) =>
   value.startsWith("accounts/") ? value : `accounts/${value}`;

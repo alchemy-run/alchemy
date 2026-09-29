@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as Effect from "effect/Effect";
@@ -9,14 +10,9 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
-
-export const project =
-  process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 
 export const APP_CHECK_DISABLED = "Firebase App Check API has not been used";
 
@@ -25,24 +21,36 @@ export const FIREBASE_DISABLED = "Firebase Management API has not been used";
 export const probeTags = ["NotFound", "Forbidden"] as const;
 
 export const missingDebugToken = () =>
-  `projects/${project}/apps/1:0:web:deadbeef/debugTokens/missing`;
+  currentProject.pipe(
+    Effect.map(
+      (project) =>
+        `projects/${project}/apps/1:0:web:deadbeef/debugTokens/missing`,
+    ),
+  );
 
 export const missingResourcePolicy = () =>
-  `projects/${project}/services/oauth2.googleapis.com/resourcePolicies/missing`;
+  currentProject.pipe(
+    Effect.map(
+      (project) =>
+        `projects/${project}/services/oauth2.googleapis.com/resourcePolicies/missing`,
+    ),
+  );
 
 export const probeAppCheck = () =>
-  firebaseappcheck
-    .getProjectsAppsDebugTokens({ name: missingDebugToken() })
-    .pipe(
-      Effect.as("enabled" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("enabled" as const)),
-      Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
-    );
+  missingDebugToken().pipe(
+    Effect.flatMap((name) =>
+      firebaseappcheck.getProjectsAppsDebugTokens({ name }),
+    ),
+    Effect.as("enabled" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("enabled" as const)),
+    Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
+  );
 
 export const resolveAppId = () =>
   Effect.gen(function* () {
     const fromEnv = process.env.GCP_TEST_FIREBASE_APP_ID;
     if (fromEnv && fromEnv.length > 0) return fromEnv;
+    const project = yield* currentProject;
     const page = yield* firebase
       .searchAppsProjects({
         parent: `projects/${project}`,

@@ -11,6 +11,7 @@ import {
   KEY_A_PEM,
   KEY_B_PEM,
 } from "./fixtures/https-proxy-cert.ts";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,36 +20,34 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const region = "us-central1";
 
 const waitUntilGone = (sslCertificateName: string) =>
-  compute
-    .getRegionSslCertificates({
-      project,
-      region,
-      sslCertificate: sslCertificateName,
-    })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute
+        .getRegionSslCertificates({
+          project,
+          region,
+          sslCertificate: sslCertificateName,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
+        ),
+    ),
+  );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, replace, and delete a regional ssl certificate",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

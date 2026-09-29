@@ -8,7 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { hasGcpCreds, location, logLevel, parent } from "./common.ts";
+import { location, logLevel, currentParent } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +71,7 @@ const glossaryNameFromOperation = (operation: translate.Operation) => {
 
 const createGlossary = (glossaryId: string, inputUri?: string) =>
   Effect.gen(function* () {
+    const parent = yield* currentParent;
     const name = `${parent}/glossaries/${glossaryId}`;
     const existing = yield* translate
       .getProjectsLocationsGlossaries({ name })
@@ -108,10 +109,11 @@ const deleteGlossary = (name: string) =>
     Effect.catchTag("NotFound", () => Effect.void),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsGlossariesGlossaryEntries on a missing entry fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -126,10 +128,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a glossary entry",
   (stack) =>
     Effect.gen(function* () {
+      const parent = yield* currentParent;
       yield* stack.destroy();
 
       const probe = yield* translate

@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,24 +14,21 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const region = "us-central1";
 
 const waitUntilGone = (autoscaler: string) =>
-  compute.getRegionAutoscalers({ project, region, autoscaler }).pipe(
-    Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 15,
-    }),
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute.getRegionAutoscalers({ project, region, autoscaler }).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (status) => status === "gone",
+          times: 15,
+        }),
+      ),
+    ),
   );
 
 const templateProps: GCP.Compute.InstanceTemplateProps = {
@@ -46,10 +44,11 @@ const templateProps: GCP.Compute.InstanceTemplateProps = {
   networkInterfaces: [{ network: "global/networks/default" }],
 };
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a region autoscaler",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

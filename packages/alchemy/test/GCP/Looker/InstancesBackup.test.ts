@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as looker from "@distilled.cloud/gcp/looker_v1";
 import { expect } from "alchemy-test";
@@ -13,17 +14,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const location = "us-central1";
-const instanceParent = `projects/${project}/locations/${location}`;
-const missingInstance = `${instanceParent}/instances/alchemy-missing-looker`;
-const missingName = `${missingInstance}/backups/alchemy-missing-backup`;
+const namesOf = (project: string) => {
+  const instanceParent = `projects/${project}/locations/${location}`;
+  const missingInstance = `${instanceParent}/instances/alchemy-missing-looker`;
+  const missingName = `${missingInstance}/backups/alchemy-missing-backup`;
+  return { instanceParent, missingInstance, missingName };
+};
 
 const DISABLED_MESSAGE = "Looker (Google Cloud core) API has not been used";
 
@@ -39,10 +36,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsInstancesBackups on a missing backup fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const { missingInstance, missingName } = namesOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -73,10 +72,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create against a missing Looker instance is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const { missingInstance } = namesOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -107,10 +108,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, refresh, and delete a Looker instance backup",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const { instanceParent, missingInstance, missingName } = namesOf(project);
       yield* stack.destroy();
 
       const access = yield* looker

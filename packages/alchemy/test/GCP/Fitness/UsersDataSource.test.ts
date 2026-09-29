@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilGone = (dataSourceId: string) =>
   fitness
     .getUsersDataSources({
@@ -45,7 +39,7 @@ const probeAccess = () =>
     ),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getUsersDataSources on a missing data source fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -64,7 +58,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createUsersDataSources without Fitness access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -129,7 +123,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a data source",
   (stack) =>
     Effect.gen(function* () {

@@ -6,11 +6,10 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   location,
   logLevel,
   probeIpamAdminScopes,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
 } from "./common.ts";
@@ -24,7 +23,10 @@ const organizationScope = () => {
       fromEnv.includes("/") ? fromEnv : `organizations/${fromEnv}`,
     );
   }
-  return resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
+  return currentProject.pipe(
+    Effect.flatMap((project) =>
+      resourcemanager.getProjects({ name: `projects/${project}` }),
+    ),
     Effect.map((item) =>
       item.parent?.startsWith("organizations/") ? item.parent : undefined,
     ),
@@ -32,10 +34,12 @@ const organizationScope = () => {
   );
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsIpamAdminScopes on a missing scope fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -54,6 +58,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an ipam admin scope",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const probe = yield* probeIpamAdminScopes();

@@ -4,7 +4,6 @@ import * as adsenseplatform from "@distilled.cloud/gcp/adsenseplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
   probeDomain,
   probeName,
@@ -15,7 +14,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPlatformsAccountsSites on a missing site fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -31,7 +30,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createPlatformsAccountsSites without AdSense for Platforms access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -50,7 +49,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, replace, and delete a platform site",
   (stack) =>
     Effect.gen(function* () {

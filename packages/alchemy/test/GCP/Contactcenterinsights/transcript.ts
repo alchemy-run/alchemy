@@ -1,5 +1,6 @@
-import * as ChildProcess from "node:child_process";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 export const CHAT_TRANSCRIPT = JSON.stringify({
   entries: [
@@ -18,19 +19,11 @@ export const CHAT_TRANSCRIPT = JSON.stringify({
   ],
 });
 
-const accessToken = Effect.sync(() => {
-  const fromEnv = process.env.GOOGLE_ACCESS_TOKEN;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-  return ChildProcess.execFileSync("gcloud", ["auth", "print-access-token"], {
-    encoding: "utf8",
-    env: process.env,
-  }).trim();
-});
-
 export const uploadChatTranscript = (bucketName: string) =>
   Effect.gen(function* () {
-    const token = yield* accessToken;
-    const project = process.env.GOOGLE_PROJECT_ID ?? "";
+    const env = yield* GcpEnvironment.current;
+    const token = Redacted.value(env.accessToken);
+    const project = env.project;
     yield* Effect.tryPromise({
       try: () =>
         fetch(

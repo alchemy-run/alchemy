@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,22 +14,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour).
 // The API is enabled on the testing project; get-missing returns
 // `NotFound`, and create with an invalid CIDR returns `BadRequest`
 // (`CIDR "not-a-cidr" is invalid`). Set GCP_TEST_MANAGEDIDENTITIES=1
 // to run the full lifecycle.
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !process.env.FAST && process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
 
 const waitUntilGone = (name: string) =>
   managedidentities.getProjectsLocationsGlobalDomains({ name }).pipe(
@@ -41,10 +33,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsGlobalDomains on a missing domain fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -71,7 +64,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create is rejected with a typed tag when Managed Microsoft AD is unavailable",
   (stack) =>
     Effect.gen(function* () {

@@ -24,14 +24,6 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const skip = !hasGcpCreds;
-
 // Kept for the post-destroy check in `afterAll`.
 let deployedBucket: string | undefined;
 
@@ -75,7 +67,7 @@ const getPublic = (url: string) =>
 const siteBase = (bucketName: string) =>
   `https://storage.googleapis.com/${bucketName}`;
 
-test.skipIf(skip)(
+test(
   "serves index.html publicly with its content type",
   Effect.gen(function* () {
     const { url, fileCount } = yield* stack;
@@ -90,7 +82,7 @@ test.skipIf(skip)(
   { timeout: 180_000 },
 );
 
-test.skipIf(skip)(
+test(
   "serves nested pages and assets with correct content types",
   Effect.gen(function* () {
     const { bucketName } = yield* stack;
@@ -114,7 +106,7 @@ test.skipIf(skip)(
   { timeout: 180_000 },
 );
 
-test.skipIf(skip)(
+test(
   "a missing path is a 404 and the website config is set",
   Effect.gen(function* () {
     const { bucketName } = yield* stack;

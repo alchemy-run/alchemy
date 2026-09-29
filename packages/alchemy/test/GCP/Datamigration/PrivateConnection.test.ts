@@ -4,9 +4,8 @@ import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
-  project,
+  currentProject,
   runEntitlementProbe,
   runSlowLifecycle,
   waitUntilGone,
@@ -14,10 +13,12 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsPrivateConnections on a missing connection fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -36,6 +37,8 @@ test.provider.skipIf(!runEntitlementProbe)(
   "createProjectsLocationsPrivateConnections without entitlement fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -63,6 +66,8 @@ test.provider.skipIf(!runSlowLifecycle)(
   "create and delete a private connection",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

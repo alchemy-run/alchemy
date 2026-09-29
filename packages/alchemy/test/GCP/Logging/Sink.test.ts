@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,15 +13,8 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const destination = `logging.googleapis.com/projects/${project}/locations/global/buckets/_Default`;
+const destinationOf = (project: string) =>
+  `logging.googleapis.com/projects/${project}/locations/global/buckets/_Default`;
 
 const waitUntilGone = (name: string) =>
   logging.getSinks({ sinkName: name }).pipe(
@@ -33,16 +27,18 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete a logging sink",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Logging.Sink("Errors", {
-            destination,
+            destination: destinationOf(project),
             filter: "severity>=ERROR",
             description: "application errors",
           });
@@ -54,7 +50,7 @@ test.provider.skipIf(!hasGcpCreds)(
         `projects/${project}/sinks/${created.sinkId}`,
       );
       expect(created.project).toEqual(project);
-      expect(created.destination).toEqual(destination);
+      expect(created.destination).toEqual(destinationOf(project));
       expect(created.filter).toEqual("severity>=ERROR");
       expect(created.description).toEqual("application errors");
       expect(created.disabled).toEqual(false);
@@ -62,7 +58,7 @@ test.provider.skipIf(!hasGcpCreds)(
 
       const fetched = yield* logging.getSinks({ sinkName: created.name });
       expect(fetched.name).toEqual(created.sinkId);
-      expect(fetched.destination).toEqual(destination);
+      expect(fetched.destination).toEqual(destinationOf(project));
       expect(fetched.filter).toEqual("severity>=ERROR");
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("application errors");
@@ -71,7 +67,7 @@ test.provider.skipIf(!hasGcpCreds)(
         Effect.gen(function* () {
           return yield* GCP.Logging.Sink("Errors", {
             sinkId: created.sinkId,
-            destination,
+            destination: destinationOf(project),
             filter: "severity>=WARNING",
             description: "warnings and errors",
             disabled: true,
@@ -114,7 +110,7 @@ test.provider.skipIf(!hasGcpCreds)(
         Effect.gen(function* () {
           return yield* GCP.Logging.Sink("Errors", {
             sinkId: nextSinkId,
-            destination,
+            destination: destinationOf(project),
             filter: "severity>=WARNING",
             description: "replaced sink",
           });

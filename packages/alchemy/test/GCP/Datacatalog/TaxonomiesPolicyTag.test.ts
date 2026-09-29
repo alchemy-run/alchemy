@@ -5,11 +5,10 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   location,
   logLevel,
   probeTags,
-  project,
+  currentProject,
   runLifecycle,
 } from "./common.ts";
 
@@ -26,10 +25,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsTaxonomiesPolicyTags on a missing tag fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -44,10 +44,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create is rejected with Forbidden when the Data Catalog API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

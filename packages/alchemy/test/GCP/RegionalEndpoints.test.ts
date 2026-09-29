@@ -13,13 +13,7 @@ const { test } = Test.make({
   ),
 });
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "GCP.RegionalEndpoints('prefer') on the providers layer deploys through the regional endpoint",
   (stack) =>
     Effect.gen(function* () {

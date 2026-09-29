@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   logLevel,
   runAccountLifecycle,
   sampleMailExportOptions,
@@ -27,7 +26,7 @@ const waitUntilGone = (matterId: string, exportId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getMattersExports on a missing export fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -46,7 +45,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_VAULT)(
+test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
   "createMattersExports without Vault access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

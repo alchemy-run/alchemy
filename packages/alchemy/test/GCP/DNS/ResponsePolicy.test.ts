@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilPolicyGone = (project: string, responsePolicy: string) =>
   dns.getResponsePolicies({ project, responsePolicy }).pipe(
     Effect.as("found" as const),
@@ -53,7 +47,7 @@ const waitUntilRuleGone = (
 
 const lastSegment = (url: string) => url.split("/").pop() ?? url;
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete a response policy and rule",
   (stack) =>
     Effect.gen(function* () {

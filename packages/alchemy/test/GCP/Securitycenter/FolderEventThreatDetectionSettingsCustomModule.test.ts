@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
@@ -14,14 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-
 const waitUntilGone = (name: string) =>
   scc.getFoldersEventThreatDetectionSettingsCustomModules({ name }).pipe(
     Effect.as("found" as const),
@@ -37,6 +30,8 @@ const waitUntilGone = (name: string) =>
 
 const folderOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+
     const fromEnv = process.env.GOOGLE_FOLDER_ID;
     if (fromEnv && fromEnv.length > 0) {
       return fromEnv.startsWith("folders/") ? fromEnv : `folders/${fromEnv}`;
@@ -75,7 +70,7 @@ const configV2 = {
   ips: ["192.0.2.2"],
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getFoldersEventThreatDetectionSettingsCustomModules on a missing module fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -94,7 +89,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a folder Event Threat Detection custom module",
   (stack) =>
     Effect.gen(function* () {

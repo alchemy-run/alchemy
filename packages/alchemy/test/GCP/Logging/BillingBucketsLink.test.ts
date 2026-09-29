@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   logging.getBillingAccountsLocationsBucketsLinks({ name }).pipe(
@@ -38,14 +31,20 @@ const waitUntilGone = (name: string) =>
   );
 
 const billingAccountId = () =>
-  cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }).pipe(
-    Effect.map(
-      (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-    ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-  );
+  Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
 
-test.provider.skipIf(!hasGcpCreds)(
+    return yield* cloudbilling
+      .getBillingInfoProjects({ name: `projects/${project}` })
+      .pipe(
+        Effect.map(
+          (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
+        ),
+        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
+      );
+  });
+
+test.provider(
   "getBillingAccountsLocationsBucketsLinks on a missing link fails with NotFound or Forbidden",
   (stack) =>
     Effect.gen(function* () {
@@ -64,7 +63,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, replace, and delete a billing bucket link",
   (stack) =>
     Effect.gen(function* () {

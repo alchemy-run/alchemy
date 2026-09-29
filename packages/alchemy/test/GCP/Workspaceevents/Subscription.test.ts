@@ -1,5 +1,6 @@
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as we from "@distilled.cloud/gcp/workspaceevents_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -13,14 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_WORKSPACE_EVENTS;
+  !process.env.FAST && !!process.env.GCP_TEST_WORKSPACE_EVENTS;
 
 const waitUntilGone = (name: string) =>
   we.getSubscriptions({ name }).pipe(
@@ -34,7 +29,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getSubscriptions on a missing subscription fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -52,10 +47,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_WORKSPACE_EVENTS)(
+test.provider.skipIf(!!process.env.GCP_TEST_WORKSPACE_EVENTS)(
   "createSubscriptions without Workspace Events access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -64,7 +60,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_WORKSPACE_EVENTS)(
             targetResource: "//chat.googleapis.com/spaces/alchemy-missing",
             eventTypes: ["google.workspace.chat.message.v1.created"],
             notificationEndpoint: {
-              pubsubTopic: `projects/${process.env.GOOGLE_PROJECT_ID}/topics/alchemy-missing-topic`,
+              pubsubTopic: `projects/${project}/topics/alchemy-missing-topic`,
             },
           },
         }),

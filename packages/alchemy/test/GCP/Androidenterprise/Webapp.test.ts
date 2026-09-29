@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
   enterpriseId,
-  hasGcpCreds,
   logLevel,
   probeEnterpriseId,
   runLifecycle,
@@ -26,7 +25,7 @@ const waitUntilGone = (accountId: string, webAppId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getWebapps on a missing web app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -45,7 +44,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_ANDROIDENTERPRISE)(
+test.provider.skipIf(!!process.env.GCP_TEST_ANDROIDENTERPRISE)(
   "insertWebapps without EMM access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

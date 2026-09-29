@@ -5,6 +5,7 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,23 +14,16 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
 // Encrypt/decrypt needs a version; versions cannot be deleted for ≥24h, so
 // this key is reused across runs (names cannot be reused after delete).
 const ENCRYPT_KEY_ID = kmsTestId("cryptokey");
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsKeyRingsCryptoKeys on a missing key fails with NotFound",
   () =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         kms.getProjectsLocationsKeyRingsCryptoKeys({
           name: `projects/${project}/locations/us-central1/keyRings/${KEY_RING_ID}/cryptoKeys/alchemy-cryptokey-does-not-exist`,
@@ -39,10 +33,11 @@ test.provider.skipIf(!hasGcpCreds)(
     }).pipe(logLevel),
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and release a crypto key",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
@@ -128,7 +123,7 @@ const roundTrip = (name: string, text: string) =>
     return decrypted.plaintext === plaintext;
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "destroy releases a fixed-id key and the next deploy reclaims it",
   (stack) =>
     Effect.gen(function* () {
@@ -185,10 +180,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "redeploy after destroy reuses the default ring and key ids",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const deploy = stack.deploy(

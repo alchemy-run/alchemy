@@ -1,9 +1,9 @@
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -12,12 +12,6 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
 );
 
 const waitUntilGone = (name: string) =>
@@ -31,22 +25,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const serviceAccountOf = Effect.gen(function* () {
-  const path = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (path === undefined || path.length === 0) {
-    return undefined;
-  }
-  const fs = yield* FileSystem.FileSystem;
-  const raw = yield* fs.readFileString(path);
-  const parsed = yield* Effect.sync(
-    () => JSON.parse(raw) as { client_email?: string },
-  );
-  return parsed.client_email;
-});
+const serviceAccountOf = GcpEnvironment.current.pipe(
+  Effect.map(
+    ({ project }) => `alchemy-testing@${project}.iam.gserviceaccount.com`,
+  ),
+);
 
-test.provider.skipIf(
-  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
   "create, update, and delete a lake task",
   (stack) =>
     Effect.gen(function* () {

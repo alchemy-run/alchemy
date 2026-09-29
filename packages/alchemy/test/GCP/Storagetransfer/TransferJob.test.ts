@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,26 +15,24 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 const waitUntilGone = (jobName: string) =>
-  storagetransfer.getTransferJobs({ jobName, projectId: project }).pipe(
-    Effect.map((job) =>
-      job.status === "DELETED" ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
+  Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+
+    return yield* storagetransfer
+      .getTransferJobs({ jobName, projectId: project })
+      .pipe(
+        Effect.map((job) =>
+          job.status === "DELETED" ? ("gone" as const) : ("found" as const),
+        ),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (status) => status === "gone",
+          times: 10,
+        }),
+      );
+  });
 
 const grantBucketRole = (bucket: string, member: string, role: string) =>
   Effect.gen(function* () {
@@ -81,10 +80,12 @@ const grantTransferAccess = (
   );
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a transfer job",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const buckets = yield* stack.deploy(

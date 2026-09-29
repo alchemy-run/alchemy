@@ -8,6 +8,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -16,20 +17,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const LOCATION = "us-central1";
 
 // Gen2 function create/update/delete is a multi-minute LRO. Set
 // GCP_TEST_CLOUDFUNCTIONS=1 to run the lifecycle; default recapture
 // keeps the list probe only.
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_CLOUDFUNCTIONS && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   cloudfunctions.getProjectsLocationsFunctions({ name }).pipe(
@@ -43,6 +36,7 @@ const waitUntilGone = (name: string) =>
   );
 
 const uploadSource = Effect.fn(function* () {
+  const { project } = yield* GcpEnvironment.current;
   const archive = yield* zipFiles([
     {
       path: "index.js",
@@ -74,6 +68,7 @@ const uploadSource = Effect.fn(function* () {
       HttpClientRequest.bodyUint8Array(bytes, "application/zip"),
     ),
   );
+
   if (response.status < 200 || response.status >= 300) {
     return yield* Effect.die(
       new Error(`source upload failed with HTTP ${response.status}`),
@@ -87,10 +82,11 @@ const uploadSource = Effect.fn(function* () {
   return uploaded.storageSource;
 });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "lists functions",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
       const page = yield* cloudfunctions.listProjectsLocationsFunctions({
         parent: `projects/${project}/locations/-`,

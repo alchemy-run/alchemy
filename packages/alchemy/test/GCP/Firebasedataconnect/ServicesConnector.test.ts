@@ -6,12 +6,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
   connectorSource,
-  hasGcpCreds,
   location,
   logLevel,
   missingConnector,
   probeTags,
-  project,
+  currentProject,
   runLifecycle,
   schemaSource,
   unlinkedDatasources,
@@ -30,10 +29,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "createProjectsLocationsServicesConnectors is Forbidden when Firebase Data Connect is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -53,15 +54,17 @@ test.provider.skipIf(!hasGcpCreds || runLifecycle)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsServicesConnectors on a missing connector fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         firebasedataconnect.getProjectsLocationsServicesConnectors({
-          name: missingConnector(),
+          name: yield* missingConnector(),
         }),
       );
       expect(probeTags).toContain(error._tag);

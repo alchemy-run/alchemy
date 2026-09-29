@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   logLevel,
   runAccountLifecycle,
   sampleMailQuery,
@@ -26,7 +25,7 @@ const waitUntilGone = (matterId: string, savedQueryId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getMattersSavedQueries on a missing saved query fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -45,7 +44,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_VAULT)(
+test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
   "createMattersSavedQueries without Vault access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

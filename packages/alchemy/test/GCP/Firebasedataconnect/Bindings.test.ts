@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   connectorSource,
-  hasGcpCreds,
   logLevel,
   runLifecycle,
   schemaSource,

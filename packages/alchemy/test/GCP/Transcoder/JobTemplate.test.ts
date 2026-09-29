@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
@@ -12,17 +13,7 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const location = "us-central1";
-const parent = `projects/${project}/locations/${location}`;
-const missingName = `${parent}/jobTemplates/alchemy-missing-template`;
 
 const DISABLED_MESSAGE = "Transcoder API has not been used";
 
@@ -93,16 +84,25 @@ const waitUntilGone = (name: string) =>
   );
 
 const probeAccess = () =>
-  transcoder.getProjectsLocationsJobTemplates({ name: missingName }).pipe(
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      transcoder.getProjectsLocationsJobTemplates({
+        name: `projects/${project}/locations/${location}/jobTemplates/alchemy-missing-template`,
+      }),
+    ),
     Effect.as("ok" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("ok" as const)),
     Effect.catchTag("Forbidden", (error) => Effect.succeed(error)),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsJobTemplates on a missing template fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const parent = `projects/${project}/locations/${location}`;
+      const missingName = `${parent}/jobTemplates/alchemy-missing-template`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -130,7 +130,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, replace, and delete a job template",
   (stack) =>
     Effect.gen(function* () {

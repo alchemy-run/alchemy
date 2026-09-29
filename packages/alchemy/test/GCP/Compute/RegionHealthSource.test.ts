@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,31 +14,28 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const region = "us-central1";
 
 const waitUntilGone = (healthSource: string) =>
-  compute
-    .getRegionHealthSources({
-      project,
-      region,
-      healthSource,
-    })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      compute
+        .getRegionHealthSources({
+          project,
+          region,
+          healthSource,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
+        ),
+    ),
+  );
 
 const resourceTail = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
@@ -45,10 +43,11 @@ const resourceTail = (value: string | undefined): string => {
   return parts[parts.length - 1] ?? "";
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getRegionHealthSources on a missing source fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -65,7 +64,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a regional health source",
   (stack) =>
     Effect.gen(function* () {

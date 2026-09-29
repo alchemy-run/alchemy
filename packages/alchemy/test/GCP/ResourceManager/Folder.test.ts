@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,20 +13,10 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 // Live create returns Forbidden: Permission 'resourcemanager.folders.create'
 // denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'.
 const runLifecycle =
-  hasGcpCreds &&
-  !process.env.FAST &&
-  process.env.GCP_TEST_RESOURCE_MANAGER === "1";
+  !process.env.FAST && process.env.GCP_TEST_RESOURCE_MANAGER === "1";
 
 const waitUntilGone = (name: string) =>
   resourcemanager.getFolders({ name }).pipe(
@@ -45,13 +36,14 @@ const waitUntilGone = (name: string) =>
   );
 
 const resolveParent = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
   const resource = yield* resourcemanager.getProjects({
     name: `projects/${project}`,
   });
   return resource.parent;
 });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getFolders on a missing folder fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -69,9 +61,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds || process.env.GCP_TEST_RESOURCE_MANAGER === "1",
-)(
+test.provider.skipIf(process.env.GCP_TEST_RESOURCE_MANAGER === "1")(
   "createFolders without folder IAM fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

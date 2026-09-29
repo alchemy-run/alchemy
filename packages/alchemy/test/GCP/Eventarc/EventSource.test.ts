@@ -20,12 +20,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const dockerAvailable = (() => {
   try {
     return (
@@ -37,7 +31,7 @@ const dockerAvailable = (() => {
   }
 })();
 
-test.provider.skipIf(!hasGcpCreds || !dockerAvailable)(
+test.provider.skipIf(!dockerAvailable)(
   "Eventarc routes Storage finalize events to an effect-native Function",
   (stack) =>
     Effect.gen(function* () {

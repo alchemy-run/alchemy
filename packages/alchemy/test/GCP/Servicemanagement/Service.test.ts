@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,20 +14,14 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
-
 // Managed-service delete LROs routinely exceed 180s. Set
 // GCP_TEST_SERVICEMANAGEMENT=1 to run the full lifecycle.
 const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_SERVICEMANAGEMENT && !process.env.FAST;
-const missingName = `alch-missing.endpoints.${project}.cloud.goog`;
-const lifecycleName = `alch-sm-lifecycle.endpoints.${project}.cloud.goog`;
+  !!process.env.GCP_TEST_SERVICEMANAGEMENT && !process.env.FAST;
+const missingNameOf = (project: string) =>
+  `alch-missing.endpoints.${project}.cloud.goog`;
+const lifecycleNameOf = (project: string) =>
+  `alch-sm-lifecycle.endpoints.${project}.cloud.goog`;
 
 const waitUntilGone = (serviceName: string) =>
   servicemanagement.getServices({ serviceName }).pipe(
@@ -44,10 +39,12 @@ const waitUntilGone = (serviceName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getServices on a missing service fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingName = missingNameOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -80,6 +77,9 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a managed service",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingName = missingNameOf(project);
+      const lifecycleName = lifecycleNameOf(project);
       yield* stack.destroy();
 
       const access = yield* servicemanagement

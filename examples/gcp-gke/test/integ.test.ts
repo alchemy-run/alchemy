@@ -31,12 +31,6 @@ const GcpHttp = Layer.mergeAll(
   FetchHttpClient.layer,
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // `Api` and `SeedJob` are built from `main`, and `Web`'s image is mirrored
 // into Artifact Registry — both need a local Docker daemon.
 const dockerAvailable = (() => {
@@ -50,8 +44,13 @@ const dockerAvailable = (() => {
   }
 })();
 
-const skip = !hasGcpCreds || !dockerAvailable;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const skip = !dockerAvailable;
+
+// The project comes from the same credential the deploy uses.
+const currentProject = GCP.GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
+  Effect.provide(GCP.fromCredentials().pipe(Layer.provide(GcpHttp))),
+);
 
 // Autopilot cluster creation dominates the deploy (~5–10 min).
 const stack = beforeAll(deploy(Stack), { timeout: 1_800_000 });
@@ -75,42 +74,50 @@ const expectGone = <E, R>(
     ),
   );
 
-const projectNumber = resourcemanager
-  .getProjects({ name: `projects/${project}` })
-  .pipe(Effect.map((p) => (p.name ?? "").split("/").pop() ?? ""));
+const projectNumber = (project: string) =>
+  resourcemanager
+    .getProjects({ name: `projects/${project}` })
+    .pipe(Effect.map((p) => (p.name ?? "").split("/").pop() ?? ""));
 
 /** The Workload Identity Federation principal of a Kubernetes ServiceAccount. */
-const ksaPrincipal = (number: string, namespace: string, ksa: string) =>
+const ksaPrincipal = (
+  project: string,
+  number: string,
+  namespace: string,
+  ksa: string,
+) =>
   `principal://iam.googleapis.com/projects/${number}/locations/global/` +
   `workloadIdentityPools/${project}.svc.id.goog/subject/ns/${namespace}/sa/${ksa}`;
 
 /** Project IAM bindings (v3, with conditions) that include `member`. */
 const projectBindingsOf = (member: string) =>
-  resourcemanager
-    .getIamPolicyProjects({
-      resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
-    })
-    .pipe(
-      Effect.map((policy) =>
-        (policy.bindings ?? []).filter((binding) =>
-          (binding.members ?? []).includes(member),
-        ),
-      ),
-    );
-
-/** Forwarding rules GKE created for Services in the `guestbook` namespace. */
-const guestbookForwardingRules = compute
-  .listForwardingRules({ project, region: "us-central1" })
-  .pipe(
-    Effect.map((page) =>
-      (page.items ?? []).filter((rule) =>
-        (rule.description ?? "").includes(
-          '"kubernetes.io/service-name":"guestbook/',
-        ),
+  currentProject.pipe(
+    Effect.flatMap((project) =>
+      resourcemanager.getIamPolicyProjects({
+        resource: `projects/${project}`,
+        body: { options: { requestedPolicyVersion: 3 } },
+      }),
+    ),
+    Effect.map((policy) =>
+      (policy.bindings ?? []).filter((binding) =>
+        (binding.members ?? []).includes(member),
       ),
     ),
   );
+
+/** Forwarding rules GKE created for Services in the `guestbook` namespace. */
+const guestbookForwardingRules = currentProject.pipe(
+  Effect.flatMap((project) =>
+    compute.listForwardingRules({ project, region: "us-central1" }),
+  ),
+  Effect.map((page) =>
+    (page.items ?? []).filter((rule) =>
+      (rule.description ?? "").includes(
+        '"kubernetes.io/service-name":"guestbook/',
+      ),
+    ),
+  ),
+);
 
 class NotReady extends Data.TaggedError("NotReady")<{ detail: string }> {}
 
@@ -147,13 +154,24 @@ const principalsOf = (outputs: {
   apiServiceAccount: string;
   seedJobServiceAccount: string;
 }) =>
-  projectNumber.pipe(
-    Effect.map((number) => [
-      ksaPrincipal(number, outputs.namespace, outputs.apiServiceAccount),
-      ksaPrincipal(number, outputs.namespace, outputs.seedJobServiceAccount),
-    ]),
-    Effect.provide(GcpHttp),
-  );
+  Effect.gen(function* () {
+    const project = yield* currentProject;
+    const number = yield* projectNumber(project);
+    return [
+      ksaPrincipal(
+        project,
+        number,
+        outputs.namespace,
+        outputs.apiServiceAccount,
+      ),
+      ksaPrincipal(
+        project,
+        number,
+        outputs.namespace,
+        outputs.seedJobServiceAccount,
+      ),
+    ];
+  }).pipe(Effect.provide(GcpHttp));
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(
   Effect.gen(function* () {

@@ -7,9 +7,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import {
   createErrorTags,
-  hasGcpCreds,
   missingMembership,
-  project,
+  currentProject,
   runLifecycle,
   vmwareControlPlane,
   vmwareLoadBalancer,
@@ -35,10 +34,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsVmwareClusters on a missing cluster fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -65,10 +66,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_GKEONPREM)(
+test.provider.skipIf(!!process.env.GCP_TEST_GKEONPREM)(
   "create without an admin cluster is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -97,6 +100,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a vmware cluster",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

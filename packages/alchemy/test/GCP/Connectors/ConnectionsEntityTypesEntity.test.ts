@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as connectors from "@distilled.cloud/gcp/connectors_v2";
@@ -12,19 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const entityTypeParent =
-  process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
-  `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
-
-const missingName = `${entityTypeParent}/entities/alchemy-missing-entity`;
 
 // Live create against this project returns Forbidden:
 // "Connectors API has not been used in project alchemy-gcp-testing-83661
@@ -43,10 +31,16 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsConnectionsEntityTypesEntities on a missing entity fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const entityTypeParent =
+        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
+        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
+      const missingName = `${entityTypeParent}/entities/alchemy-missing-entity`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -61,10 +55,15 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createProjectsLocationsConnectionsEntityTypesEntities without a connection fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const entityTypeParent =
+        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
+        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -80,10 +79,15 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an entity",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const entityTypeParent =
+        process.env.GCP_TEST_CONNECTORS_PARENT?.trim() ||
+        `projects/${project}/locations/us-central1/connections/alchemy-missing/entityTypes/Account`;
+
       yield* stack.destroy();
 
       const probe = yield* connectors

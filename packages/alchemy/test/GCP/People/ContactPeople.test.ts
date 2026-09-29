@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const PERSON_FIELDS =
   "names,emailAddresses,phoneNumbers,clientData,memberships,metadata,biographies,nicknames,userDefined";
 
@@ -54,7 +48,7 @@ const probeAccess = () =>
       ),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPeople on a missing contact fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -73,7 +67,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createContactPeople without People access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -130,7 +124,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a contact",
   (stack) =>
     Effect.gen(function* () {

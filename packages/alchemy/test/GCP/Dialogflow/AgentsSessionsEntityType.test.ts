@@ -11,6 +11,7 @@ import {
   ensureAgent,
   ensureEntityType,
 } from "./parent.ts";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -19,15 +20,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
 const agentDisplayName = "alch-df-set";
 
 const waitUntilGone = (name: string) =>
@@ -41,10 +34,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsAgentsSessionsEntityTypes on a missing session entity type fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -63,6 +57,7 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a session entity type",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const agent = yield* ensureAgent(project, agentDisplayName);

@@ -4,12 +4,7 @@ import * as streetviewpublish from "@distilled.cloud/gcp/streetviewpublish_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  entitlementTags,
-  hasGcpCreds,
-  logLevel,
-  probeSequenceAccess,
-} from "./common.ts";
+import { entitlementTags, logLevel, probeSequenceAccess } from "./common.ts";
 import { MINIMAL_MP4_BASE64 } from "./fixtures/equirectangular.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -26,7 +21,7 @@ const waitUntilGone = (sequenceId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPhotoSequence on a missing sequence fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -45,7 +40,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and delete a photo sequence",
   (stack) =>
     Effect.gen(function* () {

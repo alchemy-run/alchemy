@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilGone = (name: string) =>
   resourcemanager.getLiens({ name }).pipe(
     Effect.as("found" as const),
@@ -32,7 +26,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getLiens on a missing lien fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -50,7 +44,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, replace, and delete a lien",
   (stack) =>
     Effect.gen(function* () {

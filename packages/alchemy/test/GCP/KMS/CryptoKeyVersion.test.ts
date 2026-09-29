@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
 // Versions enter DESTROY_SCHEDULED for ≥24h, so reuse a standing key.
@@ -47,10 +40,11 @@ const waitVersionReady = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions on a missing version fails with NotFound",
   () =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
           name: `projects/${project}/locations/us-central1/keyRings/${KEY_RING_ID}/cryptoKeys/${CRYPTO_KEY_ID}/cryptoKeyVersions/999999`,
@@ -60,10 +54,11 @@ test.provider.skipIf(!hasGcpCreds)(
     }).pipe(logLevel),
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and destroy a crypto key version",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

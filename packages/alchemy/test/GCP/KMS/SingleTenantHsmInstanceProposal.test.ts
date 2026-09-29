@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,17 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const INSTANCE_ID = "alchemy-sthsm-does-not-exist";
 const PROPOSAL_ID = "alchemy-test-sthsm-proposal";
-const instanceName = `projects/${project}/locations/us-central1/singleTenantHsmInstances/${INSTANCE_ID}`;
-const missingProposalName = `${instanceName}/proposals/alchemy-sthsm-proposal-does-not-exist`;
+const instanceNameOf = (project: string) =>
+  `projects/${project}/locations/us-central1/singleTenantHsmInstances/${INSTANCE_ID}`;
+const missingProposalNameOf = (project: string) =>
+  `${instanceNameOf(project)}/proposals/alchemy-sthsm-proposal-does-not-exist`;
 
 // Creating a SingleTenantHsmInstance succeeds as an LRO then lands in
 // FAILED (`quorumAuth` without 2FA registration). Proposals against a
@@ -32,7 +28,6 @@ const missingProposalName = `${instanceName}/proposals/alchemy-sthsm-proposal-do
 // parent returns NotFound. Set GCP_TEST_KMS_HSM=1 and
 // GCP_TEST_KMS_HSM_INSTANCE to a working instance to run the lifecycle.
 const runLifecycle =
-  hasGcpCreds &&
   !process.env.FAST &&
   process.env.GCP_TEST_KMS_HSM === "1" &&
   !!process.env.GCP_TEST_KMS_HSM_INSTANCE;
@@ -50,10 +45,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsSingleTenantHsmInstancesProposals on a missing proposal fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingProposalName = missingProposalNameOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -71,10 +68,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create is rejected with NotFound when the parent HSM instance is missing",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const instanceName = instanceNameOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -99,6 +98,7 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete a single-tenant HSM instance proposal",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

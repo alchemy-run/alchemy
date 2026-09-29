@@ -8,13 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import {
-  hasGcpCreds,
-  location,
-  logLevel,
-  project,
-  runLifecycle,
-} from "./common.ts";
+import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,10 +58,11 @@ const uploadObject = (bucketName: string, object: string, bytes: Uint8Array) =>
     }
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsProductsReferenceImages on a missing image fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

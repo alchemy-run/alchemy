@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as ces from "@distilled.cloud/gcp/ces_v1";
@@ -13,19 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 // CES (Gemini Enterprise for Customer Experience) is entitlement-gated.
 // Live create returns Forbidden: "Gemini Enterprise for Customer Experience
 // API has not been used in project … or it is disabled."
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && process.env.GCP_TEST_CES === "1";
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_CES === "1";
 
 const waitUntilGone = (name: string) =>
   ces.getProjectsLocationsApps({ name }).pipe(
@@ -38,10 +30,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsApps on a missing app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

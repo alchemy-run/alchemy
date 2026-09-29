@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilGone = (
   projectId: string,
   datasetId: string,
@@ -42,7 +36,7 @@ const waitUntilGone = (
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a row access policy",
   (stack) =>
     Effect.gen(function* () {

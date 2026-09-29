@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   logLevel,
   packageName,
   probePackageName,
@@ -31,7 +30,7 @@ const waitUntilGone = (appId: string, productId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getMonetizationSubscriptions on a missing subscription fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -50,7 +49,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_ANDROIDPUBLISHER)(
+test.provider.skipIf(!!process.env.GCP_TEST_ANDROIDPUBLISHER)(
   "createMonetizationSubscriptions without Play access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

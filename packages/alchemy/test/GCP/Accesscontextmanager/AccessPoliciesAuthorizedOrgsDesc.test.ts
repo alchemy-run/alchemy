@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   lastSegment,
   logLevel,
   projectContext,
@@ -25,7 +24,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAccessPoliciesAuthorizedOrgsDescs on a missing descriptor fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

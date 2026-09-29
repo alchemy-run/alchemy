@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   logLevel,
   merchantId,
   probeMerchantId,
@@ -32,7 +31,7 @@ const waitUntilGone = (accountId: string, conversionSourceId: string) =>
       }),
     );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getConversionsources on a missing source fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -51,7 +50,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CONTENT)(
+test.provider.skipIf(!!process.env.GCP_TEST_CONTENT)(
   "createConversionsources without Merchant Center access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

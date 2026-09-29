@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,22 +14,17 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 const membership = process.env.GCP_TEST_GKE_MEMBERSHIP;
 // GKE Hub API is disabled on the testing project: 403 Forbidden
 // (SERVICE_DISABLED) "GKE Hub API has not been used in project
 // alchemy-gcp-testing-83661 before or it is disabled." Full
 // lifecycle also needs a registered Fleet membership.
-const runLifecycle = hasGcpCreds && !process.env.FAST && !!membership;
+const runLifecycle = !process.env.FAST && !!membership;
 
-const missingMembership = `projects/${project}/locations/global/memberships/alchemy-missing-membership`;
-const missingFeature = `${missingMembership}/features/configmanagement`;
+const missingMembershipOf = (project: string) =>
+  `projects/${project}/locations/global/memberships/alchemy-missing-membership`;
+const missingFeatureOf = (project: string) =>
+  `${missingMembershipOf(project)}/features/configmanagement`;
 
 const waitUntilGone = (name: string) =>
   gkehub.getProjectsLocationsMembershipsFeatures({ name }).pipe(
@@ -42,10 +38,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsMembershipsFeatures on a missing feature fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingFeature = missingFeatureOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -72,10 +70,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || runLifecycle)(
+test.provider.skipIf(runLifecycle)(
   "create against a missing membership is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const missingMembership = missingMembershipOf(project);
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

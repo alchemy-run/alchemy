@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -12,14 +13,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const denyRules = `rules_version = '2';
 service cloud.firestore {
@@ -50,20 +43,27 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeAccess = firebaserules
-  .listProjectsReleases({
-    name: `projects/${project}`,
-    pageSize: 1,
-  })
-  .pipe(
-    Effect.as("ok" as const),
-    Effect.catchTag("Forbidden", () => Effect.succeed("Forbidden" as const)),
-  );
+const probeAccess = GcpEnvironment.current.pipe(
+  Effect.flatMap(({ project }) =>
+    firebaserules
+      .listProjectsReleases({
+        name: `projects/${project}`,
+        pageSize: 1,
+      })
+      .pipe(
+        Effect.as("ok" as const),
+        Effect.catchTag("Forbidden", () =>
+          Effect.succeed("Forbidden" as const),
+        ),
+      ),
+  ),
+);
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsReleases on a missing release fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -78,10 +78,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete a firebaserules release",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const access = yield* probeAccess;

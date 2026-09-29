@@ -6,12 +6,12 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import {
-  catalogParent,
-  defaultCatalog,
+  catalogParentOf,
+  currentProject,
+  defaultCatalogOf,
   entitlementTags,
-  hasGcpCreds,
   logLevel,
-  missingName,
+  missingNameOf,
   probeCatalogAccess,
 } from "./common.ts";
 
@@ -39,15 +39,16 @@ const assertEntitlement = (error: { _tag: string; message: string }) => {
   }
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsCatalogsCatalogItems on a missing item fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         recommendationengine.getProjectsLocationsCatalogsCatalogItems({
-          name: missingName,
+          name: missingNameOf(project),
         }),
       );
       expect(["NotFound", "Forbidden"]).toContain(error._tag);
@@ -62,10 +63,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createProjectsLocationsCatalogsCatalogItems is rejected with Forbidden when Recommendations AI is disabled",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+      const defaultCatalog = defaultCatalogOf(project);
       yield* stack.destroy();
 
       const result = yield* recommendationengine
@@ -92,7 +95,7 @@ test.provider.skipIf(!hasGcpCreds)(
 
       const page = yield* recommendationengine
         .listProjectsLocationsCatalogs({
-          parent: catalogParent,
+          parent: catalogParentOf(project),
           pageSize: 1,
         })
         .pipe(
@@ -107,7 +110,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a catalog item",
   (stack) =>
     Effect.gen(function* () {

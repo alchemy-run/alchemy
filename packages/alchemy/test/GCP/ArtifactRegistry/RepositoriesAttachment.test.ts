@@ -17,12 +17,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const PACKAGE_ID = "sbom";
 const VERSION_ID = "1.0.0";
 const FILENAME = "sbom.json";
@@ -82,7 +76,7 @@ const uploadFile = (repositoryName: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, replace, and delete a repository attachment",
   (stack) =>
     Effect.gen(function* () {

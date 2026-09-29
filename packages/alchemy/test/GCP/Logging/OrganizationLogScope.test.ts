@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,15 +14,7 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const projectName = `projects/${project}`;
+const projectNameOf = (project: string) => `projects/${project}`;
 
 const waitUntilGone = (name: string) =>
   logging.getOrganizationsLocationsLogScopes({ name }).pipe(
@@ -36,6 +29,8 @@ const waitUntilGone = (name: string) =>
 
 const organizationOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
+
     let current: string | undefined = `projects/${project}`;
     for (let i = 0; i < 8; i++) {
       if (current === undefined) return "";
@@ -59,7 +54,7 @@ const organizationOf = () =>
     return "";
   });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsLogScopes on a missing log scope fails with NotFound or Forbidden",
   (stack) =>
     Effect.gen(function* () {
@@ -78,10 +73,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, replace, and delete an organization logging log scope",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const organization = yield* organizationOf();
@@ -90,7 +87,7 @@ test.provider.skipIf(!hasGcpCreds)(
           logging.createOrganizationsLocationsLogScopes({
             parent: "organizations/0/locations/global",
             logScopeId: "alchemy-probe",
-            body: { resourceNames: [projectName] },
+            body: { resourceNames: [projectNameOf(project)] },
           }),
         );
         expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
@@ -119,7 +116,7 @@ test.provider.skipIf(!hasGcpCreds)(
         Effect.gen(function* () {
           return yield* GCP.Logging.OrganizationLogScope("App", {
             organization,
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "application logs",
           });
         }),
@@ -131,13 +128,13 @@ test.provider.skipIf(!hasGcpCreds)(
       expect(created.name).toEqual(
         `${organization}/locations/global/logScopes/${created.logScopeId}`,
       );
-      expect(created.resourceNames).toEqual([projectName]);
+      expect(created.resourceNames).toEqual([projectNameOf(project)]);
       expect(created.description).toEqual("application logs");
 
       const fetched = yield* logging.getOrganizationsLocationsLogScopes({
         name: created.name,
       });
-      expect(fetched.resourceNames).toEqual([projectName]);
+      expect(fetched.resourceNames).toEqual([projectNameOf(project)]);
       expect(fetched.description).toContain("alchemy-id=");
 
       const updated = yield* stack.deploy(
@@ -145,7 +142,7 @@ test.provider.skipIf(!hasGcpCreds)(
           return yield* GCP.Logging.OrganizationLogScope("App", {
             organization,
             logScopeId: created.logScopeId,
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "updated application logs",
           });
         }),
@@ -162,7 +159,7 @@ test.provider.skipIf(!hasGcpCreds)(
           return yield* GCP.Logging.OrganizationLogScope("App", {
             organization,
             logScopeId: nextId,
-            resourceNames: [projectName],
+            resourceNames: [projectNameOf(project)],
             description: "replaced scope",
           });
         }),

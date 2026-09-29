@@ -2,12 +2,6 @@ import * as streetviewpublish from "@distilled.cloud/gcp/streetviewpublish_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",

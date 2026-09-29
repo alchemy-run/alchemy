@@ -13,12 +13,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const KEY =
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/Yy38fq56JD+xf1K+OMIJNawYl7wLaQOOpiFe/+Y5k";
 
@@ -42,7 +36,7 @@ const probeAccess = () =>
     Effect.catchTag("NotFound", (error) => Effect.succeed(error._tag)),
   );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "GetUsersSshPublicKey round-trip",
   (stack) =>
     Effect.gen(function* () {

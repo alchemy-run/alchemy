@@ -6,12 +6,6 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const accountId =
   process.env.GCP_MERCHANTAPI_ACCOUNT_ID?.trim() ||
   process.env.GCP_CONTENT_MERCHANT_ID?.trim() ||
@@ -28,10 +22,10 @@ export const productReviewDataSource =
   sharedDataSource;
 
 export const runMerchantReviewLifecycle =
-  hasGcpCreds && !process.env.FAST && !!accountId && !!merchantReviewDataSource;
+  !process.env.FAST && !!accountId && !!merchantReviewDataSource;
 
 export const runProductReviewLifecycle =
-  hasGcpCreds && !process.env.FAST && !!accountId && !!productReviewDataSource;
+  !process.env.FAST && !!accountId && !!productReviewDataSource;
 
 export const probeAccount = accountId ?? "1";
 

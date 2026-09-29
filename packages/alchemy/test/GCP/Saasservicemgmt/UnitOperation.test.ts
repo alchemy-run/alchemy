@@ -5,23 +5,21 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   location,
   logLevel,
   probeSaasApi,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
 } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const blueprintPackage = `${location}-docker.pkg.dev/${project}/blueprints/store:v1`;
-
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsUnitOperations on a missing unit operation fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -40,6 +38,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a unit operation",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+      const blueprintPackage = `${location}-docker.pkg.dev/${project}/blueprints/store:v1`;
       yield* stack.destroy();
 
       const probe = yield* probeSaasApi();

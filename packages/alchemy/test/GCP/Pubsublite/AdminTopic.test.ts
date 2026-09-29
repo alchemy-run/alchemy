@@ -5,10 +5,9 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   logLevel,
   probeTopics,
-  project,
+  currentProject,
   runLifecycle,
   waitUntilGone,
   zone,
@@ -16,7 +15,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createAdminProjectsLocationsTopics is Forbidden when Pub/Sub Lite is sunset",
   (stack) =>
     Effect.gen(function* () {
@@ -30,10 +29,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAdminProjectsLocationsTopics on a missing topic fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(

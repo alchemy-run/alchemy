@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   APP_CHECK_DISABLED,
-  hasGcpCreds,
   logLevel,
   missingResourcePolicy,
   probeAppCheck,
@@ -15,15 +14,16 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsServicesResourcePolicies on a missing policy fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const missing = yield* missingResourcePolicy();
       const error = yield* Effect.flip(
         firebaseappcheck.getProjectsServicesResourcePolicies({
-          name: missingResourcePolicy(),
+          name: missing,
         }),
       );
       expect(probeTags).toContain(error._tag);
@@ -36,7 +36,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a resource policy",
   (stack) =>
     Effect.gen(function* () {

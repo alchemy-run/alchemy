@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as netapp from "@distilled.cloud/gcp/netapp_v1";
@@ -13,16 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_NETAPP && !process.env.FAST;
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const cryptoKeyName = `projects/${project}/locations/us-central1/keyRings/alchemy-test-keyring/cryptoKeys/alchemy-test-cryptokey-enc`;
+const runLifecycle = !!process.env.GCP_TEST_NETAPP && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   netapp.getProjectsLocationsKmsConfigs({ name }).pipe(
@@ -35,10 +27,12 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsKmsConfigs on a missing config fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -69,6 +63,9 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a kms config",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const cryptoKeyName = `projects/${project}/locations/us-central1/keyRings/alchemy-test-keyring/cryptoKeys/alchemy-test-cryptokey-enc`;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

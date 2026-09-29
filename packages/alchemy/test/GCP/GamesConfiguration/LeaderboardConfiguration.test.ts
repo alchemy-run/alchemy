@@ -4,12 +4,7 @@ import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1c
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  applicationId,
-  hasGcpCreds,
-  logLevel,
-  probeApplicationId,
-} from "./common.ts";
+import { applicationId, logLevel, probeApplicationId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +20,7 @@ const waitUntilGone = (leaderboardId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getLeaderboardConfigurations on a missing leaderboard fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -43,7 +38,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_GAMESCONFIGURATION)(
+test.provider.skipIf(!!process.env.GCP_TEST_GAMESCONFIGURATION)(
   "insertLeaderboardConfigurations without Play Games access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -70,7 +65,7 @@ test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_GAMESCONFIGURATION)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a leaderboard configuration",
   (stack) =>
     Effect.gen(function* () {

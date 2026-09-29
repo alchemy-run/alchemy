@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import {
   APP_CHECK_DISABLED,
   FIREBASE_DISABLED,
-  hasGcpCreds,
   logLevel,
   missingDebugToken,
   probeAppCheck,
@@ -17,15 +16,16 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsAppsDebugTokens on a missing token fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const missing = yield* missingDebugToken();
       const error = yield* Effect.flip(
         firebaseappcheck.getProjectsAppsDebugTokens({
-          name: missingDebugToken(),
+          name: missing,
         }),
       );
       expect(probeTags).toContain(error._tag);
@@ -38,7 +38,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a debug token",
   (stack) =>
     Effect.gen(function* () {

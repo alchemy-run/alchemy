@@ -12,14 +12,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_MEMCACHE && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_MEMCACHE && !process.env.FAST;
 
 test.provider.skipIf(!runLifecycle)(
   "GetInstance invokes the HTTP binding",

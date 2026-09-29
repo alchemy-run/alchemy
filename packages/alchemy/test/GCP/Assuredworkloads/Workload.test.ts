@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,17 +15,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const defaultLocation = "us-central1";
 
 const organizationOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
     const fromEnv = process.env.GOOGLE_ORGANIZATION_ID;
     if (fromEnv && fromEnv.length > 0) {
       return fromEnv.startsWith("organizations/")
@@ -73,7 +68,7 @@ const billingAccount = process.env.GOOGLE_BILLING_ACCOUNT
     : `billingAccounts/${process.env.GOOGLE_BILLING_ACCOUNT}`
   : undefined;
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationsLocationsWorkloads on a missing workload fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -92,7 +87,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a workload",
   (stack) =>
     Effect.gen(function* () {

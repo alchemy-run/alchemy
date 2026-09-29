@@ -8,14 +8,8 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_PROD_TT_SASPORTAL;
+  !process.env.FAST && !!process.env.GCP_TEST_PROD_TT_SASPORTAL;
 
 const isMissing = <E extends { readonly _tag: string }>(
   error: E,

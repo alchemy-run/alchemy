@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
@@ -8,14 +9,8 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_APIGEE_REGISTRY;
+  !process.env.FAST && !!process.env.GCP_TEST_APIGEE_REGISTRY;
 
 /**
  * Apigee Registry is being retired and its backend often answers with 5xx.
@@ -33,7 +28,9 @@ export const probeTags = [
 
 export const noRetry = Layer.succeed(GcpRetry, { while: () => false });
 
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
+);
 export const location = "us-central1";
 
 export const openApi = JSON.stringify({

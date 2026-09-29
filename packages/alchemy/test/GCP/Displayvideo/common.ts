@@ -6,14 +6,8 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 export const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_DISPLAYVIDEO;
+  !process.env.FAST && !!process.env.GCP_TEST_DISPLAYVIDEO;
 
 export const partnerId = process.env.GCP_DISPLAYVIDEO_PARTNER_ID ?? "1";
 export const billingProfileId =

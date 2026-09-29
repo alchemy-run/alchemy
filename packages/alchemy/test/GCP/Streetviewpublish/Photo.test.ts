@@ -4,12 +4,7 @@ import * as streetviewpublish from "@distilled.cloud/gcp/streetviewpublish_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  entitlementTags,
-  hasGcpCreds,
-  logLevel,
-  probePhotoAccess,
-} from "./common.ts";
+import { entitlementTags, logLevel, probePhotoAccess } from "./common.ts";
 import { EQUIRECTANGULAR_JPEG_BASE64 } from "./fixtures/equirectangular.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -26,7 +21,7 @@ const waitUntilGone = (photoId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getPhoto on a missing photo fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -45,7 +40,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a photo",
   (stack) =>
     Effect.gen(function* () {

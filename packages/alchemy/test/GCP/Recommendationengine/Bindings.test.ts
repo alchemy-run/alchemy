@@ -3,16 +3,11 @@ import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  entitlementTags,
-  hasGcpCreds,
-  logLevel,
-  probeCatalogAccess,
-} from "./common.ts";
+import { entitlementTags, logLevel, probeCatalogAccess } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "GetCatalogItem round-trip",
   (stack) =>
     Effect.gen(function* () {

@@ -16,12 +16,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const { getWhenReady } = Test;
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 // Both hosts are built from `main`, which needs a local image build.
 const dockerAvailable = (() => {
   try {
@@ -34,7 +28,7 @@ const dockerAvailable = (() => {
   }
 })();
 
-const skip = !hasGcpCreds || !dockerAvailable;
+const skip = !dockerAvailable;
 
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 

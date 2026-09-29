@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,13 +15,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "alchemy-gcp-testing-83661";
 const entitlementTags = ["Forbidden", "NotFound", "BadRequest"] as const;
 
 // Cloud Support Event Subscriptions are entitlement-gated on the default
@@ -29,7 +23,7 @@ const entitlementTags = ["Forbidden", "NotFound", "BadRequest"] as const;
 // GCP_TEST_CLOUDSUPPORT=1 on an entitled org (Cloud Customer Care) to run
 // the lifecycle.
 const entitled = process.env.GCP_TEST_CLOUDSUPPORT === "1";
-const runLifecycle = hasGcpCreds && entitled && !process.env.FAST;
+const runLifecycle = entitled && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   cloudsupport.getOrganizationsSupportEventSubscriptions({ name }).pipe(
@@ -48,6 +42,7 @@ const waitUntilGone = (name: string) =>
 
 const organizationOf = () =>
   Effect.gen(function* () {
+    const { project } = yield* GcpEnvironment.current;
     const fromEnv = process.env.GOOGLE_ORGANIZATION_ID;
     if (fromEnv && fromEnv.length > 0) {
       return fromEnv.startsWith("organizations/")
@@ -84,7 +79,7 @@ const assertDisabledOrMissing = (error: { _tag: string; message?: string }) => {
   }
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getSupportEventSubscriptions on a missing subscription fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -103,10 +98,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "createSupportEventSubscriptions without Cloud Support access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const organization = (yield* organizationOf()) || "organizations/0";

@@ -4,7 +4,6 @@ import * as adsense from "@distilled.cloud/gcp/adsense_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
   probeName,
   probeParent,
@@ -15,7 +14,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getAccountsAdclientsCustomchannels on a missing custom channel fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -31,7 +30,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_ADSENSE)(
+test.provider.skipIf(!!process.env.GCP_TEST_ADSENSE)(
   "createAccountsAdclientsCustomchannels without AdSense for Platforms access fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

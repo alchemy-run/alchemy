@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,18 +15,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const runLifecycle =
-  hasGcpCreds &&
-  !!process.env.GCP_TEST_ORG_SECURITY_POLICY &&
-  !process.env.FAST;
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
+  !!process.env.GCP_TEST_ORG_SECURITY_POLICY && !process.env.FAST;
 
 const waitUntilGone = (securityPolicy: string) =>
   compute.getOrganizationSecurityPolicies({ securityPolicy }).pipe(
@@ -43,7 +34,7 @@ const ruleAt = (
   priority: number,
 ) => (rules ?? []).find((rule) => rule.priority === priority);
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getOrganizationSecurityPolicies on a missing policy fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
@@ -61,12 +52,11 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(
-  !hasGcpCreds || !!process.env.GCP_TEST_ORG_SECURITY_POLICY,
-)(
+test.provider.skipIf(!!process.env.GCP_TEST_ORG_SECURITY_POLICY)(
   "insertOrganizationSecurityPolicies without org IAM fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const resource = yield* resourcemanager.getProjects({

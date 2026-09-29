@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
   firstCustomerName,
-  hasGcpCreds,
   logLevel,
   runLifecycle,
   signedDeviceProbe,
@@ -26,7 +25,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getDeploymentsDevices on a missing device fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -44,7 +43,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_SASPORTAL)(
+test.provider.skipIf(!!process.env.GCP_TEST_SASPORTAL)(
   "createSignedNodesDeploymentsDevices without entitlement fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {

@@ -5,9 +5,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
-  hasGcpCreds,
   logLevel,
-  project,
+  currentProject,
   TEST_PKIX_PUBLIC_KEY_PEM,
 } from "./common.ts";
 
@@ -24,10 +23,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsAttestors on a missing attestor fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -42,7 +42,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete an attestor",
   (stack) =>
     Effect.gen(function* () {

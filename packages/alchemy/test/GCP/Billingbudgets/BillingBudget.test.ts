@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@/GCP/Environment";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as billingbudgets from "@distilled.cloud/gcp/billingbudgets_v1";
@@ -13,14 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
 
 const waitUntilGone = (name: string) =>
   billingbudgets.getBillingAccountsBudgets({ name }).pipe(
@@ -44,17 +37,19 @@ const billingAccountId = () => {
         : fromEnv,
     );
   }
-  return cloudbilling
-    .getBillingInfoProjects({ name: `projects/${project}` })
-    .pipe(
-      Effect.map(
-        (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
-    );
+  return GcpEnvironment.current.pipe(
+    Effect.flatMap(({ project }) =>
+      cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }),
+    ),
+
+    Effect.map(
+      (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
+    ),
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed("")),
+  );
 };
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getBillingAccountsBudgets on a missing budget fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -73,10 +68,12 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "create, update, and delete a billing budget",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+
       yield* stack.destroy();
 
       const account = yield* billingAccountId();

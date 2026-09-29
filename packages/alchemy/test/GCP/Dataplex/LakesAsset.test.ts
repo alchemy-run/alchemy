@@ -14,12 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsLakesZonesAssets({ name }).pipe(
     Effect.as("found" as const),
@@ -31,9 +25,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(
-  !hasGcpCreds || !!process.env.FAST || !process.env.GCP_TEST_DATAPLEX,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
   "create, update, and delete a lake asset",
   (stack) =>
     Effect.gen(function* () {

@@ -12,20 +12,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
 const cloneUri =
   process.env.GCP_DEVELOPERCONNECT_CLONE_URI ??
   "https://github.com/octocat/Hello-World.git";
 
 test.provider.skipIf(
-  !hasGcpCreds ||
-    !!process.env.FAST ||
-    process.env.GCP_TEST_DEVELOPERCONNECT !== "1",
+  !!process.env.FAST || process.env.GCP_TEST_DEVELOPERCONNECT !== "1",
 )(
   "FetchReadToken, FetchReadWriteToken, and FetchGitRefs invoke HTTP bindings",
   (stack) =>

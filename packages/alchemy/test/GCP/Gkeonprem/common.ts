@@ -1,13 +1,12 @@
-export const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Effect from "effect/Effect";
+
+export const currentProject = GcpEnvironment.current.pipe(
+  Effect.map((env) => env.project),
 );
 
-export const project = process.env.GOOGLE_PROJECT_ID ?? "";
-
 export const runLifecycle =
-  hasGcpCreds && !!process.env.GCP_TEST_GKEONPREM && !process.env.FAST;
+  !!process.env.GCP_TEST_GKEONPREM && !process.env.FAST;
 
 export const createErrorTags = [
   "Forbidden",

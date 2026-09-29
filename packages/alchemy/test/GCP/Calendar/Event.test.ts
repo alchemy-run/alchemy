@@ -13,14 +13,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const runLifecycle =
-  hasGcpCreds && !process.env.FAST && !!process.env.GCP_TEST_CALENDAR;
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_CALENDAR;
 
 const waitUntilGone = (calendarId: string, eventId: string) =>
   calendar.getEvents({ calendarId, eventId }).pipe(
@@ -34,7 +27,7 @@ const waitUntilGone = (calendarId: string, eventId: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getEvents on a missing event fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -53,7 +46,7 @@ test.provider.skipIf(!hasGcpCreds)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.GCP_TEST_CALENDAR)(
+test.provider.skipIf(!!process.env.GCP_TEST_CALENDAR)(
   "insertEvents without Calendar access fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {

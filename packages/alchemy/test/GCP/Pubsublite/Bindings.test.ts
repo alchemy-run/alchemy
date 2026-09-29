@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
   entitlementTags,
-  hasGcpCreds,
   logLevel,
   probeReservations,
   probeTopics,
@@ -65,7 +64,7 @@ test.provider.skipIf(!runLifecycle)(
   { timeout: 90_000 },
 );
 
-test.provider.skipIf(!hasGcpCreds || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "GetSubscription and CommitCursor on a subscription",
   (stack) =>
     Effect.gen(function* () {

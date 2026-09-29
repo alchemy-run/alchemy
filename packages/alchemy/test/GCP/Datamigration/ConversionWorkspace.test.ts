@@ -4,9 +4,8 @@ import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  hasGcpCreds,
   logLevel,
-  project,
+  currentProject,
   runEntitlementProbe,
   runLifecycle,
   waitUntilGone,
@@ -14,10 +13,12 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsConversionWorkspaces on a missing workspace fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -36,6 +37,8 @@ test.provider.skipIf(!runEntitlementProbe)(
   "createProjectsLocationsConversionWorkspaces without entitlement fails with Forbidden",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -60,6 +63,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a conversion workspace",
   (stack) =>
     Effect.gen(function* () {
+      const project = yield* currentProject;
+
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

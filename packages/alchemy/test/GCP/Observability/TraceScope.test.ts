@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,21 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasGcpCreds = !!(
-  process.env.GOOGLE_PROJECT_ID &&
-  (process.env.GOOGLE_ACCESS_TOKEN ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS)
-);
-
-const project = process.env.GOOGLE_PROJECT_ID ?? "";
-const projectName = `projects/${project}`;
-
 // Observability API is entitlement-gated on the default testing project.
 // Live create returns Forbidden: "Observability API has not been used in
 // project alchemy-gcp-testing-83661 before or it is disabled." Set
 // GCP_TEST_OBSERVABILITY=1 on an entitled project to run the lifecycle.
 const entitled = process.env.GCP_TEST_OBSERVABILITY === "1";
-const runLifecycle = hasGcpCreds && entitled;
+const runLifecycle = entitled;
 
 const waitUntilGone = (name: string) =>
   observability.getProjectsLocationsTraceScopes({ name }).pipe(
@@ -40,10 +32,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!hasGcpCreds)(
+test.provider(
   "getProjectsLocationsTraceScopes on a missing scope fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -65,6 +58,8 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, replace, and delete a trace scope",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      const projectName = `projects/${project}`;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
