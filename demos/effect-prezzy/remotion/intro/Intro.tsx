@@ -18,6 +18,7 @@ import { CodeSlide, SPLIT } from "./CodeSlide.tsx";
 import { LinksView } from "./Links.tsx";
 import { LoopView } from "./Loop.tsx";
 import { PullRequestView } from "./PullRequest.tsx";
+import { PyramidView } from "./Pyramid.tsx";
 import { BrowserPane, TerminalPane } from "./Panes.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
@@ -99,6 +100,8 @@ export const Intro = ({ intro }: IntroProps) => {
         <BrowserPane step={step} prev={prev} local={local} />
       ) : step.kind === "loop" ? (
         <LoopView step={step} prev={prev?.kind === "loop" ? prev : undefined} local={local} />
+      ) : step.kind === "pyramid" ? (
+        <PyramidView step={step} prev={prev?.kind === "pyramid" ? prev : undefined} local={local} />
       ) : step.kind === "comment" ? (
         <PullRequestView step={step} prev={prev?.kind === "comment" ? prev : undefined} local={local} />
       ) : (

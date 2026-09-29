@@ -8,8 +8,8 @@
  *
  * Code comes from `snippets/chat/` and is type-checked; `*.error.ts` must fail.
  */
-import type { LoopPart, MiniGraph, MiniNode, Tone } from "../shared/intro.ts";
-import type { CodeSpec, CommentSpec, LoopSpec, StepSpec, TerminalSpec } from "./steps.ts";
+import type { LoopPart, MiniGraph, MiniNode, PyramidLayer, Tone } from "../shared/intro.ts";
+import type { CodeSpec, CommentSpec, LoopSpec, PyramidSpec, StepSpec, TerminalSpec } from "./steps.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -105,20 +105,22 @@ const card = (text: string, tone: Tone = "construct") => ({ text, tone });
 const WORKER = { snippet: "Chat.ts", file: "src/Chat.ts", group: "chat", fontSize: 22 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 25 };
 
-// ── act 0: the loop, introduced one piece at a time ─────────────────────
-/** A map step that draws only `show`, everything lit. */
-const reveal = (title: string, notes: string, show: LoopPart[], focus?: LoopPart[]): LoopSpec => ({
-  kind: "loop",
-  title,
-  notes,
-  show,
-  focus,
-  frames: 30,
+// ── the stack: what "the code" actually is ─────────────────────────────
+const LAYER = {
+  infra: { id: "infra", title: "Infrastructure", detail: "databases · buckets · queues · networks", color: "#8b9cf6" },
+  config: { id: "config", title: "Configuration & policies", detail: "IAM · env vars · secrets · DNS", color: "#e0a86b" },
+  api: { id: "api", title: "APIs & business logic", detail: "Workers · Lambdas · Durable Objects", color: "#a3c473" },
+  web: { id: "web", title: "Frontend", detail: "websites · CDN · domains", color: "#e06c9f" },
+} satisfies Record<string, PyramidLayer>;
+const ALL_LAYERS = [LAYER.infra, LAYER.config, LAYER.api, LAYER.web];
+const pyramid = (s: Omit<PyramidSpec, "kind" | "layers"> & { layers?: PyramidLayer[] }): PyramidSpec => ({
+  kind: "pyramid",
+  layers: ALL_LAYERS,
+  frames: 24,
+  ...s,
 });
-const MACHINE: LoopPart[] = ["edit", "types", "local", "live", "feedback"];
-const PULL: LoopPart[] = ["push", "pr", "prTest", "comment"];
-const MAIN: LoopPart[] = ["merge", "staging", "stagingTest", "prod"];
-const theLoop: StepSpec[] = [
+
+const opening: StepSpec[] = [
   {
     kind: "slide",
     layout: "title",
@@ -138,6 +140,91 @@ const theLoop: StepSpec[] = [
     notes:
       "Agents are very good at writing code now. What slows them down, and what makes them wrong, is everything that comes after: finding out whether the code actually works.",
   },
+];
+
+const theStack: StepSpec[] = [
+  pyramid({
+    title: "Every app sits on infrastructure",
+    layers: [LAYER.infra],
+    notes:
+      "Before we talk about checking an agent's work, what is the work? It's never just code. At the bottom, every app sits on infrastructure: databases, buckets, queues, networks.",
+  }),
+  pyramid({
+    title: "…wired together with configuration and policies",
+    layers: [LAYER.infra, LAYER.config],
+    notes: "On top of that is the glue: who can access what, environment variables, secrets, DNS records.",
+  }),
+  pyramid({
+    title: "…running the APIs and business logic",
+    layers: [LAYER.infra, LAYER.config, LAYER.api],
+    notes: "Then the part we usually call the code: the APIs and business logic, running as Workers, Lambdas or Durable Objects.",
+  }),
+  pyramid({
+    title: "…behind a frontend served from a CDN",
+    notes: "And at the top, the frontend people actually see, served from a CDN on a domain.",
+  }),
+  pyramid({
+    title: "Each layer is usually built with a different tool",
+    side: [
+      { layer: "infra", text: "Terraform, CloudFormation" },
+      { layer: "config", text: "YAML, JSON, dashboards" },
+      { layer: "api", text: "TypeScript" },
+      { layer: "web", text: "a framework + CDN settings" },
+    ],
+    notes:
+      "Today each layer tends to live in its own tool. Terraform or CloudFormation for infrastructure, YAML and JSON and clicking in dashboards for config, TypeScript for the code, a framework and CDN settings for the frontend.",
+  }),
+  pyramid({
+    title: "…and checked a different way, or not at all",
+    side: [
+      { layer: "infra", text: "a plan, reviewed in CI" },
+      { layer: "config", text: "✗ breaks in production", tone: "bad" },
+      { layer: "api", text: "unit tests with mocks" },
+      { layer: "web", text: "clicked through by hand" },
+    ],
+    notes:
+      "And each is checked differently. Infrastructure gets a plan someone reads in CI. Code gets unit tests with mocks. The frontend gets clicked through. And config, the missing permission or the wrong variable name, usually gets found in production.",
+  }),
+  pyramid({
+    title: "An agent editing the code only sees one layer",
+    lit: ["api"],
+    side: [
+      { layer: "infra", text: "? the queue it sends to", tone: "bad" },
+      { layer: "config", text: "? the permission it needs", tone: "bad" },
+      { layer: "api", text: "✎ the agent works here", tone: "good" },
+      { layer: "web", text: "? the page that calls it", tone: "bad" },
+    ],
+    notes:
+      "That's hard for people, and worse for an agent. It edits the code, but the queue, the permission and the page that calls it are somewhere else, in another tool. It can't see them, so it can't check them. It guesses.",
+  }),
+  pyramid({
+    title: "Alchemy makes the whole stack one TypeScript program",
+    brace: { text: "one program", sub: "Alchemy\nTypeScript + Effect" },
+    notes:
+      "That's the problem Alchemy solves. The infrastructure, the policies and config, the code, and the frontend are declared together in one TypeScript program. A bucket is a variable. Using it from your code is what grants the permission. We call it infrastructure as effects.",
+  }),
+  pyramid({
+    title: "…so one type checker and one test can cover every layer",
+    brace: { text: "one program", sub: "one type checker\none test file\none deploy" },
+    notes:
+      "And once it's one program, one type checker sees every layer, one test file can exercise all of them, and one command deploys them. That's what makes a fast loop possible. Let's look at that loop.",
+  }),
+];
+
+// ── act 0: the loop, introduced one piece at a time ─────────────────────
+/** A map step that draws only `show`, everything lit. */
+const reveal = (title: string, notes: string, show: LoopPart[], focus?: LoopPart[]): LoopSpec => ({
+  kind: "loop",
+  title,
+  notes,
+  show,
+  focus,
+  frames: 30,
+});
+const MACHINE: LoopPart[] = ["edit", "types", "local", "live", "feedback"];
+const PULL: LoopPart[] = ["push", "pr", "prTest", "comment"];
+const MAIN: LoopPart[] = ["merge", "staging", "stagingTest", "prod"];
+const theLoop: StepSpec[] = [
   reveal(
     "An agent can change your code in seconds",
     "Here's the agent. It edits code in seconds, and it'll happily tell you it's done.",
@@ -192,13 +279,24 @@ const theLoop: StepSpec[] = [
 
 // ── act 1: the app is one declarative program ───────────────────────────
 const program: StepSpec[] = [
+  pyramid({
+    title: "Our example is a chat app that touches every layer",
+    layers: [
+      { ...LAYER.infra, detail: "R2 bucket · queue · Neon Postgres" },
+      { ...LAYER.config, detail: "bindings · Hyperdrive · IAM" },
+      { ...LAYER.api, detail: "a Worker · a Durable Object per room" },
+      { ...LAYER.web, detail: "the chat page, over WebSockets" },
+    ],
+    notes:
+      "To make this concrete, we'll build a chat app on Cloudflare that touches every layer: a bucket, a queue and a Postgres database; the bindings and permissions between them; a Worker with a Durable Object per room; and the chat page talking to it over WebSockets.",
+  }),
   chat({
     snippet: "Hello.ts",
     file: "src/Chat.ts",
     group: "chat",
     fontSize: WORKER.fontSize,
-    title: "We'll build a chat app, starting with one Worker",
-    notes: "Our example is a chat app on Cloudflare. It starts as the smallest thing that works: a Worker that says hello.",
+    title: "It starts as one Worker",
+    notes: "It starts as the smallest thing that works: a Worker that says hello.",
     quiet: true,
   }),
   chat({
@@ -762,4 +860,4 @@ const release: StepSpec[] = [
   ),
 ];
 
-export const steps: StepSpec[] = [...theLoop, ...program, ...grow, ...tests, ...ci, ...shared, ...release];
+export const steps: StepSpec[] = [...opening, ...theStack, ...theLoop, ...program, ...grow, ...tests, ...ci, ...shared, ...release];

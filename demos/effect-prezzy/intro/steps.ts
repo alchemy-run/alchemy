@@ -7,7 +7,7 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { BundlePanel, Drill, LoopPart, MiniGraph, PhaseTimeline, PanelItem, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import type { BundlePanel, Drill, LoopPart, MiniGraph, PhaseTimeline, PanelItem, PyramidStep, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
 import CLIENTS from "./bundle-clients.json" with { type: "json" };
 import { demo } from "./demo.ts";
 
@@ -153,7 +153,10 @@ export interface CommentSpec {
   frames?: number;
 }
 
-export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec;
+/** An application's layers as a pyramid (loop deck). */
+export type PyramidSpec = Omit<PyramidStep, "notes" | "frames"> & { notes?: string; frames?: number };
+
+export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec | PyramidSpec;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {

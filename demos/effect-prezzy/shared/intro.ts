@@ -283,7 +283,39 @@ export interface CommentStep {
   frames: number;
 }
 
-export type IntroStep = CodeStep | SlideStep | BoardStep | TerminalStep | BrowserStep | LoopStep | CommentStep;
+/** One layer of an application, drawn as a band of the pyramid. */
+export interface PyramidLayer {
+  id: string;
+  title: string;
+  detail: string;
+  color: string;
+}
+
+/** An application's layers as a pyramid, bottom first, with notes beside them. */
+export interface PyramidStep {
+  kind: "pyramid";
+  title: string;
+  notes: string;
+  /** Layers drawn so far, bottom first. */
+  layers: PyramidLayer[];
+  /** Layers at full strength; the rest are dimmed. Omit to light everything. */
+  lit?: string[];
+  /** Hand-written notes to the right of a layer. */
+  side?: { layer: string; text: string; tone?: Tone }[];
+  /** A bracket over every layer, with a label. */
+  brace?: { text: string; sub?: string };
+  frames: number;
+}
+
+export type IntroStep =
+  | CodeStep
+  | SlideStep
+  | BoardStep
+  | TerminalStep
+  | BrowserStep
+  | LoopStep
+  | CommentStep
+  | PyramidStep;
 
 export interface IntroJson {
   steps: IntroStep[];
