@@ -6,7 +6,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
@@ -110,12 +109,16 @@ for (const dev of [true, false]) {
         Effect.gen(function* () {
           const { url } = yield* stack;
           const client = yield* HttpClient.HttpClient;
-          const response = yield* (
-            method === "GET"
-              ? client.get(`${url}${path}`)
-              : client.post(`${url}${path}`)
-          ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-          expect(response.status).toBe(200);
+          const response = yield* method === "GET"
+            ? client.get(`${url}${path}`)
+            : client.post(`${url}${path}`);
+          if (response.status !== 200) {
+            return yield* Effect.fail(
+              new Error(
+                `${method} ${url}${path}: ${response.status}: ${yield* response.text}`,
+              ),
+            );
+          }
           return (yield* response.json) as A;
         });
       const read = (name: string) =>
