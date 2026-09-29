@@ -97,7 +97,9 @@ export type PersistentResourceProps = {
   labels?: Record<string, string>;
   /**
    * Resource pools. At least one pool is required. Pool machine specs
-   * are immutable — changing them replaces the resource.
+   * are immutable — changing them replaces the resource. Replica counts
+   * update in place only for Ray clusters (`raySpec`); GCP rejects updates
+   * to other persistent resources, so a replica change replaces them.
    */
   resourcePools?: ResourcePool[];
   /**
@@ -320,7 +322,18 @@ export const PersistentResourceProvider = () =>
         olds !== undefined &&
         JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
           JSON.stringify(Object.entries(olds.labels ?? {}).sort());
+      // GCP only updates Ray-cluster persistent resources ("Currently we only
+      // support the update function on Ray cluster"); any other resource is
+      // replaced when its replica counts change.
+      const replicasChanged =
+        olds !== undefined &&
+        news.raySpec === undefined &&
+        JSON.stringify(
+          (news.resourcePools ?? []).map((p) => p.replicaCount),
+        ) !==
+          JSON.stringify((olds.resourcePools ?? []).map((p) => p.replicaCount));
       const replace =
+        replicasChanged ||
         (previousId !== undefined &&
           nextId !== undefined &&
           nextId !== previousId) ||
@@ -474,7 +487,8 @@ export const PersistentResourceProvider = () =>
 
       // Display name and labels are create-only; `diff` replaces the resource
       // when they change.
-      if (poolsChanged) {
+      // Only Ray clusters accept updates; `diff` replaces other resources.
+      if (poolsChanged && news.raySpec !== undefined) {
         const patched =
           yield* aiplatform.patchProjectsLocationsPersistentResources({
             name: observedName,

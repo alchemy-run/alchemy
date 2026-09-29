@@ -102,7 +102,8 @@ test.provider.skipIf(!runLifecycle)(
             resourcePools: [
               {
                 id: "worker",
-                // Replica count is the only field that updates in place.
+                // Non-Ray persistent resources cannot be updated in place,
+                // so a replica change replaces the resource.
                 replicaCount: "2",
                 machineSpec: { machineType: "n1-standard-4" },
               },
@@ -112,6 +113,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
+      // Replaced under the same id.
       expect(updated.name).toEqual(created.name);
       const scaled = yield* aiplatform.getProjectsLocationsPersistentResources({
         name: created.name,
