@@ -63,7 +63,7 @@ const setMetadata = Effect.fn(function* (
     machine.id!,
     () =>
       machines
-        .updateMachineMetadata({
+        .patchMachineMetadata({
           app_name: appName,
           machine_id: machine.id!,
           metadata,

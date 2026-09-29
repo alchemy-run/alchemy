@@ -4933,7 +4933,7 @@ describe.sequential(
                 for (const id of initial.machineIds.slice(0, affected)) {
                   const target = { app_name: site.appName, machine_id: id };
                   const current = yield* machines.getMachine(target);
-                  yield* machines.updateMachineMetadata({
+                  yield* machines.patchMachineMetadata({
                     ...target,
                     metadata: {
                       ...current.config!.metadata,

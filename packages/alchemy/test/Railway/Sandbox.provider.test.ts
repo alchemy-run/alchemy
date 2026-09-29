@@ -1,4 +1,8 @@
-import * as railway from "@distilled.cloud/railway";
+import {
+  CredentialsFromToken,
+  GraphQLLive,
+  toConfig,
+} from "@distilled.cloud/railway";
 import {
   Sandbox,
   SandboxProvider,
@@ -20,11 +24,12 @@ const testLayer = (client: HttpClient.HttpClient) =>
         Layer.succeed(
           RailwayEnvironment,
           Effect.succeed({
-            ...railway.toConfig({ token: "fixture" }),
+            ...toConfig({ token: "fixture" }),
             workspaceId: "workspace",
           }),
         ),
-        railway.CredentialsFromToken({ token: "fixture" }),
+        CredentialsFromToken({ token: "fixture" }),
+        GraphQLLive,
         Layer.succeed(HttpClient.HttpClient, client),
       ),
     ),

@@ -24,6 +24,7 @@ import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
 import { FlyAuth } from "../Fly/AuthProvider.ts";
 import { DopplerAuth } from "../Doppler/AuthProvider.ts";
+import { GcpAuth } from "../GCP/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { DigitalOceanAuth } from "../DigitalOcean/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
@@ -373,6 +374,7 @@ const builtinAuth = Layer.mergeAll(
   AxiomAuth,
   CloudflareAuth,
   FlyAuth,
+  GcpAuth,
   GitHubAuth,
   DigitalOceanAuth,
   DopplerAuth,

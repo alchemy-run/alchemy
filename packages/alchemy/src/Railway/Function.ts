@@ -4,12 +4,21 @@ import {
   projectServices as fetchProjectServices,
 } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import {
+  Railway,
+  type Service as RailwayService,
+  type ServiceCreateInput,
+  type ServiceInstance as RailwayServiceInstance,
+  type ServiceInstanceUpdateInput,
+  type VariableUpsertInput,
+} from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
+import type * as Types from "effect/Types";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { isResolved, stripEffects } from "../Diff.ts";
@@ -55,38 +64,33 @@ import {
 } from "./hosted.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
 
-type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
+const serviceFields = <E>(service: Query<RailwayService, E>) => ({
+  id: service.id,
+  name: service.name,
+  deletedAt: service.deletedAt,
+});
+type CloudService = UnwrapPlan<ReturnType<typeof serviceFields>>;
 
-const selection = {
-  id: true,
-  name: true,
-  deletedAt: true,
-} as const satisfies railway.Selection<"Service">;
-const attributeInstanceSelection = {
-  source: { image: true },
-  region: true,
-  numReplicas: true,
-  sleepApplication: true,
-  latestDeployment: { id: true, status: true },
-  cronSchedule: true,
-  nextCronRunAt: true,
-} as const satisfies railway.Selection<"ServiceInstance">;
-const instanceSelection = {
-  ...attributeInstanceSelection,
-  deletedAt: true,
-  startCommand: true,
-} as const satisfies railway.Selection<"ServiceInstance">;
-type ServiceResponse = railway.Result<"Service!", typeof selection>;
-type CreateServiceResponse = railway.Result<"Service!", typeof selection>;
-type UpdateServiceResponse = railway.Result<"Service!", typeof selection>;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  typeof selection
->;
-type ServiceInstanceResponse = railway.Result<
-  "ServiceInstance!",
-  typeof instanceSelection
->;
+const attributeInstanceFields = <E>(
+  instance: Query<RailwayServiceInstance, E>,
+) => ({
+  source: instance.source.pipe(Query.map((s) => ({ image: s.image }))),
+  region: instance.region,
+  numReplicas: instance.numReplicas,
+  sleepApplication: instance.sleepApplication,
+  latestDeployment: instance.latestDeployment.pipe(
+    Query.map((d) => ({ id: d.id, status: d.status })),
+  ),
+  cronSchedule: instance.cronSchedule,
+  nextCronRunAt: instance.nextCronRunAt,
+});
+const instanceFields = <E>(instance: Query<RailwayServiceInstance, E>) => ({
+  ...attributeInstanceFields(instance),
+  deletedAt: instance.deletedAt,
+  startCommand: instance.startCommand,
+});
+type AttributeInstance = UnwrapPlan<ReturnType<typeof attributeInstanceFields>>;
+type ServiceInstanceResponse = UnwrapPlan<ReturnType<typeof instanceFields>>;
 
 export { FunctionBundleNotSingleFile } from "./hosted.ts";
 export type { InferEnv } from "./InferEnv.ts";
@@ -591,12 +595,6 @@ class FunctionDeployPending extends Data.TaggedError(
   status: string;
 }> {}
 
-type CloudService =
-  | ServiceResponse
-  | CreateServiceResponse
-  | UpdateServiceResponse
-  | ProjectResponseServicesEdgesItemNode;
-
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
@@ -663,24 +661,22 @@ const resolveSource = (props: FunctionProps) =>
     });
   });
 
+const readRuntimeImage = Query.fn(() => ({
+  image: Railway.functionRuntime({ name: FUNCTION_RUNTIME_NAME }).latestVersion
+    .image,
+}));
+
 const latestRuntimeImage = () =>
-  railway
-    .functionRuntime(
-      { name: FUNCTION_RUNTIME_NAME },
-      { latestVersion: { image: true } },
-    )
-    .pipe(
-      Effect.flatMap((runtime) => {
-        const image = runtime.latestVersion.image;
-        if (image.length === 0) {
-          return new FunctionRuntimeImageMissing({
-            message:
-              "functionRuntime(bun) returned an empty latestVersion.image",
-          });
-        }
-        return Effect.succeed(image);
-      }),
-    );
+  readRuntimeImage().pipe(
+    Effect.flatMap(({ image }) => {
+      if (image.length === 0) {
+        return new FunctionRuntimeImageMissing({
+          message: "functionRuntime(bun) returned an empty latestVersion.image",
+        });
+      }
+      return Effect.succeed(image);
+    }),
+  );
 
 const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed == null || observed.length === 0) return false;
@@ -699,23 +695,31 @@ const deployReady = (status: string | undefined) =>
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
+const readService = Query.fn((id: string) =>
+  serviceFields(Railway.service({ id })),
+);
+
 const getById = (serviceId: string) =>
-  railway.service({ id: serviceId }, selection).pipe(
+  readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
+const readInstance = Query.fn((environmentId: string, serviceId: string) =>
+  instanceFields(Railway.serviceInstance({ environmentId, serviceId })),
+);
+
 const getInstance = (environmentId: string, serviceId: string) =>
-  railway.serviceInstance({ environmentId, serviceId }, instanceSelection).pipe(
+  readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
-  fetchProjectServices(projectId, selection).pipe(
+  fetchProjectServices(projectId, serviceFields).pipe(
     Effect.map((services) => services.filter((node) => !isGoneService(node))),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed([] as CloudService[]),
     ),
   );
 
@@ -744,26 +748,27 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     ),
   );
 
+const readDeployLogs = Query.fn((deploymentId: string) =>
+  Railway.deploymentLogs({ deploymentId, limit: 80 }).pipe(
+    Query.map((row) => ({ severity: row.severity, message: row.message })),
+  ),
+);
+
 const fetchDeployLogs = (deploymentId: string | undefined) =>
   deploymentId === undefined || deploymentId.length === 0
     ? Effect.succeed("")
-    : railway
-        .deploymentLogs(
-          { deploymentId, limit: 80 },
-          { severity: true, message: true },
-        )
-        .pipe(
-          Effect.map((rows) =>
-            rows
-              .map((row) =>
-                row.severity != null
-                  ? `[${row.severity}] ${row.message}`
-                  : row.message,
-              )
-              .join("\n"),
-          ),
-          Effect.orElseSucceed(() => ""),
-        );
+    : readDeployLogs(deploymentId).pipe(
+        Effect.map((rows) =>
+          rows
+            .map((row) =>
+              row.severity != null
+                ? `[${row.severity}] ${row.message}`
+                : row.message,
+            )
+            .join("\n"),
+        ),
+        Effect.orElseSucceed(() => ""),
+      );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
@@ -808,24 +813,31 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
+const readVariables = Query.fn(
+  (projectId: string, environmentId: string, serviceId: string) =>
+    Railway.variables({
+      projectId,
+      environmentId,
+      serviceId,
+      unrendered: true,
+    }),
+);
+
+const variableUpsert = Query.fn((input: VariableUpsertInput) =>
+  Railway.variableUpsert({ input }),
+);
+
 const listVariableMap = (
   projectId: string,
   environmentId: string,
   serviceId: string,
 ) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
+  readVariables(projectId, environmentId, serviceId).pipe(
+    Effect.map(asVariableMap),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed({} as Record<string, string>),
+    ),
+  );
 
 const upsertVariable = (input: {
   projectId: string;
@@ -834,16 +846,37 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway.upsertVariable({
-    input: {
-      projectId: input.projectId,
-      environmentId: input.environmentId,
-      serviceId: input.serviceId,
-      name: input.name,
-      value: input.value,
-      skipDeploys: true,
-    },
+  variableUpsert({
+    projectId: input.projectId,
+    environmentId: input.environmentId,
+    serviceId: input.serviceId,
+    name: input.name,
+    value: input.value,
+    skipDeploys: true,
   });
+
+const serviceCreate = Query.fn((input: ServiceCreateInput) =>
+  serviceFields(Railway.serviceCreate({ input })),
+);
+
+const serviceUpdate = Query.fn((id: string, name: string) =>
+  serviceFields(Railway.serviceUpdate({ id, input: { name } })),
+);
+
+const serviceInstanceUpdate = Query.fn(
+  (
+    environmentId: string,
+    serviceId: string,
+    input: ServiceInstanceUpdateInput,
+  ) => Railway.serviceInstanceUpdate({ environmentId, serviceId, input }),
+);
+
+const serviceInstanceDeploy = Query.fn(
+  (environmentId: string, serviceId: string) =>
+    Railway.serviceInstanceDeployV2({ environmentId, serviceId }),
+);
+
+const serviceDelete = Query.fn((id: string) => Railway.serviceDelete({ id }));
 
 const hostedProgramProps = (
   props: FunctionProps,
@@ -907,9 +940,7 @@ const syncMounts = Effect.fn(function* (input: {
 
 const toAttrs = (input: {
   service: CloudService;
-  instance:
-    | railway.Result<"ServiceInstance!", typeof attributeInstanceSelection>
-    | undefined;
+  instance: AttributeInstance | undefined;
   domain: ServiceDomainRecord | undefined;
   projectId: string;
   environmentId: string;
@@ -947,7 +978,7 @@ const instanceSettingsDelta = (input: {
   props: FunctionProps;
 }): ServiceInstanceUpdateInput | undefined => {
   const instance = input.instance;
-  const delta: ServiceInstanceUpdateInput = {};
+  const delta: Types.Mutable<ServiceInstanceUpdateInput> = {};
   let changed = false;
 
   if (!sameImage(instance?.source?.image, input.sourceImage)) {
@@ -1097,11 +1128,15 @@ export const FunctionProvider = () =>
               if (services.size === 0) return [];
               const envIds = yield* projectEnvironmentIds(project);
               const items = yield* Effect.forEach(envIds, (environmentId) =>
-                environmentServiceInstances(environmentId, project.projectId, {
-                  ...attributeInstanceSelection,
-                  serviceId: true,
-                  deletedAt: true,
-                }).pipe(
+                environmentServiceInstances(
+                  environmentId,
+                  project.projectId,
+                  (instance) => ({
+                    ...attributeInstanceFields(instance),
+                    serviceId: instance.serviceId,
+                    deletedAt: instance.deletedAt,
+                  }),
+                ).pipe(
                   Effect.map((instances) =>
                     instances.flatMap((instance) => {
                       const service = services.get(instance.serviceId);
@@ -1232,23 +1267,16 @@ export const FunctionProvider = () =>
           }
 
           if (current === undefined) {
-            const created = yield* railway
-              .createService(
-                {
-                  input: {
-                    projectId,
-                    environmentId,
-                    name,
-                    source: { image },
-                  },
-                },
-                selection,
-              )
-              .pipe(
-                railway.catchTags("RailwayValidationError", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            const created = yield* serviceCreate({
+              projectId,
+              environmentId,
+              name,
+              source: { image },
+            }).pipe(
+              Effect.catchTag("RailwayValidationError", () =>
+                Effect.succeed(undefined),
+              ),
+            );
             current = created ?? (yield* findByName(projectId, name));
           }
 
@@ -1257,13 +1285,7 @@ export const FunctionProvider = () =>
           }
 
           if (current.name !== name) {
-            current = yield* railway.updateService(
-              {
-                id: current.id,
-                input: { name },
-              },
-              selection,
-            );
+            current = yield* serviceUpdate(current.id, name);
           }
 
           // The service instance must exist in this environment before a
@@ -1288,11 +1310,11 @@ export const FunctionProvider = () =>
             props,
           });
           if (instanceDelta !== undefined) {
-            yield* railway.updateServiceInstance({
+            yield* serviceInstanceUpdate(
               environmentId,
-              serviceId: current.id,
-              input: instanceDelta,
-            });
+              current.id,
+              instanceDelta,
+            );
             needsDeploy = true;
             instance =
               (yield* getInstance(environmentId, current.id)) ?? instance;
@@ -1337,14 +1359,9 @@ export const FunctionProvider = () =>
           });
 
           if (needsDeploy || instance?.latestDeployment == null) {
-            yield* railway
-              .serviceInstanceDeployV2({
-                environmentId,
-                serviceId: current.id,
-              })
-              .pipe(
-                railway.catchTags("RailwayValidationError", () => Effect.void),
-              );
+            yield* serviceInstanceDeploy(environmentId, current.id).pipe(
+              Effect.catchTag("RailwayValidationError", () => Effect.void),
+            );
           }
 
           // Cron-only Functions sleep until the schedule. Waiting for
@@ -1390,9 +1407,9 @@ export const FunctionProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const serviceId = output.serviceId;
           if (serviceId.length === 0) return;
-          yield* railway
-            .deleteService({ id: serviceId })
-            .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+          yield* serviceDelete(serviceId).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.void),
+          );
           yield* waitUntilDeleted(
             "Service",
             serviceId,

@@ -144,7 +144,9 @@ export interface DeploymentPropsBase extends PlatformProps {
   /**
    * Cloud-specific workload-identity options, consumed by the cluster
    * platform's identity adapter (on EKS: `{ managedPolicyArns: [...] }`
-   * attaches extra managed policies to the generated pod-identity role).
+   * attaches extra managed policies to the generated pod-identity role; on
+   * GKE: `{ gcpServiceAccount }` runs the pods as an existing Google
+   * service account instead of the ServiceAccount's own principal).
    */
   identity?: WorkloadIdentityOptions;
   /**
@@ -227,7 +229,8 @@ export interface Deployment extends Resource<
     imageUri: string;
     /**
      * Workload-identity state provisioned by the cluster platform's
-     * adapter (on EKS: the pod-identity role + association).
+     * adapter (on EKS: the pod-identity role + association; on GKE: the
+     * Workload Identity principal and the IAM grants applied to it).
      */
     identity: IdentityState | undefined;
     /**
@@ -272,9 +275,15 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * Effect program), `context` (build your own Dockerfile), or `image` (a
  * pre-built registry reference). `main` and `context` images are built on
  * the deploying machine and pushed to the connection's registry
- * (`Kubernetes.LocalCluster` includes one; EKS uses ECR). Bindings attach
- * environment variables on any cluster; cloud credential grants need a
- * platform with workload identity (EKS Pod Identity).
+ * (`Kubernetes.LocalCluster` includes one; EKS uses ECR; GKE uses
+ * Artifact Registry). Bindings attach environment variables on any
+ * cluster; cloud credential grants need a platform with workload identity.
+ * On `AWS.EKS.Cluster` targets it accepts the `{ env, policyStatements }`
+ * contract of `AWS.Lambda.Function`: IAM policy statements go to a
+ * generated pod-identity role. On `GCP.Container.Cluster` targets it
+ * accepts the `{ env, iam }` contract of `GCP.Run.Service`: IAM roles are
+ * granted to the Kubernetes ServiceAccount's Workload Identity Federation
+ * principal.
  * ### Creating a Deployment
  * **Example:** Run an image on a local cluster
  * ```typescript
@@ -469,6 +478,29 @@ const retryUntilServiceReady = <A, E, R>(
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
+
+class ServiceStillExists extends Data.TaggedError(
+  "Kubernetes.ServiceStillExists",
+)<{}> {}
+
+/**
+ * Bounded (~3 min) wait for a deleted Service to disappear, i.e. for the
+ * cloud controller to tear down its load balancer and drop the finalizer.
+ */
+const waitForServiceGone = (
+  transport: ClusterTransport,
+  service: KubernetesObjectRef,
+): Effect.Effect<void, unknown> =>
+  Effect.retry(
+    readObject({ transport, object: service }).pipe(
+      Effect.flatMap(() => Effect.fail(new ServiceStillExists())),
+      Effect.catchIf(isNotFound, () => Effect.void),
+    ),
+    {
+      while: (error) => error instanceof ServiceStillExists,
+      schedule: loadBalancerRetrySchedule,
+    },
+  );
 
 export const DeploymentProvider = () =>
   Provider.effect(
@@ -860,6 +892,20 @@ export const DeploymentProvider = () =>
               transport,
               objects: output.kubernetesObjects ?? [],
             }).pipe(Effect.catch(() => Effect.void));
+            // A LoadBalancer Service carries the cloud controller's cleanup
+            // finalizer; wait for it so the cloud load balancer is gone
+            // before the cluster (and its controller) can be deleted —
+            // deleting the cluster first leaks the load balancer.
+            yield* Effect.forEach(
+              (output.kubernetesObjects ?? []).filter(
+                (object) => object.kind === "Service",
+              ),
+              (service) =>
+                waitForServiceGone(transport, service).pipe(
+                  Effect.catch(() => Effect.void),
+                ),
+              { discard: true },
+            );
           }
 
           if (adapter.identity) {

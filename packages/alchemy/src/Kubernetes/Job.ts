@@ -141,7 +141,9 @@ export interface JobPropsBase extends PlatformProps {
   /**
    * Cloud-specific workload-identity options, consumed by the cluster
    * platform's identity adapter (on EKS: `{ managedPolicyArns: [...] }`
-   * attaches extra managed policies to the generated pod-identity role).
+   * attaches extra managed policies to the generated pod-identity role; on
+   * GKE: `{ gcpServiceAccount }` runs the pods as an existing Google
+   * service account instead of the ServiceAccount's own principal).
    */
   identity?: WorkloadIdentityOptions;
   /**
@@ -221,7 +223,8 @@ export interface Job extends Resource<
     imageUri: string;
     /**
      * Workload-identity state provisioned by the cluster platform's
-     * adapter (on EKS: the pod-identity role + association).
+     * adapter (on EKS: the pod-identity role + association; on GKE: the
+     * Workload Identity principal and the IAM grants applied to it).
      */
     identity: IdentityState | undefined;
     /**
@@ -272,7 +275,11 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * your own Dockerfile), or `image` (a pre-built registry reference).
  * `main` and `context` images are built on the deploying machine and
  * pushed to the connection's registry (`Kubernetes.LocalCluster` includes
- * one; EKS uses ECR).
+ * one; EKS uses ECR; GKE uses Artifact Registry). On `AWS.EKS.Cluster`
+ * targets, bindings attach IAM policy statements to a generated
+ * pod-identity role; on `GCP.Container.Cluster` targets, GCP bindings grant
+ * their IAM roles to the Kubernetes ServiceAccount's Workload Identity
+ * Federation principal — exactly like `Kubernetes.Deployment`.
  * ### Creating a Job
  * **Example:** Remote image (external — no Effect runtime in the container)
  * ```typescript
