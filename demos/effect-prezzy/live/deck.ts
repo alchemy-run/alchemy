@@ -46,10 +46,10 @@ const terminalPauses = async (id: string): Promise<number[]> => {
  * Loads every deck item the same way render.ts does, splits it into
  * presenter steps, and skips scenes that haven't been captured yet.
  */
-export const loadDeck = async (name = "talk") => {
+export const loadDeck = async (name = "loop") => {
   const items: LiveItem[] = [];
   const steps: LiveStep[] = [];
-  for (const item of name === "loop" ? loopDeck : deck) {
+  for (const item of name === "talk" ? deck : loopDeck) {
     const index = items.length;
     if (item.kind === "slide") {
       const frames = Math.round((item.seconds ?? 2) * VIDEO.fps);
