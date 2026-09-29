@@ -102,6 +102,73 @@ describe.sequential(
   { tags: ["provider:prisma", "provider:prisma:website", "local"] },
   () => {
     it.effect(
+      "ignores dangling optional-package resolution links while retaining the runtime fallback",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const root = yield* fixture("vite");
+            const dist = path.join(root, "dist");
+            const modules = path.join(root, "node_modules");
+            yield* fs.makeDirectory(dist);
+            yield* fs.makeDirectory(modules);
+            yield* fs.symlink(
+              path.join(root, "missing-optional-runtime"),
+              path.join(modules, "optional-runtime"),
+            );
+            const entry = path.join(dist, "server.cjs");
+            yield* fs.writeFileString(
+              entry,
+              'try { module.exports = require("optional-runtime"); } catch { module.exports = require("./fallback.cjs"); }',
+            );
+            yield* fs.writeFileString(
+              path.join(dist, "fallback.cjs"),
+              'module.exports = "fallback";',
+            );
+            const staged = yield* stageWebsiteArtifact({
+              root,
+              distDir: dist,
+              serverEntry: entry,
+            });
+            const files = yield* listFiles(staged.directory);
+            expect(files.some((file) => file.endsWith("fallback.cjs"))).toBe(
+              true,
+            );
+            expect(
+              files.some((file) => file.includes("optional-runtime")),
+            ).toBe(false);
+          }),
+        ).pipe(Effect.provide(services)),
+      { tags: ["unit"] },
+    );
+
+    it.effect(
+      "rejects a dangling symlink in the build output",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const root = yield* fixture("vite");
+            const dist = path.join(root, "dist");
+            yield* fs.makeDirectory(dist);
+            yield* fs.symlink(
+              path.join(root, "missing-build-asset"),
+              path.join(dist, "required-asset"),
+            );
+            const error = yield* stageWebsiteArtifact({
+              root,
+              distDir: dist,
+              static: {},
+            }).pipe(Effect.flip);
+            expect(String(error)).toContain("required-asset");
+          }),
+        ).pipe(Effect.provide(services)),
+      { tags: ["unit"] },
+    );
+
+    it.effect(
       "rejects output symlinks that would package the source tree",
       () =>
         Effect.scoped(
