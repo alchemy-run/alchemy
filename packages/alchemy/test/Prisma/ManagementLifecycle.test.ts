@@ -39,6 +39,8 @@ import {
   page,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
+import { PlatformServices } from "@/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -1405,6 +1407,9 @@ it.effect(
       Effect.provide(DatabaseProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(liveProviderContext),
+      Effect.provide(testStackContext),
+      Effect.provide(makeFakeManagementApi(unhandled).layer),
+      Effect.provide(PlatformServices),
     );
   },
   { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },

@@ -41,8 +41,10 @@ import {
   dispatchTo,
   failure,
   FAKE_API_BASE_URL,
+  makeFakeManagementApi,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const testBranch = (
   id: string,
@@ -339,7 +341,11 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 });
 
 const computeProviderLive = () =>
-  ComputeProvider().pipe(Layer.provide(liveProviderContext));
+  ComputeProvider().pipe(
+    Layer.provide(
+      Layer.mergeAll(liveProviderContext, testStackContext, PlatformServices),
+    ),
+  );
 
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
@@ -2149,6 +2155,9 @@ describe(
               withDefaultBranch({} as PrismaManagementClient),
             ),
           ),
+          // Fails before any cloud mutation: every Management API route is
+          // unregistered so a stray call fails loudly.
+          Effect.provide(makeFakeManagementApi(unhandled).layer),
           Effect.provide(PlatformServices),
         ),
       { tags: ["provider:prisma:branch"] },
@@ -7529,6 +7538,7 @@ describe(
 
           const provider = yield* Provider.findProvider(Compute).pipe(
             Effect.provide(computeProviderLive()),
+            Effect.provide(makeFakeManagementApi(unhandled).layer),
           );
           const lines = yield* provider.tail!({
             id: "App",

@@ -62,6 +62,8 @@ import {
   wireDatabase,
   wireProject,
 } from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
+import { PlatformServices } from "@/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -637,6 +639,8 @@ const providerLayer = (client: PrismaManagementClient) =>
   ).pipe(
     Layer.provide(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provide(testStackContext),
+    Layer.provide(PlatformServices),
   );
 
 const reconcileInput = <Props, Attrs>(

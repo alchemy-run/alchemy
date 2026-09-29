@@ -10,6 +10,7 @@ import {
   makeFakeManagementApi,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const app = (id: string, branchId: string | null = "branch-main") => ({
   id,
@@ -91,6 +92,7 @@ const provide =
       Effect.provide(AppProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(liveProviderContext),
+      Effect.provide(testStackContext),
       Effect.provide(clientBackedApi(client).layer),
     );
 

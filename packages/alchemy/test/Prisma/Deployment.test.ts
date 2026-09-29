@@ -1943,6 +1943,7 @@ describe(
 
           const provider = yield* Provider.findProvider(PrismaDeployment).pipe(
             Effect.provide(deploymentProviderLive()),
+            Effect.provide(makeFakeManagementApi(unhandled).layer),
             Effect.provide(PlatformServices),
           );
           const lines = yield* provider.tail!({
