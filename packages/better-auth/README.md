@@ -60,6 +60,18 @@ The database is a Layer you provide on the surrounding impl effect. Pick the opt
 
 Every layer routes runtime access through alchemy's binding system — native bindings (D1, Hyperdrive, RDS Data API IAM grants) or host-environment Output bindings (connection strings) — never hand-wired env vars.
 
+## Plugin factories
+
+Plugins that mutate their options or capture the auth context during initialization need fresh instances for each execution. Pass a factory that creates the plugins and their mutable options:
+
+```typescript
+const auth = yield* BetterAuth({
+  plugins: () => [organization(), stripe({ /* ... */ })],
+});
+```
+
+The factory runs once per execution that uses auth, and separately during deployment for schema inspection. It must return the same plugin configuration and schema each time. Existing plugin arrays remain supported. Plugin endpoints and session fields are inferred from either form.
+
 ## Cloudflare D1
 
 Native D1 binding at runtime; migrations run over the D1 HTTP API at deploy (and against the local simulator under `alchemy dev`).
