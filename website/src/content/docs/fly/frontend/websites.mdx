@@ -138,9 +138,21 @@ const site = yield* Fly.Website.Astro("Web", {
 });
 ```
 
-`domain` is a hostname string. Alchemy requests ACME on the App;
-point existing DNS at the App first (v1 does not create records).
-`url` becomes `https://app.example.com`.
+A hostname string makes Alchemy request ACME on the App; you point DNS
+at the App yourself. `url` becomes `https://app.example.com`.
+
+To have Alchemy publish the records, pass the DNS host as `dns`. The site
+then publishes the ACME challenge `CNAME` and the `A`/`AAAA` records at the
+App through that host:
+
+```typescript
+const site = yield* Fly.Website.Astro("Web", {
+  domain: { name: "app.example.com", dns: Cloudflare.DNS.Adapter() },
+});
+```
+
+`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See
+[DNS Adapters](/infrastructure-as-code/dns-adapters).
 
 ## Where next
 

@@ -2,7 +2,18 @@ export {
   AccountConfiguration,
   AccountConfigurationProvider,
 } from "./AccountConfiguration.ts";
-export { Certificate, CertificateProvider } from "./Certificate.ts";
+export {
+  Certificate,
+  CertificateCaaError,
+  CertificateProvider,
+  validationRecordsOf,
+  type CertificateProps,
+} from "./Certificate.ts";
+export {
+  CertificateValidation,
+  CertificateValidationProvider,
+  type CertificateValidationProps,
+} from "./CertificateValidation.ts";
 export * from "./DescribeCertificate.ts";
 export * from "./DescribeCertificateHttp.ts";
 export * from "./ExpiryEventSource.ts";

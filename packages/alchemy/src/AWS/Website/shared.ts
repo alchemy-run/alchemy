@@ -1,7 +1,7 @@
 import type { Input } from "../../Input.ts";
 import type { Certificate } from "../ACM/Certificate.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
-import type { Records } from "../Route53/Records.ts";
+import type { DnsAliasSet, DnsConfig } from "../../DNS/Adapter.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 
@@ -29,12 +29,14 @@ export interface WebsiteRouterBindTargets {
    */
   certificate?: Certificate;
   /**
-   * The Router's Route 53 alias record set — bound hostnames get A-alias
-   * records pointing at the distribution. Absent when the Router's domain
-   * sets `dns: false`. Without an explicit `hostedZoneId`, the set infers
-   * its zone from the first bound hostname.
+   * The Router's alias record set (`AWS.Route53.Records` by default, or
+   * the record set of the Router domain's DNS adapter, e.g.
+   * `Cloudflare.DNS.Records`) — bound hostnames get records pointing at
+   * the distribution. Absent when the Router's domain sets `dns: false`.
+   * Without an explicit zone, the set infers it from the first bound
+   * hostname.
    */
-  records?: Records;
+  records?: DnsAliasSet;
 }
 
 /**
@@ -74,7 +76,8 @@ export interface WebsiteStandaloneDomainProps {
    * the most specific PUBLIC hosted zone in the account containing each
    * hostname is inferred by walking its parent domains; the deploy fails
    * actionably when no zone matches. Pass an explicit id to pin the zone
-   * (e.g. when several zones could match).
+   * (e.g. when several zones could match). Ignored when {@link dns} names
+   * another DNS host.
    */
   hostedZoneId?: string;
   /**
@@ -98,9 +101,13 @@ export interface WebsiteStandaloneDomainProps {
    */
   cert?: Input<string>;
   /**
-   * Disable Route 53 automation. When set, no DNS records are created.
+   * DNS host for the certificate validation and alias records (see
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
+   * 53 (see {@link hostedZoneId}). Pass `Cloudflare.DNS.Adapter()` or
+   * `Hetzner.DNS.Adapter()` for a domain whose DNS lives there, or `false`
+   * to create no alias records (requires {@link cert}).
    */
-  dns?: false;
+  dns?: false | DnsConfig;
   /**
    * Never set on a standalone domain — attach to a Router by setting
    * {@link WebsiteRouterDomainProps.router}.
@@ -380,8 +387,9 @@ export type RouterRoute = string | RouterUrlRouteProps | RouterBucketRouteProps;
 
 export interface RouterProps {
   /**
-   * Optional custom domain managed through Route 53. A string is shorthand
-   * for `{ name }`; `null` explicitly clears a previously set domain.
+   * Optional custom domain (Route 53 by default; see `dns`). A string is
+   * shorthand for `{ name }`; `null` explicitly clears a previously set
+   * domain.
    */
   domain?: string | WebsiteStandaloneDomainProps | null;
   /**

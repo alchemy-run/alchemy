@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
-import { Certificate } from "../ACM/Certificate.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import {
@@ -15,7 +15,6 @@ import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { Service } from "../ECS/Service.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Function } from "../Lambda/Function.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
@@ -76,8 +75,9 @@ export interface SsrSiteProps {
    */
   server: SsrSiteServerOrigin;
   /**
-   * Optional custom domain managed through Route 53. A string is shorthand
-   * for `{ name }`; `null` explicitly clears a previously set domain.
+   * Optional custom domain (Route 53 by default; see `dns`). A string is
+   * shorthand for `{ name }`; `null` explicitly clears a previously set
+   * domain.
    */
   domain?: string | WebsiteStandaloneDomainProps | null;
   /**
@@ -207,6 +207,22 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  * });
  * ```
  *
+ * **Example:** SSR Site With A Cloudflare Domain
+ * ```typescript
+ * // Certificate validation and the CNAME to CloudFront go through the
+ * // Cloudflare zone. Requires `Cloudflare.providers()` in the stack.
+ * const site = yield* SsrSite("App", {
+ *   server: {
+ *     type: "ecs",
+ *     service: webService,
+ *   },
+ *   domain: {
+ *     name: "app.example.com",
+ *     dns: Cloudflare.DNS.Adapter(),
+ *   },
+ * });
+ * ```
+ *
  * ### Router Composition
  * **Example:** Route Through An Existing Router
  * ```typescript
@@ -304,20 +320,27 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       );
     }
 
+    const managed =
+      domain && !domain.cert
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [
+                ...(domain.aliases ?? []),
+                ...(domain.redirects ?? []),
+              ],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
+        : undefined;
     const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
-            hostedZoneId: domain.hostedZoneId,
-            tags: props.tags,
-          });
+      managed?.certificate ??
+      (domain?.cert ? { certificateArn: domain.cert } : undefined);
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const distribution = yield* Distribution("Distribution", {
       aliases: domain ? [domain.name, ...(domain.aliases ?? [])] : undefined,
@@ -374,9 +397,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               },
             ]
           : undefined,
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: (certificate as any).certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -404,8 +427,12 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
       });
     }
 
-    const records =
+    const dns =
       domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
+    const records =
+      domain && dns
         ? yield* Effect.forEach(
             [
               domain.name,
@@ -413,15 +440,13 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               ...(domain.redirects ?? []),
             ],
             (name, index) =>
-              Route53Record(`AliasRecord${index + 1}`, {
-                // Optional — the Record provider infers the most specific
-                // public zone containing `name` when omitted.
-                hostedZoneId: domain.hostedZoneId,
+              // The DNS host infers the zone containing `name` unless one
+              // is pinned.
+              dns.alias(`AliasRecord${index + 1}`, {
                 name,
-                type: "A",
-                aliasTarget: {
-                  hostedZoneId: distribution.hostedZoneId,
-                  dnsName: distribution.domainName,
+                target: {
+                  hostname: distribution.domainName,
+                  route53Alias: { hostedZoneId: distribution.hostedZoneId },
                 },
               }),
             { concurrency: "unbounded" },

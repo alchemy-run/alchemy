@@ -5,6 +5,8 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as DNS from "../../DNS/Adapter.ts";
+import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
@@ -21,7 +23,10 @@ import {
 } from "../../Website/Server.ts";
 import { App } from "../App.ts";
 import { Bucket } from "../Bucket.ts";
-import { Certificate } from "../Certificate.ts";
+import {
+  Certificate,
+  type CertificateDnsRequirements,
+} from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import type { Providers } from "../Providers.ts";
 import { Service, type ServiceProps } from "../Service.ts";
@@ -35,6 +40,86 @@ export type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
 export { staticConfigFromAssets };
+
+/**
+ * Custom hostname of a Fly website: the hostname itself, or
+ * `{ name, dns }` to also publish its DNS records.
+ */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `www.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the hostname's records (see
+       * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
+       * `Cloudflare.DNS.Adapter()`: the ACME challenge `CNAME` Fly lists in
+       * the Certificate's `dnsRequirements`, and `A` / `AAAA` records at
+       * the site's addresses. Omitted: publish the records yourself.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (
+  domain: WebsiteDomain | undefined,
+): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
+
+const acmeChallengeRecords = (
+  hostname: string,
+  requirements: CertificateDnsRequirements | undefined,
+): DNS.DnsRecord[] => {
+  const challenge = requirements?.acmeChallenge;
+  if (challenge?.target === undefined || challenge.target.length === 0) {
+    return [];
+  }
+  const expected = `_acme-challenge.${hostname}`;
+  const name =
+    challenge.name !== undefined &&
+    DNS.normalizeDnsName(challenge.name).endsWith(
+      DNS.normalizeDnsName(hostname),
+    )
+      ? challenge.name
+      : expected;
+  return [{ name, type: "CNAME", value: challenge.target }];
+};
+
+/**
+ * Publish a Fly website's records through `domain.dns`: the Certificate's
+ * ACME challenge `CNAME` (`CertificateValidation`) and `A` / `AAAA`
+ * records at the site's shared IPv4 plus any IPv6 Fly lists for the
+ * hostname (`Domain`). No-op for a plain hostname or an object without
+ * `dns`.
+ */
+export const publishWebsiteDomainDns = Effect.fn(
+  "Fly.Website.publishDomainDns",
+)(function* (args: {
+  readonly domain: WebsiteDomain;
+  readonly certificate: Certificate;
+  readonly ip: IpAssignment;
+}) {
+  if (typeof args.domain === "string" || args.domain.dns === undefined) {
+    return;
+  }
+  const dns = yield* DNS.resolve(args.domain.dns);
+  const name = args.domain.name;
+  yield* dns.records("CertificateValidation", {
+    records: Output.map(args.certificate.dnsRequirements, (requirements) =>
+      acmeChallengeRecords(name, requirements),
+    ) as unknown as Input<DNS.DnsRecord[]>,
+  });
+  yield* dns.alias("Domain", {
+    name,
+    target: {
+      ipv4: Output.map(args.ip.ip, (ip) => [ip]) as unknown as Input<string[]>,
+      ipv6: Output.map(
+        args.certificate.dnsRequirements,
+        (requirements) => requirements?.aaaa ?? [],
+      ) as unknown as Input<string[]>,
+    },
+  });
+});
 
 /**
  * Props shared by every Fly framework website composite.
@@ -84,9 +169,15 @@ export interface FrameworkSiteProps {
   dev?: ServerDevProps;
   /**
    * Optional custom hostname. Requests ACME (`Fly.Certificate`) on the
-   * App. `url` becomes `https://<domain>` (existing DNS only for v1).
+   * App and `url` becomes `https://<domain>`.
+   *
+   * A string (or `{ name }`) leaves DNS to you. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish the ACME challenge `CNAME` and the `A` / `AAAA` records
+   * through that DNS host. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
-  domain?: string;
+  domain?: WebsiteDomain;
   /**
    * User-defined tags. Accepted for API parity; Fly Services do not
    * surface resource tags.
@@ -343,16 +434,20 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
         : undefined,
   });
 
+  const domainName = websiteDomainName(props.domain);
   const certificate =
-    props.domain !== undefined
+    domainName !== undefined
       ? yield* Certificate("Certificate", {
           app,
-          hostname: props.domain,
+          hostname: domainName,
           kind: "acme",
         })
       : undefined;
+  if (props.domain !== undefined && certificate !== undefined) {
+    yield* publishWebsiteDomainDns({ domain: props.domain, certificate, ip });
+  }
 
-  const url = props.domain !== undefined ? `https://${props.domain}` : app.url;
+  const url = domainName !== undefined ? `https://${domainName}` : app.url;
 
   return { url, app, service, ip, certificate };
 });

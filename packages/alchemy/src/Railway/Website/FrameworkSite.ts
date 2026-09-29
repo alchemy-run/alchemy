@@ -6,6 +6,8 @@ import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as DNS from "../../DNS/Adapter.ts";
+import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
@@ -38,6 +40,57 @@ export type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
 export { staticConfigFromAssets };
+
+/**
+ * Custom hostname of a Railway website: the hostname itself, or
+ * `{ name, dns }` to also publish its DNS records.
+ */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `www.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the records Railway requires (the routing
+       * `CNAME` and the ownership `TXT` listed in the CustomDomain's
+       * `dnsRecords`; see
+       * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish them yourself.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (
+  domain: WebsiteDomain | undefined,
+): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
+
+/**
+ * Publish the records Railway requires for a website's custom domain
+ * (`DomainRecords`) through `domain.dns`. No-op for a plain hostname or an
+ * object without `dns`.
+ */
+export const publishWebsiteDomainDns = Effect.fn(
+  "Railway.Website.publishDomainDns",
+)(function* (args: {
+  readonly domain: WebsiteDomain | undefined;
+  readonly customDomain: CustomDomain;
+}) {
+  if (typeof args.domain !== "object" || args.domain.dns === undefined) {
+    return;
+  }
+  const dns = yield* DNS.resolve(args.domain.dns);
+  yield* dns.records("DomainRecords", {
+    records: Output.map(args.customDomain.dnsRecords, (records) =>
+      records.map((record): DNS.DnsRecord => ({
+        name: record.name,
+        type: record.type,
+        value: record.value,
+      })),
+    ) as unknown as Input<DNS.DnsRecord[]>,
+  });
+});
 
 /**
  * Props shared by every Railway framework website composite.
@@ -88,11 +141,16 @@ export interface FrameworkSiteProps {
    */
   dev?: ServerDevProps;
   /**
-   * Optional custom hostname attached via `Railway.CustomDomain`. A
-   * string is the hostname (`www.example.com`). When set, `url` is
-   * `https://{domain}` instead of the generated `*.up.railway.app`.
+   * Optional custom hostname attached via `Railway.CustomDomain`. When
+   * set, `url` is `https://{domain}` instead of the generated
+   * `*.up.railway.app`.
+   *
+   * A string (or `{ name }`) leaves DNS to you. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish the records Railway requires through that DNS host. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
-  domain?: string;
+  domain?: WebsiteDomain;
   /**
    * User-defined tags. Railway Services do not persist tags; accepted
    * for API parity with AWS/Cloudflare Website composites.
@@ -311,15 +369,17 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
     purgeOnDeploy: "HTML",
   });
 
-  if (props.domain !== undefined && props.domain.length > 0) {
-    yield* CustomDomain("Domain", {
+  const domainName = websiteDomainName(props.domain);
+  if (domainName !== undefined && domainName.length > 0) {
+    const customDomain = yield* CustomDomain("Domain", {
       service,
       environment,
-      domain: props.domain,
+      domain: domainName,
       targetPort: WEBSITE_PORT,
     });
+    yield* publishWebsiteDomainDns({ domain: props.domain, customDomain });
     return {
-      url: `https://${props.domain}`,
+      url: `https://${domainName}`,
       service,
       project,
     } satisfies Website;

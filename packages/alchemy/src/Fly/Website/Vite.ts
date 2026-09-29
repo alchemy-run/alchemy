@@ -83,6 +83,15 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * **Example:** Publish DNS in Cloudflare
+ * ```typescript
+ * // The ACME challenge CNAME and A/AAAA records are published in the
+ * // Cloudflare zone. Requires Cloudflare.providers() in the stack.
+ * const site = yield* Fly.Website.Vite("Web", {
+ *   domain: { name: "app.example.com", dns: Cloudflare.DNS.Adapter() },
+ * });
+ * ```
+ *
  * ### Build Configuration
  * **Example:** Custom Output Directory and Base Path
  * ```typescript

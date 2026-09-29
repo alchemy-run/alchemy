@@ -15,9 +15,12 @@ import { IpAssignment } from "../IpAssignment.ts";
 import { Service, type ServiceProps } from "../Service.ts";
 import {
   type FrameworkSite,
+  publishWebsiteDomainDns,
   type Ref,
   type WebsiteAssetsProps,
+  type WebsiteDomain,
   staticConfigFromAssets,
+  websiteDomainName,
 } from "./FrameworkSite.ts";
 import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
@@ -71,9 +74,16 @@ export interface StaticSiteProps {
    */
   app?: Ref<App>;
   /**
-   * Optional custom hostname. Requests ACME (`Fly.Certificate`) on the App.
+   * Optional custom hostname. Requests ACME (`Fly.Certificate`) on the App
+   * and `url` becomes `https://<domain>`.
+   *
+   * A string (or `{ name }`) leaves DNS to you. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish the ACME challenge `CNAME` and the `A` / `AAAA` records
+   * through that DNS host. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
-  domain?: string;
+  domain?: WebsiteDomain;
   /**
    * User-defined tags. Accepted for API parity; Fly Services do not
    * surface resource tags.
@@ -278,17 +288,24 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       ],
     });
 
+    const domainName = websiteDomainName(props.domain);
     const certificate =
-      props.domain !== undefined
+      domainName !== undefined
         ? yield* Certificate("Certificate", {
             app,
-            hostname: props.domain,
+            hostname: domainName,
             kind: "acme",
           }).pipe(Namespace.push(id))
         : undefined;
+    if (props.domain !== undefined && certificate !== undefined) {
+      yield* publishWebsiteDomainDns({
+        domain: props.domain,
+        certificate,
+        ip,
+      }).pipe(Namespace.push(id));
+    }
 
-    const url =
-      props.domain !== undefined ? `https://${props.domain}` : app.url;
+    const url = domainName !== undefined ? `https://${domainName}` : app.url;
 
     return { url, app, service, ip, certificate };
   }).pipe(Effect.orDie);

@@ -70,6 +70,24 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * ### Custom Domain
+ * **Example:** Existing hostname
+ * ```typescript
+ * // Publish the records in `Railway.CustomDomain.dnsRecords` yourself.
+ * const site = yield* Railway.Website.Vite("Web", {
+ *   domain: "www.example.com",
+ * });
+ * ```
+ *
+ * **Example:** Publish DNS in Cloudflare
+ * ```typescript
+ * // Railway's CNAME and verification TXT are published in the Cloudflare
+ * // zone. Requires Cloudflare.providers() in the stack.
+ * const site = yield* Railway.Website.Vite("Web", {
+ *   domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter() },
+ * });
+ * ```
+ *
  * ### Multi-Page Sites
  * **Example:** Per-Route HTML Pages with a 404 Page
  * ```typescript
