@@ -5,7 +5,7 @@ import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import CloudFunctionsBindingsHost from "./fixtures/bindings-host.ts";
 import TargetFunction from "./fixtures/target-function.ts";

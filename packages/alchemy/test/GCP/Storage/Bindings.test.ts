@@ -6,7 +6,7 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
 import StorageBindingsHost, {
   DeleteAssets,

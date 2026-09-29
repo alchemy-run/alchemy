@@ -1,7 +1,7 @@
 import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import {
   docId,
   Jobs,
