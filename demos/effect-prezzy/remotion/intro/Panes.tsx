@@ -114,8 +114,10 @@ const DeployProgress = ({
   local: number;
   size: number;
 }) => {
-  const nameW = Math.max(...progress.rows.map((r) => (r.binding ? 2 : 0) + r.name.length)) + 2;
+  // Resource rows: name, then (type). Binding rows are longer and span both columns.
+  const nameW = Math.max(...progress.rows.filter((r) => !r.binding).map((r) => r.name.length)) + 2;
   const typeW = Math.max(...progress.rows.map((r) => (r.type ? r.type.length + 2 : 0))) + 2;
+  const totalW = Math.max(nameW + typeW, ...progress.rows.filter((r) => r.binding).map((r) => r.name.length + 4));
   return (
     <>
       {progress.rows.map((row) => {
@@ -127,8 +129,8 @@ const DeployProgress = ({
             : state === "working"
               ? `${SPINNER[Math.floor(local / 3) % 4]} ${row.binding ? "attaching" : "creating"}`
               : `✓ ${row.binding ? "attached" : "created"}`;
-        const name = `${row.binding ? "  " : ""}${row.name}`.padEnd(nameW);
-        const type = (row.type ? `(${row.type})` : "").padEnd(typeW);
+        const name = row.binding ? `  ${row.name}`.padEnd(totalW) : row.name.padEnd(nameW);
+        const type = row.binding ? "" : (row.type ? `(${row.type})` : "").padEnd(totalW - nameW);
         return (
           <div key={row.name} style={{ minHeight: size * 1.5 }}>
             <span style={{ color: state === "pending" ? brand.fgMuted : brand.fg, fontWeight: row.binding ? undefined : 700 }}>{name}</span>
