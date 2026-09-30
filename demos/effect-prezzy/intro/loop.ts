@@ -755,9 +755,50 @@ const program: StepSpec[] = [
     snippet: "alchemy.run.ts",
     file: "alchemy.run.ts",
     group: "stack",
-    title: "That one program is the Stack you deploy",
+    fontSize: 30,
+    omit: ["providers", "state", "chat", "ret"],
+    title: "That one program is deployed as a Stack",
     notes:
-      "That one program has an entry point: the Stack. It yields the Chat Worker, which pulls in every Layer beneath it, and says which providers can create things and where state lives.",
+      "That one program needs an entry point: the Stack. It's an Effect program too: a name, some configuration, and a body.",
+  }),
+  chat({
+    snippet: "alchemy.run.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    fontSize: 30,
+    omit: ["state", "chat", "ret"],
+    title: "providers says which clouds it can create things in",
+    notes:
+      "providers says which clouds this Stack can create resources in: Cloudflare and Neon. They're Layers too.",
+  }),
+  chat({
+    snippet: "alchemy.run.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    fontSize: 30,
+    omit: ["chat", "ret"],
+    title: "state says where it records what it created",
+    notes:
+      "state says where the Stack records what it created, so the next deploy knows what already exists. Here, in Cloudflare.",
+  }),
+  chat({
+    snippet: "alchemy.run.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    fontSize: 30,
+    omit: ["ret"],
+    title: "Its body yields the Chat Worker, and every Layer beneath it",
+    notes:
+      "The body yields the Chat Worker. That one line pulls in everything: Rooms, History, Files, Database, and all their resources and bindings.",
+  }),
+  chat({
+    snippet: "alchemy.run.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    fontSize: 30,
+    title: "…and returns what the app exposes: its URL",
+    notes:
+      "And it returns the Stack's outputs, here the Worker's URL, so deploys and tests can find the app.",
   }),
   term({
     group: "cli",
