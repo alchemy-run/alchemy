@@ -105,14 +105,14 @@ const at = (node: { id: string; title: string; color: string }, x: number, y: nu
 const LAYER = {
   infra: { id: "infra", title: "Infrastructure", detail: "compute · databases · buckets · queues · networks", color: "#8b9cf6" },
   config: { id: "config", title: "Configuration & policies", detail: "IAM · env vars · secrets · DNS", color: "#e0a86b" },
-  api: { id: "api", title: "APIs & business logic", detail: "Workers · Lambdas · Durable Objects", color: "#a3c473" },
+  api: { id: "api", title: "APIs & business logic", detail: "domain models · rules · workflows", color: "#a3c473" },
   web: { id: "web", title: "Frontend", detail: "websites · CDN · domains", color: "#e06c9f" },
 } satisfies Record<string, PyramidLayer>;
 const ALL_LAYERS = [LAYER.infra, LAYER.config, LAYER.api, LAYER.web];
 const CHAT_LAYERS: PyramidLayer[] = [
   { ...LAYER.infra, detail: "R2 bucket · queue · Neon Postgres" },
   { ...LAYER.config, detail: "bindings · Hyperdrive · permissions" },
-  { ...LAYER.api, detail: "a Worker · a Durable Object per room" },
+  { ...LAYER.api, detail: "rooms · messages · history · uploads" },
   { ...LAYER.web, detail: "the chat page, over WebSockets" },
 ];
 /** Observability: beside the pyramid, spanning every layer. */
@@ -161,7 +161,7 @@ const theStack: StepSpec[] = [
   pyramid({
     title: "…running the APIs and business logic",
     layers: [LAYER.infra, LAYER.config, LAYER.api],
-    notes: "Then the part we usually call the code: the APIs and business logic, running as Workers, Lambdas or Durable Objects.",
+    notes: "Then the part we usually call the code: the APIs and business logic. The domain itself: its models, its rules, its workflows.",
   }),
   pyramid({
     title: "…behind a frontend served from a CDN",
