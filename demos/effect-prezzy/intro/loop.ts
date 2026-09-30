@@ -310,19 +310,7 @@ const twoPrograms: StepSpec[] = [
     layers: CHAT_LAYERS,
     slice: { ...UPLOAD, label: "the Files module" },
     notes:
-      "So erase the line. Instead of cutting the app horizontally into two programs, cut it vertically into modules. The Files module owns everything uploading needs: the bucket, the permission, and the code.",
-  }),
-  pyramid({
-    title: "Every module is a slice like that: a resource, a binding, an API",
-    layers: CHAT_LAYERS,
-    slices: [
-      { label: "Files", items: { infra: "R2 bucket", config: "read-write", api: "upload()" } },
-      { label: "Database", items: { infra: "Neon", config: "Hyperdrive", api: "SQL client" } },
-      { label: "History", items: { infra: "Queue", config: "send · consume", api: "append()" } },
-      { label: "Rooms", items: { infra: "Durable Obj.", config: "namespace", api: "join()" } },
-    ],
-    notes:
-      "And that's the pattern for the whole app. Every module is its own slice through the stack: a resource at the bottom, a binding that gives the code access to it, and an API on top that the rest of the app calls. We'll build each one exactly that way: resource, then binding, then API.",
+      "So erase the line. Instead of cutting the app horizontally into two programs, cut it vertically into modules. The Files module owns everything uploading needs: the bucket, the permission, and the code. And every module in the app will be a slice like that: a resource, a binding to it, and an API on top. We'll build each one exactly that way.",
   }),
 ];
 
