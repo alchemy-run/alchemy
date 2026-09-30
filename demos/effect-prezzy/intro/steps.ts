@@ -18,7 +18,8 @@ export type Find = string | { text: string; nth?: number };
  * `regions` picks what's shown (other code collapses to "…"); `omit` drops regions
  * entirely, for building a file up one piece per step from the finished version.
  */
-export type Source = { snippet: string; regions?: string[]; omit?: string[] } | { code: string };
+/** `fold` collapses a region to one line, like an editor fold: `first line … last line`. */
+export type Source = { snippet: string; regions?: string[]; omit?: string[]; fold?: string[] } | { code: string };
 
 export interface CodeSpec {
   kind: "code";

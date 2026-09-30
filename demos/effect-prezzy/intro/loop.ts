@@ -32,6 +32,7 @@ const chat = (s: {
   fontSize?: number;
   regions?: string[];
   omit?: string[];
+  fold?: string[];
   marks?: CodeSpec["marks"];
   diagram?: MiniGraph;
   beside?: CodeSpec["beside"];
@@ -48,7 +49,7 @@ const chat = (s: {
   group: s.group,
   file: s.file,
   title: s.title,
-  src: { snippet: `chat/${s.snippet}`, regions: s.regions ?? ["show"], omit: s.omit },
+  src: { snippet: `chat/${s.snippet}`, regions: s.regions ?? ["show"], omit: s.omit, fold: s.fold },
   fontSize: s.fontSize,
   marks: s.marks,
   diagram: s.diagram,
@@ -598,13 +599,6 @@ const compose: StepSpec[] = [
   }),
   chat({
     ...HISTORY,
-    title: "attach stores a file, and records it in the room",
-    omit: ["service", "consume"],
-    layer: "api",
-    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History needs both Database and Files.",
-  }),
-  chat({
-    ...HISTORY,
     title: "On AWS, the same line would grant three permissions and wire the trigger",
     omit: ["service", "queue", "methods"],
     emphasize: ["consumeQueueMessages"],
@@ -631,6 +625,15 @@ FunctionName: chat-dev-sam-history`,
     ],
     notes:
       "On Cloudflare that's all there is to it. On AWS, where the queue would be SQS and History would run in a Lambda, the same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "attach stores a file, and records it in the room",
+    omit: ["service"],
+    fold: ["consume"],
+    emphasize: ["attach:", "      Effect.gen(function* () {", "files.upload(file, body)", "text: file"],
+    layer: "api",
+    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History needs both Database and Files.",
   }),
   chat({
     ...ROOM_FILE,

@@ -117,17 +117,36 @@ interface Cut {
   origin: number[];
   regions: Map<string, [number, number]>;
 }
-const cut = (text: string, keep?: string[], omit: string[] = []): Cut => {
+const cut = (text: string, keep?: string[], omit: string[] = [], fold: string[] = []): Cut => {
   const lines = text.split("\n");
   const open: string[] = [];
   const kept: string[] = [];
   const origin: number[] = [];
   const regions = new Map<string, [number, number]>();
   const starts = new Map<string, number>();
+  /** Lines of a folded region, collapsed to one line (like an editor fold) when it closes. */
+  let folding: { name: string; lines: [string, number][] } | undefined;
   lines.forEach((line, i) => {
     const marker = line.match(/^\s*\/\/ #(end)?region\s+(\S+)/);
     if (marker) {
       const name = marker[2]!;
+      if (marker[1] && folding?.name === name) {
+        const body = folding.lines.filter(([l]) => l.trim());
+        for (const [l, o] of folding.lines) {
+          if (l.trim()) break;
+          kept.push(l);
+          origin.push(o);
+        }
+        if (body.length) {
+          const first = body[0]![0].replace(/\s+$/, "");
+          const last = body.at(-1)![0].trim();
+          kept.push(body.length > 1 ? `${first} … ${last}` : first);
+          origin.push(body[0]![1]);
+        }
+        folding = undefined;
+      } else if (!marker[1] && fold.includes(name) && !omit.some((n) => open.includes(n))) {
+        folding = { name, lines: [] };
+      }
       if (marker[1]) {
         open.splice(open.lastIndexOf(name), 1);
         regions.set(name, [starts.get(name)!, kept.length - 1]);
@@ -147,6 +166,10 @@ const cut = (text: string, keep?: string[], omit: string[] = []): Cut => {
         kept.push(`${line.match(/^\s*/)![0]}…`);
         origin.push(i);
       }
+      return;
+    }
+    if (folding) {
+      folding.lines.push([line.replace(HIDDEN, ""), i]);
       return;
     }
     kept.push(line.replace(HIDDEN, ""));
@@ -196,7 +219,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   if ("snippet" in spec.src) {
     const file = path.join(snippetsDir, spec.src.snippet);
     const text = await readFile(file, "utf8");
-    const c = cut(text, spec.src.regions, spec.src.omit);
+    const c = cut(text, spec.src.regions, spec.src.omit, spec.src.fold);
     code = c.code;
     regions = c.regions;
     const list = diagnostics.get(spec.src.snippet) ?? [];
