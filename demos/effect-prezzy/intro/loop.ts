@@ -423,17 +423,6 @@ const modules: StepSpec[] = [
     ],
   },
   chat({
-    snippet: "FilesRead.error.ts",
-    file: FILES.file,
-    group: "files-read",
-    fontSize: FILES.fontSize,
-    title: "Ask for read-only access and upload stops compiling",
-    error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
-    emphasize: ["R2.ReadBucket(bucket)"],
-    notes:
-      "Remember deleting the link in SST, and nothing noticed? Here the access is declared in the same program as the code, so the type checker connects them. Ask for read-only access and the client has no put. The agent finds out in milliseconds, in the editor.",
-  }),
-  chat({
     snippet: "FilesS3.ts",
     file: FILES.file,
     group: "files-s3",
@@ -478,6 +467,17 @@ $BUCKET_NAME: chat-dev-sam-files`,
     ],
     notes:
       "It also sets $BUCKET_NAME, so putObject knows where to write. Nobody writes the policy or the variable by hand. Delete the line and the permission goes with it, and anything that used it stops compiling. And callers don't change at all: it's still Files.",
+  }),
+  chat({
+    snippet: "FilesRead.error.ts",
+    file: FILES.file,
+    group: "files-read",
+    fontSize: FILES.fontSize,
+    title: "The types match the policy: ask for read-only and upload won't compile",
+    error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
+    emphasize: ["R2.ReadBucket(bucket)"],
+    notes:
+      "Back on R2. Because every binding is a policy, the types the binding hands back are exactly what that policy allows. Ask for read-only access and you get a read-only client, with no put, so upload stops compiling. Least privilege isn't something to review after the fact. The type checker guarantees the policy and the code agree, and the agent finds out in milliseconds, in the editor."
   }),
 ];
 
