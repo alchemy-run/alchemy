@@ -1529,12 +1529,14 @@ resource: chat-dev-sam-files`,
     },
     {
       snippet: "DbD1.ts",
+      emphasize: ["D1.Database", "D1.QueryDatabase", "SQL.D1Layer", "QueryDatabaseBinding"],
       title: "…Cloudflare D1, which is SQLite…",
       notes:
         "It doesn't even have to be Postgres. Cloudflare D1 is SQLite, bound straight into the Worker with no connection pool, and SQL.D1Layer turns it into the same SQL client. History's queries don't change.",
     },
     {
       snippet: "DbAurora.ts",
+      emphasize: ["RDS.Aurora", "RDS.Connect(", "Effect.map(db", "RDS.ConnectHttp"],
       title: "…or Aurora on AWS, and nothing above it changes",
       notes:
         "Or Aurora on AWS, for the Lambda version of the app. RDS.Connect grants read access to the cluster's secret and attaches the function to the database's network, and the Postgres Layer connects with the URL it returns. Five databases, one Layer: History and everything above it still just get a SQL client.",
@@ -1547,6 +1549,7 @@ resource: chat-dev-sam-files`,
       fontSize: 22,
       title: db.title,
       reel: { items: DATABASES, at },
+      emphasize: "emphasize" in db ? db.emphasize : undefined,
       notes: db.notes,
     }),
   ),
