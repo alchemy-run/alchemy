@@ -315,7 +315,7 @@ const twoPrograms: StepSpec[] = [
 const BRICKS = {
   files: { row: 0, col: 1, of: 2, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
   database: { row: 0, col: 0, of: 2, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
-  history: { row: 1, title: "History", detail: "append() · attach()", color: "#e0a86b" },
+  history: { row: 1, title: "History", detail: "append() · list()", color: "#e0a86b" },
   rooms: { row: 2, title: "Rooms", detail: "Durable Objects · join()", color: "#e06c9f" },
   chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
 };
@@ -367,10 +367,7 @@ const HISTORY_BESIDE_CLASS = {
   file: "the same shape, as a class",
   src: {
     code: `class HistoryLive {
-  constructor(
-    private sql: Database,
-    private files: Files,
-  ) {}
+  constructor(private sql: Database) {}
 }`,
   },
 };
@@ -532,32 +529,31 @@ const compose: StepSpec[] = [
   chat({
     ...HISTORY,
     title: "History starts as an empty Layer",
-    omit: ["service", "deps", "queue", "consume", "append", "list", "attach"],
+    omit: ["service", "deps", "queue", "consume", "append", "list"],
     notes: "Chat history is the next module. Like the others, it's a Layer: a constructor that returns the methods the rest of the app calls. It starts empty.",
   }),
   chat({
     ...HISTORY,
-    title: "It asks for Database and Files",
-    omit: ["service", "queue", "consume", "append", "list", "attach"],
+    title: "It asks for the Database",
+    omit: ["service", "queue", "consume", "append", "list"],
     beside: HISTORY_BESIDE_CLASS,
     links: [
       { from: "yield* Database", to: "private sql: Database", tone: "construct" },
-      { from: "yield* Files", to: "private files: Files", tone: "construct" },
     ],
     notes:
-      "Unlike Files, History doesn't create anything yet: its constructor asks for Database and Files, the two modules we just built. As a class, those would be constructor parameters. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
+      "Unlike Files, History doesn't create anything yet: its constructor asks for the Database module we just built. As a class, that would be a constructor parameter. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
     ...HISTORY,
     title: "list reads a room's messages from Postgres",
-    omit: ["service", "queue", "consume", "append", "attach"],
+    omit: ["service", "queue", "consume", "append"],
     layer: "api",
     notes: "The first method: list. One query against the database for a room's messages.",
   }),
   chat({
     ...HISTORY,
     title: "New messages go on a queue that History declares itself",
-    omit: ["service", "queueBinding", "consume", "append", "attach"],
+    omit: ["service", "queueBinding", "consume", "append"],
     layer: "resource",
     notes:
       "Messages arrive faster than we want to write them one at a time, so they go through a queue. History declares the queue right in its constructor: a resource, a Cloudflare Queue called Messages. Nothing else in the app knows it exists.",
@@ -565,21 +561,21 @@ const compose: StepSpec[] = [
   chat({
     ...HISTORY,
     title: "…with a binding that can send to it",
-    omit: ["service", "consume", "append", "attach"],
+    omit: ["service", "consume", "append"],
     layer: "binding",
     notes: "Then a binding: send access to that queue, and a client for it.",
   }),
   chat({
     ...HISTORY,
     title: "append puts a message on that queue",
-    omit: ["service", "consume", "attach"],
+    omit: ["service", "consume"],
     layer: "api",
     notes: "append sends a room name and the text onto the queue. That's what every chat room will call.",
   }),
   chat({
     ...HISTORY,
     title: "…and History consumes the queue into Postgres",
-    omit: ["service", "attach"],
+    omit: ["service"],
     layer: "binding",
     notes:
       "And History consumes its own queue, inserting each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
@@ -614,15 +610,6 @@ FunctionName: chat-dev-sam-history`,
       "On Cloudflare that's all there is to it. On AWS, where the queue would be SQS and History would run in a Lambda, the same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
   chat({
-    ...HISTORY,
-    title: "attach stores a file, and records it in the room",
-    omit: ["service"],
-    fold: ["consume"],
-    emphasize: ["attach:", "      Effect.gen(function* () {", "files.upload(file, body)", "text: file"],
-    layer: "api",
-    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History needs both Database and Files.",
-  }),
-  chat({
     ...ROOM_FILE,
     title: "Each room is a Durable Object that holds its sockets",
     omit: ["history", "send"],
@@ -639,9 +626,9 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Room;", "yield* History;", "Effect.provide(", "HistoryLive.pipe(Layer.provide([DatabaseLive, FilesR2]))"],
+    emphasize: ["yield* Room;", "yield* History;", "yield* Files;", "Effect.provide(", "HistoryLive.pipe(Layer.provide(DatabaseLive))", "      FilesR2,"],
     notes:
-      "The Worker asks for the rooms and for History. join hands the WebSocket to that room's Durable Object; attach and history go to History. At the bottom it wires the Layers: HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each module gets. The rooms get History from here too.",
+      "The Worker asks for the rooms, History and Files. join hands the WebSocket to that room's Durable Object, uploads go to Files, and history comes from History. At the bottom it wires the Layers: HistoryLive on DatabaseLive, and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each module gets. The rooms get History from here too.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",

@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { DatabaseLive } from "./Db.ts";
-import { FilesR2 } from "./Files.ts";
+import { Files, FilesR2 } from "./Files.ts";
 import { ObservabilityLive } from "./Observability.ts";
 import { History, HistoryLive } from "./History.ts";
 import Room from "./Room.ts";
@@ -16,14 +16,15 @@ export default Cloudflare.Worker(
   Effect.gen(function* () {
     const rooms = yield* Room;
     const history = yield* History;
+    const files = yield* Files;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const [, route, room, file] = request.url.split("/");
         if (route === "join") return yield* rooms.getByName(room!).fetch(request);
-        if (route === "attach") {
-          yield* history.attach(room!, file!, yield* request.text);
+        if (route === "upload") {
+          yield* files.upload(file!, yield* request.text);
           return HttpServerResponse.empty({ status: 201 });
         }
         return yield* HttpServerResponse.json(yield* history.list(room!));
@@ -31,7 +32,8 @@ export default Cloudflare.Worker(
     };
   }).pipe(
     Effect.provide([
-      HistoryLive.pipe(Layer.provide([DatabaseLive, FilesR2])),
+      HistoryLive.pipe(Layer.provide(DatabaseLive)),
+      FilesR2,
       ObservabilityLive,
     ]),
   ),
