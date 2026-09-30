@@ -412,6 +412,7 @@ export interface DurableObjectContainerProps extends PlatformProps {
    * copies each image into Cloudflare's registry and prepares its immutable
    * digest before uploading the Worker. Omit to use the managed
    * `cloudflare/debian-trixie` image or restore a filesystem snapshot.
+   * Supports up to 100 images, with names between 1 and 128 characters.
    */
   images?: Record<string, ContainerImageProps>;
   /** Application-wide logging. Changes do not restart running containers. */

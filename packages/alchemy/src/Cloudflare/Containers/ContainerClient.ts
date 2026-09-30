@@ -280,7 +280,7 @@ export const fromContainer = <ImageName extends string = string>(
  * @product Containers
  * @category Workers & Compute
  */
-export const bind = Effect.fn(function* <
+export const bind = Effect.fn("Cloudflare.Containers.bind")(function* <
   Shape,
   Req,
   ImageName extends string = string,

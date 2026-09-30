@@ -177,15 +177,15 @@ export const LocalContainerProvider = () =>
         id: string,
         news: AnyContainerApplicationProps,
       ) {
-        const devImages: Record<string, DevContainerImage> = {};
-        const hashes: Record<string, string> = {};
-        for (const [name, source] of Object.entries(news.images ?? {})) {
-          const { dev, hash } = yield* prepareImage(`${id}-${name}`, source);
-          devImages[name] = dev;
-          hashes[name] = hash;
-        }
+        const images = yield* Effect.forEach(
+          Object.entries(news.images ?? {}),
+          Effect.fn(function* ([name, source]) {
+            return { name, ...(yield* prepareImage(`${id}-${name}`, source)) };
+          }),
+        );
+        const hashes = Object.fromEntries(images.map(({ name, hash }) => [name, hash] as const));
         return {
-          devImages,
+          devImages: Object.fromEntries(images.map(({ name, dev }) => [name, dev] as const)),
           hash: { image: yield* sha256Object(hashes), images: hashes },
         };
       });
@@ -242,7 +242,9 @@ export const LocalContainerProvider = () =>
             affinities: undefined,
             configuration: {},
             observability: news.observability,
-            images: Object.fromEntries(Object.keys(news.images ?? {}).map((name) => [name, name])),
+            images: Object.fromEntries(
+              Object.keys(news.images ?? {}).map((name) => [name, name] as const),
+            ),
             durableObjects: undefined,
             createdAt: output?.createdAt ?? new Date().toISOString(),
             version: 1,

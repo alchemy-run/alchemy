@@ -197,6 +197,46 @@ describe(
   "native Container configuration",
   { tags: ["unit", "local", "provider:cloudflare:container"] },
   () => {
+    it.effect("rejects more than 100 named images before publishing", () =>
+      Effect.gen(function* () {
+        const images = Object.fromEntries(
+          Array.from(
+            { length: 101 },
+            (_, index) => [`image-${index}`, { image: "alpine:3.21" }] as const,
+          ),
+        );
+        const failure = yield* validateContainerConfiguration({
+          schedulingPolicy: "durable_object",
+          images,
+        }).pipe(Effect.flip);
+        expect(failure._tag).toBe("ContainerConfigurationError");
+        expect(failure.message).toContain("100");
+      }),
+    );
+    for (const name of ["", "a".repeat(129)]) {
+      it.effect(`rejects an image name with ${name.length} characters`, () =>
+        Effect.gen(function* () {
+          const failure = yield* validateContainerConfiguration({
+            schedulingPolicy: "durable_object",
+            images: { [name]: { image: "alpine:3.21" } },
+          }).pipe(Effect.flip);
+          expect(failure._tag).toBe("ContainerConfigurationError");
+          expect(failure.message).toContain("128");
+        }),
+      );
+    }
+    it.effect("accepts the named image count and name length limits", () =>
+      validateContainerConfiguration({
+        schedulingPolicy: "durable_object",
+        images: Object.fromEntries([
+          ["a".repeat(128), { image: "alpine:3.21" }] as const,
+          ...Array.from(
+            { length: 99 },
+            (_, index) => [`image-${index}`, { image: "alpine:3.21" }] as const,
+          ),
+        ]),
+      }),
+    );
     for (const prop of [
       "image",
       "main",

@@ -454,7 +454,7 @@ export const DockerLive = Layer.effect(
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
       // local-only tag that exists in the Docker daemon but resolves in no
       // registry (e.g. a locally-built dev image) — an unconditional
-      // `docker pull` there fails, this detached fiber dies, and every
+      // `docker pull` there fails, this startup fiber dies, and every
       // caller of `getWorkerdDockerConfiguration` (joined on first use)
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
