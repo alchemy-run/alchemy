@@ -2,6 +2,7 @@ import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteProduct,
   GetProducts,
+  GetProductsSearch,
   GetProduct,
   CreateProduct,
   UpdateProduct,
@@ -194,16 +195,16 @@ const listAllProducts = Effect.fn(function* () {
   return products;
 });
 
+// Look the product up by its ownership metadata instead of scanning the
+// account: products with prices can only be archived, never deleted, so a
+// full scan grows without bound. Search can lag a fresh write, which is fine
+// here because creates are idempotent per instance (see `reconcile`).
 const findByAlchemyId = Effect.fn(function* (id: string) {
-  const products = yield* listAllProducts();
-  const matches: StripeProduct[] = [];
-  for (const product of products) {
-    if (yield* hasAlchemyMetadata(id, tagRecord(product.metadata))) {
-      matches.push(product);
-    }
-  }
-  matches.sort((a, b) => b.created - a.created);
-  return matches[0];
+  const query = Object.entries(yield* createInternalMetadata(id))
+    .map(([key, value]) => `metadata["${key}"]:"${value}"`)
+    .join(" AND ");
+  const response = yield* GetProductsSearch({ query, limit: LIST_PAGE_SIZE });
+  return response.data.toSorted((a, b) => b.created - a.created)[0];
 });
 
 const observe = Effect.fn(function* (input: {
