@@ -10,7 +10,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import {
+  deferUntilFirstUse,
+  orDieCredentialsUnavailable,
+  resolveProviderConfig,
+} from "../Auth/Resolve.ts";
 import {
   GCP_AUTH_PROVIDER_NAME,
   type GcpAuthConfig,
@@ -43,28 +47,34 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const { profileName, resolve } = yield* resolveProviderConfig<
+      // Defer the profile lookup until first use, so building the provider
+      // layers never requires a configured profile. Only the lookup is
+      // cached: distilled yields `Credentials` then the inner Effect on
+      // every call so SA tokens can refresh from AuthProvider's cache.
+      const lookup = yield* resolveProviderConfig<
         GcpAuthConfig,
         GcpResolvedCredentials
-      >(GCP_AUTH_PROVIDER_NAME);
-
-      // Return the resolver Effect (not a one-shot token). Distilled yields
-      // `Credentials` then the inner Effect on every call so SA tokens can
-      // refresh from AuthProvider's cache.
-      return resolve.pipe(
-        Effect.map((creds) => ({
-          accessToken: creds.accessToken,
-          project: creds.project,
-          region: creds.region,
-        })),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({
-              message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
+      >(GCP_AUTH_PROVIDER_NAME).pipe(
+        deferUntilFirstUse,
+        Effect.flatMap(Effect.cached),
+      );
+      return lookup.pipe(
+        Effect.flatMap(({ profileName, resolve }) =>
+          resolve.pipe(
+            Effect.map((creds) => ({
+              accessToken: creds.accessToken,
+              project: creds.project,
+              region: creds.region,
+            })),
+            Effect.mapError(
+              (e) =>
+                new ConfigError({
+                  message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+                }),
+            ),
+          ),
         ),
-        // Distilled `Credentials` is `Effect<Config>` (error `never`).
-        Effect.orDie,
+        orDieCredentialsUnavailable(GCP_AUTH_PROVIDER_NAME),
       );
     }),
   );
