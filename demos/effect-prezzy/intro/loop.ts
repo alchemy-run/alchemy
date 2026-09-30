@@ -100,7 +100,7 @@ const at = (node: { id: string; title: string; color: string }, x: number, y: nu
 
 // ── the stack: what "the code" actually is ─────────────────────────────
 const LAYER = {
-  infra: { id: "infra", title: "Infrastructure", detail: "databases · buckets · queues · networks", color: "#8b9cf6" },
+  infra: { id: "infra", title: "Infrastructure", detail: "compute · databases · buckets · queues · networks", color: "#8b9cf6" },
   config: { id: "config", title: "Configuration & policies", detail: "IAM · env vars · secrets · DNS", color: "#e0a86b" },
   api: { id: "api", title: "APIs & business logic", detail: "Workers · Lambdas · Durable Objects", color: "#a3c473" },
   web: { id: "web", title: "Frontend", detail: "websites · CDN · domains", color: "#e06c9f" },
@@ -148,7 +148,7 @@ const theStack: StepSpec[] = [
     title: "The whole app starts with the infrastructure it runs on",
     layers: [LAYER.infra],
     notes:
-      "It's never just code. At the bottom is the infrastructure it runs on: databases, buckets, queues, networks.",
+      "It's never just code. At the bottom is the infrastructure it runs on: compute, databases, buckets, queues, networks.",
   }),
   pyramid({
     title: "…wired together with configuration and policies",
