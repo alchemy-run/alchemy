@@ -56,10 +56,11 @@ export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffect
           }
           case "/scrape": {
             const scrape = yield* browser
-              .scrape({ url: TARGET_URL, elements: [{ selector: "h1" }] })
+              // example.com has no heading; its only link reads "Learn more".
+              .scrape({ url: TARGET_URL, elements: [{ selector: "a" }] })
               .pipe(Effect.orDie);
             return yield* HttpServerResponse.json({
-              heading: scrape.result[0]?.results[0]?.text ?? null,
+              text: scrape.result[0]?.results[0]?.text ?? null,
             });
           }
           case "/snapshot": {

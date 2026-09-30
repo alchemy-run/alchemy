@@ -885,7 +885,17 @@ describe.concurrent(
           expect(changed.app.configuration.image).not.toBe(
             first.app.configuration.image,
           );
-          expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
+          // The registry keeps serving an overwritten tag's previous target
+          // for a while (observed ~25s), so wait for the new one.
+          expect(
+            yield* cacheDigest.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("4 seconds"),
+                until: (digest) => digest === changed.app.hash?.digest,
+                times: 10,
+              }),
+            ),
+          ).toBe(changed.app.hash?.digest);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const restored = yield* Effect.acquireUseRelease(

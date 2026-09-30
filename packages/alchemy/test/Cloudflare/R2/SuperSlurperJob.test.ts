@@ -454,6 +454,12 @@ test.provider(
             queueId: created.queue!.queueId,
             acks,
           });
+        // A `job.resumed` emitted before the new subscription propagates is
+        // lost, so emit a fresh one until an event is delivered.
+        if (!delivered() && (yield* getJob(job)).status === "running") {
+          yield* r2.pauseSuperSlurperJob(job).pipe(Retry.none, Effect.ignore);
+          yield* r2.resumeSuperSlurperJob(job).pipe(Retry.none, Effect.ignore);
+        }
       }).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
