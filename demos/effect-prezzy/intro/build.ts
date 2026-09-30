@@ -365,8 +365,11 @@ for (const spec of steps) {
       active: spec.active,
       lines,
       fresh: spec.fresh ?? lines.length,
-      // New lines appear two frames apart; hold until the last one has faded in.
-      frames: spec.frames ?? Math.max(24, (spec.fresh ?? lines.length) * 2 + 8),
+      progress: spec.progress
+        ? { rows: spec.progress.rows, done: tokenize(spec.progress.done, false, "ansi"), at: spec.progress.at }
+        : undefined,
+      // New lines appear two frames apart; hold until the last one has faded in (or the deploy finishes).
+      frames: spec.frames ?? Math.max(24, (spec.fresh ?? lines.length) * 2 + 8, spec.progress ? spec.progress.at + 12 : 0),
     });
   } else if (spec.kind === "roll") {
     const fill = (values: string[]) => spec.template.replace(/⟨(\d+)⟩/g, (_, i) => values[Number(i)]!);

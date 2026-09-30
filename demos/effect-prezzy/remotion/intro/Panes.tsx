@@ -59,7 +59,8 @@ export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?:
   const same = prev?.kind === "terminal" && prev.group === step.group;
   const firstNew = step.lines.length - step.fresh;
   // 26px fits about 20 lines in the pane; longer output shrinks to fit.
-  const size = Math.min(26, Math.floor(850 / (step.lines.length * 1.5 + 2)));
+  const rows = step.lines.length + (step.progress ? step.progress.rows.length + step.progress.done.length : 0);
+  const size = Math.min(26, Math.floor(850 / (rows * 1.5 + 2)));
   return (
     <Window
       header={
@@ -95,8 +96,57 @@ export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?:
             </div>
           );
         })}
+        {step.progress ? <DeployProgress progress={step.progress} local={local} size={size} /> : null}
       </div>
     </Window>
+  );
+};
+
+const SPINNER = ["◐", "◓", "◑", "◒"];
+
+/** Rows of a live deploy: pending, then a spinner while in progress, then a check. */
+const DeployProgress = ({
+  progress,
+  local,
+  size,
+}: {
+  progress: NonNullable<TerminalStep["progress"]>;
+  local: number;
+  size: number;
+}) => {
+  const nameW = Math.max(...progress.rows.map((r) => (r.binding ? 2 : 0) + r.name.length)) + 2;
+  const typeW = Math.max(...progress.rows.map((r) => (r.type ? r.type.length + 2 : 0))) + 2;
+  return (
+    <>
+      {progress.rows.map((row) => {
+        const state = local < row.from ? "pending" : local < row.to ? "working" : "done";
+        const color = row.binding ? "#6cb6ff" : "#8ddb8c";
+        const label =
+          state === "pending"
+            ? "pending"
+            : state === "working"
+              ? `${SPINNER[Math.floor(local / 3) % 4]} ${row.binding ? "attaching" : "creating"}`
+              : `✓ ${row.binding ? "attached" : "created"}`;
+        const name = `${row.binding ? "  " : ""}${row.name}`.padEnd(nameW);
+        const type = (row.type ? `(${row.type})` : "").padEnd(typeW);
+        return (
+          <div key={row.name} style={{ minHeight: size * 1.5 }}>
+            <span style={{ color: state === "pending" ? brand.fgMuted : brand.fg, fontWeight: row.binding ? undefined : 700 }}>{name}</span>
+            <span style={{ color: brand.fgMuted }}>{type}</span>
+            <span style={{ color: state === "pending" ? brand.fgMuted : color }}>{label}</span>
+          </div>
+        );
+      })}
+      {progress.done.map((line, i) => (
+        <div key={`done-${i}`} style={{ opacity: interpolate(local, [progress.at + i * 2, progress.at + i * 2 + 5], [0, 1], clamp), minHeight: size * 1.5 }}>
+          {line.map((t, k) => (
+            <span key={k} style={{ color: t.color, fontWeight: t.bold ? 700 : undefined }}>
+              {t.text}
+            </span>
+          ))}
+        </div>
+      ))}
+    </>
   );
 };
 

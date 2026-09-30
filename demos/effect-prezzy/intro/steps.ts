@@ -127,6 +127,8 @@ export interface TerminalSpec {
   active?: number;
   lines: string;
   fresh?: number;
+  /** A live deploy under the lines (see TerminalStep.progress); `done` is ANSI text. */
+  progress?: { rows: { name: string; type?: string; binding?: boolean; from: number; to: number }[]; done: string; at: number };
   frames?: number;
 }
 

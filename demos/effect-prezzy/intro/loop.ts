@@ -802,7 +802,7 @@ const program: StepSpec[] = [
   }),
   term({
     group: "cli",
-    title: "alchemy deploy makes the cloud match that program",
+    title: "alchemy deploy plans what has to change",
     lines: [
       $("alchemy deploy"),
       `${T.ok}✓${T.reset} Plan ready`,
@@ -825,11 +825,39 @@ const program: StepSpec[] = [
       `  ${T.ok}+${T.reset} ${T.soft}Connect(Pool)${T.reset}`,
       `  ${T.ok}+${T.reset} ${T.soft}DurableObject(Room)${T.reset}`,
       `  ${T.ok}+${T.reset} ${T.soft}Telemetry(Ingest)${T.reset}`,
-      RULE,
-      `${T.ok}Stack deployed (10/10)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
     ],
     notes:
-      "alchemy deploy compares that program with what's in the cloud and does whatever it takes to make them match: every resource, every binding between them, and the dashboard and monitor that watch them.",
+      "alchemy deploy first compares that program with what's in the cloud and plans what has to change. Nothing exists yet, so everything is a create: every resource, every binding between them, and the dashboard and monitor that watch them.",
+  }),
+  term({
+    group: "cli-apply",
+    title: "…then makes the cloud match, in dependency order",
+    lines: [$("alchemy deploy"), `${T.ok}✓${T.reset} Plan ready`, RULE],
+    fresh: 0,
+    progress: {
+      rows: [
+        { name: "Files", type: "Cloudflare.R2.Bucket", from: 4, to: 26 },
+        { name: "Messages", type: "Cloudflare.Queues.Queue", from: 6, to: 24 },
+        { name: "Db", type: "Neon.Project", from: 4, to: 50 },
+        { name: "Traces", type: "Axiom.Dataset", from: 5, to: 18 },
+        { name: "Logs", type: "Axiom.Dataset", from: 5, to: 20 },
+        { name: "Ingest", type: "Axiom.ApiToken", from: 21, to: 32 },
+        { name: "Dashboard", type: "Axiom.Dashboard", from: 21, to: 36 },
+        { name: "Errors", type: "Axiom.Monitor", from: 22, to: 38 },
+        { name: "Pool", type: "Cloudflare.Hyperdrive", from: 51, to: 68 },
+        { name: "Chat", type: "Cloudflare.Worker", from: 69, to: 96 },
+        { name: "ReadWrite(Files)", binding: true, from: 97, to: 104 },
+        { name: "Write(Messages)", binding: true, from: 97, to: 105 },
+        { name: "Consume(Messages)", binding: true, from: 98, to: 108 },
+        { name: "Connect(Pool)", binding: true, from: 98, to: 106 },
+        { name: "DurableObject(Room)", binding: true, from: 99, to: 107 },
+        { name: "Telemetry(Ingest)", binding: true, from: 99, to: 109 },
+      ],
+      done: [RULE, `${T.ok}Stack deployed (10/10)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`].join("\n"),
+      at: 112,
+    },
+    notes:
+      "Then it does it. Everything that doesn't depend on anything starts at once: the bucket, the queue, the Neon project, the Axiom datasets. The token, dashboard and monitor wait for the datasets. Hyperdrive waits for the database. The Worker waits for all of it, and then its bindings attach. At the end, the Stack's outputs: the app's URL.",
   }),
   term({
     group: "cli",

@@ -237,6 +237,13 @@ export interface TerminalStep {
   lines: Token[][];
   /** Lines that are new since the previous step (they fade in). */
   fresh: number;
+  /** A live deploy under the lines: each row moves pending → in progress → done on its own schedule. */
+  progress?: {
+    rows: { name: string; type?: string; binding?: boolean; from: number; to: number }[];
+    /** Lines that appear once every row is done, at frame `at`. */
+    done: Token[][];
+    at: number;
+  };
   frames: number;
 }
 
