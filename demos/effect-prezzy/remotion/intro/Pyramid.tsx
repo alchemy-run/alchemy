@@ -22,7 +22,7 @@ const band = (slot: number) => {
 };
 /** Where the notes beside the pyramid start. */
 const NOTE_X = CX + WIDE / 2 + 70;
-const SLICE_W = 400;
+const SLICE_W = 420;
 
 const DIM = 0.3;
 
@@ -96,31 +96,62 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         );
       })}
 
+      {step.cut
+        ? (() => {
+            const slot = step.layers.findIndex((l) => l.id === step.cut!.under);
+            const y = band(slot).bottom + GAP / 2;
+            const x1 = CX - widthAt(y) / 2 - 40;
+            const x2 = NOTE_X - 30;
+            return (
+              <g>
+                <path
+                  d={`M ${x1} ${y} L ${x1 + (x2 - x1) * cutIn} ${y}`}
+                  stroke={TONE.bad}
+                  strokeWidth={5}
+                  strokeDasharray="16 10"
+                  strokeLinecap="round"
+                />
+                <g opacity={cutIn} fontFamily={hand} fontWeight={700} fontSize={46} fill={brand.fg}>
+                  <text x={NOTE_X} y={y - 26}>↑ {step.cut.above}</text>
+                  <text x={NOTE_X} y={y + 58}>↓ {step.cut.below}</text>
+                </g>
+              </g>
+            );
+          })()
+        : null}
+
+      {/* A feature cut vertically through the layers: one solid section per band. */}
       {step.slice
         ? (() => {
-            const top = band(step.layers.length - 1).top - 16;
-            const bottom = BOTTOM + 16;
+            const top = band(step.layers.length - 1).top;
+            const x = CX - SLICE_W / 2;
             return (
               <g opacity={sliceIn}>
-                <rect x={CX - SLICE_W / 2} y={top} width={SLICE_W} height={bottom - top} rx={22} fill="#14110de6" stroke={TONE.good} strokeWidth={4} />
-                <text x={CX} y={top - 18} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.good}>
-                  {step.slice.label}
-                </text>
                 {step.layers.map((layer, slot) => {
+                  const b = band(slot);
                   const item = step.slice!.items[layer.id];
-                  if (!item) return null;
-                  const level = blend(lit(step, layer.id) ? 1 : DIM, prev ? (lit(prev, layer.id) ? 1 : DIM) : 1);
+                  const level = blend(lit(step, layer.id) ? 1 : DIM, prev?.slice ? (lit(prev, layer.id) ? 1 : DIM) : 1);
                   return (
-                    <g key={layer.id} opacity={level}>
-                      <text x={CX} y={band(slot).mid - 8} textAnchor="middle" fontFamily={mono} fontSize={19} fill={layer.color}>
-                        {layer.title.toLowerCase()}
-                      </text>
-                      <text x={CX} y={band(slot).mid + 30} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={30} fill={brand.fg}>
-                        {item}
-                      </text>
+                    <g key={layer.id}>
+                      <rect x={x} y={b.top} width={SLICE_W} height={BAND} fill={brand.bg} />
+                      <rect x={x} y={b.top} width={SLICE_W} height={BAND} fill={layer.color} fillOpacity={0.16 * level} />
+                      {item ? (
+                        <g opacity={level}>
+                          <text x={CX} y={b.mid - 10} textAnchor="middle" fontFamily={mono} fontSize={20} fill={layer.color}>
+                            {layer.title.toLowerCase()}
+                          </text>
+                          <text x={CX} y={b.mid + 30} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={32} fill={brand.fg}>
+                            {item}
+                          </text>
+                        </g>
+                      ) : null}
                     </g>
                   );
                 })}
+                <rect x={x} y={top} width={SLICE_W} height={BOTTOM - top} rx={14} fill="none" stroke={TONE.good} strokeWidth={4} />
+                <text x={CX} y={BOTTOM + 58} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={48} fill={TONE.good}>
+                  {step.slice.label}
+                </text>
               </g>
             );
           })()
@@ -152,35 +183,6 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
           </g>
         );
       })}
-
-      {step.cut
-        ? (() => {
-            const slot = step.layers.findIndex((l) => l.id === step.cut!.under);
-            const y = band(slot).bottom + GAP / 2;
-            const half = widthAt(y) / 2 + 40;
-            const x1 = CX - half;
-            const x2 = NOTE_X - 30;
-            return (
-              <g>
-                <path
-                  d={`M ${x1} ${y} L ${x1 + (x2 - x1) * cutIn} ${y}`}
-                  stroke={TONE.bad}
-                  strokeWidth={5}
-                  strokeDasharray="16 10"
-                  strokeLinecap="round"
-                />
-                <g opacity={cutIn}>
-                  <text x={NOTE_X} y={y - 26} fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.runtime}>
-                    ↑ {step.cut.above}
-                  </text>
-                  <text x={NOTE_X} y={y + 58} fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.construct}>
-                    ↓ {step.cut.below}
-                  </text>
-                </g>
-              </g>
-            );
-          })()
-        : null}
 
       {(step.side ?? []).map((note) => {
         const slot = step.layers.findIndex((l) => l.id === note.layer);

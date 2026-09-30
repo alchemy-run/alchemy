@@ -392,7 +392,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
 
 // ── composing modules as Layers ──────────────────────────────────────────
 const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
-const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 25 };
+const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
 const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 23 };
 /** The consumer on AWS: a Lambda fed by SQS (shown, not type-checked). */
 const ARCHIVE = `export default AWS.Lambda.Function(

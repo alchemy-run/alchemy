@@ -318,7 +318,8 @@ for (const spec of steps) {
       active: spec.active,
       lines,
       fresh: spec.fresh ?? lines.length,
-      frames: spec.frames ?? 24,
+      // New lines appear two frames apart; hold until the last one has faded in.
+      frames: spec.frames ?? Math.max(24, (spec.fresh ?? lines.length) * 2 + 8),
     });
   } else if (spec.kind === "browser") {
     resolved.push({ kind: "browser", title: spec.title, notes: spec.notes ?? "", url: spec.url, image: spec.image, frames: spec.frames ?? 20 });
