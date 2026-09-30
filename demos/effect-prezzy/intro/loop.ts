@@ -1197,6 +1197,11 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     notes:
       "So staging is the one shared environment. Each PR gets a preview of its Worker and a branch of its database: realistic, isolated, and cheap enough to make for every PR.",
   },
+  loop(
+    "The last step of a pull request is a link to try it",
+    "Back to the map. That last box in the pull request lane: a comment with a preview link. The agent can read it, and a reviewer can click it and chat in the preview. So how does that comment get there?",
+    ["comment"],
+  ),
   chat({
     snippet: "StackPr.ts",
     file: "alchemy.run.ts",
@@ -1205,7 +1210,7 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     title: "The Stack comments the preview link on the pull request",
     emphasize: ["GitHub.Comment", "PULL_REQUEST", "Preview deployed", "GitHub.providers"],
     notes:
-      "One more thing a pull request needs: a link to try it. A GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
+      "A GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
   }),
   {
     kind: "comment",
