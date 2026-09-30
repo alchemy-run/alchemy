@@ -181,7 +181,8 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 120_000 });
+// Setup provisions Redis and deploys two runtime builds before tests can run.
+const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
 });

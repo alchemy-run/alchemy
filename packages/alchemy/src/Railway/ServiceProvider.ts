@@ -615,6 +615,8 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
         Effect.orElseSucceed(() => ""),
       );
 
+// Railway builds can outlast a 50-second poll window. Allow up to 90 seconds
+// while bounding both the retry count and time spent in API requests.
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
     const instance = yield* getInstance(environmentId, serviceId);
@@ -640,8 +642,9 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
       times: 10,
-      schedule: Schedule.spaced("5 seconds"),
+      schedule: Schedule.spaced("8 seconds"),
     }),
+    Effect.timeout("90 seconds"),
   );
 
 type DeployRef = {
@@ -742,8 +745,9 @@ const waitForDeploymentById = (input: {
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
       times: 10,
-      schedule: Schedule.spaced("5 seconds"),
+      schedule: Schedule.spaced("8 seconds"),
     }),
+    Effect.timeout("90 seconds"),
     Effect.catchTag("Railway.ServiceDeployPending", (pending) =>
       Effect.gen(function* () {
         const instance = yield* getInstance(
@@ -767,8 +771,14 @@ const waitForDeploymentById = (input: {
             logs,
           });
         }
-        return yield* pending;
-      }),
+        if (instance !== undefined && deployReady(status)) {
+          return instance;
+        }
+        return yield* new ServiceDeployPending({
+          serviceId: input.serviceId,
+          status: status ?? pending.status,
+        });
+      }).pipe(Effect.timeout("10 seconds")),
     ),
   );
 
