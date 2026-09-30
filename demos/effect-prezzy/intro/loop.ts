@@ -1077,17 +1077,6 @@ const ci: StepSpec[] = [
     notes:
       "A stage is a name, like dev_sam, test_sam or pr-42. Every resource's physical name includes it, and every stage keeps its own state. Deploy a new stage and you get a whole new copy of the app.",
   }),
-  inline({
-    group: "ci",
-    file: ".github/workflows/pr.yml",
-    lang: "yaml",
-    fontSize: 30,
-    title: "CI runs the same tests on a copy just for the pull request",
-    code: PR_YAML,
-    emphasize: ["STAGE: pr-", "pnpm test"],
-    notes:
-      "CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys a copy of the app for that PR and runs the same tests against it. Set LOCAL too and CI runs it emulated instead.",
-  }),
 ];
 
 // ── act 5: shared infrastructure, by reference ───────────────────────────
@@ -1165,6 +1154,22 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     notes:
       "So staging is the one shared environment. Each PR gets a preview of its Worker and a branch of its database: realistic, isolated, and cheap enough to make for every PR.",
   },
+  loop(
+    "With its own preview, the pull request is ready to test",
+    "Back to the map. The pull request has its own preview now, branched from staging. Next box: test it in CI.",
+    ["prTest"],
+  ),
+  inline({
+    group: "ci",
+    file: ".github/workflows/pr.yml",
+    lang: "yaml",
+    fontSize: 30,
+    title: "CI runs the same tests against that preview",
+    code: PR_YAML,
+    emphasize: ["STAGE: pr-", "pnpm test"],
+    notes:
+      "And CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys that preview, with its branched database and its preview Worker, and runs the same tests we ran on our machine against it. Set LOCAL too and CI runs it emulated instead.",
+  }),
   loop(
     "The last step of a pull request is a link to try it",
     "Back to the map. That last box in the pull request lane: a comment with a preview link. The agent can read it, and a reviewer can click it and chat in the preview. So how does that comment get there?",
