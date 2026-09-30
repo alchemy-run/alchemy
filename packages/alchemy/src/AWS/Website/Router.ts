@@ -183,12 +183,11 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
         if (typeof route === "string" || "url" in (route as any)) {
           const url = typeof route === "string" ? route : (route as any).url;
-          const host = typeof url === "string" ? new URL(url).host : url;
           inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-            host,
-            (resolvedHost) =>
+            url,
+            (resolvedUrl) =>
               JSON.stringify({
-                host: resolvedHost,
+                host: new URL(resolvedUrl).host,
                 origin: (route as any).origin,
                 rewrite: (route as any).rewrite,
               }),
@@ -509,7 +508,7 @@ async function handler(event) {
       try {
         var type = match.type;
         var routeNs = match.routeNs;
-        var v = await cf.kvs().get(routeNs + ":metadata");
+        var v = await cf.kvs().get(type === "site" ? routeNs + ":metadata" : "${kvNamespace}:" + routeNs + ":metadata");
         return { type: type, routeNs: routeNs, metadata: JSON.parse(v) };
       } catch (e) {}
     }
