@@ -157,7 +157,7 @@ export interface DurableObjectNamespace {
    * starts one per DO instance via the worker's `containerEngine` and exposes
    * it as `ctx.container`.
    */
-  container?: ContainerImage;
+  container?: ContainerImage | { images: Record<string, ContainerImage> };
 }
 
 export interface Workflow {

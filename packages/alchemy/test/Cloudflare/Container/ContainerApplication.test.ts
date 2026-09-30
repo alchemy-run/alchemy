@@ -1978,6 +1978,8 @@ describe.concurrent(
             }),
           );
           expect(deleted).toBe(true);
+          assert(first.app.maxInstances !== undefined);
+          assert(first.app.configuration.image !== undefined);
           const detached = yield* Containers.createContainerApplication({
             accountId,
             name: first.app.applicationName,
@@ -1986,7 +1988,10 @@ describe.concurrent(
             schedulingPolicy: first.app.schedulingPolicy,
             constraints: first.app.constraints,
             affinities: first.app.affinities,
-            configuration: first.app.configuration,
+            configuration: {
+              ...first.app.configuration,
+              image: first.app.configuration.image,
+            },
           });
           expect(detached.id).not.toBe(first.app.applicationId);
           expect(detached.durableObjects ?? undefined).toBeUndefined();

@@ -131,67 +131,55 @@ export const RuntimeLive = Layer.effect(
           hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",
         });
       }
-      const imageNames = new Map<string, string>();
-
-      const registerImage = (
-        className: string,
-        tag: string,
-        env?: Record<string, string>,
-      ) => {
-        if (env) {
-          // To prevent collisions between images with the same tag but different env,
-          // `registerImageEnv` returns a unique alias for the image, which our Docker
-          // proxy server then maps to the actual tag and injects the env variables.
-          return docker
-            .registerImageEnv(className, tag, env)
-            .pipe(
-              Effect.andThen((alias) =>
-                Effect.sync(() => imageNames.set(className, alias)),
-              ),
-            );
+      const imageNames = new Map<
+        string,
+        WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions
+      >();
+      const prepareImage = Effect.fnUntraced(function* (
+        name: string,
+        image: Docker.ContainerImage,
+      ) {
+        const tag = "tag" in image ? image.tag : docker.generateImageTag(name);
+        if (!("tag" in image)) {
+          yield* "imageUri" in image
+            ? docker.pull(tag, image)
+            : docker.build(tag, image);
+          // Own only this start's tag; another workerd may still use a sibling tag.
+          yield* Effect.addFinalizer(() =>
+            docker
+              .removeContainer(tag)
+              .pipe(Effect.andThen(docker.removeImageTag(tag)), Effect.ignore),
+          );
         }
-        return Effect.sync(() => imageNames.set(className, tag));
-      };
+        yield* docker.validate(tag);
+        return image.env
+          ? yield* docker.registerImageEnv(name, tag, image.env)
+          : tag;
+      });
 
       const [, containerEngine] = yield* Effect.forEach(
         containers,
-        ({ className, container }) => {
-          if ("tag" in container) {
-            return docker
-              .validate(container.tag)
-              .pipe(
-                Effect.andThen(
-                  registerImage(className, container.tag, container.env),
-                ),
-              );
-          }
-          const tag = docker.generateImageTag(className);
-          const prepare =
-            "imageUri" in container
-              ? docker.pull(tag, container)
-              : docker.build(tag, container);
-          return prepare.pipe(
-            Effect.andThen(docker.validate(tag)),
-            Effect.tap(() => {
-              // Each start cleans up ONLY its own image tag when its scope
-              // closes. Do NOT prune other same-name tags as "stale" here: a
-              // dev session starts the worker more than once (precreate stub
-              // → reconcile), and a cleanup that guesses which sibling tags
-              // are dead can untag the tag a live workerd is about to
-              // `docker create` from — every container start then fails and
-              // the session serves 500s until redeploy.
-              return Effect.addFinalizer(() =>
-                docker
-                  .removeContainer(tag)
-                  .pipe(
-                    Effect.andThen(docker.removeImageTag(tag)),
-                    Effect.ignore,
+        Effect.fnUntraced(function* ({ className, container }) {
+          const options =
+            "images" in container
+              ? {
+                  images: yield* Effect.forEach(
+                    Object.entries(container.images),
+                    Effect.fnUntraced(function* ([name, image]) {
+                      return {
+                        name,
+                        image: yield* prepareImage(
+                          `${className}-${name}`,
+                          image,
+                        ),
+                      };
+                    }),
+                    { concurrency: "unbounded" },
                   ),
-              );
-            }),
-            Effect.tap(() => registerImage(className, tag, container.env)),
-          );
-        },
+                }
+              : { imageName: yield* prepareImage(className, container) };
+          imageNames.set(className, options);
+        }),
         { concurrency: "unbounded", discard: true },
       ).pipe(
         Effect.zip(docker.getWorkerdDockerConfiguration, { concurrent: true }),
@@ -244,7 +232,7 @@ export const RuntimeLive = Layer.effect(
                     modules: worker.modules.map(moduleToWorkerd),
                     durableObjectNamespaces:
                       worker.durableObjectNamespaces?.map((namespace) => {
-                        const imageName = imageNames.get(namespace.className);
+                        const container = imageNames.get(namespace.className);
                         return {
                           className: namespace.className,
                           enableSql: namespace.sql,
@@ -255,7 +243,7 @@ export const RuntimeLive = Layer.effect(
                               namespace.className,
                             ),
                           ephemeralLocal: namespace.ephemeralLocal,
-                          container: imageName ? { imageName } : undefined,
+                          container,
                         };
                       }),
                     durableObjectStorage: {

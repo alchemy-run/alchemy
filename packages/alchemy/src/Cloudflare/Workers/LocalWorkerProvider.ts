@@ -9,7 +9,6 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -375,7 +374,10 @@ export const LocalWorkerProvider = () =>
         // send_email descriptors. Part of the hashed config: flipping the
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
-        const containers: Record<string, ContainerImage> = {};
+        const containers: Record<
+          string,
+          NonNullable<RuntimeDurableObject["container"]>
+        > = {};
         // Content hashes of the container images, keyed like `containers`.
         // `ContainerImage` itself only carries stable paths (context /
         // dockerfile / imageUri), so without the hash an image CONTENT
@@ -439,15 +441,25 @@ export const LocalWorkerProvider = () =>
           }
           if (data.containers) {
             for (const container of data.containers) {
-              if (!container.dev) {
+              if (container.devImages !== undefined) {
+                containers[container.className] = {
+                  images: Object.fromEntries(
+                    Object.entries(container.devImages).map(([name, image]) => [
+                      name,
+                      { ...image, env: unwrapRedacted(image.env) },
+                    ]),
+                  ),
+                };
+              } else if (container.dev) {
+                containers[container.className] = {
+                  ...container.dev,
+                  env: unwrapRedacted(container.dev.env),
+                };
+              } else {
                 return yield* Effect.die(
                   `Container ${container.className} has no dev image`,
                 );
               }
-              containers[container.className] = {
-                ...container.dev,
-                env: unwrapRedacted(container.dev.env),
-              };
               if (container.hash !== undefined) {
                 containerHashes[container.className] = container.hash;
               }
@@ -698,16 +710,23 @@ export const LocalWorkerProvider = () =>
           const fs = yield* PlatformFileSystem.FileSystem;
           const watched = new Map<string, { dockerfile: string | undefined }>();
           for (const namespace of worker.durableObjectNamespaces) {
-            const image = namespace.container;
-            if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(runtimeBase, image.context ?? ".");
-            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
-            watched.set(context, {
-              dockerfile:
-                image.dockerfile !== undefined
-                  ? path.resolve(context, image.dockerfile)
-                  : undefined,
-            });
+            const container = namespace.container;
+            if (container === undefined) continue;
+            const images =
+              "images" in container
+                ? Object.values(container.images)
+                : [container];
+            for (const image of images) {
+              if (!("dockerfile" in image)) continue;
+              const context = path.resolve(runtimeBase, image.context ?? ".");
+              if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
+              watched.set(context, {
+                dockerfile:
+                  image.dockerfile !== undefined
+                    ? path.resolve(context, image.dockerfile)
+                    : undefined,
+              });
+            }
           }
           const key = JSON.stringify([...watched.entries()].sort());
           const existing = containerWatchers.get(worker.fqn);

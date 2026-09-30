@@ -1293,6 +1293,11 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Application name and prepared images for the native container API. */
+      name?: string;
+      images?: Record<string, string>;
+      /** Named image sources for local workerd. An empty map enables managed images. */
+      devImages?: Record<string, DevContainerImage>;
       dev: DevContainerImage | undefined;
       /**
        * Content hash of the image (bundle/Dockerfile/context). Part of the

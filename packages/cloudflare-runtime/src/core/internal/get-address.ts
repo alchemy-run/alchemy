@@ -23,7 +23,7 @@ export const toConnectableHost = (host: string): string =>
   UNSPECIFIED_ADDRESSES.has(host) ? "127.0.0.1" : host;
 
 export const getAddress = (
-  server: NodeHttp.Server,
+  server: Pick<NodeHttp.Server, "address">,
 ): Effect.Effect<string, SystemError> => {
   const address = server.address();
   if (address === null) {
