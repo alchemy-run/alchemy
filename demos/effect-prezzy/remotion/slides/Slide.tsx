@@ -92,7 +92,7 @@ const TitleLayout = ({ props }: SlideProps) => (
     </Enter>
     {props.subtitle ? (
       <Enter delay={14}>
-        <p style={{ margin: "36px 0 0", fontFamily: sans, fontSize: 40, color: brand.fgMuted }}>
+        <p style={{ margin: "36px 0 0", fontFamily: sans, fontSize: 40, color: brand.fgMuted, whiteSpace: "pre-line" }}>
           {props.subtitle}
         </p>
       </Enter>
