@@ -1,16 +1,23 @@
+import type { RuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import { Queues } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { Messages } from "./Messages.ts";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { History } from "./History.ts";
+
+type RoomShape = {
+  fetch: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Cloudflare.DurableObjectState | RuntimeContext>;
+  webSocketMessage: (socket: Cloudflare.WebSocket, text: string) => Effect.Effect<void, never, RuntimeContext>;
+};
 
 // #region show
-export default class Room extends Cloudflare.DurableObject<Room>()(
-  "Room",
+export class Room extends Cloudflare.DurableObject<Room, RoomShape>()("Room") {}
+
+export const RoomLive = Room.make(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
-    // #region archive
-    const archive = yield* Queues.WriteQueue(yield* Messages);
-    // #endregion archive
+    // #region history
+    const history = yield* History;
+    // #endregion history
 
     return Effect.gen(function* () {
       return {
@@ -28,12 +35,12 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
           }
           // #endregion broadcast
           // #region send
-          yield* archive.send({ room: state.id.name!, text })/*hide*/.pipe(Effect.orDie)/*end*/;
+          yield* history.append(state.id.name!, text);
           // #endregion send
         }),
         // #endregion message
       };
     });
-  })/*hide*/.pipe(Effect.provide(Queues.WriteQueueBinding))/*end*/,
-) {}
+  }),
+);
 // #endregion show

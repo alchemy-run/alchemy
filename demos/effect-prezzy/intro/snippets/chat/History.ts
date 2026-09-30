@@ -13,6 +13,7 @@ import { Messages, type Message } from "./Messages.ts";
 export class History extends Context.Service<
   History,
   {
+    append(room: string, text: string): Effect.Effect<void, never, Alchemy.RuntimeContext>;
     list(room: string): Effect.Effect<readonly string[], never, Alchemy.RuntimeContext>;
     attach(room: string, file: string, body: string): Effect.Effect<void, UploadError, Alchemy.RuntimeContext>;
   }
@@ -27,8 +28,11 @@ export const HistoryLive = Layer.effect(
     const sql = yield* Database;
     const files = yield* Files;
     // #endregion deps
-    // #region consume
+    // #region queue
     const messages = yield* Messages;
+    const queue = yield* Queues.WriteQueue(messages);
+    // #endregion queue
+    // #region consume
 
     yield* Queues.consumeQueueMessages<Message>(
       messages,
@@ -40,6 +44,9 @@ export const HistoryLive = Layer.effect(
     // #region methods
 
     return {
+      // #region append
+      append: (room: string, text: string) => queue.send({ room, text })/*hide*/.pipe(Effect.orDie)/*end*/,
+      // #endregion append
       list: (room: string) =>
         sql<{ text: string }>`SELECT text FROM messages WHERE room = ${room}`/*hide*/.pipe(Effect.map((rows) => rows.map((row) => row.text)), Effect.orDie)/*end*/,
       attach: (room: string, file: string, body: string) =>
@@ -50,6 +57,6 @@ export const HistoryLive = Layer.effect(
     };
     // #endregion methods
   }),
-)/*hide*/.pipe(Layer.provide(Queues.EventSourceLive))/*end*/;
+)/*hide*/.pipe(Layer.provide([Queues.WriteQueueBinding, Queues.EventSourceLive]))/*end*/;
 // #endregion live
 // #endregion show

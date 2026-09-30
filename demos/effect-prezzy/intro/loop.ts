@@ -348,7 +348,7 @@ const twoPrograms: StepSpec[] = [
 const BRICKS = {
   files: { row: 0, col: 1, of: 2, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
   database: { row: 0, col: 0, of: 2, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
-  history: { row: 1, title: "History", detail: "messages · attach()", color: "#e0a86b" },
+  history: { row: 1, title: "History", detail: "append() · attach()", color: "#e0a86b" },
   rooms: { row: 2, title: "Rooms", detail: "Durable Objects · join()", color: "#e06c9f" },
   chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
 };
@@ -369,7 +369,7 @@ const PROVIDES = {
 /** Beside each row on the last slide: the Worker's wiring, which reads top to bottom as the pyramid. */
 const WIRED = [
   { layer: "web", text: "Effect.provide(", code: true },
-  { layer: "api", text: "  RoomsLive.pipe(", code: true },
+  { layer: "api", text: "  RoomsLive.pipe(\n    Layer.provide(RoomLive),", code: true },
   { layer: "config", text: "    Layer.provide(HistoryLive),", code: true },
   { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesLive]),\n  ),\n)", code: true },
 ];
@@ -562,7 +562,7 @@ const compose: StepSpec[] = [
   chat({
     ...HISTORY,
     title: "History asks for Database and Files",
-    omit: ["service", "consume"],
+    omit: ["service", "queue", "consume", "append"],
     emphasize: ["yield* Database;", "yield* Files;"],
     notes:
       "The constructor asks for Database and for Files, the two blocks beneath it. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
@@ -578,16 +578,24 @@ const compose: StepSpec[] = [
   }),
   chat({
     ...HISTORY,
-    title: "History consumes that queue into Postgres",
-    omit: ["service"],
-    emphasize: ["consumeQueueMessages", "Stream.runForEach", "const messages"],
+    title: "History owns that queue, and appends to it",
+    omit: ["service", "consume"],
+    emphasize: ["const messages", "Queues.WriteQueue", "append:"],
+    notes:
+      "The queue belongs to History. Its constructor asks for the Messages queue and send access to it, and History's new append method puts a message on it. Nothing else in the app touches the queue.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "…and consumes it into Postgres",
+    omit: ["service", "methods"],
+    emphasize: ["consumeQueueMessages", "Stream.runForEach"],
     notes:
       "History reads that queue and inserts each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the Messages queue's consumer.",
   }),
   chat({
     ...HISTORY,
     title: "On AWS, the same line would grant three permissions and wire the trigger",
-    omit: ["service", "methods"],
+    omit: ["service", "queue", "methods"],
     emphasize: ["consumeQueueMessages"],
     beside: {
       file: "on AWS, generated at deploy",
@@ -622,15 +630,16 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...ROOM_FILE,
     title: "Each chat room is a Durable Object, with the same shape",
-    omit: ["archive", "send"],
+    omit: ["history", "send"],
     notes:
       "Each chat room is a Durable Object, one small stateful server per room name, and it has the same shape: a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
   }),
   chat({
     ...ROOM_FILE,
-    title: "…and each room puts its messages on the queue",
-    emphasize: ["archive"],
-    notes: "Each room also sends every message to the queue that History consumes. Send-only access, declared in its constructor.",
+    title: "…and each room appends its messages to History",
+    emphasize: ["yield* History", "history.append"],
+    notes:
+      "Each room asks for History, the block beneath it, and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business.",
   }),
   chat({
     snippet: "Rooms.ts",
@@ -652,9 +661,9 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesLive])"],
+    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(RoomLive)", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesLive])"],
     notes:
-      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
+      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesLive. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
