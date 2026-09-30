@@ -109,5 +109,32 @@ describe.sequential(
       }),
       { timeout: 240_000 },
     );
+
+    test(
+      "restores a container from a filesystem snapshot",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const token = `alchemy-${Date.now()}`;
+        // Wait for the Worker, then run the round trip once: it takes longer
+        // than one readiness poll, and a retry would restart it mid-flight.
+        yield* fetchReady(new URL("/images", url), "echo");
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client
+          .get(new URL(`/snapshot?token=${token}`, url))
+          .pipe(Effect.timeout("200 seconds"));
+        const body = yield* response.text;
+        const result = JSON.parse(body) as {
+          snapshot?: { id: string };
+          restored?: string;
+          error?: string;
+          steps: Array<{ step: string; ms: number }>;
+        };
+        yield* Effect.logInfo(`snapshot round trip: ${body}`);
+        expect(result.error).toBeUndefined();
+        expect(result.snapshot?.id).toBeTruthy();
+        expect(result.restored).toBe(token);
+      }),
+      { timeout: 240_000 },
+    );
   },
 );
