@@ -352,15 +352,14 @@ const MODULE_BESIDE_CLASS = {
   file: "the same shape, as a class",
   src: {
     code: `class FilesR2 {
-  private files: ReadWriteBucket;
+  private bucket: Bucket;
 
   constructor() {
-    const bucket = new Bucket("Files");
-    this.files = bucket.readWrite();
+    this.bucket = new Bucket("Files");
   }
 
   upload(name: string, body: string) {
-    return this.files.put(name, body);
+    return this.bucket.put(name, body);
   }
 }`,
   },
@@ -417,13 +416,12 @@ const modules: StepSpec[] = [
       omit: ["service"],
       quiet: true,
       notes:
-        "If that shape looks familiar, it's a class: a constructor that creates what the object needs, and methods that use it. Files has no dependencies; its constructor creates the bucket itself, like new Bucket(), and takes read-write access to it. The difference is that this constructor is an Effect, so creating the bucket means declaring a real cloud resource, and the type system tracks everything it needs.",
+        "If that shape looks familiar, it's a class: a constructor that creates what the object needs, and methods that use it. Files has no dependencies; its constructor creates the bucket itself, like new Bucket(). The difference is that this constructor is an Effect, so creating the bucket means declaring a real cloud resource, and the type system tracks everything it needs.",
     }),
     beside: MODULE_BESIDE_CLASS,
     links: [
       { from: 'R2.Bucket("Files")', to: 'new Bucket("Files")', tone: "construct" },
-      { from: "R2.ReadWriteBucket(bucket)", to: "bucket.readWrite()", tone: "construct" },
-      { from: "files.put(name, body)", to: "this.files.put(name, body)", tone: "runtime" },
+      { from: "files.put(name, body)", to: "this.bucket.put(name, body)", tone: "runtime" },
     ],
   },
   chat({
