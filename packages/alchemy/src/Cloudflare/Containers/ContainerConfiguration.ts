@@ -44,6 +44,22 @@ export const validateContainerConfiguration = Effect.fn(function* (
     return;
   }
 
+  const imageNames = Object.keys(props.images ?? {});
+  if (imageNames.length > 100) {
+    return yield* new ContainerConfigurationError({
+      message:
+        "A Durable Object-managed container supports at most 100 named images.",
+    });
+  }
+  for (const name of imageNames) {
+    if (name.length === 0 || name.length > 128) {
+      return yield* new ContainerConfigurationError({
+        message:
+          "A container image name must contain between 1 and 128 characters.",
+      });
+    }
+  }
+
   for (const key of [
     "main",
     "image",

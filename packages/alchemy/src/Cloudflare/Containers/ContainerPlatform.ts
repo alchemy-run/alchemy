@@ -1,3 +1,4 @@
+import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
@@ -14,7 +15,11 @@ import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import { ContainerTypeId } from "./Container.ts";
+import {
+  ContainerTypeId,
+  type Container,
+  type ContainerStartupOptions,
+} from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
@@ -33,21 +38,13 @@ const toHttpUrl = (url: string) =>
  * `@cloudflare/containers` `containerFetch` does
  * (`request.url.replace("https:", "http:")`).
  */
-export const httpSchemePort = <
-  P extends {
-    fetch: (...args: any[]) => any;
-    connect: (...args: any[]) => any;
-  },
->(
-  port: P,
-): P =>
-  ({
-    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-      input instanceof Request
-        ? port.fetch(toHttpUrl(input.url), input)
-        : port.fetch(toHttpUrl(String(input)), init),
-    connect: (address: any, options?: any) => port.connect(address, options),
-  }) as any as P;
+export const httpSchemePort = (port: cf.Fetcher): cf.Fetcher => ({
+  fetch: (input, init) =>
+    typeof input === "object" && "url" in input
+      ? port.fetch(toHttpUrl(input.url), input)
+      : port.fetch(toHttpUrl(String(input)), init),
+  connect: (address, options) => port.connect(address, options),
+});
 
 const bindContainer = Effect.fn(function* <Shape, Req = never>(
   containerEff:

@@ -11,7 +11,9 @@ export class NativeAsyncObject extends DurableObject {
     if (!container.running) {
       const image = path.startsWith("/builtin")
         ? "cloudflare/debian-trixie"
-        : container.images.shell;
+        : container.images[
+            path.startsWith("/image/") ? path.slice("/image/".length) : "shell"
+          ];
       if (!image) throw new Error("The shell image is not configured.");
       container.start({
         image,
@@ -46,9 +48,18 @@ export class NativeAsyncObject extends DurableObject {
 }
 
 export default {
-  fetch(request: Request, env: Cloudflare.InferEnv<typeof NativeAsyncWorker>) {
+  async fetch(
+    request: Request,
+    env: Cloudflare.InferEnv<typeof NativeAsyncWorker>,
+  ) {
     if (new URL(request.url).pathname === "/ready")
       return new Response("ready");
-    return env.SANDBOX.getByName(new URL(request.url).pathname).fetch(request);
+    try {
+      return await env.SANDBOX.getByName(new URL(request.url).pathname).fetch(
+        request,
+      );
+    } catch (error) {
+      return Response.json({ error: String(error) }, { status: 500 });
+    }
   },
 };

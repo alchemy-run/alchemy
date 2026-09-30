@@ -168,10 +168,8 @@ export const RuntimeLive = Layer.effect(
                     Effect.fnUntraced(function* ([name, image]) {
                       return {
                         name,
-                        image: yield* prepareImage(
-                          `${className}-${name}`,
-                          image,
-                        ),
+                        // Docker generates a unique tag for each source.
+                        image: yield* prepareImage(className, image),
                       };
                     }),
                     { concurrency: "unbounded" },

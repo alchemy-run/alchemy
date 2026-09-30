@@ -810,33 +810,36 @@ export const LiveContainerProvider = () =>
         session: { note: (message: string) => Effect.Effect<void> },
       ) {
         const inputs = yield* computeNamedImages(id, props);
-        const images: Record<string, string> = {};
-        const hashes: Record<string, string> = {};
-        const devImages: NonNullable<
-          ContainerApplication["Attributes"]["devImages"]
-        > = {};
-        for (const input of inputs) {
-          const previous = output?.images?.[input.name];
-          const image =
-            previous && output?.hash?.images?.[input.name] === input.imageHash
-              ? previous
-              : (yield* buildAndPushImage(
-                  input.id,
-                  input.props,
-                  input.build,
-                  input.imageRef,
-                  input.imageHash,
-                  undefined,
-                  session,
-                )).imageRef;
-          yield* prepareImage(image);
-          images[input.name] = image;
-          hashes[input.name] = input.imageHash;
-          devImages[input.name] = input.dev;
-        }
+        const published = yield* Effect.forEach(
+          inputs,
+          Effect.fn(function* (input) {
+            const previous = output?.images?.[input.name];
+            const image =
+              previous && output?.hash?.images?.[input.name] === input.imageHash
+                ? previous
+                : (yield* buildAndPushImage(
+                    input.id,
+                    input.props,
+                    input.build,
+                    input.imageRef,
+                    input.imageHash,
+                    undefined,
+                    session,
+                  )).imageRef;
+            yield* prepareImage(image);
+            return { ...input, image };
+          }),
+        );
+        const hashes = Object.fromEntries(
+          published.map(({ name, imageHash }) => [name, imageHash] as const),
+        );
         return {
-          images,
-          devImages,
+          images: Object.fromEntries(
+            published.map(({ name, image }) => [name, image] as const),
+          ),
+          devImages: Object.fromEntries(
+            published.map(({ name, dev }) => [name, dev] as const),
+          ),
           hash: { image: yield* sha256Object(hashes), images: hashes },
         };
       });
