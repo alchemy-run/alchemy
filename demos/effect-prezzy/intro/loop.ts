@@ -158,7 +158,7 @@ const theStack: StepSpec[] = [
   }),
 ];
 
-// ── today: two programs ─────────────────────────────────────────────────
+// ── other IaC frameworks: two programs ─────────────────────────────────────────────────
 const SST_CONFIG = `const bucket = new sst.aws.Bucket("Files");
 
 new sst.aws.Function("Upload", {
@@ -195,9 +195,9 @@ const UPLOAD = {
 };
 const twoPrograms: StepSpec[] = [
   sst({
-    title: "Today, we'd build its file uploads with SST",
+    title: "With other IaC frameworks like SST, file uploads look like this",
     notes:
-      "So how would we build this today, in a way an agent can check? Take one feature, uploading a file, and build it with SST, one of the nicest tools we have. sst.config.ts creates a bucket and a function, and links them.",
+      "So how would other infrastructure-as-code frameworks build this? Take one feature, uploading a file, and build it with SST. sst.config.ts creates a bucket and a function, and links them.",
   }),
   sst({
     title: "The infrastructure is one program, the code that runs is another",
@@ -898,7 +898,7 @@ const shared: StepSpec[] = [
     file: DB_FILE.file,
     group: DB_FILE.group,
     fontSize: DB_FILE.fontSize,
-    title: "Today, every stage's Database Layer creates a new project",
+    title: "So far, every stage's Database Layer creates a new project",
     notes: "Here's the Database Layer from before. Every stage creates a brand new Neon project.",
     quiet: true,
   }),
