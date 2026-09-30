@@ -1181,6 +1181,24 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     notes:
       "And CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys that preview, with its branched database and its preview Worker, and runs the same tests we ran on our machine against it. Set LOCAL too and CI runs it emulated instead.",
   }),
+  term({
+    group: "ci-run",
+    tabs: ["GitHub Actions · test"],
+    title: "pnpm test deploys the preview and tests it",
+    lines: [
+      $("pnpm test"),
+      `${T.ok}${T.bold}▲ deploy${T.reset}   ${T.dim}Chat → stage${T.reset} ${T.bold}pr-42${T.reset}`,
+      `  ${T.ok}+ Files  + Messages  + Pool${T.reset}`,
+      `  ${T.ok}+ Db${T.reset}    ${T.dim}branch of staging's database${T.reset}`,
+      `  ${T.ok}+ Chat${T.reset}  ${T.dim}preview of staging's Worker${T.reset}`,
+      ``,
+      PASSED,
+      ``,
+      `${T.ok}1 passed${T.reset}`,
+    ],
+    notes:
+      "In CI it's the same command we ran on our machine. It deploys stage pr-42: the database is a branch of staging's, the Worker is a preview of staging's, and the same test passes against it.",
+  }),
   loop(
     "The last step of a pull request is a link to try it",
     "Back to the map. That last box in the pull request lane: a comment with a preview link. The agent can read it, and a reviewer can click it and chat in the preview. So how does that comment get there?",
