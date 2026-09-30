@@ -93,11 +93,12 @@ export const makeCloudflareDnsSolver = (
       }).pipe(
         Effect.mapError(solverError(`Could not remove TXT ${record.fqdn}`)),
       ),
-    // Allow recursive caches used by secondary validators to expire.
+    // Let Cloudflare publish before any intercepted/recursive lookup can cache
+    // a negative answer for the zone's SOA minimum (often 30 minutes).
     propagated: (record, options) =>
       waitForTxt(record.fqdn, record.value, {
         ...options,
-        delay: options.delay ?? "60 seconds",
+        initialDelay: options.initialDelay ?? "60 seconds",
         timeout: options.timeout ?? "90 seconds",
       }),
   };

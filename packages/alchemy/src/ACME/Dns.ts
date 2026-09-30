@@ -7,8 +7,9 @@
  * can stay invisible for far longer than the CA takes to validate. Where
  * `node:dns` is available (deploy time, Fly Machines) the check therefore
  * asks the zone's **authoritative** nameservers directly — the same
- * servers the CA asks. Elsewhere (Workers) it falls back to DNS over
- * HTTPS, which works everywhere an `HttpClient` does.
+ * servers the CA asks. Networks can intercept port 53, so DNS over HTTPS
+ * also checks for the exact challenge value. A stale recursive cache must
+ * not veto a positive answer; the CA performs its own validation.
  */
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -19,14 +20,21 @@ import { DnsPropagationTimeout } from "./Errors.ts";
 
 export interface PropagationOptions {
   /**
+   * Wait before the first lookup to avoid caching an unpublished record.
+   * Outside the polling budget. Cloudflare defaults to 60 seconds.
+   * @default "0 seconds"
+   */
+  readonly initialDelay?: Duration.Input | undefined;
+  /**
    * Extra wait after the record is seen (or, for solvers that skip the
    * check, the whole wait): anycast edges lag the first one that answers.
    * @default "5 seconds"
    */
   readonly delay?: Duration.Input | undefined;
   /**
-   * DNS-over-HTTPS JSON endpoints polled when the authoritative check is
-   * unavailable. Every resolver must return the record.
+   * DNS-over-HTTPS JSON endpoints to use instead of automatic discovery.
+   * When supplied, every resolver must return the record. Automatic lookup
+   * accepts all discovered nameservers or any default DoH resolver.
    * @default Cloudflare (1.1.1.1) and Google public DNS
    */
   readonly resolvers?: ReadonlyArray<string> | undefined;
@@ -94,7 +102,7 @@ const authoritativeServers = (
     return [];
   });
 
-/** TXT values for `fqdn` straight from one nameserver (no caching). */
+/** TXT values requested from one nameserver (port 53 may be intercepted). */
 const resolveTxtAt = (
   dns: NodeDns,
   server: string,
@@ -150,10 +158,10 @@ export const resolveTxt = (
   );
 
 /**
- * Poll until `fqdn` carries `value` — at every authoritative nameserver
- * where `node:dns` is available, else at every DoH resolver — then wait
- * `delay`. Fails with {@link DnsPropagationTimeout} when polling exceeds
- * `timeout`; the delay afterwards is not counted against it.
+ * Wait `initialDelay`, then poll for the exact challenge value and wait
+ * `delay`. Explicit resolvers must all agree; automatic lookup accepts all
+ * discovered nameservers or a positive default DoH answer. Discovery and
+ * polling share `timeout`; the delays before and after are outside it.
  */
 export const waitForTxt = (
   fqdn: string,
@@ -168,33 +176,54 @@ export const waitForTxt = (
       1,
       Math.ceil(Duration.toMillis(timeout) / Duration.toMillis(interval)),
     );
-    const dns = yield* nodeDns;
-    const servers =
-      dns === undefined ? [] : yield* authoritativeServers(dns, fqdn);
-    const lookups: ReadonlyArray<
-      Effect.Effect<boolean, never, HttpClient.HttpClient>
-    > =
-      dns !== undefined && servers.length > 0
-        ? servers.map((server) =>
-            resolveTxtAt(dns, server, fqdn).pipe(
-              Effect.map((values) => values.includes(value)),
+    yield* Effect.sleep(options.initialDelay ?? "0 seconds");
+    const propagated = yield* Effect.gen(function* () {
+      // Explicit resolvers must work even when node:dns is available.
+      const dns = options.resolvers === undefined ? yield* nodeDns : undefined;
+      const servers =
+        dns === undefined
+          ? []
+          : yield* authoritativeServers(dns, fqdn).pipe(
+              Effect.timeout("5 seconds"),
+              Effect.orElseSucceed(() => [] as ReadonlyArray<string>),
+            );
+      const check = Effect.all(
+        {
+          direct: Effect.all(
+            dns === undefined
+              ? []
+              : servers.map((server) =>
+                  resolveTxtAt(dns, server, fqdn).pipe(
+                    Effect.map((values) => values.includes(value)),
+                  ),
+                ),
+            { concurrency: "unbounded" },
+          ),
+          doh: Effect.all(
+            (options.resolvers ?? DEFAULT_RESOLVERS).map((resolver) =>
+              resolveTxt(resolver, fqdn).pipe(
+                Effect.map((values) => values.includes(value)),
+              ),
             ),
-          )
-        : (options.resolvers ?? DEFAULT_RESOLVERS).map((resolver) =>
-            resolveTxt(resolver, fqdn).pipe(
-              Effect.map((values) => values.includes(value)),
-            ),
-          );
-    const check = Effect.all(lookups, { concurrency: "unbounded" }).pipe(
-      Effect.map((seen) => seen.length > 0 && seen.every(Boolean)),
-    );
-    const propagated = yield* check.pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced(interval),
-        until: (seen) => seen,
-        times: attempts,
-      }),
-      // The timeout covers polling only, not the settle delay after it.
+            { concurrency: "unbounded" },
+          ),
+        },
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.map(({ direct, doh }) =>
+          options.resolvers !== undefined
+            ? doh.length > 0 && doh.every(Boolean)
+            : (direct.length > 0 && direct.every(Boolean)) || doh.some(Boolean),
+        ),
+      );
+      return yield* check.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced(interval),
+          until: (seen) => seen,
+          times: attempts,
+        }),
+      );
+    }).pipe(
       Effect.timeoutOrElse({
         duration: timeout,
         orElse: () => Effect.fail(new DnsPropagationTimeout({ fqdn, value })),
