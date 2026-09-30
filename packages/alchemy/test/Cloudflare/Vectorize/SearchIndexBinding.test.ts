@@ -1,6 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
+import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
+import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -34,16 +37,9 @@ const logLevel = Effect.provideService(
 
 // Fresh workers.dev URLs take a few seconds to start serving 200s, and edge
 // propagation can still transiently 404/500 individual route hits after the
-// script is resolvable. Cap each backoff at 5s and stop after 12 attempts
-// (~45s worst case) so a genuine failure surfaces instead of hanging.
+// script is resolvable. Bound both the retry count and the entire request.
 const readinessRetry = {
-  schedule: Schedule.max([
-    Schedule.min([
-      Schedule.exponential("500 millis"),
-      Schedule.spaced("5 seconds"),
-    ]),
-    Schedule.recurs(12),
-  ]),
+  schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(8)]),
 } as const;
 
 const getJson = (url: string) =>
@@ -51,6 +47,7 @@ const getJson = (url: string) =>
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap((res) => res.json),
     Effect.retry(readinessRetry),
+    Effect.timeout("15 seconds"),
   );
 
 const postJson = (url: string) =>
@@ -58,76 +55,99 @@ const postJson = (url: string) =>
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap((res) => res.json),
     Effect.retry(readinessRetry),
+    Effect.timeout("15 seconds"),
   );
 
-/**
- * Drives the full Vectorize client surface against one worker and asserts.
- * `label` is the id prefix this worker uses (`effect` / `async`).
- */
-const exercise = (label: string, baseUrl: string) =>
+/** Drives the client surface using this worker's vector ID prefix. */
+const exercise = (
+  label: string,
+  baseUrl: string,
+  accountId: string,
+  indexName: string,
+) =>
   Effect.gen(function* () {
     // Gate on /health first to prove the script is resolvable.
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.timeout("5 seconds"),
       Effect.retry({
         schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(20),
+          Schedule.spaced("1 second"),
+          Schedule.recurs(8),
         ]),
       }),
+      Effect.timeout("15 seconds"),
     );
 
-    const upsertRes = yield* postJson(`${baseUrl}/upsert`);
+    const upsertRes = (yield* postJson(`${baseUrl}/upsert`)) as {
+      mutationId: string;
+    };
     expect(upsertRes).toMatchObject({ mutationId: expect.any(String) });
 
     const describeRes = yield* getJson(`${baseUrl}/describe`);
     expect(describeRes).toMatchObject({ dimensions: 32 });
 
-    // Mutations are async/eventually consistent — poll until this worker's
-    // three vectors are visible.
-    const queryBody = yield* poll({
-      description: `[${label}] GET /query returns the three upserted vectors`,
-      effect: getJson(`${baseUrl}/query`).pipe(
-        Effect.map((body) => body as { count: number; ids: string[] }),
+    // Observe processing and all read surfaces under one readiness budget.
+    // The fixture is the sole writer, so compare opaque mutation IDs exactly.
+    const { queryBody, getRes, filteredBody } = yield* waitForVectorize({
+      description: `[${label}] mutation ${upsertRes.mutationId} processed and visible to query, ID lookup and metadata filtering`,
+      effect: Effect.all(
+        {
+          progress: vectorize
+            .getIndexInfo({ accountId, indexName })
+            .pipe(Effect.timeout("10 seconds")),
+          queryBody: getJson(`${baseUrl}/query`).pipe(
+            Effect.map((body) => body as { count: number; ids: string[] }),
+          ),
+          getRes: getJson(`${baseUrl}/get`).pipe(
+            Effect.map((body) => body as { ids: string[] }),
+          ),
+          filteredBody: getJson(`${baseUrl}/query-filtered`).pipe(
+            Effect.map(
+              (body) =>
+                body as { count: number; ids: string[]; kinds: string[] },
+            ),
+          ),
+        },
+        { concurrency: "unbounded" },
       ),
-      predicate: (body) => body.count >= 3,
+      predicate: ({ progress, queryBody, getRes, filteredBody }) =>
+        progress.processedUpToMutation === upsertRes.mutationId &&
+        queryBody.count >= 3 &&
+        getRes.ids.length === 2 &&
+        filteredBody.ids.length === 1 &&
+        filteredBody.kinds.length === 1,
     });
     expect(queryBody.count).toBeGreaterThanOrEqual(3);
-    // The query vector equals `${label}-a` exactly, so it's the top match.
     expect(queryBody.ids[0]).toBe(`${label}-a`);
-
-    const getRes = yield* poll({
-      description: `[${label}] GET /get returns the two upserted vectors`,
-      effect: getJson(`${baseUrl}/get`).pipe(
-        Effect.map((body) => body as { ids: string[] }),
-      ),
-      predicate: (body) => body.ids.length === 2,
-    });
     expect(getRes).toEqual({ ids: [`${label}-a`, `${label}-b`] });
-
-    // Metadata-filtered query: only this worker's `kind: "second"` vector
-    // (`${label}-b`) should come back.
-    const filteredBody = yield* poll({
-      description: `[${label}] GET /query-filtered returns the second vector`,
-      effect: getJson(`${baseUrl}/query-filtered`).pipe(
-        Effect.map(
-          (body) => body as { count: number; ids: string[]; kinds: string[] },
-        ),
-      ),
-      predicate: (body) => body.ids.length === 1 && body.kinds.length === 1,
-    });
     expect(filteredBody.ids).toEqual([`${label}-b`]);
     expect(filteredBody.kinds).toEqual(["second"]);
-  }).pipe(logLevel);
+  }).pipe(logLevel, Effect.provide(CloudflareApiLive()));
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  Effect.gen(function* () {
+    yield* destroy(Stack);
+    const deployed = yield* deploy(Stack);
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    yield* waitForMetadata(accountId, deployed.indexName, [
+      {
+        propertyName: "kind",
+        indexType: "string",
+        mutationId: deployed.metadataMutationId,
+      },
+    ]);
+    return { ...deployed, accountId };
+  }).pipe(Effect.provide(CloudflareApiLive())),
+  { timeout: 210_000 },
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "effect-worker: SearchIndex(index) exercises the client surface",
   Effect.gen(function* () {
-    const { effectWorkerUrl } = yield* stack;
-    yield* exercise("effect", effectWorkerUrl);
+    const { effectWorkerUrl, accountId, indexName } = yield* stack;
+    yield* exercise("effect", effectWorkerUrl, accountId, indexName);
   }),
   {
     tags: [
@@ -136,15 +156,15 @@ test(
       "provider:cloudflare:worker",
       "live",
     ],
-    timeout: 240_000,
+    timeout: 210_000,
   },
 );
 
 test(
   "async-worker: env Vectorize binding exercises the client surface",
   Effect.gen(function* () {
-    const { asyncWorkerUrl } = yield* stack;
-    yield* exercise("async", asyncWorkerUrl);
+    const { asyncWorkerUrl, accountId, indexName } = yield* stack;
+    yield* exercise("async", asyncWorkerUrl, accountId, indexName);
   }),
   {
     tags: [
@@ -153,6 +173,6 @@ test(
       "provider:cloudflare:worker",
       "live",
     ],
-    timeout: 240_000,
+    timeout: 210_000,
   },
 );
