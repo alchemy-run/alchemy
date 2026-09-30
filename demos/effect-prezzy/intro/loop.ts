@@ -501,7 +501,7 @@ const compose: StepSpec[] = [
     omit: ["pool", "connect", "ret"],
     title: "The Database module starts with a Neon Postgres project",
     notes:
-      "Same shape as Files: a Layer whose constructor declares what it needs. First, a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
+      "Same shape as Files: an interface, then a Layer. The interface is just a SQL client, called Database. The Layer's constructor declares what it needs, starting with a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
   }),
   chat({
     snippet: "DbSteps.ts",
@@ -551,9 +551,9 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "HistoryLive sits on DatabaseLive and FilesLive",
     omit: ["service"],
-    emphasize: ["Layer.provide([DatabaseLive, FilesLive])", "yield* SqlClient.SqlClient", "yield* Files;"],
+    emphasize: ["Layer.provide([DatabaseLive, FilesLive])", "yield* Database;", "yield* Files;"],
     notes:
-      "Here's that line. The constructor asks for a SQL client and for Files, and Layer.provide says where they come from: the two blocks we just built. That last line is exactly the pyramid: History on top of Database and Files.",
+      "Here's that line. The constructor asks for Database and for Files, and Layer.provide says where they come from: the two blocks we just built. That last line is exactly the pyramid: History on top of Database and Files.",
   }),
   chat({
     ...HISTORY,

@@ -4,8 +4,12 @@ import * as Postgres from "alchemy/SQL/Postgres";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as SqlClient from "effect/sql/SqlClient";
 
 // #region show
+/** The Database module's interface: a SQL client. */
+export const Database = SqlClient.SqlClient;
+
 export const DatabaseLive = Layer.unwrap(
   Effect.gen(function* () {
     // #region stage

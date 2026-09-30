@@ -4,8 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as SqlClient from "effect/sql/SqlClient";
-import { DatabaseLive } from "./Db.ts";
+import { Database, DatabaseLive } from "./Db.ts";
 import { Files, FilesLive, type UploadError } from "./Files.ts";
 import { Messages, type Message } from "./Messages.ts";
 
@@ -25,7 +24,7 @@ export const HistoryLive = Layer.effect(
   History,
   Effect.gen(function* () {
     // #region deps
-    const sql = yield* SqlClient.SqlClient;
+    const sql = yield* Database;
     const files = yield* Files;
     // #endregion deps
     // #region consume
