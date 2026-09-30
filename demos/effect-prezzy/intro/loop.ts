@@ -352,11 +352,28 @@ const MODULE_BESIDE_CLASS = {
   file: "the same shape, as a class",
   src: {
     code: `class FilesR2 {
-  constructor(private files: Bucket) {}
+  private files: ReadWriteBucket;
+
+  constructor() {
+    const bucket = new Bucket("Files");
+    this.files = bucket.readWrite();
+  }
 
   upload(name: string, body: string) {
     return this.files.put(name, body);
   }
+}`,
+  },
+};
+/** History's dependencies, as a class receiving them. */
+const HISTORY_BESIDE_CLASS = {
+  file: "the same shape, as a class",
+  src: {
+    code: `class HistoryLive {
+  constructor(
+    private sql: Database,
+    private files: Files,
+  ) {}
 }`,
   },
 };
@@ -400,11 +417,12 @@ const modules: StepSpec[] = [
       omit: ["service"],
       quiet: true,
       notes:
-        "If that shape looks familiar, it's a class: a constructor that receives its dependencies, and methods that use them. The difference is that this constructor is an Effect, so it can declare cloud resources, and the type system tracks everything it needs.",
+        "If that shape looks familiar, it's a class: a constructor that creates what the object needs, and methods that use it. Files has no dependencies; its constructor creates the bucket itself, like new Bucket(), and takes read-write access to it. The difference is that this constructor is an Effect, so creating the bucket means declaring a real cloud resource, and the type system tracks everything it needs.",
     }),
     beside: MODULE_BESIDE_CLASS,
     links: [
-      { from: "R2.ReadWriteBucket(bucket)", to: "private files: Bucket", tone: "construct" },
+      { from: 'R2.Bucket("Files")', to: 'new Bucket("Files")', tone: "construct" },
+      { from: "R2.ReadWriteBucket(bucket)", to: "bucket.readWrite()", tone: "construct" },
       { from: "files.put(name, body)", to: "this.files.put(name, body)", tone: "runtime" },
     ],
   },
@@ -535,8 +553,13 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "It asks for Database and Files",
     omit: ["service", "queue", "consume", "append", "list", "attach"],
+    beside: HISTORY_BESIDE_CLASS,
+    links: [
+      { from: "yield* Database", to: "private sql: Database", tone: "construct" },
+      { from: "yield* Files", to: "private files: Files", tone: "construct" },
+    ],
     notes:
-      "The constructor asks for Database and for Files, the two modules we just built. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
+      "Unlike Files, History doesn't create anything yet: its constructor asks for Database and Files, the two modules we just built. As a class, those would be constructor parameters. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
     ...HISTORY,
