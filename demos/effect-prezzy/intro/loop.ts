@@ -639,28 +639,41 @@ FunctionName: chat-dev-sam-history`,
     notes:
       "One block is missing: observability. It doesn't sit on top of anything or under anything. It sits beside the stack, because every block reports to it. And it's built exactly like the others.",
   }),
+  chat({
+    snippet: "ChatTraced.ts",
+    file: WORKER.file,
+    group: WORKER.group,
+    fontSize: WORKER.fontSize,
+    title: "Collecting every trace and log is one line in the Worker",
+    emphasize: ["Axiom.Telemetry("],
+    notes:
+      "Start with the simplest version. One line in the Worker: Axiom.Telemetry. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
+  }),
+  chat({
+    snippet: "Telemetry.ts",
+    file: "src/Telemetry.ts",
+    group: "telemetry",
+    fontSize: 26,
+    title: "…sending to two Axiom datasets, with a token that can only write to them",
+    notes:
+      "Ingest, Traces and Logs are three Axiom resources: a dataset for traces, one for logs, and an ingest token that can only write to those two. At deploy, Telemetry binds their endpoints and the token to the Worker as secrets.",
+  }),
   ...[
     {
-      omit: ["dashboard", "monitor", "export"],
-      title: "Its constructor declares where telemetry goes…",
+      omit: ["dashboard", "monitor"],
+      title: "Production also needs dashboards and alarms, so move it into a Layer",
       notes:
-        "Here's the Observability module, on Axiom. Its constructor declares two Axiom datasets, one for traces and one for logs, and an ingest token that can only write to them.",
+        "Collecting is only half of it. Production also needs something that plots the data and something that wakes you up. So move that line into its own module: an Observability Layer that returns the same Axiom.Telemetry.",
     },
     {
-      omit: ["monitor", "export"],
-      title: "…a dashboard to plot it…",
-      notes: "Then a dashboard, with a chart of errors over time. It's a resource like any other, so it's deployed and versioned with the app.",
-    },
-    {
-      omit: ["export"],
-      title: "…a monitor that alerts on it…",
-      notes: "And a monitor that fires when errors pass a threshold. In production, that alert is one more failure that goes back to the agent.",
+      omit: ["monitor"],
+      title: "…with a dashboard that plots the errors…",
+      notes: "Its constructor declares a dashboard, with a chart of errors over time. It's a resource like any other, so it's deployed and versioned with the app.",
     },
     {
       omit: [],
-      title: "…and returns the exporter that ships every trace and log",
-      notes:
-        "Then it returns Axiom.Telemetry: an OpenTelemetry exporter pointed at those datasets with that token. At deploy it binds the endpoints and the token to the Worker as secrets.",
+      title: "…and a monitor that alerts on them",
+      notes: "And a monitor that fires when errors pass a threshold. In production, that alert is one more failure that goes back to the agent.",
     },
   ].map((step) =>
     chat({
@@ -678,10 +691,10 @@ FunctionName: chat-dev-sam-history`,
     file: WORKER.file,
     group: WORKER.group,
     fontSize: WORKER.fontSize,
-    title: "The Worker provides it beside the stack, so every module is traced",
-    emphasize: ["Effect.provide(ObservabilityLive)"],
+    title: "The Worker provides the Layer instead, beside the stack",
+    showRemoved: true,
     notes:
-      "Back in the Worker, one more line provides it beside the stack. Every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span, with no changes to any of them.",
+      "Back in the Worker, the Telemetry line becomes ObservabilityLive. Same traces and logs, and now the dashboard and the monitor deploy with the app.",
   }),
   pyramid({
     title: "The whole stack, with observability beside it",
