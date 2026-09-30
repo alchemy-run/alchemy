@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+type Response = HttpServerResponse.HttpServerResponse;
 import type { UploadError } from "./Files.ts";
 import { History } from "./History.ts";
 import Room from "./Room.ts";
@@ -13,7 +15,7 @@ import Room from "./Room.ts";
 export class Rooms extends Context.Service<
   Rooms,
   {
-    join(room: string, request: HttpServerRequest): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Alchemy.RuntimeContext>;
+    join(room: string, request: HttpServerRequest): Effect.Effect<Response, never, Alchemy.RuntimeContext>;
     attach(room: string, file: string, body: string): Effect.Effect<void, UploadError, Alchemy.RuntimeContext>;
     history(room: string): Effect.Effect<readonly string[], never, Alchemy.RuntimeContext>;
   }
