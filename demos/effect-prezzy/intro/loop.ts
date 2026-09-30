@@ -545,18 +545,27 @@ const compose: StepSpec[] = [
   chat({
     ...HISTORY,
     title: "History asks for Database and Files",
-    omit: ["service"],
+    omit: ["service", "consume"],
     emphasize: ["yield* Database;", "yield* Files;"],
     notes:
       "The constructor asks for Database and for Files, the two blocks beneath it. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
+    snippet: "Messages.ts",
+    file: "src/Messages.ts",
+    group: "messages",
+    fontSize: 30,
+    title: "Chat messages arrive on a queue called Messages",
+    notes:
+      "Where do the messages come from? A Cloudflare Queue called Messages. Every chat room will put what people say onto it, and each message is just a room name and some text. Declaring the queue is one line.",
+  }),
+  chat({
     ...HISTORY,
-    title: "Consuming a queue is declared in the constructor too",
+    title: "History consumes that queue into Postgres",
     omit: ["service"],
     emphasize: ["consumeQueueMessages", "Stream.runForEach", "const messages"],
     notes:
-      "History also consumes the Messages queue into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
+      "History reads that queue and inserts each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the Messages queue's consumer.",
   }),
   inline({
     group: "aws-sqs",
