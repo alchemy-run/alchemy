@@ -1379,7 +1379,7 @@ const EVENTS_TEMPLATE = `export default AWS.Lambda.Function(
     return {};
   }).pipe(Effect.provide(AWS.Lambda.⟨3⟩)),
 );`;
-const OBS_PLATFORMS = ["Axiom", "Cloudflare", "CloudWatch", "Datadog (someday)"];
+const OBS_PLATFORMS = ["Axiom", "CloudWatch", "Datadog (someday)"];
 const DATADOG_CODE = `export const ObservabilityLive = Layer.unwrap(
   Effect.gen(function* () {
     const apiKey = yield* Config.Redacted("DD_API_KEY");
@@ -1774,8 +1774,8 @@ Source: dynamodb:…:messages/stream`,
     "…and Foldkit. Twelve frameworks, same props, and on every cloud alchemy dev runs the framework's own dev server.",
   ),
   section(
-    "Four platforms, one observability Layer",
-    "Axiom · Cloudflare · CloudWatch · Datadog (someday)",
+    "Three platforms, one observability Layer",
+    "Axiom · CloudWatch · Datadog (someday)",
     "Last, the column beside the pyramid. Observability is a Layer like the rest, so the platform behind it is a choice.",
   ),
   ...[
@@ -1784,11 +1784,6 @@ Source: dynamodb:…:messages/stream`,
       title: "Observability is a Layer, so the platform is one swap away",
       notes:
         "Last, the pillar beside the pyramid. Observability is a Layer like the rest, so the platform behind it is a choice. Here's the Axiom version: datasets, a token, a dashboard, a monitor, and the exporter.",
-    },
-    {
-      snippet: "ObservabilityCloudflare.ts",
-      title: "…Cloudflare's own Workers Observability is one line…",
-      notes: "Cloudflare has observability built into Workers. That Layer is one line, and it sends the same spans to Cloudflare's dashboard.",
     },
     {
       snippet: "../anywhere/ObservabilityCloudWatch.ts",
@@ -1814,7 +1809,7 @@ Source: dynamodb:…:messages/stream`,
     title: "…and a Datadog Layer would have exactly the same shape",
     code: DATADOG_CODE,
     emphasize: ["Datadog.Dashboard", "Datadog.Monitor", "Telemetry.layerOtlp"],
-    reel: { items: OBS_PLATFORMS, at: 3 },
+    reel: { items: OBS_PLATFORMS, at: 2 },
     notes:
       "Datadog isn't an Alchemy provider yet, so this one is hypothetical. But it would be the same shape: a dashboard and a monitor in the constructor, and an exporter at the end. The exporter part is real today: Telemetry.layerOtlp sends to any OpenTelemetry backend.",
   }),
