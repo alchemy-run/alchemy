@@ -15,7 +15,7 @@ export const ObservabilityLive = Layer.unwrap(
     const token = yield* Axiom.ApiToken("Ingest", { name: "chat-ingest", datasetCapabilities: ingest });
     // #region dashboard
 
-    yield* Axiom.Dashboard("Chat", {
+    yield* Axiom.Dashboard("Dashboard", {
       dashboard: { name: "Chat", owner: "", charts: [chart], layout: [{ i: "errors", x: 0, y: 0, w: 12, h: 6 }], ...window },
     });
     // #endregion dashboard
