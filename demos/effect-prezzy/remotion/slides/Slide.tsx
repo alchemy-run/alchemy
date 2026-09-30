@@ -78,11 +78,13 @@ const TitleLayout = ({ props }: SlideProps) => (
           margin: "44px 0 0",
           fontFamily: serif,
           fontWeight: 600,
-          fontSize: 132,
+          // A "\n" in the heading sets the lines exactly; sized so each fits on one.
+          fontSize: props.heading.includes("\n") ? 118 : 132,
           lineHeight: 1.02,
           letterSpacing: -2,
           color: brand.fg,
           textWrap: "balance",
+          whiteSpace: props.heading.includes("\n") ? "pre" : undefined,
         }}
       >
         {props.heading}

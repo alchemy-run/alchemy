@@ -111,10 +111,10 @@ const opening: StepSpec[] = [
   {
     kind: "slide",
     layout: "title",
-    title: "The tightest feedback loop for agents",
+    title: "The tightest feedback loop from edit to production",
     eyebrow: "Alchemy",
-    heading: "The tightest feedback loop for agents",
-    subtitle: "One program and one test file, from an edit to production",
+    heading: "The tightest feedback loop\nfrom edit to production",
+    subtitle: "One program and one test file for your whole cloud app",
     notes:
       "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
   },
