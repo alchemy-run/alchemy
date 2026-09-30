@@ -1,8 +1,8 @@
 import * as Http from "alchemy/Http";
 import * as Layer from "effect/Layer";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import type * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import { ShortyApi } from "./ShortyApi.ts";
 
 /** Serve ShortyApi from a Worker's fetch, given the handlers for its endpoints. */

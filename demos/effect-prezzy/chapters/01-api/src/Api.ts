@@ -2,8 +2,8 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { LinkNotFound, newCode, type Link } from "./Link.ts";
 import { ShortyApi } from "./ShortyApi.ts";
 
