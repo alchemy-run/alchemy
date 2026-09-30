@@ -7,10 +7,15 @@ export default AWS.Lambda.Function(
   "Archive",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const source = yield* AWS.DynamoDB.Table("Messages", { partitionKey: "room", attributes: { room: "S" } });
+    const source = yield* AWS.DynamoDB.Table("Messages", {
+      partitionKey: "room",
+      attributes: { room: "S" },
+    });
 
-    yield* AWS.DynamoDB.consumeTableChanges(source, { streamViewType: "NEW_IMAGE" }, (records) =>
-      records.pipe(Stream.runForEach((record) => Effect.log(record))),
+    yield* AWS.DynamoDB.consumeTableChanges(
+      source,
+      { streamViewType: "NEW_IMAGE" },
+      (records) => records.pipe(Stream.runForEach(Effect.log)),
     );
 
     return {};

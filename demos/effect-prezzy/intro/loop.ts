@@ -1355,19 +1355,6 @@ const web = (cloud: string, framework: string, title: string, notes: string) =>
     notes,
   });
 
-const EVENTS_TEMPLATE = `export default AWS.Lambda.Function(
-  "Archive",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const source = yield* ⟨0⟩;
-
-    yield* ⟨1⟩(source, ⟨2⟩(records) =>
-      records.pipe(Stream.runForEach((record) => Effect.log(record))),
-    );
-
-    return {};
-  }).pipe(Effect.provide(AWS.Lambda.⟨3⟩)),
-);`;
 const OBS_PLATFORMS = ["Axiom", "CloudWatch", "Datadog (someday)"];
 const DATADOG_CODE = `export const ObservabilityLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -1647,30 +1634,26 @@ resource: chat-dev-sam-files`,
     "GitHub repositories · SQS · Kinesis · DynamoDB Streams",
     "Events don't have to come from your own cloud. Anything that can call a webhook can be an event source.",
   ),
-  chat({
-    snippet: "Commits.ts",
-    file: "src/Commits.ts",
-    group: "commits",
-    fontSize: 24,
-    title: "A GitHub repository can be an event source",
-    emphasize: ["GitHub.consumeRepositoryEvents", "events: [\"push\"]"],
-    beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# GitHub webhook on alchemy-run/alchemy
-url: https://chat-dev-sam-commits.workers.dev/…
-events: [push]`,
-      },
-    },
-    notes:
-      "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at this Worker.",
-  }),
   ...[
     {
-      values: ['AWS.SQS.Queue("Messages")', "AWS.SQS.consumeQueueMessages", "", "QueueEventSource"],
-      check: "EventsSqs.ts",
-      title: "On AWS, the same line consumes an SQS queue…",
+      snippet: "EventsGitHub.ts",
+      title: "A GitHub repository can be an event source",
+      emphasize: ["Config.Redacted", "GitHub.consumeRepositoryEvents", "GitHubRepositoryEventSourceLive"],
+      generated: `# GitHub webhook (created on alchemy-run/chat)
+url: https://chat-dev-sam-archive.workers.dev
+       /__alchemy/github/alchemy-run/chat
+events: [push]
+secret: ••••••••
+
+# Worker secret, to verify each delivery
+ALCHEMY_GITHUB_WEBHOOK_SECRET_alchemy_run_chat`,
+      notes:
+        "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at a path on this Worker, and gives it the secret. The same secret is bound to the Worker, so it can verify every delivery really came from GitHub. Each event is typed by its name.",
+    },
+    {
+      snippet: "EventsSqs.ts",
+      emphasize: ["AWS.SQS.Queue", "AWS.SQS.consumeQueueMessages", "QueueEventSource"],
+      title: "…an SQS queue on AWS…",
       generated: `# IAM policy
 - sqs:ReceiveMessage
 - sqs:DeleteMessage
@@ -1681,8 +1664,8 @@ Source: sqs:…:messages`,
       notes: "Back on AWS, event sources all look alike. Consume an SQS queue: the call grants the three consumer permissions and creates the event source mapping that invokes the Lambda.",
     },
     {
-      values: ['AWS.Kinesis.Stream("Messages")', "AWS.Kinesis.consumeStreamRecords", '{ startingPosition: "LATEST" }, ', "StreamEventSource"],
-      check: "EventsKinesis.ts",
+      snippet: "EventsKinesis.ts",
+      emphasize: ["AWS.Kinesis.Stream", "AWS.Kinesis.consumeStreamRecords", "StreamEventSource"],
       title: "…a Kinesis stream…",
       generated: `# IAM policy
 - kinesis:GetRecords
@@ -1695,13 +1678,8 @@ Source: kinesis:…:stream/messages`,
       notes: "A Kinesis stream: swap the resource and the consume call. The permissions and the mapping change to match, the handler doesn't.",
     },
     {
-      values: [
-        'AWS.DynamoDB.Table("Messages", { partitionKey: "room", attributes: { room: "S" } })',
-        "AWS.DynamoDB.consumeTableChanges",
-        '{ streamViewType: "NEW_IMAGE" }, ',
-        "TableEventSource",
-      ],
-      check: "EventsDynamo.ts",
+      snippet: "EventsDynamo.ts",
+      emphasize: ["AWS.DynamoDB.Table", "AWS.DynamoDB.consumeTableChanges", "TableEventSource"],
       title: "…or every change to a DynamoDB table",
       generated: `# Table stream: NEW_IMAGE
 
@@ -1716,16 +1694,15 @@ Source: dynamodb:…:messages/stream`,
       notes: "Or every change to a DynamoDB table. This one even turns on the table's stream for you, then grants the stream permissions and creates the mapping. Four event sources, one shape.",
     },
   ].map((ev, at) =>
-    roll({
-      group: "events",
+    chat({
+      snippet: `../anywhere/${ev.snippet}`,
       file: "src/Archive.ts",
-      fontSize: 17,
+      group: "events",
+      fontSize: 20,
       title: ev.title,
-      template: EVENTS_TEMPLATE,
-      values: ev.values,
-      check: `anywhere/${ev.check}`,
-      beside: { file: "generated at deploy", code: ev.generated },
-      reel: { items: ["SQS", "Kinesis", "DynamoDB Streams"], at },
+      emphasize: ev.emphasize,
+      beside: { file: "generated at deploy", lang: "yaml", src: { code: ev.generated } },
+      reel: { items: ["GitHub", "SQS", "Kinesis", "DynamoDB Streams"], at },
       notes: ev.notes,
     }),
   ),

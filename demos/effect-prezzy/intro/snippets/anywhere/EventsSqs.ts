@@ -9,8 +9,9 @@ export default AWS.Lambda.Function(
   Effect.gen(function* () {
     const source = yield* AWS.SQS.Queue("Messages");
 
-    yield* AWS.SQS.consumeQueueMessages(source, (records) =>
-      records.pipe(Stream.runForEach((record) => Effect.log(record))),
+    yield* AWS.SQS.consumeQueueMessages(
+      source,
+      (records) => records.pipe(Stream.runForEach(Effect.log)),
     );
 
     return {};

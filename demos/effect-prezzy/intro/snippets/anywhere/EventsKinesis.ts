@@ -9,8 +9,10 @@ export default AWS.Lambda.Function(
   Effect.gen(function* () {
     const source = yield* AWS.Kinesis.Stream("Messages");
 
-    yield* AWS.Kinesis.consumeStreamRecords(source, { startingPosition: "LATEST" }, (records) =>
-      records.pipe(Stream.runForEach((record) => Effect.log(record))),
+    yield* AWS.Kinesis.consumeStreamRecords(
+      source,
+      { startingPosition: "LATEST" },
+      (records) => records.pipe(Stream.runForEach(Effect.log)),
     );
 
     return {};
