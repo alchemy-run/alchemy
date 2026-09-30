@@ -1638,17 +1638,21 @@ resource: chat-dev-sam-files`,
     {
       snippet: "EventsGitHub.ts",
       title: "A GitHub repository can be an event source",
-      emphasize: ["Config.Redacted", "GitHub.consumeRepositoryEvents", "GitHubRepositoryEventSourceLive"],
-      generated: `# GitHub webhook (created on alchemy-run/chat)
+      emphasize: ["GitHub.consumeRepositoryEvents", "GitHubRepositoryEventSourceLive"],
+      generated: `# Random secret, generated once and kept in state
+text: *****
+
+# GitHub webhook on alchemy-run/chat
 url: https://chat-dev-sam-archive.workers.dev
        /__alchemy/github/alchemy-run/chat
 events: [push]
-secret: ••••••••
+content_type: json
+secret: *****
 
-# Worker secret, to verify each delivery
-WEBHOOK_SECRET=*****`,
+# Worker secret binding, to verify each delivery
+ALCHEMY_GITHUB_WEBHOOK_SECRET_alchemy_run_chat=*****`,
       notes:
-        "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at a path on this Worker, and gives it the secret. The same secret is bound to the Worker, so it can verify every delivery really came from GitHub. Each event is typed by its name.",
+        "Events don't have to come from a cloud. A GitHub repository is an event source too. You don't manage a secret: at deploy, the binding generates a random one, creates the webhook on the repository pointed at a path on this Worker, and binds the same secret to the Worker, so it can verify every delivery really came from GitHub. Each event is typed by its name.",
     },
     {
       snippet: "EventsSqs.ts",
