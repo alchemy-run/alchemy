@@ -303,10 +303,10 @@ const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms,
 /** Beside each row, the code that puts that block on the ones beneath it. */
 const PROVIDES = {
   // Line one is Database's, line two is Files'; Files alone keeps its line.
-  files: { layer: "infra", text: "\nconst FilesLive = Layer.effect(Files, …)", code: true },
+  files: { layer: "infra", text: "\nconst FilesR2 = Layer.effect(Files, …)", code: true },
   bottom: {
     layer: "infra",
-    text: "const DatabaseLive = Layer.unwrap(…)\nconst FilesLive = Layer.effect(Files, …)",
+    text: "const DatabaseLive = Layer.unwrap(…)\nconst FilesR2 = Layer.effect(Files, …)",
     code: true,
   },
   history: { layer: "config", text: "const HistoryLive = Layer.effect(History, …)", code: true },
@@ -318,7 +318,7 @@ const WIRED = [
   { layer: "web", text: "Effect.provide(", code: true },
   { layer: "api", text: "  RoomsLive.pipe(\n    Layer.provide(RoomLive),", code: true },
   { layer: "config", text: "    Layer.provide(HistoryLive),", code: true },
-  { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesLive]),\n  ),\n)", code: true },
+  { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesR2]),\n  ),\n)", code: true },
 ];
 /** The chat app's pyramid, rebuilt from the modules implemented so far. */
 const built = (title: string, bricks: typeof ALL_BRICKS, notes: string, side?: PyramidSpec["side"]): PyramidSpec =>
@@ -329,7 +329,7 @@ const FILES = { snippet: "Files.ts", file: "src/Files.ts", group: "files", fontS
 const MODULE_BESIDE_CLASS = {
   file: "the same shape, as a class",
   src: {
-    code: `class FilesLive {
+    code: `class FilesR2 {
   constructor(private files: Bucket) {}
 
   upload(name: string, body: string) {
@@ -342,7 +342,7 @@ const modules: StepSpec[] = [
   built(
     "We'll build the chat app as blocks like this, starting with Files",
     [BRICKS.files],
-    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. In code, that block is a Layer called FilesLive. Let's write it.",
+    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. In code, that block is a Layer called FilesR2. Let's write it.",
     [PROVIDES.files],
   ),
   chat({
@@ -608,9 +608,9 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(RoomLive)", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesLive])"],
+    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(RoomLive)", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesR2])"],
     notes:
-      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesLive. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
+      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
@@ -629,7 +629,7 @@ FunctionName: chat-dev-sam-history`,
     bricks: ALL_BRICKS,
     side: WIRED,
     notes:
-      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. So the whole thing, infrastructure to frontend, is one program made of Layers.",
+      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesR2. So the whole thing, infrastructure to frontend, is one program made of Layers.",
   }),
   pyramid({
     title: "Observability is a block too, beside the whole stack",

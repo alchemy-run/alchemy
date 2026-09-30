@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { DatabaseLive } from "./Db.ts";
-import { FilesLive } from "./Files.ts";
+import { FilesR2 } from "./Files.ts";
 import { HistoryLive } from "./History.ts";
 import { ObservabilityLive } from "./Observability.ts";
 import { RoomLive } from "./Room.ts";
@@ -34,7 +34,7 @@ export default Cloudflare.Worker(
       RoomsLive.pipe(
         Layer.provide(RoomLive),
         Layer.provide(HistoryLive),
-        Layer.provide([DatabaseLive, FilesLive]),
+        Layer.provide([DatabaseLive, FilesR2]),
       ),
     ),
     Effect.provide(ObservabilityLive),
