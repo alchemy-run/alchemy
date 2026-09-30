@@ -175,7 +175,7 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
             position: "absolute",
             left: 110,
             right: 110,
-            top: step.reel.items.length > 8 ? 900 : 960,
+            top: 985,
             display: "flex",
             flexWrap: "wrap",
             rowGap: 14,

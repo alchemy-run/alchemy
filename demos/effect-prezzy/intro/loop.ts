@@ -1157,7 +1157,7 @@ const HOST_TEMPLATE = `export default ⟨0⟩(
     };
   }).pipe(Effect.provide(⟨2⟩)),
 );`;
-const HOSTS = ["Cloudflare Workers", "AWS Lambda", "Kubernetes on GKE"];
+const HOSTS = ["Workers", "Lambda", "ECS", "Cloud Run", "GKE", "Fly", "Railway", "Hetzner", "Neon"];
 const host = (at: number, title: string, values: string[], check: string, generated: string, notes: string) =>
   roll({
     group: "hosts",
@@ -1169,6 +1169,36 @@ const host = (at: number, title: string, values: string[], check: string, genera
     check: `anywhere/${check}`,
     beside: { file: "generated at deploy", code: generated },
     reel: { items: HOSTS, at },
+    notes,
+  });
+
+const JOB_TEMPLATE = `export default ⟨0⟩(
+  "Report",
+  Effect.gen(function* () {
+    return { main: import.meta.url⟨1⟩ };
+  }),
+  Effect.gen(function* () {
+    const files = yield* Files;
+    return {
+      run: Effect.gen(function* () {
+        const report = \`generated at \${new Date().toISOString()}\`;
+        yield* files.upload("report.txt", report);
+      }),
+    };
+  }).pipe(Effect.provide(⟨2⟩)),
+);`;
+const JOBS = ["ECS Task", "Cloud Run Job", "Kubernetes Job"];
+const job = (at: number, title: string, values: string[], check: string, generated: string, notes: string) =>
+  roll({
+    group: "jobs",
+    file: "src/Report.ts",
+    fontSize: 24,
+    title,
+    template: JOB_TEMPLATE,
+    values,
+    check: `anywhere/${check}`,
+    beside: { file: "generated at deploy", code: generated },
+    reel: { items: JOBS, at },
     notes,
   });
 
@@ -1252,14 +1282,112 @@ Resource: arn:aws:s3:::chat-dev-sam-files/*`,
   ),
   host(
     2,
-    "…or on Kubernetes, in Google Cloud",
+    "…as a container on ECS…",
+    ["AWS.ECS.Service", ", cluster: yield* Cluster, port: 3000", "FilesS3"],
+    "ApiEcs.ts",
+    `# IAM policy on the ECS task role
+Effect: Allow
+Action: s3:PutObject
+Resource: arn:aws:s3:::chat-dev-sam-files/*`,
+    "Or a long-running container on ECS. Same S3 Layer, and the same policy, now on the task role instead of the Lambda's.",
+  ),
+  host(
+    3,
+    "…on Cloud Run…",
+    ["GCP.Run.Service", "", "FilesGCS"],
+    "ApiRun.ts",
+    `# IAM binding for the service's account
+role: roles/storage.objectUser
+resource: chat-dev-sam-files`,
+    "Google Cloud Run, with Cloud Storage. The binding becomes a Google IAM role on the bucket for the service's account.",
+  ),
+  host(
+    4,
+    "…on Kubernetes, in Google Cloud…",
     ["Kubernetes.Deployment", ", cluster: yield* Gke, port: 3000", "FilesGCS"],
     "ApiGke.ts",
     `# IAM binding for the Pod's ServiceAccount
 role: roles/storage.objectUser
 member: principal://…/sa/api
 resource: chat-dev-sam-files`,
-    "Or a Kubernetes Deployment on a GKE cluster, with Cloud Storage. Same body again. The binding becomes a Google IAM role granted to the Pod's ServiceAccount through Workload Identity: no keys, no YAML.",
+    "Or a Kubernetes Deployment on GKE. Same Layer, but now the role goes to the Pod's ServiceAccount through Workload Identity: no keys, no YAML.",
+  ),
+  host(
+    5,
+    "…on Fly…",
+    ["Fly.Service", "", "FilesTigris"],
+    "ApiFly.ts",
+    `# Tigris bucket, attached to the Fly app
+secrets:
+  BUCKET_NAME: chat-dev-sam-files
+  AWS_ENDPOINT_URL_S3: https://fly.storage.tigris.dev
+  AWS_ACCESS_KEY_ID: tid_…`,
+    "Fly, with a Tigris bucket. The binding attaches the bucket to the Fly app and sets its credentials as secrets.",
+  ),
+  host(
+    6,
+    "…on Railway…",
+    ["Railway.Service", ", project: yield* Chat", "FilesRailway"],
+    "ApiRailway.ts",
+    `# Railway service variables
+BUCKET_NAME: chat-dev-sam-files
+AWS_ENDPOINT_URL: https://…
+AWS_ACCESS_KEY_ID: …`,
+    "Railway, with a Railway bucket. The binding writes the bucket's name and credentials into the service's variables.",
+  ),
+  host(
+    7,
+    "…on a Hetzner server, with a mounted volume…",
+    ["Hetzner.Service", ", server: yield* Box, port: 3000", "FilesVolume"],
+    "ApiHetzner.ts",
+    `# systemd unit on the Box server
+ExecStart: bun /opt/api/main.js
+
+# Volume attached and mounted
+Files → /files (ext4, 10 GB)`,
+    "A box you rent from Hetzner. The API runs as a systemd unit, and Files is a Hetzner Volume mounted at /files, so uploads are just files on disk. Same interface, completely different storage.",
+  ),
+  host(
+    8,
+    "…or as a Neon Function, and the body never changed",
+    ["Neon.Function", ", branch: yield* Main", "FilesNeon"],
+    "ApiNeon.ts",
+    `# Function environment
+AWS_ENDPOINT_URL_S3: https://…neon…
+AWS_ACCESS_KEY_ID: …  # scoped to Files`,
+    "Or a Neon Function, with a Neon bucket. Nine hosts. The props change, the Files Layer changes, and the request handler never changed once.",
+  ),
+  job(
+    0,
+    "Background jobs have the same shape, with run instead of fetch",
+    ["AWS.ECS.Task", "", "FilesS3"],
+    "JobEcs.ts",
+    `# IAM policy on the task role
+Effect: Allow
+Action: s3:PutObject
+Resource: arn:aws:s3:::chat-dev-sam-files/*`,
+    "Not everything serves requests. A job runs once and exits. Same shape: props, then an Effect that returns run instead of fetch. Here it's an ECS task that writes a report through Files.",
+  ),
+  job(
+    1,
+    "…as a Cloud Run Job…",
+    ["GCP.Run.Job", "", "FilesGCS"],
+    "JobRun.ts",
+    `# IAM binding for the job's account
+role: roles/storage.objectUser
+resource: chat-dev-sam-files`,
+    "The same job on Cloud Run Jobs, with Cloud Storage.",
+  ),
+  job(
+    2,
+    "…or as a Kubernetes Job",
+    ["Kubernetes.Job", ", cluster: yield* Gke", "FilesGCS"],
+    "JobGke.ts",
+    `# IAM binding for the Job's ServiceAccount
+role: roles/storage.objectUser
+member: principal://…/sa/report
+resource: chat-dev-sam-files`,
+    "Or a Kubernetes Job on GKE. Services and jobs, on nine hosts, and it's all the same program.",
   ),
   postgres(
     0,
