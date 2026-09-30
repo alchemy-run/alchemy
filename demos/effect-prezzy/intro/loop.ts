@@ -696,6 +696,19 @@ FunctionName: chat-dev-sam-history`,
     notes:
       "Back in the Worker, the Telemetry line becomes ObservabilityLive. Same traces and logs, and now the dashboard and the monitor deploy with the app.",
   }),
+  {
+    kind: "dash",
+    title: "Deploy, and the dashboard is already there",
+    notes:
+      "Here's roughly what that gets you, mocked up. Deploy, and the dashboard exists: requests and errors over time, and every trace, broken down by module, because every module is already traced. Nobody clicked anything in a console.",
+  },
+  {
+    kind: "dash",
+    title: "When errors spike, the monitor fires, and the agent hears about it",
+    alert: true,
+    notes:
+      "And when something breaks in production, say uploads start timing out, the errors cross the threshold and the monitor fires. The trace points straight at Files.upload. That alert is one more failure that goes back to the agent, from production this time.",
+  },
   pyramid({
     title: "The whole stack, with observability beside it",
     layers: CHAT_LAYERS,

@@ -368,7 +368,18 @@ export interface ArchStep {
   frames: number;
 }
 
+/** A mocked observability dashboard (hypothetical UI), optionally with its monitor firing. */
+export interface DashStep {
+  kind: "dash";
+  title: string;
+  notes: string;
+  /** Show the monitor alert firing, and the error spike that triggered it. */
+  alert?: boolean;
+  frames: number;
+}
+
 export type IntroStep =
+  | DashStep
   | ArchStep
   | RollStep
   | CodeStep
