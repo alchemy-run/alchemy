@@ -946,6 +946,12 @@ const theLoop: StepSpec[] = [
 
 // ── act 3: one test for the whole app, local or live ─────────────────────
 const TEST = { snippet: "chat.test.ts", file: "test/chat.test.ts", group: "test", fontSize: 27 };
+const LOCAL_RUN = [
+  $("LOCAL=1 pnpm test"),
+  `${T.ok}${T.bold}▲ start${T.reset}    ${T.dim}Chat →${T.reset} ${T.bold}http://localhost:1337${T.reset}`,
+  PASSED,
+  `${T.red}${T.bold}▼ stop${T.reset}     ${T.dim}Chat${T.reset}`,
+];
 const tests: StepSpec[] = [
   loop(
     "Next, tests that prove the whole app works",
@@ -1004,12 +1010,16 @@ const tests: StepSpec[] = [
   }),
   term({
     group: "test-run",
+    title: "LOCAL=1 runs it on emulated services",
+    lines: [...LOCAL_RUN],
+    notes:
+      "With LOCAL=1, the same test starts the whole app on emulated services on your machine, runs, and stops it. It's fast and free, so the agent can run it after every change.",
+  }),
+  term({
+    group: "test-run",
     title: "Emulated for speed, live for the real thing",
     lines: [
-      $("LOCAL=1 pnpm test"),
-      `${T.ok}${T.bold}▲ start${T.reset}    ${T.dim}Chat →${T.reset} ${T.bold}http://localhost:1337${T.reset}`,
-      PASSED,
-      `${T.red}${T.bold}▼ stop${T.reset}     ${T.dim}Chat${T.reset}`,
+      ...LOCAL_RUN,
       ``,
       $("pnpm test"),
       ...DEPLOYED,
@@ -1018,7 +1028,7 @@ const tests: StepSpec[] = [
     ],
     fresh: 7,
     notes:
-      "Both are one command away. Emulated is fast and free, so the agent can run it after every change. Live catches what emulation can't, like permissions and real network behavior.",
+      "Without it, the same command runs live. Both are one command away: emulated after every change, live to catch what emulation can't, like permissions and real network behavior.",
   }),
 ];
 
