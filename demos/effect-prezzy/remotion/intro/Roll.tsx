@@ -46,13 +46,14 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
   const t = interpolate(local, [0, 12], [0, 1], { ...clamp, easing: Easing.bezier(0.3, 0, 0.1, 1) });
   const enter = same ? 1 : interpolate(local, [0, 8], [0, 1], clamp);
 
+  // Same place as every code slide: file label at the top-left of the code area, code
+  // below it. Nothing is centred, so the code never moves from one step to the next.
   const widest = Math.max(...step.lines.map(length));
   const codeW = widest * size * CHAR;
-  const besideW = step.beside ? Math.max(...step.beside.lines.map(length)) * 24 * CHAR : 0;
-  const gap = step.beside ? 90 : 0;
-  const left = Math.max(110, (1920 - codeW - gap - besideW) / 2);
-  const codeH = step.lines.length * lh;
-  const top = Math.max(190, 170 + (step.reel ? 740 : 800) / 2 - codeH / 2);
+  const gap = 90;
+  const left = 140;
+  const top = 260;
+  const labelTop = 170;
 
   const renderLine = (line: Token[], i: number) => {
     const here = step.slots.map((slot, k) => ({ slot, k })).filter(({ slot }) => slot.line === i);
@@ -108,7 +109,7 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
   return (
     <div style={{ position: "absolute", inset: 0, opacity: enter }}>
       {step.file ? (
-        <div style={{ position: "absolute", left, top: top - 64, fontFamily: mono, fontSize: 22, color: brand.fgMuted }}>{step.file}</div>
+        <div style={{ position: "absolute", left: 110, top: labelTop, fontFamily: mono, fontSize: 22, color: brand.fgMuted }}>{step.file}</div>
       ) : null}
       <div style={{ position: "absolute", left, top, fontFamily: mono, fontSize: size, lineHeight: `${lh}px`, color: brand.fg }}>
         {step.lines.map(renderLine)}
@@ -116,7 +117,7 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
 
       {step.beside ? (
         <div style={{ position: "absolute", left: left + codeW + gap, top, opacity: besideIn, transform: `translateY(${(1 - besideIn) * 10}px)` }}>
-          <div style={{ fontFamily: mono, fontSize: 22, color: brand.fgMuted, position: "absolute", top: -64 }}>{step.beside.file}</div>
+          <div style={{ fontFamily: mono, fontSize: 22, color: brand.fgMuted, position: "absolute", top: labelTop - top }}>{step.beside.file}</div>
           <div style={{ fontFamily: mono, fontSize: 24, lineHeight: `${24 * LINE}px`, whiteSpace: "pre" }}>
             {step.beside.lines.map((line, i) => (
               <div key={i}>
@@ -132,11 +133,9 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
         <div
           style={{
             position: "absolute",
-            left: 0,
-            right: 0,
-            top: 950,
+            left: 110,
+            top: 960,
             display: "flex",
-            justifyContent: "center",
             gap: 44,
             fontFamily: sans,
             fontSize: 30,
