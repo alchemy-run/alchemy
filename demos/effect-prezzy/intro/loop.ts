@@ -477,13 +477,52 @@ const compose: StepSpec[] = [
     [PROVIDES.bottom],
   ),
   chat({
+    snippet: "DbSteps.ts",
+    file: "src/Db.ts",
+    group: "db",
+    fontSize: 25,
+    omit: ["pool", "connect", "ret"],
+    title: "The Database module starts with a Neon Postgres project",
+    notes:
+      "Same shape as Files: a Layer whose constructor declares what it needs. First, a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
+  }),
+  chat({
+    snippet: "DbSteps.ts",
+    file: "src/Db.ts",
+    group: "db",
+    fontSize: 25,
+    omit: ["connect", "ret"],
+    title: "Hyperdrive puts a connection pool in front of it",
+    notes:
+      "Workers are short-lived, so opening a Postgres connection on every request is slow. Hyperdrive keeps a pool of connections near the database. Its origin is the project's origin: one resource's output is the next one's input.",
+  }),
+  chat({
+    snippet: "DbSteps.ts",
+    file: "src/Db.ts",
+    group: "db",
+    fontSize: 25,
+    omit: ["ret"],
+    title: "Connect binds that pool to whichever Worker uses this module",
+    notes:
+      "Connect is a binding, like ReadWriteBucket was for Files. At deploy it adds the Hyperdrive pool to the Worker that ends up using this module. At runtime it hands back the pool's connection string.",
+  }),
+  chat({
+    snippet: "DbSteps.ts",
+    file: "src/Db.ts",
+    group: "db",
+    fontSize: 25,
+    title: "The constructor returns a SQL client for the rest of the app",
+    notes:
+      "Then the constructor returns a Postgres Layer built from that connection string. That's why this is Layer.unwrap: the constructor's result is itself a Layer, and anything above it just asks for a SQL client.",
+  }),
+  chat({
     snippet: "Db.ts",
     file: "src/Db.ts",
     group: "db",
     fontSize: 25,
-    title: "The Database module declares a Neon database behind Hyperdrive",
+    title: "…and it provides how Connect works on a Worker",
     notes:
-      "Same idea as Files: its constructor declares a Neon Postgres project and a Hyperdrive pool in front of it, binds the pool to the Worker, and provides a SQL client built from the pool's connection string.",
+      "Last line: ConnectBinding is the Worker implementation of Connect, the native Hyperdrive binding. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one block.",
   }),
   built(
     "History goes on top of both",
