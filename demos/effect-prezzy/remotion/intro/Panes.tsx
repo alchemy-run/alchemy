@@ -58,7 +58,8 @@ const Window = ({ children, header }: { children: React.ReactNode; header: React
 export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?: IntroStep; local: number }) => {
   const same = prev?.kind === "terminal" && prev.group === step.group;
   const firstNew = step.lines.length - step.fresh;
-  const size = 26;
+  // 26px fits about 20 lines in the pane; longer output shrinks to fit.
+  const size = Math.min(26, Math.floor(850 / (step.lines.length * 1.5 + 2)));
   return (
     <Window
       header={
