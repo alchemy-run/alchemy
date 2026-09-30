@@ -1182,7 +1182,7 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     group: "stack",
     fontSize: 22,
     title: "The Stack comments the preview link on the pull request",
-    emphasize: ["GitHub.Comment", "Config.Int", "if (pullRequest)", "issueNumber: pullRequest", "Preview deployed", "GitHub.providers"],
+    emphasize: ["GitHub.Comment", "Config.Int", "Config.option", "Config.map", "if (pullRequest)", "owner:", "repository:", "issueNumber: pullRequest", "Preview deployed", "GitHub.providers"],
     notes:
       "A GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
   }),
