@@ -1654,44 +1654,76 @@ WEBHOOK_SECRET=*****`,
       snippet: "EventsSqs.ts",
       emphasize: ["AWS.SQS.Queue", "AWS.SQS.consumeQueueMessages", "QueueEventSource"],
       title: "…an SQS queue on AWS…",
-      generated: `# IAM policy
-- sqs:ReceiveMessage
-- sqs:DeleteMessage
-- sqs:GetQueueAttributes
+      generated: `# IAM policy on the Lambda's role
+- Effect: Allow
+  Action:
+    - sqs:ReceiveMessage
+    - sqs:DeleteMessage
+    - sqs:GetQueueAttributes
+  Resource: arn:aws:sqs:…:chat-dev-sam-messages
 
 # Event source mapping
-Source: sqs:…:messages`,
+FunctionName: chat-dev-sam-archive
+EventSourceArn: arn:aws:sqs:…:chat-dev-sam-messages
+Enabled: true
+BatchSize: 10
+FunctionResponseTypes: [ReportBatchItemFailures]
+MetricsConfig: { Metrics: [EventCount] }`,
       notes: "Back on AWS, event sources all look alike. Consume an SQS queue: the call grants the three consumer permissions and creates the event source mapping that invokes the Lambda.",
     },
     {
       snippet: "EventsKinesis.ts",
       emphasize: ["AWS.Kinesis.Stream", "AWS.Kinesis.consumeStreamRecords", "StreamEventSource"],
       title: "…a Kinesis stream…",
-      generated: `# IAM policy
-- kinesis:GetRecords
-- kinesis:GetShardIterator
-- kinesis:DescribeStream
-- kinesis:ListShards
+      generated: `# IAM policy on the Lambda's role
+- Effect: Allow
+  Action:
+    - kinesis:DescribeStream
+    - kinesis:GetRecords
+    - kinesis:GetShardIterator
+    - kinesis:ListShards
+  Resource: arn:aws:kinesis:…:stream/chat-dev-sam-messages
 
 # Event source mapping
-Source: kinesis:…:stream/messages`,
+FunctionName: chat-dev-sam-archive
+EventSourceArn: arn:aws:kinesis:…:stream/chat-dev-sam-messages
+Enabled: true
+StartingPosition: LATEST
+BatchSize: 100
+FunctionResponseTypes: [ReportBatchItemFailures]
+MetricsConfig: { Metrics: [EventCount] }`,
       notes: "A Kinesis stream: swap the resource and the consume call. The permissions and the mapping change to match, the handler doesn't.",
     },
     {
       snippet: "EventsDynamo.ts",
       emphasize: ["AWS.DynamoDB.Table", "AWS.DynamoDB.consumeTableChanges", "TableEventSource"],
       title: "…or every change to a DynamoDB table",
-      generated: `# Table stream: NEW_IMAGE
+      generated: `# Table: stream turned on
+TableName: chat-dev-sam-messages
+StreamSpecification:
+  StreamEnabled: true
+  StreamViewType: NEW_IMAGE
 
-# IAM policy
-- dynamodb:GetRecords
-- dynamodb:GetShardIterator
-- dynamodb:DescribeStream
-- dynamodb:ListStreams
+# IAM policy on the Lambda's role
+- Effect: Allow
+  Action:
+    - dynamodb:DescribeStream
+    - dynamodb:GetRecords
+    - dynamodb:GetShardIterator
+  Resource: arn:aws:dynamodb:…:table/chat-dev-sam-messages/stream/…
+- Effect: Allow
+  Action: [dynamodb:ListStreams]
+  Resource: arn:aws:dynamodb:…:table/chat-dev-sam-messages
 
 # Event source mapping
-Source: dynamodb:…:messages/stream`,
-      notes: "Or every change to a DynamoDB table. This one even turns on the table's stream for you, then grants the stream permissions and creates the mapping. Four event sources, one shape.",
+FunctionName: chat-dev-sam-archive
+EventSourceArn: arn:aws:dynamodb:…:table/chat-dev-sam-messages/stream/…
+Enabled: true
+StartingPosition: LATEST
+BatchSize: 100
+FunctionResponseTypes: [ReportBatchItemFailures]
+MetricsConfig: { Metrics: [EventCount] }`,
+      notes: "Or every change to a DynamoDB table. This one also changes the table itself: it turns on the table's stream with the view type you asked for, then grants the stream permissions and creates the mapping on the stream's ARN. Four event sources, one shape.",
     },
   ].map((ev, at) =>
     chat({
