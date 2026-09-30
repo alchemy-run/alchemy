@@ -31,14 +31,14 @@ export default Cloudflare.Worker(
       })/*hide*/.pipe(Effect.orDie)/*end*/,
     };
   }).pipe(
-    Effect.provide(
+    Effect.provide([
       RoomsLive.pipe(
         Layer.provide(RoomLive),
         Layer.provide(HistoryLive),
         Layer.provide([DatabaseLive, FilesR2]),
       ),
-    ),
-    Effect.provide(Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs })),
+      Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
+    ]),
   ),
 );
 // #endregion show

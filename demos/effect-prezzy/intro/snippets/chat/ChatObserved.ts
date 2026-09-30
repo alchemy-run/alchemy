@@ -30,14 +30,14 @@ export default Cloudflare.Worker(
       })/*hide*/.pipe(Effect.orDie)/*end*/,
     };
   }).pipe(
-    Effect.provide(
+    Effect.provide([
       RoomsLive.pipe(
         Layer.provide(RoomLive),
         Layer.provide(HistoryLive),
         Layer.provide([DatabaseLive, FilesR2]),
       ),
-    ),
-    Effect.provide(ObservabilityLive),
+      ObservabilityLive,
+    ]),
   ),
 );
 // #endregion show

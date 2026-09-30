@@ -487,7 +487,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
 // ── composing modules as Layers ──────────────────────────────────────────
 const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
-const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 19 };
+const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 17 };
 const compose: StepSpec[] = [
   chat({
     snippet: "DbSteps.ts",
