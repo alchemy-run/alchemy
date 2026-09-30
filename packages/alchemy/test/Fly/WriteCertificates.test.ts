@@ -67,7 +67,9 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack));
+// This hook builds/pushes the runtime image and issues a real certificate.
+// The test body's timeout does not cover setup; reserve time for both here.
+const stack = beforeAll(deploy(Stack), { timeout: 180_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 interface Reply {
