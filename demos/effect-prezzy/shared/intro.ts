@@ -301,7 +301,13 @@ export interface PyramidStep {
   /** Layers at full strength; the rest are dimmed. Omit to light everything. */
   lit?: string[];
   /** Hand-written notes to the right of a layer. */
-  side?: { layer: string; text: string; tone?: Tone }[];
+  side?: {
+    layer: string;
+    text: string;
+    tone?: Tone;
+    /** Code set just right of the band, instead of a hand-written note. */
+    code?: boolean;
+  }[];
   /** A bracket over every layer, with a label. */
   brace?: { text: string; sub?: string };
   /** A dashed line under a layer, splitting the stack into two programs. */

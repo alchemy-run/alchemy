@@ -268,21 +268,29 @@ const twoPrograms: StepSpec[] = [
 const BRICKS = {
   files: { row: 0, col: 1, of: 2, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
   database: { row: 0, col: 0, of: 2, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
-  history: { row: 1, title: "History", detail: "queue consumer · list()", color: "#e0a86b" },
-  room: { row: 2, title: "Room", detail: "Durable Object · sockets", color: "#e06c9f" },
+  history: { row: 1, title: "History", detail: "messages · attach()", color: "#e0a86b" },
+  rooms: { row: 2, title: "Rooms", detail: "Durable Objects · join()", color: "#e06c9f" },
   chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
 };
-const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat];
+const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms, BRICKS.chat];
+/** Beside each row, the code that puts that block on the ones beneath it. */
+const PROVIDES = {
+  files: { layer: "infra", text: "FilesLive", code: true },
+  bottom: { layer: "infra", text: "DatabaseLive, FilesLive", code: true },
+  history: { layer: "config", text: "Layer.provide([DatabaseLive, FilesLive])", code: true },
+  rooms: { layer: "api", text: "Layer.provide(HistoryLive)", code: true },
+  chat: { layer: "web", text: "Effect.provide(RoomsLive)", code: true },
+};
 /** The chat app's pyramid, rebuilt from the modules implemented so far. */
-const built = (title: string, bricks: typeof ALL_BRICKS, notes: string): PyramidSpec =>
-  pyramid({ title, layers: CHAT_LAYERS, bricks, notes });
+const built = (title: string, bricks: typeof ALL_BRICKS, notes: string, side?: PyramidSpec["side"]): PyramidSpec =>
+  pyramid({ title, layers: CHAT_LAYERS, bricks, notes, side });
 
 // ── modules: effectful constructors ─────────────────────────────────────
 const FILES = { snippet: "Files.ts", file: "src/Files.ts", group: "files", fontSize: 25 };
 const MODULE_BESIDE_CLASS = {
   file: "the same shape, as a class",
   src: {
-    code: `class FilesR2 {
+    code: `class FilesLive {
   constructor(private files: Bucket) {}
 
   upload(name: string, body: string) {
@@ -295,7 +303,8 @@ const modules: StepSpec[] = [
   built(
     "We'll build the chat app as blocks like this, starting with Files",
     [BRICKS.files],
-    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. Let's write it.",
+    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. In code, that block is a Layer called FilesLive. Let's write it.",
+    [PROVIDES.files],
   ),
   chat({
     ...FILES,
@@ -413,7 +422,8 @@ const compose: StepSpec[] = [
   built(
     "Next, a Database block beside it",
     [BRICKS.database, BRICKS.files],
-    "Next to Files goes the database. It doesn't depend on anything either, so it sits at the bottom too.",
+    "Next to Files goes the database, DatabaseLive. It doesn't depend on anything either, so it sits at the bottom too.",
+    [PROVIDES.bottom],
   ),
   chat({
     snippet: "Db.ts",
@@ -425,20 +435,23 @@ const compose: StepSpec[] = [
       "Same idea as Files: its constructor declares a Neon Postgres project and a Hyperdrive pool in front of it, binds the pool to the Worker, and provides a SQL client built from the pool's connection string.",
   }),
   built(
-    "History goes on top, because it needs the database",
+    "History goes on top of both",
     [BRICKS.database, BRICKS.files, BRICKS.history],
-    "Next is chat history. It keeps messages in Postgres, so it sits on the Database block. Let's see how it says so in code.",
+    "Next is chat history. It keeps messages in Postgres and attachments in Files, so it sits on both blocks. In code, that's one line: HistoryLive provides DatabaseLive and FilesLive.",
+    [PROVIDES.bottom, PROVIDES.history],
   ),
   chat({
     ...HISTORY,
-    title: "History gets its SQL client from the Database module",
-    emphasize: ["Layer.provide(Database)", "yield* SqlClient.SqlClient"],
+    title: "HistoryLive sits on DatabaseLive and FilesLive",
+    omit: ["service"],
+    emphasize: ["Layer.provide([DatabaseLive, FilesLive])", "yield* SqlClient.SqlClient", "yield* Files;"],
     notes:
-      "Chat history is the next module. Its constructor asks for a SQL client, and Layer.provide says where it comes from: the Database module we just built. Modules depend on modules, like any Effect service.",
+      "Here's that line. The constructor asks for a SQL client and for Files, and Layer.provide says where they come from: the two blocks we just built. That last line is exactly the pyramid: History on top of Database and Files.",
   }),
   chat({
     ...HISTORY,
     title: "Consuming a queue is declared in the constructor too",
+    omit: ["service"],
     emphasize: ["consumeQueueMessages", "Stream.runForEach", "const messages"],
     notes:
       "History also consumes the Messages queue into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
@@ -497,9 +510,10 @@ FunctionName: chat-dev-sam-archive`,
       "It also creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
   built(
-    "The chat rooms go on top of History",
-    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room],
-    "Then the chat rooms. They hand every message to History through a queue, so they sit on top of it.",
+    "Rooms go on top of History",
+    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms],
+    "Then the chat rooms. They read and write History, so they sit on top of it: RoomsLive provides HistoryLive.",
+    [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms],
   ),
   chat({
     ...ROOM_FILE,
@@ -514,17 +528,29 @@ FunctionName: chat-dev-sam-archive`,
     emphasize: ["archive"],
     notes: "Each room also sends every message to the queue that History consumes. Send-only access, declared in its constructor.",
   }),
+  chat({
+    snippet: "Rooms.ts",
+    file: "src/Rooms.ts",
+    group: "rooms",
+    fontSize: 24,
+    omit: ["service"],
+    title: "RoomsLive wraps the Durable Object and sits on HistoryLive",
+    emphasize: ["Layer.provide(HistoryLive)", "yield* Room;", "yield* History;"],
+    notes:
+      "The Rooms module puts the Durable Object and History behind one interface: join a room, attach a file, read its history. And its last line is the next row of the pyramid: RoomsLive provides HistoryLive.",
+  }),
   built(
-    "The Chat Worker goes on top of all of them",
+    "The Chat Worker goes on top",
     ALL_BRICKS,
-    "Last, the Worker that serves requests. It uses every block below it, so it goes on top.",
+    "Last, the Worker that serves requests. It uses Rooms, so it goes on top and provides RoomsLive. Read the code beside the pyramid from bottom to top: it's the same stack.",
+    [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms, PROVIDES.chat],
   ),
   chat({
     ...WORKER,
-    title: "The Chat Worker uses the modules and provides their Layers",
-    emphasize: ["yield* Room", "yield* Files", "yield* History", "Effect.provide"],
+    title: "The Chat Worker uses Rooms and provides RoomsLive",
+    emphasize: ["yield* Rooms", "Effect.provide(RoomsLive)"],
     notes:
-      "The Worker is a module too. It yields the rooms, Files and History, routes requests to them, and provides the Layers that implement them. It has no idea there's a bucket, a queue or a database underneath.",
+      "The Worker only knows about Rooms. It routes requests to it and provides RoomsLive, and RoomsLive brings everything beneath it. It has no idea there's a bucket, a queue or a database underneath.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
@@ -532,10 +558,10 @@ FunctionName: chat-dev-sam-archive`,
     group: WORKER.group,
     fontSize: WORKER.fontSize,
     title: "Forget a Layer and the Worker doesn't compile",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'History' is not assignable")).slice(0, 1), below: true },
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Rooms' is not assignable")).slice(0, 1), below: true },
     showRemoved: true,
     notes:
-      "Forget to provide History, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
+      "Forget to provide RoomsLive, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
   pyramid({
     title: "The pyramid is literally a stack of Layers",
@@ -888,7 +914,7 @@ const shared: StepSpec[] = [
   pyramid({
     title: "But the database is just a Layer, so a pull request can swap it",
     layers: CHAT_LAYERS,
-    bricks: [{ ...BRICKS.database, detail: "new project ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat],
+    bricks: [{ ...BRICKS.database, detail: "new project ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.rooms, BRICKS.chat],
     lit: ["Database"],
     notes:
       "Remember the pyramid. The database is one block, one Layer. Swap it and nothing above it changes: History still gets a SQL client, the Worker still works. So a pull request can use a different Database Layer.",

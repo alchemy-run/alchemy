@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 // #region show
-export const Database = Layer.unwrap(
+export const DatabaseLive = Layer.unwrap(
   Effect.gen(function* () {
     // #region db
     const db = yield* Neon.Project("Db", { migrations: "./migrations" });

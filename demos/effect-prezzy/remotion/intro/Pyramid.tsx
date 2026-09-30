@@ -191,6 +191,16 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         const k = newNotes.indexOf(note);
         const q = k < 0 ? 1 : interpolate(local, [4 + k * 4, 12 + k * 4], [0, 1], clamp);
         const color = TONE[note.tone ?? "neutral"];
+        if (note.code) {
+          const x = CX + widthAt(mid) / 2 + 44;
+          return (
+            <g key={noteKey(note)} opacity={q} transform={`translate(${(1 - q) * 14} 0)`}>
+              <text x={x} y={mid + 10} fontFamily={mono} fontSize={27} fill={note.tone ? color : brand.fg}>
+                {note.text}
+              </text>
+            </g>
+          );
+        }
         return (
           <g key={noteKey(note)} opacity={q} transform={`translate(${(1 - q) * 14} 0)`}>
             <text x={NOTE_X} y={mid + 14} fontFamily={hand} fontWeight={700} fontSize={44} fill={color}>

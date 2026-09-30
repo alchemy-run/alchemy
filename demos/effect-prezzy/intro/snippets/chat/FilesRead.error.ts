@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import { Files, UploadError } from "./Files.ts";
 
 // #region show
-export const FilesR2 = Layer.effect(
+export const FilesLive = Layer.effect(
   Files,
   Effect.gen(function* () {
     const bucket = yield* R2.Bucket("Files");
