@@ -1239,6 +1239,24 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     emphasize: ["closed", "cleanup", "alchemy destroy"],
     notes: "And when the PR is merged or closed, the copy goes away: destroy that stage, and every resource the PR created goes with it.",
   }),
+  term({
+    group: "ci-run",
+    tabs: ["GitHub Actions · cleanup"],
+    title: "alchemy destroy removes everything pr-42 created",
+    lines: [
+      $("pnpm alchemy destroy --stage pr-42"),
+      `${T.red}-${T.reset} ${res("Preview", "GitHub.Comment")} deleted`,
+      `${T.red}-${T.reset} ${res("Chat", "Cloudflare.Worker")} deleted ${T.dim}preview of staging's Worker${T.reset}`,
+      `${T.red}-${T.reset} ${res("Pool", "Cloudflare.Hyperdrive")} deleted`,
+      `${T.red}-${T.reset} ${res("Db", "Neon.Branch")} deleted ${T.dim}branch of staging's database${T.reset}`,
+      `${T.red}-${T.reset} ${res("Messages", "Cloudflare.Queues.Queue")} deleted`,
+      `${T.red}-${T.reset} ${res("Files", "Cloudflare.R2.Bucket")} deleted`,
+      RULE,
+      `${T.ok}Stack destroyed (6/6)${T.reset}`,
+    ],
+    notes:
+      "The cleanup job is the same destroy we ran by hand, for stage pr-42: the comment, the preview Worker, the database branch and everything else the pull request created. Staging's Worker and database stay untouched, because the PR only referenced them.",
+  }),
 ];
 
 // ── act 6: main → staging → prod ─────────────────────────────────────────
