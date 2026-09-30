@@ -583,7 +583,8 @@ const compose: StepSpec[] = [
   chat({
     ...HISTORY,
     title: "On AWS, the same line would grant three permissions and wire the trigger",
-    omit: ["service", "queue", "methods"],
+    omit: ["service"],
+    fontSize: 19,
     emphasize: ["consumeQueueMessages"],
     beside: {
       file: "on AWS, generated at deploy",
