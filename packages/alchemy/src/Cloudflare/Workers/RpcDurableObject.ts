@@ -5,15 +5,15 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import type { HttpServerResponse } from "effect/unstable/http/HttpServerResponse";
-import type { HttpServerError } from "effect/unstable/http/HttpServerError";
-import type { Rpc, RpcGroup } from "effect/unstable/rpc";
-import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as RpcServer from "effect/unstable/rpc/RpcServer";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import type { HttpServerResponse } from "effect/http/HttpServerResponse";
+import type { HttpServerError } from "effect/http/HttpServerError";
+import type { Rpc, RpcGroup } from "effect/rpc";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as RpcServer from "effect/rpc/RpcServer";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcClientError from "effect/rpc/RpcClientError";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
@@ -272,7 +272,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * don't include any per-session identifier — only the per-call inputs.
  * ```typescript
  * import * as Schema from "effect/Schema";
- * import { Rpc, RpcGroup } from "effect/unstable/rpc";
+ * import { Rpc, RpcGroup } from "effect/rpc";
  *
  * const setTitle = Rpc.make("setTitle", {
  *   success: Schema.Void,
@@ -340,8 +340,8 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * Handler-Layer implementations accept WebSocket upgrades automatically;
  * ordinary HTTP RPC remains available on the same object.
  * ```typescript
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import { HttpServerRequest } from "effect/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * const counters = yield* Counter;
  * return {

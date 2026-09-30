@@ -26,6 +26,7 @@ export const alchemyMetadataKeys = {
   sequence: "alchemy.sequence",
   count: "alchemy.count",
   image: "alchemy.image",
+  containerImageSet: "alchemy.container-image-set",
   phase: "alchemy.phase",
   protocol: "alchemy.deployment-protocol",
   roles: "alchemy.readiness-roles",

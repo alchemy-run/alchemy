@@ -8,7 +8,7 @@ import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
-import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
+import type { LanguageModel } from "effect/ai/LanguageModel";
 
 const typeCases = (project: Project, branch: Branch, credential: Credential) =>
   Effect.gen(function* () {

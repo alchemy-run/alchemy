@@ -492,14 +492,26 @@ export type FilterTuple<
 export const interpolate = <Args extends any[]>(
   template: TemplateStringsArray,
   ...args: Args
-): All<Args> extends Output<any, infer Req> ? Output<string, Req> : never =>
-  all(...args.map((arg) => (isOutput(arg) ? arg : literal(arg)))).pipe(
+): All<Args> extends Output<any, infer Req> ? Output<string, Req> : never => {
+  const outs = args.map((arg) => (isOutput(arg) ? arg : literal(arg)));
+  const expr = all(...outs).pipe(
     map((args) =>
       template
         .map((str, i) => str + (args[i] == null ? "" : String(args[i])))
         .join(""),
     ),
-  ) as any;
+  );
+  // The binding id of a mapped Output embeds the mapper's source, which the
+  // runtime bundler reprints differently from the deploying process, so the
+  // two sides would derive different keys. Name it from the template and its
+  // arguments instead, which are identical on both sides.
+  const name = template
+    .map((str, i) =>
+      i < outs.length ? `${str}\${${(outs[i] as any)[inspect]()}}` : str,
+    )
+    .join("");
+  return named(expr as Output<string, any>, `interpolate(${name})`) as any;
+};
 
 function proxy(self: any): any {
   const target = Object.assign(() => {}, self);

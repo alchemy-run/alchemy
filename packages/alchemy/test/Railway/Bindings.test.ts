@@ -4,7 +4,8 @@ import { fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Alchemy from "@/index.ts";
 import * as Railway from "@/Railway";
 import * as Test from "@/Test/Alchemy";
@@ -15,8 +16,8 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import BucketApi, {
   Data as BucketData,
   OBJECT_BODY,
@@ -36,7 +37,12 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
+    Effect.provide(
+      Layer.merge(
+        GraphQLLive,
+        fromAuthProvider().pipe(Layer.provide(RailwayAuth)),
+      ),
+    ),
   );
 
 class NotReady extends Data.TaggedError("NotReady")<{
@@ -63,57 +69,58 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
+const readBucketCredentials = Query.fn(
+  (bucketId: string, environmentId: string, projectId: string) =>
+    RailwayApi.bucketS3Credentials({ bucketId, environmentId, projectId }).pipe(
+      Query.map((creds) => ({
+        bucketName: creds.bucketName,
+        endpoint: creds.endpoint,
+        accessKeyId: creds.accessKeyId,
+        secretAccessKey: creds.secretAccessKey,
+        region: creds.region,
+      })),
+    ),
+);
+
+const readVariables = Query.fn(
+  (projectId: string, environmentId: string, serviceId: string) =>
+    RailwayApi.variables({
+      projectId,
+      environmentId,
+      serviceId,
+      unrendered: true,
+    }),
+);
+
 const readServiceVariables = (
   projectId: string,
   environmentId: string,
   serviceId: string,
 ) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
+  readVariables(projectId, environmentId, serviceId).pipe(
+    Effect.map(asVariableMap),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed({} as Record<string, string>),
+    ),
+  );
 
 const firstCredentials = (
   bucketId: string,
   environmentId: string,
   projectId: string,
 ) =>
-  railway
-    .bucketS3Credentials(
-      {
-        bucketId,
-        environmentId,
-        projectId,
-      },
-      {
-        bucketName: true,
-        endpoint: true,
-        accessKeyId: true,
-        secretAccessKey: true,
-        region: true,
-      },
-    )
-    .pipe(
-      Effect.flatMap((items) => {
-        const first = items[0];
-        return first !== undefined
-          ? Effect.succeed(first)
-          : Effect.fail(new Error("missing bucket credentials"));
-      }),
-      Effect.retry({
-        schedule: Schedule.spaced("2 seconds"),
-        times: 8,
-      }),
-    );
+  readBucketCredentials(bucketId, environmentId, projectId).pipe(
+    Effect.flatMap((items) => {
+      const first = items[0];
+      return first !== undefined
+        ? Effect.succeed(first)
+        : Effect.fail(new Error("missing bucket credentials"));
+    }),
+    Effect.retry({
+      schedule: Schedule.spaced("2 seconds"),
+      times: 8,
+    }),
+  );
 
 const withBucketS3 = <A, E, R>(
   creds: {

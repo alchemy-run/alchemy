@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway";
+import { GraphQLFailure, type GraphQLIssue } from "@distilled.cloud/railway";
 import {
   ResourceDeletionPending,
   waitUntilDeleted,
@@ -74,11 +74,12 @@ describe(
       "preserves the query's typed aggregate failure during polling",
       () =>
         Effect.gen(function* () {
-          const denied = new railway.RailwayForbidden({
+          const denied: GraphQLIssue = {
+            _tag: "RailwayForbidden",
             message: "Not Authorized",
             path: ["project"],
-          });
-          const failure = new railway.GraphQLFailure({
+          };
+          const failure = new GraphQLFailure({
             errors: [denied],
             data: { project: null },
             status: 200,
@@ -96,7 +97,10 @@ describe(
           yield* TestClock.adjust("1 second");
           const error = yield* Fiber.join(fiber);
           expect(error).toBe(failure);
-          expect(railway.isErrorTag(error, "RailwayForbidden")).toBe(true);
+          expect(
+            error._tag === "GraphQLFailure" &&
+              error.errors.every((issue) => issue._tag === "RailwayForbidden"),
+          ).toBe(true);
           yield* TestClock.adjust("10 seconds");
           expect(reads).toBe(2);
         }),

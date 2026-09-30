@@ -1,3 +1,4 @@
+import { SOCIAL_REDIRECTS } from "../src/social-redirects.ts";
 import type { AstroIntegration } from "astro";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -98,6 +99,7 @@ export function buildOutputChecks(): AstroIntegration {
             if (exists === undefined) {
               const clean = link.replace(/\/$/, "");
               exists =
+                Object.hasOwn(SOCIAL_REDIRECTS, clean) ||
                 paths.has(clean) ||
                 paths.has(clean + "/index.html") ||
                 paths.has(clean + ".html") ||

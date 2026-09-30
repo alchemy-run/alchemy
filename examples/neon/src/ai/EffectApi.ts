@@ -5,10 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import * as Sse from "effect/unstable/encoding/Sse";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as LanguageModel from "effect/ai/LanguageModel";
+import * as Sse from "effect/encoding/Sse";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { resources } from "../resources.ts";
 import { gateway } from "./resources.ts";
 

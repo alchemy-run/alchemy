@@ -6,8 +6,8 @@ import { FunctionProvider } from "@/Railway/Function";
 import * as Layer from "effect/Layer";
 import * as Railway from "@/Railway";
 import { RailwayEnvironment } from "@/Railway/Environment";
-import { Credentials } from "@distilled.cloud/railway";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Credentials, GqlTransport } from "@distilled.cloud/railway";
+import * as HttpClient from "effect/http/HttpClient";
 import {
   createRailwayFunctionSupport,
   createRailwayHostedSupport,
@@ -27,6 +27,10 @@ const { test } = Test.make({
           Credentials,
           Effect.die("Offline diff must not resolve credentials"),
         ),
+        Layer.succeed(GqlTransport, {
+          execute: () =>
+            Effect.die("Offline diff must not issue GraphQL requests"),
+        }),
         Layer.succeed(
           RailwayEnvironment,
           Effect.die("Offline diff must not resolve environment"),

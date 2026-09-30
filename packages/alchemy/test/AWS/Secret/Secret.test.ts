@@ -6,7 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import SecretsTestFunctionLive, {
   CONFIG_SECRET_ENV_KEY,
   LITERAL_SECRET_VALUE,

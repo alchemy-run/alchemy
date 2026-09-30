@@ -2,7 +2,7 @@ import * as ACME from "@/ACME";
 import { describe, expect } from "alchemy-test";
 import * as Test from "@/Test/Alchemy";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ROOT_CERTIFICATE } from "./fixtures/root-certificate.ts";

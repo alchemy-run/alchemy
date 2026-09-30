@@ -1,4 +1,5 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -128,26 +129,34 @@ export const serviceRegionPlacement = (
   return placement;
 };
 
+const readEnvironmentConfig = Query.fn(
+  (args: { id: string; projectId?: string }) => ({
+    config: Railway.environment(args).config,
+  }),
+);
+
+const environmentPatchCommit = Query.fn(
+  (args: { environmentId: string; commitMessage: string; patch: unknown }) =>
+    Railway.environmentPatchCommit(args),
+);
+
 const readPlacement = (input: {
   environmentId: string;
   projectId: string;
   serviceId: string;
 }) =>
-  railway
-    .environment(
-      input.projectId.length > 0
-        ? { id: input.environmentId, projectId: input.projectId }
-        : { id: input.environmentId },
-      { config: { where: { decryptVariables: false } } },
-    )
-    .pipe(
-      Effect.map((environment) =>
-        serviceRegionPlacement(environment.config, input.serviceId),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as RegionPlacement),
-      ),
-    );
+  readEnvironmentConfig(
+    input.projectId.length > 0
+      ? { id: input.environmentId, projectId: input.projectId }
+      : { id: input.environmentId },
+  ).pipe(
+    Effect.map((environment) =>
+      serviceRegionPlacement(environment.config, input.serviceId),
+    ),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed({} as RegionPlacement),
+    ),
+  );
 
 /** Region reported by the environment config, without writing. */
 export const readServiceRegion = Effect.fn(function* (input: {
@@ -230,7 +239,7 @@ export const syncServiceRegion = Effect.fn(function* (input: {
         input.fallbackReplicas ?? undefined,
       );
       if (patch === undefined) return false;
-      yield* railway.environmentPatchCommit({
+      yield* environmentPatchCommit({
         environmentId: input.environmentId,
         commitMessage: `Pin Railway service region to ${desired}`,
         patch: {

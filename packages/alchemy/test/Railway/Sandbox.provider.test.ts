@@ -1,4 +1,8 @@
-import * as railway from "@distilled.cloud/railway";
+import {
+  CredentialsFromToken,
+  GraphQLLive,
+  toConfig,
+} from "@distilled.cloud/railway";
 import {
   Sandbox,
   SandboxProvider,
@@ -10,8 +14,8 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import { RailwayEnvironment } from "@/Railway/Environment.ts";
 import * as TestClock from "effect/testing/TestClock";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 const testLayer = (client: HttpClient.HttpClient) =>
   SandboxProvider().pipe(
@@ -20,11 +24,12 @@ const testLayer = (client: HttpClient.HttpClient) =>
         Layer.succeed(
           RailwayEnvironment,
           Effect.succeed({
-            ...railway.toConfig({ token: "fixture" }),
+            ...toConfig({ token: "fixture" }),
             workspaceId: "workspace",
           }),
         ),
-        railway.CredentialsFromToken({ token: "fixture" }),
+        CredentialsFromToken({ token: "fixture" }),
+        GraphQLLive,
         Layer.succeed(HttpClient.HttpClient, client),
       ),
     ),

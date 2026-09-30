@@ -5,7 +5,7 @@ import * as omics from "@distilled.cloud/aws/omics";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import OmicsBindingsFunctionLive, {
   OmicsBindingsFunction,
 } from "./bindings-handler";

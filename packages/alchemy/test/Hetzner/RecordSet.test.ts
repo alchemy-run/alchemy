@@ -1,7 +1,8 @@
+import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as Hetzner from "@/Hetzner";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as zones from "@distilled.cloud/hetzner/zones";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -17,7 +18,7 @@ const logLevel = Effect.provideService(
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (zoneId: number, name: string, type: string) =>
-  Services.zoneRrsets
+  zoneRrsets
     .getZoneRrset({
       id_or_name: String(zoneId),
       rr_name: name,
@@ -34,7 +35,7 @@ const waitUntilGone = (zoneId: number, name: string, type: string) =>
     );
 
 const waitUntilZoneGone = (zoneId: number) =>
-  Services.zones.getZone({ id_or_name: String(zoneId) }).pipe(
+  zones.getZone({ id_or_name: String(zoneId) }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -81,7 +82,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       );
       expect(created.recordSet.records).toHaveLength(1);
 
-      const fetched = yield* Services.zoneRrsets.getZoneRrset({
+      const fetched = yield* zoneRrsets.getZoneRrset({
         id_or_name: String(created.zone.zoneId),
         rr_name: "www",
         rr_type: "A",
@@ -127,7 +128,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         updated.recordSet.records.map((record) => record.value).sort(),
       ).toEqual(["192.0.2.1", "192.0.2.2"]);
 
-      const refetched = yield* Services.zoneRrsets.getZoneRrset({
+      const refetched = yield* zoneRrsets.getZoneRrset({
         id_or_name: String(updated.zone.zoneId),
         rr_name: "www",
         rr_type: "A",
@@ -204,7 +205,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(replaced.recordSet.id).not.toEqual(created.recordSet.id);
       expect(replaced.recordSet.zoneId).toEqual(created.zone.zoneId);
 
-      const fetched = yield* Services.zoneRrsets.getZoneRrset({
+      const fetched = yield* zoneRrsets.getZoneRrset({
         id_or_name: String(replaced.zone.zoneId),
         rr_name: "api",
         rr_type: "A",

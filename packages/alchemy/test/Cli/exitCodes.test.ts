@@ -4,7 +4,7 @@ import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as FileSystem from "effect/FileSystem";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
@@ -92,6 +92,20 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         );
         expect(stderr).not.toContain("PlatformError");
       }),
+  );
+
+  it.live("plan accepts --adopt like deploy --dry-run", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject([
+        "plan",
+        "--adopt",
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).not.toContain("Unrecognized flag");
+      expect(stderr).toContain(
+        "Stack entrypoint 'alchemy.run.ts' does not exist",
+      );
+    }),
   );
 
   it.live("bare `profile` without a terminal prints help and exits 1", () =>

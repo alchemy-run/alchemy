@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import LimitsWorkflowWorker from "./fixtures/workflow-limits/limits-worker.ts";
 import { STEP_LIMIT } from "./fixtures/workflow-limits/limits-workflow.ts";
 import ScheduledWorkflowWorker from "./fixtures/workflow-schedules/scheduled-worker.ts";

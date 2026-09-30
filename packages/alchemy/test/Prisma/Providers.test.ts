@@ -1,9 +1,11 @@
 import { AlchemyContext } from "@/AlchemyContext";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts";
 import { AuthProviders } from "@/Auth/AuthProvider";
 import * as CliKit from "@/Cli/CliKit";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
 import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
+import { PlatformServices } from "@/Util/PlatformServices";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,12 +15,20 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { v4 as uuidv4 } from "uuid";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",
   dev: true,
   adopt: false,
 });
+
+// What `Stack.make` supplies to a stack's `providers` layer.
+const stackProvidedServices = Layer.mergeAll(
+  testStackContext,
+  PlatformServices,
+  Layer.effect(ArtifactStore, Effect.sync(createArtifactStore)),
+);
 
 const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -27,6 +37,7 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         // The dual registration always carries the (lazy) management-api
         // layer; it registers auth at build without resolving credentials.
         Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+        Layer.provide(stackProvidedServices),
       ),
     ),
     Effect.provide(devAlchemyContext),
@@ -57,6 +68,7 @@ describe(
           yield* Layer.build(
             Prisma.providers().pipe(
               Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
+              Layer.provide(stackProvidedServices),
             ),
           );
 
@@ -302,6 +314,7 @@ describe(
           Effect.provide(
             Prisma.providers().pipe(
               Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+              Layer.provide(stackProvidedServices),
             ),
           ),
           Effect.provide(

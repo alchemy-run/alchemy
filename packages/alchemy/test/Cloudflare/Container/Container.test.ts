@@ -16,8 +16,8 @@ import AttachmentStack, {
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import makeAsyncContainerStack from "./fixtures/async/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import makeExternalStack from "./fixtures/external/stack.ts";

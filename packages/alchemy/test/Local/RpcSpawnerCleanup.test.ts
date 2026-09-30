@@ -12,7 +12,7 @@ import {
 } from "../Command/fixture/lifecycle-support.ts";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import {
   assertPidExited,

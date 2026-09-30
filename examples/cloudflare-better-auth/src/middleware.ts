@@ -2,7 +2,7 @@ import { RuntimeContext } from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import { Auth } from "./auth.ts";
 import { CurrentUser } from "./current-user.ts";
 

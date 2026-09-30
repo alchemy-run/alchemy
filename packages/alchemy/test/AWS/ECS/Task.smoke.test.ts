@@ -11,7 +11,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as pathe from "pathe";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";

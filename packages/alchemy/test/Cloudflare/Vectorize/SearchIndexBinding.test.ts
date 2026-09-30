@@ -5,8 +5,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { HttpClientResponse } from "effect/unstable/http";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { HttpClientResponse } from "effect/http";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "./fixtures/stack.ts";
 
 /**

@@ -27,10 +27,10 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
 import { fromApiToken } from "@distilled.cloud/prisma";
@@ -41,8 +41,10 @@ import {
   dispatchTo,
   failure,
   FAKE_API_BASE_URL,
+  makeFakeManagementApi,
   unhandled,
 } from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const testBranch = (
   id: string,
@@ -339,7 +341,11 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 });
 
 const computeProviderLive = () =>
-  ComputeProvider().pipe(Layer.provide(liveProviderContext));
+  ComputeProvider().pipe(
+    Layer.provide(
+      Layer.mergeAll(liveProviderContext, testStackContext, PlatformServices),
+    ),
+  );
 
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
@@ -2149,6 +2155,9 @@ describe(
               withDefaultBranch({} as PrismaManagementClient),
             ),
           ),
+          // Fails before any cloud mutation: every Management API route is
+          // unregistered so a stray call fails loudly.
+          Effect.provide(makeFakeManagementApi(unhandled).layer),
           Effect.provide(PlatformServices),
         ),
       { tags: ["provider:prisma:branch"] },
@@ -3843,7 +3852,7 @@ describe(
             [
               'import * as Prisma from "alchemy/Prisma";',
               'import * as Effect from "effect/Effect";',
-              'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+              'import * as HttpServerResponse from "effect/http/HttpServerResponse";',
               "",
               "export default Prisma.Compute(",
               '  "App",',
@@ -3998,7 +4007,7 @@ describe(
             [
               'import * as Prisma from "alchemy/Prisma";',
               'import * as Effect from "effect/Effect";',
-              'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+              'import * as HttpServerResponse from "effect/http/HttpServerResponse";',
               "",
               "export const Api = Prisma.Compute(",
               '  "App",',
@@ -7529,6 +7538,7 @@ describe(
 
           const provider = yield* Provider.findProvider(Compute).pipe(
             Effect.provide(computeProviderLive()),
+            Effect.provide(makeFakeManagementApi(unhandled).layer),
           );
           const lines = yield* provider.tail!({
             id: "App",

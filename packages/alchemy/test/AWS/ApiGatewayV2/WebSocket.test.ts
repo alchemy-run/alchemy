@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import WebSocket from "ws";
 import WebSocketTestFunctionLive, { WebSocketTestFunction } from "./ws-handler";
 

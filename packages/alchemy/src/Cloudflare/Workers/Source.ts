@@ -15,7 +15,7 @@ import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
@@ -155,6 +155,8 @@ export type SourceDevHandle =
   | {
       readonly mode: "server";
       readonly url: URL;
+      /** Register an HTTP forwarding Worker when the server does not run in workerd. */
+      readonly serviceBinding?: "http";
     };
 
 /**

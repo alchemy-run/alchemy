@@ -377,11 +377,6 @@ export type Machine = Resource<
     imageRef: MachineImageRef | undefined;
     /** Observed guest size. */
     guest: MachineGuest | undefined;
-    /**
-     * Public `https://{appName}.fly.dev` URL when this Machine publishes
-     * a proxy service. `undefined` when no services are configured.
-     */
-    url: string | undefined;
     /** Number of Machines in the replica set. */
     count: number;
     /** Disks mounted on replica 0. */
@@ -441,7 +436,9 @@ export type Machine = Resource<
  * Each replica contains the entire group. Container checks and dependencies
  * control Pilot startup; configure Machine or service checks for deployment
  * readiness. Rolling updates can restart the entire group when one image
- * changes. Blue/green for named containers is not supported yet.
+ * changes. Blue/green requires every named image to use an immutable
+ * `repository@sha256:` digest and cannot attach volumes. Alchemy replaces
+ * the entire group and applies readiness policy before retiring predecessors.
  *
  * **Example:** API and worker
  * ```typescript
@@ -540,9 +537,9 @@ export type Machine = Resource<
  * ```
  *
  * ### Publish a proxy service
- * `services` publishes ports on Fly's proxy. `{app}.fly.dev` over IPv4
- * still needs an {@link IpAssignment} on the parent App. `url` is
- * `https://{appName}.fly.dev` when a proxy service is configured.
+ * `services` publishes ports on Fly's proxy. The App needs an
+ * {@link IpAssignment} before `{app}.fly.dev` answers. For a public
+ * endpoint without managing Apps and addresses, use a {@link Service}.
  *
  * Handlers are `http`, `tls`, `pg_tls`, and similar. Set `forceHttps`
  * to redirect HTTP to HTTPS. Use `startPort` / `endPort` for a
@@ -1101,7 +1098,6 @@ const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
   privateIp: set.privateIp,
   imageRef: set.imageRef,
   guest: set.guest,
-  url: set.url,
   count: set.count,
   mounts: set.mounts,
   replicas: set.replicas,
@@ -1286,7 +1282,7 @@ export const MachineProvider = () =>
         checks: props.checks,
         appName,
         baseName: name,
-        region,
+        regions: [region],
         count,
         disks,
         skipLaunch,
