@@ -22,16 +22,22 @@ const band = (slot: number) => {
 };
 /** Where the notes beside the pyramid start. */
 const NOTE_X = CX + WIDE / 2 + 70;
+const SLICE_W = 400;
 
 const DIM = 0.3;
 
+type Brick = NonNullable<PyramidStep["bricks"]>[number];
+
 /**
  * An application's layers, stacked as a pyramid. Layers rise in as they're
- * introduced; notes beside them and the bracket over them come and go by step.
+ * introduced; notes beside them, the bracket over them, the line that splits
+ * them, a feature cut through them, and the modules that rebuild them come
+ * and go by step.
  */
 export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: PyramidStep; local: number }) => {
   const t = interpolate(local, [0, 10], [0, 1], clamp);
   const lit = (s: PyramidStep | undefined, id: string) => !s?.lit || s.lit.includes(id);
+  const blend = (now: number, then: number) => then + (now - then) * t;
   const had = (id: string) => !!prev?.layers.some((l) => l.id === id);
   const fresh = step.layers.filter((l) => !had(l.id));
   const noteKey = (n: { layer: string; text: string }) => `${n.layer}:${n.text}`;
@@ -40,15 +46,29 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
   const braceNew = !!step.brace && (prev?.brace?.text !== step.brace.text || prev?.brace?.sub !== step.brace.sub);
   const braceWas = !!prev?.brace;
 
+  // Bands fade back when something is drawn over them.
+  const covered = (s: PyramidStep | undefined) => (s?.bricks || s?.slice ? 0 : 1);
+  const bandText = blend(covered(step), prev ? covered(prev) : covered(step));
+  const bandFill = blend(step.bricks ? 0.25 : 1, prev ? (prev.bricks ? 0.25 : 1) : step.bricks ? 0.25 : 1);
+
+  const sliceIn = step.slice ? (prev?.slice ? 1 : interpolate(local, [2, 12], [0, 1], clamp)) : 0;
+  const cutIn = step.cut ? (prev?.cut?.under === step.cut.under ? 1 : drawProgress(local, 6, 12)) : 0;
+
+  const brickKey = (b: Brick) => `${b.row}:${b.title}`;
+  const oldBricks = new Set(prev?.bricks?.map(brickKey));
+  const newBricks = (step.bricks ?? []).filter((b) => !oldBricks.has(brickKey(b)));
+
   return (
     <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
       {step.layers.map((layer, slot) => {
         const { top, bottom, mid } = band(slot);
         const k = fresh.indexOf(layer);
         const q = k < 0 ? 1 : interpolate(local, [k * 4, k * 4 + 8], [0, 1], clamp);
-        const now = lit(step, layer.id) ? 1 : DIM;
-        const then = had(layer.id) ? (lit(prev, layer.id) ? 1 : DIM) : now;
-        const level = then + (now - then) * t;
+        // With modules drawn over them, the bands are only a backdrop: never dimmed.
+        const bandLit = (s: PyramidStep | undefined) => !!s?.bricks || lit(s, layer.id);
+        const now = bandLit(step) ? 1 : DIM;
+        const then = had(layer.id) ? (bandLit(prev) ? 1 : DIM) : now;
+        const level = blend(now, then);
         const wt = widthAt(top);
         const wb = widthAt(bottom);
         const oldDetail = prev?.layers.find((l) => l.id === layer.id)?.detail;
@@ -58,19 +78,108 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
             <path
               d={`M ${CX - wb / 2} ${bottom} L ${CX - wt / 2} ${top} L ${CX + wt / 2} ${top} L ${CX + wb / 2} ${bottom} Z`}
               fill={`${layer.color}1f`}
+              fillOpacity={bandFill}
               stroke={layer.color}
+              strokeOpacity={0.4 + 0.6 * bandFill}
               strokeWidth={3}
               strokeLinejoin="round"
             />
-            <text x={CX} y={mid - 6} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={40} fill={brand.fg}>
-              {layer.title}
+            <g opacity={bandText}>
+              <text x={CX} y={mid - 6} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={40} fill={brand.fg}>
+                {layer.title}
+              </text>
+              <text x={CX} y={mid + 38} textAnchor="middle" fontFamily={mono} fontSize={24} fill={brand.fgMuted} opacity={detailIn}>
+                {layer.detail}
+              </text>
+            </g>
+          </g>
+        );
+      })}
+
+      {step.slice
+        ? (() => {
+            const top = band(step.layers.length - 1).top - 16;
+            const bottom = BOTTOM + 16;
+            return (
+              <g opacity={sliceIn}>
+                <rect x={CX - SLICE_W / 2} y={top} width={SLICE_W} height={bottom - top} rx={22} fill="#14110de6" stroke={TONE.good} strokeWidth={4} />
+                <text x={CX} y={top - 18} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.good}>
+                  {step.slice.label}
+                </text>
+                {step.layers.map((layer, slot) => {
+                  const item = step.slice!.items[layer.id];
+                  if (!item) return null;
+                  const level = blend(lit(step, layer.id) ? 1 : DIM, prev ? (lit(prev, layer.id) ? 1 : DIM) : 1);
+                  return (
+                    <g key={layer.id} opacity={level}>
+                      <text x={CX} y={band(slot).mid - 8} textAnchor="middle" fontFamily={mono} fontSize={19} fill={layer.color}>
+                        {layer.title.toLowerCase()}
+                      </text>
+                      <text x={CX} y={band(slot).mid + 30} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={30} fill={brand.fg}>
+                        {item}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })()
+        : null}
+
+      {(step.bricks ?? []).map((brick) => {
+        const { top, bottom } = band(brick.row);
+        const inRow = step.bricks!.filter((b) => b.row === brick.row);
+        const i = inRow.indexOf(brick);
+        const rowW = widthAt(top) - 60;
+        const gap = 18;
+        const w = (rowW - gap * (inRow.length - 1)) / inRow.length;
+        const x = CX - rowW / 2 + i * (w + gap);
+        const y = top + 10;
+        const h = bottom - top - 20;
+        const k = newBricks.indexOf(brick);
+        const q = k < 0 ? 1 : interpolate(local, [4 + k * 4, 12 + k * 4], [0, 1], clamp);
+        const level = blend(lit(step, brick.title) ? 1 : DIM, prev?.bricks?.some((b) => brickKey(b) === brickKey(brick)) ? (lit(prev, brick.title) ? 1 : DIM) : 1);
+        return (
+          <g key={brickKey(brick)} opacity={q * level} transform={`translate(0 ${(1 - q) * -40})`}>
+            <rect x={x} y={y} width={w} height={h} rx={16} fill={brand.bgElevated} stroke={brick.color} strokeWidth={3.5} />
+            <text x={x + w / 2} y={y + h / 2 - 4} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={36} fill={brand.fg}>
+              {brick.title}
             </text>
-            <text x={CX} y={mid + 38} textAnchor="middle" fontFamily={mono} fontSize={24} fill={brand.fgMuted} opacity={detailIn}>
-              {layer.detail}
+            <text x={x + w / 2} y={y + h / 2 + 34} textAnchor="middle" fontFamily={mono} fontSize={20} fill={brand.fgMuted}>
+              {brick.detail}
             </text>
           </g>
         );
       })}
+
+      {step.cut
+        ? (() => {
+            const slot = step.layers.findIndex((l) => l.id === step.cut!.under);
+            const y = band(slot).bottom + GAP / 2;
+            const half = widthAt(y) / 2 + 40;
+            const x1 = CX - half;
+            const x2 = NOTE_X - 30;
+            return (
+              <g>
+                <path
+                  d={`M ${x1} ${y} L ${x1 + (x2 - x1) * cutIn} ${y}`}
+                  stroke={TONE.bad}
+                  strokeWidth={5}
+                  strokeDasharray="16 10"
+                  strokeLinecap="round"
+                />
+                <g opacity={cutIn}>
+                  <text x={NOTE_X} y={y - 26} fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.runtime}>
+                    ↑ {step.cut.above}
+                  </text>
+                  <text x={NOTE_X} y={y + 58} fontFamily={hand} fontWeight={700} fontSize={46} fill={TONE.construct}>
+                    ↓ {step.cut.below}
+                  </text>
+                </g>
+              </g>
+            );
+          })()
+        : null}
 
       {(step.side ?? []).map((note) => {
         const slot = step.layers.findIndex((l) => l.id === note.layer);

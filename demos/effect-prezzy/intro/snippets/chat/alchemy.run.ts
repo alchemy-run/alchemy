@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import Chat from "./Chat.ts";
+import Chat from "./ChatModules.ts";
 
 // #region show
 export default Alchemy.Stack(

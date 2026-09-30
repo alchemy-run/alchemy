@@ -8,7 +8,7 @@
  *
  * Code comes from `snippets/chat/` and is type-checked; `*.error.ts` must fail.
  */
-import type { LoopPart, MiniGraph, MiniNode, PyramidLayer, Tone } from "../shared/intro.ts";
+import type { LoopPart, MiniGraph, MiniNode, PyramidLayer } from "../shared/intro.ts";
 import type { CodeSpec, CommentSpec, LoopSpec, PyramidSpec, StepSpec, TerminalSpec } from "./steps.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ const chat = (s: {
   emphasize?: string[];
   error?: CodeSpec["error"];
   quiet?: boolean;
+  tints?: CodeSpec["tints"];
 }): CodeSpec => ({
   kind: "code",
   group: s.group,
@@ -53,6 +54,7 @@ const chat = (s: {
   emphasize: s.emphasize,
   error: s.error,
   quiet: s.quiet,
+  tints: s.tints,
   notes: s.notes,
   frames: s.diagram ? 45 : undefined,
 });
@@ -74,36 +76,13 @@ const term = (s: Omit<TerminalSpec, "kind" | "lines"> & { lines: string[] }): Te
   lines: s.lines.join("\n"),
 });
 
-// ── the app's architecture, drawn beside the Worker ──────────────────────
-const N = {
-  chat: { id: "chat", title: "Chat", color: "#f38020" },
-  room: { id: "room", title: "Room", color: "#e06c9f" },
-  files: { id: "files", title: "Files", color: "#8b7cf6" },
-  messages: { id: "messages", title: "Messages", color: "#e0a86b" },
-  db: { id: "db", title: "Postgres", color: "#34d399" },
-};
+// ── diagram helper (the shared-staging drawing) ─────────────────────────
 const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]): MiniNode => ({
   ...node,
   x,
   y,
   ...(notes ? { notes } : {}),
 });
-const CHAT = at(N.chat, 150, 330);
-const ROOM = at(N.room, 560, 110);
-const MESSAGES = at(N.messages, 560, 330);
-const FILES = at(N.files, 150, 580);
-const DB = at(N.db, 560, 580);
-const E = {
-  room: { from: "chat", to: "room", label: "Durable Object" },
-  files: { from: "chat", to: "files", label: "read · write" },
-  send: { from: "room", to: "messages", label: "send" },
-  consume: { from: "messages", to: "chat", label: "consume" },
-  db: { from: "chat", to: "db", label: "Hyperdrive" },
-};
-const card = (text: string, tone: Tone = "construct") => ({ text, tone });
-
-const WORKER = { snippet: "Chat.ts", file: "src/Chat.ts", group: "chat", fontSize: 22 };
-const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 25 };
 
 // ── the stack: what "the code" actually is ─────────────────────────────
 const LAYER = {
@@ -113,6 +92,12 @@ const LAYER = {
   web: { id: "web", title: "Frontend", detail: "websites · CDN · domains", color: "#e06c9f" },
 } satisfies Record<string, PyramidLayer>;
 const ALL_LAYERS = [LAYER.infra, LAYER.config, LAYER.api, LAYER.web];
+const CHAT_LAYERS: PyramidLayer[] = [
+  { ...LAYER.infra, detail: "R2 bucket · queue · Neon Postgres" },
+  { ...LAYER.config, detail: "bindings · Hyperdrive · permissions" },
+  { ...LAYER.api, detail: "a Worker · a Durable Object per room" },
+  { ...LAYER.web, detail: "the chat page, over WebSockets" },
+];
 const pyramid = (s: Omit<PyramidSpec, "kind" | "layers"> & { layers?: PyramidLayer[] }): PyramidSpec => ({
   kind: "pyramid",
   layers: ALL_LAYERS,
@@ -161,55 +146,456 @@ const theStack: StepSpec[] = [
   }),
   pyramid({
     title: "…behind a frontend served from a CDN",
-    notes: "And at the top, the frontend people actually see, served from a CDN on a domain.",
+    notes: "And at the top, the frontend people actually see, served from a CDN on a domain. An agent has to get every one of these layers right.",
   }),
   pyramid({
-    title: "Each layer is usually built with a different tool",
-    side: [
-      { layer: "infra", text: "Terraform, CloudFormation" },
-      { layer: "config", text: "YAML, JSON, dashboards" },
-      { layer: "api", text: "TypeScript" },
-      { layer: "web", text: "a framework + CDN settings" },
-    ],
+    title: "Our example is a chat app that touches every layer",
+    layers: CHAT_LAYERS,
     notes:
-      "Today each layer tends to live in its own tool. Terraform or CloudFormation for infrastructure, YAML and JSON and clicking in dashboards for config, TypeScript for the code, a framework and CDN settings for the frontend.",
-  }),
-  pyramid({
-    title: "…and checked a different way, or not at all",
-    side: [
-      { layer: "infra", text: "a plan, reviewed in CI" },
-      { layer: "config", text: "✗ breaks in production", tone: "bad" },
-      { layer: "api", text: "unit tests with mocks" },
-      { layer: "web", text: "clicked through by hand" },
-    ],
-    notes:
-      "And each is checked differently. Infrastructure gets a plan someone reads in CI. Code gets unit tests with mocks. The frontend gets clicked through. And config, the missing permission or the wrong variable name, usually gets found in production.",
-  }),
-  pyramid({
-    title: "An agent editing the code only sees one layer",
-    lit: ["api"],
-    side: [
-      { layer: "infra", text: "? the queue it sends to", tone: "bad" },
-      { layer: "config", text: "? the permission it needs", tone: "bad" },
-      { layer: "api", text: "✎ the agent works here", tone: "good" },
-      { layer: "web", text: "? the page that calls it", tone: "bad" },
-    ],
-    notes:
-      "That's hard for people, and worse for an agent. It edits the code, but the queue, the permission and the page that calls it are somewhere else, in another tool. It can't see them, so it can't check them. It guesses.",
-  }),
-  pyramid({
-    title: "Alchemy makes the whole stack one TypeScript program",
-    brace: { text: "one program", sub: "Alchemy\nTypeScript + Effect" },
-    notes:
-      "That's the problem Alchemy solves. The infrastructure, the policies and config, the code, and the frontend are declared together in one TypeScript program. A bucket is a variable. Using it from your code is what grants the permission. We call it infrastructure as effects.",
-  }),
-  pyramid({
-    title: "…so one type checker and one test can cover every layer",
-    brace: { text: "one program", sub: "one type checker\none test file\none deploy" },
-    notes:
-      "And once it's one program, one type checker sees every layer, one test file can exercise all of them, and one command deploys them. That's what makes a fast loop possible. Let's look at that loop.",
+      "To make this concrete: a chat app on Cloudflare. A bucket for shared files, a queue and a Postgres database for history; the bindings and permissions between them; a Worker with a Durable Object per room; and a chat page talking to it over WebSockets.",
   }),
 ];
+
+// ── today: two programs ─────────────────────────────────────────────────
+const SST_CONFIG = `const bucket = new sst.aws.Bucket("Files");
+
+new sst.aws.Function("Upload", {
+  handler: "src/upload.handler",
+  link: [bucket],
+  url: true,
+});`;
+const SST_HANDLER = `import { Resource } from "sst";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+const s3 = new S3Client({});
+
+export const handler = async (event) => {
+  await s3.send(new PutObjectCommand({
+    Bucket: Resource.Files.name,
+    Key: event.queryStringParameters.name,
+    Body: event.body,
+  }));
+  return { statusCode: 201 };
+};`;
+const SST_BESIDE = { file: "src/upload.ts", src: { code: SST_HANDLER } };
+const sst = (s: Omit<CodeSpec, "kind" | "group" | "file" | "src" | "fontSize">): CodeSpec => ({
+  kind: "code",
+  group: "sst",
+  file: "sst.config.ts",
+  src: { code: SST_CONFIG },
+  fontSize: 22,
+  ...s,
+});
+const CUT = { under: "api", above: "runtime program", below: "infrastructure program" };
+const UPLOAD = {
+  label: "upload a file",
+  items: { infra: "Files bucket", config: "s3:PutObject · $BUCKET", api: "upload handler", web: "upload button" },
+};
+const twoPrograms: StepSpec[] = [
+  sst({
+    title: "Take one feature, uploading a file, built with SST",
+    notes:
+      "Take one feature of that chat: uploading a file. Here it is with SST, which is one of the nicest tools we have today. sst.config.ts creates a bucket and a function, and links them.",
+  }),
+  sst({
+    title: "The infrastructure is one program, the code that runs is another",
+    beside: SST_BESIDE,
+    notes:
+      "And the code that actually runs in the function lives in a different file, which becomes a different program. The config runs on your laptop at deploy time. The handler is bundled up and runs in Lambda. Two programs.",
+  }),
+  sst({
+    title: "They're joined by a file path and a name",
+    beside: SST_BESIDE,
+    links: [
+      { from: '"src/upload.handler"', to: "export const handler", tone: "bad" },
+      { from: '"Files"', to: "Resource.Files.name", tone: "bad" },
+    ],
+    notes:
+      "The two programs meet at a string with a file path in it, and at a name. SST generates types for Resource, which helps, but those types cover every linked resource in the app, not what this function was linked to.",
+  }),
+  sst({
+    title: "Delete the link and the handler still compiles",
+    beside: {
+      ...SST_BESIDE,
+      marks: [{ kind: "underline", find: "Resource.Files.name", label: "type-checks, fails at runtime", side: "right", tone: "bad" }],
+    },
+    marks: [{ kind: "strike", find: "link: [bucket],", tone: "bad" }],
+    notes:
+      "Delete the link. The config is fine, the handler still type-checks, and the upload fails the first time someone uses it in production. The agent editing the handler has no way to know.",
+  }),
+  sst({
+    title: "…and linking grants s3:* on the whole bucket",
+    beside: SST_BESIDE,
+    marks: [{ kind: "circle", find: "link: [bucket]", label: "s3:* on Files and Files/*", side: "right", tone: "bad" }],
+    notes:
+      "And link can't know what the handler does with the bucket, so it grants everything: s3:* on the bucket and every object in it. The handler only ever calls PutObject.",
+  }),
+  pyramid({
+    title: "SST, Pulumi, Terraform and the CDK all draw this line",
+    layers: CHAT_LAYERS,
+    cut: CUT,
+    notes:
+      "This isn't about SST. Pulumi, Terraform and the CDK all split an app the same way: a line through the middle of the stack. Infrastructure and policies below, in one program. The code that runs above, in another.",
+  }),
+  pyramid({
+    title: "…but every feature crosses it",
+    layers: CHAT_LAYERS,
+    cut: CUT,
+    slice: UPLOAD,
+    notes:
+      "But features don't live on one side of that line. Uploading a file needs a bucket, a permission and a variable, a handler, and a button. Every feature crosses the line, so every feature is split across two programs that have to agree.",
+  }),
+  pyramid({
+    title: "An agent editing the handler can't see below the line",
+    layers: CHAT_LAYERS,
+    cut: CUT,
+    slice: UPLOAD,
+    lit: ["api", "web"],
+    notes:
+      "And that's exactly where an agent gets lost. It edits the handler. The bucket, the permission and the variable are in the other program. The type checker can't connect them, so the agent guesses, and finds out in production.",
+  }),
+  pyramid({
+    title: "What if the feature owned both halves?",
+    layers: CHAT_LAYERS,
+    slice: { ...UPLOAD, label: "the Files module" },
+    notes:
+      "So erase the line. Instead of cutting the app horizontally into two programs, cut it vertically into modules. The Files module owns everything uploading needs: the bucket, the permission, and the code.",
+  }),
+];
+
+// ── modules: effectful constructors ─────────────────────────────────────
+const FILES = { snippet: "Files.ts", file: "src/Files.ts", group: "files", fontSize: 25 };
+const MODULE_BESIDE_CLASS = {
+  file: "the same shape, as a class",
+  src: {
+    code: `class FilesR2 {
+  constructor(private files: Bucket) {}
+
+  upload(name: string, body: string) {
+    return this.files.put(name, body);
+  }
+}`,
+  },
+};
+const modules: StepSpec[] = [
+  chat({
+    ...FILES,
+    title: "A module starts with the interface its callers use",
+    regions: ["service"],
+    notes:
+      "Here's that module in Alchemy. It starts with an interface: Files can upload. That's a Context.Service, a plain Effect service. Callers only ever see this.",
+  }),
+  chat({
+    ...FILES,
+    title: "Its constructor declares the bucket and access to it",
+    omit: ["methods"],
+    tints: [{ region: "construct", tone: "construct" }],
+    notes:
+      "The implementation is a Layer. Its constructor declares what the module needs from the cloud: an R2 bucket, and read-write access to it. At deploy, those two lines create the bucket and bind it to whatever Worker uses this module.",
+  }),
+  chat({
+    ...FILES,
+    title: "…and returns the methods that run on each request",
+    tints: [{ region: "methods", tone: "runtime" }],
+    notes:
+      "Then it returns the methods, which close over the client the constructor got back. These are what run on each request. One file holds both halves of the feature.",
+  }),
+  {
+    ...chat({
+      ...FILES,
+      title: "It's an effectful constructor, like a class constructor",
+      regions: ["live"],
+      quiet: true,
+      notes:
+        "If that shape looks familiar, it's a class: a constructor that receives its dependencies, and methods that use them. The difference is that this constructor is an Effect, so it can declare cloud resources, and the type system tracks everything it needs.",
+    }),
+    beside: MODULE_BESIDE_CLASS,
+    links: [
+      { from: "R2.ReadWriteBucket(bucket)", to: "private files: Bucket", tone: "construct" },
+      { from: "files.put(name, body)", to: "this.files.put(name, body)", tone: "runtime" },
+    ],
+  },
+  chat({
+    snippet: "FilesRead.error.ts",
+    file: FILES.file,
+    group: "files-read",
+    fontSize: FILES.fontSize,
+    title: "Ask for read-only access and upload stops compiling",
+    error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
+    emphasize: ["R2.ReadBucket(bucket)"],
+    notes:
+      "Because the access is declared in the same program as the code, the type checker connects them. Ask for read-only access and the client has no put. The agent finds out in milliseconds, in the editor.",
+  }),
+  chat({
+    snippet: "FilesS3.ts",
+    file: FILES.file,
+    group: "files-s3",
+    fontSize: 22,
+    title: "On AWS, the constructor's binding becomes an IAM policy",
+    beside: {
+      file: "generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# IAM policy on the Worker's role
+Effect: Allow
+Action: s3:PutObject
+Resource: arn:aws:s3:::chat-dev-sam-files/*`,
+      },
+    },
+    links: [{ from: "AWS.S3.PutObject(bucket)", to: "s3:PutObject", tone: "good" }],
+    notes:
+      "A quick detour to AWS, where this is easiest to see. Same module, backed by S3. The constructor asks for PutObject on this bucket, and at deploy that line becomes an IAM policy: exactly s3:PutObject, on exactly this bucket. Compare that with s3:* from link.",
+  }),
+  chat({
+    snippet: "FilesS3.ts",
+    file: FILES.file,
+    group: "files-s3",
+    fontSize: 22,
+    title: "…plus an environment variable with the bucket's name",
+    beside: {
+      file: "generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# IAM policy on the Worker's role
+Effect: Allow
+Action: s3:PutObject
+Resource: arn:aws:s3:::chat-dev-sam-files/*
+
+# Worker environment
+$BUCKET_NAME: chat-dev-sam-files`,
+      },
+    },
+    links: [
+      { from: "AWS.S3.PutObject(bucket)", to: "s3:PutObject", tone: "good" },
+      { from: "putObject({", to: "$BUCKET_NAME", tone: "good" },
+    ],
+    notes:
+      "It also sets $BUCKET_NAME, so putObject knows where to write. Nobody writes the policy or the variable by hand. Delete the line and the permission goes with it, and anything that used it stops compiling. And callers don't change at all: it's still Files.",
+  }),
+];
+
+// ── composing modules as Layers ──────────────────────────────────────────
+const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
+const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 25 };
+const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 23 };
+/** The consumer on AWS: a Lambda fed by SQS (shown, not type-checked). */
+const ARCHIVE = `export default AWS.Lambda.Function(
+  "Archive",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const messages = yield* Messages;
+
+    yield* SQS.consumeQueueMessages(messages, (batch) =>
+      Stream.runForEach(batch, save),
+    );
+  }),
+);`;
+const BRICKS = {
+  database: { row: 0, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
+  files: { row: 0, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
+  history: { row: 1, title: "History", detail: "queue consumer · list()", color: "#e0a86b" },
+  room: { row: 2, title: "Room", detail: "Durable Object · sockets", color: "#e06c9f" },
+  chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
+};
+const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat];
+const compose: StepSpec[] = [
+  chat({
+    ...HISTORY,
+    title: "A module can depend on other modules",
+    emphasize: ["Layer.provide(Database)", "yield* SqlClient.SqlClient"],
+    notes:
+      "Chat history is another module. Its constructor needs a SQL client, which comes from the Database module: a Neon Postgres database reached through Hyperdrive. It says so with Layer.provide.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "Consuming a queue is declared in the constructor too",
+    emphasize: ["consumeQueueMessages", "Stream.runForEach", "const messages"],
+    notes:
+      "History also consumes the Messages queue into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
+  }),
+  inline({
+    group: "aws-sqs",
+    file: "src/Archive.ts",
+    fontSize: 24,
+    title: "On AWS, that line grants three permissions…",
+    code: ARCHIVE,
+    beside: {
+      file: "generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# IAM policy on the Lambda's role
+Effect: Allow
+Action:
+  - sqs:ReceiveMessage
+  - sqs:DeleteMessage
+  - sqs:GetQueueAttributes
+Resource: arn:aws:sqs:…:chat-dev-sam-messages`,
+      },
+    },
+    links: [{ from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" }],
+    notes:
+      "The same detour for event sources. On AWS the consumer is a Lambda, and consumeQueueMessages grants exactly the three actions a consumer needs, on exactly this queue.",
+  }),
+  inline({
+    group: "aws-sqs",
+    file: "src/Archive.ts",
+    fontSize: 24,
+    title: "…and creates the event source mapping that triggers it",
+    code: ARCHIVE,
+    beside: {
+      file: "generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# IAM policy on the Lambda's role
+Effect: Allow
+Action:
+  - sqs:ReceiveMessage
+  - sqs:DeleteMessage
+  - sqs:GetQueueAttributes
+Resource: arn:aws:sqs:…:chat-dev-sam-messages
+
+# Event source mapping
+EventSourceArn: arn:aws:sqs:…:chat-dev-sam-messages
+FunctionName: chat-dev-sam-archive`,
+      },
+    },
+    links: [
+      { from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" },
+      { from: "SQS.consumeQueueMessages", to: "EventSourceArn", tone: "good" },
+    ],
+    notes:
+      "It also creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
+  }),
+  chat({
+    ...ROOM_FILE,
+    title: "Back on Cloudflare, a chat room is a Durable Object",
+    omit: ["archive", "send"],
+    notes:
+      "Back on Cloudflare. Each chat room is a Durable Object, one small stateful server per room name, and it has the same shape: a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
+  }),
+  chat({
+    ...ROOM_FILE,
+    title: "…and each room puts its messages on the queue",
+    emphasize: ["archive"],
+    notes: "Each room also sends every message to the queue that History consumes. Send-only access, declared in its constructor.",
+  }),
+  chat({
+    ...WORKER,
+    title: "The Worker yields the modules it uses and provides their Layers",
+    emphasize: ["yield* Room", "yield* Files", "yield* History", "Effect.provide"],
+    notes:
+      "The Worker is a module too. It yields the rooms, Files and History, routes requests to them, and provides the Layers that implement them. It has no idea there's a bucket, a queue or a database underneath.",
+  }),
+  chat({
+    snippet: "ChatMissing.error.ts",
+    file: WORKER.file,
+    group: "chat-missing",
+    fontSize: WORKER.fontSize,
+    title: "Forget a Layer and the Worker doesn't compile",
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'History' is not assignable")).slice(0, 1), below: true },
+    emphasize: ["Effect.provide"],
+    notes:
+      "Forget to provide History, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
+  }),
+  pyramid({
+    title: "Each module carries its own slice of the stack",
+    layers: CHAT_LAYERS,
+    bricks: [BRICKS.database, BRICKS.files],
+    notes:
+      "Now back to the pyramid. Database and Files have no dependencies, so they sit at the bottom. Each one carries its own infrastructure, permissions and code.",
+  }),
+  pyramid({
+    title: "Each Layer sits on the Layers it depends on",
+    layers: CHAT_LAYERS,
+    bricks: ALL_BRICKS,
+    notes:
+      "History sits on Database. Rooms sit on the queue History consumes. The Chat Worker sits on all of them. Layer.provide is literally stacking them.",
+  }),
+  pyramid({
+    title: "The pyramid is literally a stack of Layers",
+    layers: CHAT_LAYERS,
+    bricks: ALL_BRICKS,
+    brace: { text: "one program", sub: "one type checker\none test file\none deploy" },
+    notes:
+      "So the whole pyramid, infrastructure to frontend, is one program made of Layers. One type checker sees all of it. One test file can exercise all of it. One command deploys it.",
+  }),
+  pyramid({
+    title: "Swap a Layer and the same app runs somewhere else",
+    layers: CHAT_LAYERS,
+    bricks: [{ ...BRICKS.database, detail: "Neon ⇄ D1 ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat],
+    lit: ["Database"],
+    notes:
+      "And because each piece is a Layer, you can swap one. A different Database Layer means D1 instead of Neon, or, as we'll see, a branch of staging's database for a pull request. Same app, different place. That's what makes the loop fast.",
+  }),
+];
+
+// ── the Stack: deploy, destroy, dev ──────────────────────────────────────
+const program: StepSpec[] = [
+  chat({
+    snippet: "alchemy.run.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    title: "The Stack is the top of the pyramid",
+    notes:
+      "At the very top is the Stack: the Worker, which pulls in every Layer beneath it, plus which providers can create things and where state lives.",
+  }),
+  term({
+    group: "cli",
+    title: "alchemy deploy makes the cloud match that program",
+    lines: [
+      $("alchemy deploy"),
+      `${T.ok}✓${T.reset} Plan ready`,
+      RULE,
+      `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}5 to create${T.reset}${T.dim} · ${T.reset}${T.soft}3 bindings${T.reset}`,
+      ``,
+      `${T.ok}+${T.reset} ${res("Files", "Cloudflare.R2.Bucket")}`,
+      `${T.ok}+${T.reset} ${res("Messages", "Cloudflare.Queues.Queue")}`,
+      `${T.ok}+${T.reset} ${res("Db", "Neon.Project")}`,
+      `${T.ok}+${T.reset} ${res("Pool", "Cloudflare.Hyperdrive")}`,
+      `${T.ok}+${T.reset} ${res("Chat", "Cloudflare.Worker")}`,
+      `  ${T.ok}+${T.reset} ${T.soft}Files${T.reset}`,
+      `  ${T.ok}+${T.reset} ${T.soft}Messages${T.reset}`,
+      `  ${T.ok}+${T.reset} ${T.soft}Room${T.reset}`,
+      RULE,
+      `${T.ok}Stack deployed (5/5)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
+    ],
+    notes:
+      "alchemy deploy compares that program with what's in the cloud and does whatever it takes to make them match: every resource, and every binding between them.",
+  }),
+  term({
+    group: "cli",
+    title: "Running it again changes nothing",
+    lines: [$("alchemy deploy"), `${T.ok}✓${T.reset} Plan ready`, RULE, `${T.dim}No changes${T.reset}`],
+    notes:
+      "Run it again and nothing happens. The program describes the end state, not the steps to get there, so it's always safe to run. An agent can't break anything by deploying twice.",
+  }),
+  term({
+    group: "cli",
+    title: "alchemy destroy removes every piece of it",
+    lines: [
+      $("alchemy destroy"),
+      `${T.red}-${T.reset} ${res("Chat", "Cloudflare.Worker")} deleted`,
+      `${T.red}-${T.reset} ${res("Pool", "Cloudflare.Hyperdrive")} deleted`,
+      `${T.red}-${T.reset} ${res("Db", "Neon.Project")} deleted`,
+      `${T.red}-${T.reset} ${res("Messages", "Cloudflare.Queues.Queue")} deleted`,
+      `${T.red}-${T.reset} ${res("Files", "Cloudflare.R2.Bucket")} deleted`,
+      `${T.ok}Stack destroyed${T.reset}`,
+    ],
+    notes: "And destroy removes everything the Stack created, in the right order. Nothing left behind to clean up by hand.",
+  }),
+  term({
+    group: "cli",
+    title: "alchemy dev runs the same program on your machine",
+    lines: [
+      $("alchemy dev"),
+      `${T.ok}✓${T.reset} ${res("Chat", "Cloudflare.Worker")} ${T.dim}→${T.reset} http://localhost:1337`,
+      `${T.dim}watching for changes…${T.reset}`,
+    ],
+    notes:
+      "And alchemy dev runs the same program locally, with emulated Cloudflare services. Because the whole app is one declarative program, an agent can stand it up, tear it down, and run it locally, all by itself. Now: how does it know the app works?",
+  }),
+];
+
 
 // ── act 0: the loop, introduced one piece at a time ─────────────────────
 /** A map step that draws only `show`, everything lit. */
@@ -226,8 +612,8 @@ const PULL: LoopPart[] = ["push", "pr", "prTest", "comment"];
 const MAIN: LoopPart[] = ["merge", "staging", "stagingTest", "prod"];
 const theLoop: StepSpec[] = [
   reveal(
-    "An agent can change your code in seconds",
-    "Here's the agent. It edits code in seconds, and it'll happily tell you it's done.",
+    "An agent can change this app in seconds",
+    "Now, the agent. It can change any part of this app in seconds, and it'll happily tell you it's done. How does it actually find out?",
     ["edit"],
   ),
   reveal(
@@ -275,279 +661,6 @@ const theLoop: StepSpec[] = [
     undefined,
     ["feedback"],
   ),
-];
-
-// ── act 1: the app is one declarative program ───────────────────────────
-const program: StepSpec[] = [
-  pyramid({
-    title: "Our example is a chat app that touches every layer",
-    layers: [
-      { ...LAYER.infra, detail: "R2 bucket · queue · Neon Postgres" },
-      { ...LAYER.config, detail: "bindings · Hyperdrive · IAM" },
-      { ...LAYER.api, detail: "a Worker · a Durable Object per room" },
-      { ...LAYER.web, detail: "the chat page, over WebSockets" },
-    ],
-    notes:
-      "To make this concrete, we'll build a chat app on Cloudflare that touches every layer: a bucket, a queue and a Postgres database; the bindings and permissions between them; a Worker with a Durable Object per room; and the chat page talking to it over WebSockets.",
-  }),
-  chat({
-    snippet: "Hello.ts",
-    file: "src/Chat.ts",
-    group: "chat",
-    fontSize: WORKER.fontSize,
-    title: "It starts as one Worker",
-    notes: "It starts as the smallest thing that works: a Worker that says hello.",
-    quiet: true,
-  }),
-  chat({
-    snippet: "StackHello.ts",
-    file: "alchemy.run.ts",
-    group: "stack",
-    title: "A Stack declares everything the app is made of",
-    notes:
-      "Next to it is the Stack. It lists what the app is made of, which providers can create it, and where its state lives. Right now that's one Worker.",
-  }),
-  term({
-    group: "cli",
-    title: "alchemy deploy makes the cloud match that code",
-    lines: [
-      $("alchemy deploy"),
-      `${T.ok}✓${T.reset} Plan ready`,
-      RULE,
-      `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}1 to create${T.reset}`,
-      ``,
-      `${T.ok}+${T.reset} ${res("Chat", "Cloudflare.Worker")}`,
-      RULE,
-      `${T.ok}✓${T.reset} ${res("Chat", "Cloudflare.Worker")} created`,
-      `${T.ok}Stack deployed${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
-    ],
-    notes:
-      "alchemy deploy compares the code with what's in the cloud and does whatever it takes to make them match. Here, that's creating one Worker.",
-  }),
-  term({
-    group: "cli",
-    title: "Running it again changes nothing",
-    lines: [$("alchemy deploy"), `${T.ok}✓${T.reset} Plan ready`, RULE, `${T.dim}No changes${T.reset}`],
-    notes:
-      "Run it again and nothing happens. The code describes the end state, not the steps to get there, so it's always safe to run. An agent can't break anything by deploying twice.",
-  }),
-  term({
-    group: "cli",
-    title: "alchemy destroy removes every piece of it",
-    lines: [
-      $("alchemy destroy"),
-      `${T.red}-${T.reset} ${res("Chat", "Cloudflare.Worker")} deleted`,
-      `${T.ok}Stack destroyed${T.reset}`,
-    ],
-    notes: "And destroy removes everything the Stack created. Nothing left behind to clean up by hand.",
-  }),
-  term({
-    group: "cli",
-    title: "alchemy dev runs the same program on your machine",
-    lines: [
-      $("alchemy dev"),
-      `${T.ok}✓${T.reset} ${res("Chat", "Cloudflare.Worker")} ${T.dim}→${T.reset} http://localhost:1337`,
-      `${T.dim}watching for changes…${T.reset}`,
-    ],
-    notes:
-      "And alchemy dev runs the same Stack locally, with emulated Cloudflare services. Because the whole app is one declarative program, an agent can stand it up, tear it down, and run it locally, all by itself.",
-  }),
-];
-
-// ── act 2: the app grows; each binding is typed ──────────────────────────
-/** The consumer on AWS: a Lambda fed by SQS (shown, not type-checked). */
-const ARCHIVE = `export default AWS.Lambda.Function(
-  "Archive",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const messages = yield* Messages;
-
-    yield* SQS.consumeQueueMessages(messages, (batch) =>
-      Stream.runForEach(batch, save),
-    );
-  }),
-);`;
-
-const grow: StepSpec[] = [
-  chat({
-    ...ROOM_FILE,
-    title: "Each chat room is a Durable Object that accepts WebSockets",
-    omit: ["archive", "message"],
-    notes:
-      "Now let's make it a chat. Each room is a Durable Object: one small stateful server per room name. Its fetch upgrades the request to a WebSocket.",
-  }),
-  chat({
-    ...ROOM_FILE,
-    title: "When one socket sends a message, the room sends it to everyone",
-    omit: ["archive", "send"],
-    notes:
-      "When a message arrives on any socket, the room sends it to every socket connected to it. These sockets hibernate, so an idle room costs nothing.",
-  }),
-  chat({
-    ...WORKER,
-    title: "The Worker hands each room's sockets to its Durable Object",
-    omit: ["files", "sql", "consume", "upload", "history"],
-    diagram: { nodes: [CHAT, ROOM], edges: [E.room], cards: [card("durable_object_namespaces: Room")] },
-    emphasize: ["const rooms", "rooms.getByName"],
-    notes:
-      "Back in the Worker, yield the Room. That one line is a binding: at deploy it adds the Durable Object namespace to the Worker and runs the class migration. Then /rooms/:name routes to that room.",
-  }),
-  chat({
-    ...WORKER,
-    title: "Uploads go to an R2 bucket the Worker can read and write",
-    omit: ["sql", "consume", "history"],
-    diagram: {
-      nodes: [CHAT, ROOM, FILES],
-      edges: [E.room, E.files],
-      cards: [card("r2_buckets: Files → chat-dev-sam-files")],
-    },
-    emphasize: ["R2.Bucket", "R2.ReadWriteBucket", "files.put"],
-    notes:
-      "People want to share files, so add an R2 bucket. ReadWriteBucket is the binding: it asks for read and write access, and at deploy it adds the bucket to the Worker.",
-  }),
-  chat({
-    snippet: "ChatRead.error.ts",
-    file: WORKER.file,
-    group: WORKER.group,
-    fontSize: WORKER.fontSize,
-    title: "Ask for read-only access and the upload stops compiling",
-    error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
-    emphasize: ["R2.ReadBucket(bucket)"],
-    notes:
-      "Ask only for read access, and the client you get back has no put. The upload is now a type error. The agent finds out in milliseconds, in the editor, before anything deploys.",
-  }),
-  chat({
-    snippet: "ChatS3.ts",
-    file: WORKER.file,
-    group: "chat-aws",
-    fontSize: 22,
-    title: "On AWS, the same kind of line writes an IAM policy",
-    omit: ["route"],
-    beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# IAM policy on the Worker's role
-Effect: Allow
-Action: s3:PutObject
-Resource: arn:aws:s3:::chat-dev-sam-files/*`,
-      },
-    },
-    links: [{ from: "AWS.S3.PutObject(bucket)", to: "s3:PutObject", tone: "good" }],
-    notes:
-      "A quick detour to AWS, where this is easier to see. Swap the bucket for S3 and ask for PutObject. At deploy, Alchemy gives the Worker an IAM role, and that one line becomes a policy statement: PutObject, on exactly this bucket.",
-  }),
-  chat({
-    snippet: "ChatS3.ts",
-    file: WORKER.file,
-    group: "chat-aws",
-    fontSize: 22,
-    title: "…plus an environment variable with the bucket's name",
-    omit: ["route"],
-    beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# IAM policy on the Worker's role
-Effect: Allow
-Action: s3:PutObject
-Resource: arn:aws:s3:::chat-dev-sam-files/*
-
-# Worker environment
-$BUCKET_NAME: chat-dev-sam-files`,
-      },
-    },
-    links: [
-      { from: "AWS.S3.PutObject(bucket)", to: "s3:PutObject", tone: "good" },
-      { from: "putFile({", to: "$BUCKET_NAME", tone: "good" },
-    ],
-    notes:
-      "It also sets $BUCKET_NAME, so putFile knows where to write. Nobody writes the policy or the variable by hand, so neither can drift from the code. Delete the line and the permission goes with it.",
-  }),
-  chat({
-    ...ROOM_FILE,
-    title: "Back on Cloudflare, each room also puts its messages on a queue",
-    emphasize: ["archive"],
-    notes:
-      "Back to Cloudflare. We want history, so each room also sends every message to a queue. Queues.WriteQueue is another binding: send-only access to that queue.",
-  }),
-  chat({
-    ...WORKER,
-    title: "The Worker consumes that queue into Postgres on Neon",
-    omit: ["route", "upload", "history", "fetch"],
-    diagram: {
-      nodes: [CHAT, ROOM, MESSAGES, FILES, DB],
-      edges: [E.room, E.files, E.send, E.consume, E.db],
-      cards: [card("queue consumer: Messages → Chat"), card("hyperdrive: Pool → Neon Db")],
-    },
-    emphasize: ["sql", "consumeQueueMessages", "messages", "Stream.runForEach"],
-    notes:
-      "The Worker consumes the queue in batches and inserts each message into Postgres. The database is a Neon project, reached through Hyperdrive. Consuming a queue is an event source: at deploy it registers the Worker as the queue's consumer.",
-  }),
-  inline({
-    group: "aws-sqs",
-    file: "src/Archive.ts",
-    fontSize: 24,
-    title: "On AWS, consuming a queue grants three permissions",
-    code: ARCHIVE,
-    beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# IAM policy on the Lambda's role
-Effect: Allow
-Action:
-  - sqs:ReceiveMessage
-  - sqs:DeleteMessage
-  - sqs:GetQueueAttributes
-Resource: arn:aws:sqs:…:chat-dev-sam-messages`,
-      },
-    },
-    links: [{ from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" }],
-    notes:
-      "The same detour for event sources. On AWS the consumer is a Lambda, and consumeQueueMessages grants exactly the three actions a consumer needs, on exactly this queue.",
-  }),
-  inline({
-    group: "aws-sqs",
-    file: "src/Archive.ts",
-    fontSize: 24,
-    title: "…and creates the event source mapping that triggers it",
-    code: ARCHIVE,
-    beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# IAM policy on the Lambda's role
-Effect: Allow
-Action:
-  - sqs:ReceiveMessage
-  - sqs:DeleteMessage
-  - sqs:GetQueueAttributes
-Resource: arn:aws:sqs:…:chat-dev-sam-messages
-
-# Event source mapping
-EventSourceArn: arn:aws:sqs:…:chat-dev-sam-messages
-FunctionName: chat-dev-sam-archive`,
-      },
-    },
-    links: [
-      { from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" },
-      { from: "SQS.consumeQueueMessages", to: "EventSourceArn", tone: "good" },
-    ],
-    notes:
-      "It also creates the event source mapping that invokes the Lambda with each batch. One line of code, and the trigger and its permissions exist exactly as long as that line does.",
-  }),
-  chat({
-    ...WORKER,
-    title: "History is one query away",
-    omit: ["route", "upload", "consume", "files"],
-    diagram: {
-      nodes: [CHAT, ROOM, MESSAGES, FILES, DB],
-      edges: [E.room, E.files, E.send, E.consume, E.db],
-    },
-    emphasize: ["history", "SELECT", "rows"],
-    notes: "Back on Cloudflare, /history/:room reads a room's messages back out of Postgres.",
-  }),
 ];
 
 // ── act 3: one test for the whole app, local or live ─────────────────────
@@ -860,4 +973,16 @@ const release: StepSpec[] = [
   ),
 ];
 
-export const steps: StepSpec[] = [...opening, ...theStack, ...theLoop, ...program, ...grow, ...tests, ...ci, ...shared, ...release];
+export const steps: StepSpec[] = [
+  ...opening,
+  ...theStack,
+  ...twoPrograms,
+  ...modules,
+  ...compose,
+  ...program,
+  ...theLoop,
+  ...tests,
+  ...ci,
+  ...shared,
+  ...release,
+];

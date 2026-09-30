@@ -304,6 +304,12 @@ export interface PyramidStep {
   side?: { layer: string; text: string; tone?: Tone }[];
   /** A bracket over every layer, with a label. */
   brace?: { text: string; sub?: string };
+  /** A dashed line under a layer, splitting the stack into two programs. */
+  cut?: { under: string; above: string; below: string };
+  /** One feature, cut vertically through every layer: what it needs in each. */
+  slice?: { label: string; items: Record<string, string> };
+  /** The stack rebuilt from modules: bricks laid in the pyramid's rows, bottom first. */
+  bricks?: { row: number; title: string; detail: string; color: string }[];
   frames: number;
 }
 
