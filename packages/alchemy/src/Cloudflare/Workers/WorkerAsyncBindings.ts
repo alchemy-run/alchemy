@@ -398,6 +398,16 @@ const bindContainerClass = Effect.fn(function* (
     containers: [
       {
         className,
+        name: Output.all(
+          application.schedulingPolicy,
+          application.applicationName,
+        ).pipe(
+          Output.map(([policy, name]) =>
+            policy === "durable_object" ? name : undefined,
+          ),
+        ),
+        images: application.images,
+        devImages: application.devImages,
         dev: application.dev,
         hash: application.hash.pipe(Output.map((h) => h?.image)),
       },

@@ -87,12 +87,15 @@ export class ContainerCrashedError extends Data.TaggedError(
 export type ContainerStartupOptions = cf.ContainerStartupOptions;
 
 import type {
+  ContainerImageProps,
+  DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
 
 export type {
+  DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
@@ -128,8 +131,27 @@ export type {
 export type ImageContainerProps<Req = never> =
   | InputProps<ExternalContainerProps>
   | InputProps<RemoteContainerProps>
+  | InputProps<DurableObjectContainerProps>
   | Effect.Effect<
-      InputProps<ExternalContainerProps> | InputProps<RemoteContainerProps>,
+      | InputProps<ExternalContainerProps>
+      | InputProps<RemoteContainerProps>
+      | InputProps<DurableObjectContainerProps>,
+      Config.ConfigError,
+      Req
+    >;
+
+type NamedImageContainerProps<ImageName extends string, Req> =
+  | InputProps<
+      Omit<DurableObjectContainerProps, "images"> & {
+        images: Record<ImageName, ContainerImageProps>;
+      }
+    >
+  | Effect.Effect<
+      InputProps<
+        Omit<DurableObjectContainerProps, "images"> & {
+          images: Record<ImageName, ContainerImageProps>;
+        }
+      >,
       Config.ConfigError,
       Req
     >;
@@ -283,6 +305,81 @@ export type Container<Id extends string = string> = Named<Id> & {
  *   },
  * };
  * ```
+ *
+ * ### Native Durable Object Containers
+ * Use `schedulingPolicy: "durable_object"` to choose an image and instance
+ * size for each container at runtime. Named images are built or copied into
+ * Cloudflare's registry, pinned to a digest, and prepared before the Worker
+ * is uploaded. Omit `images` to use `cloudflare/debian-trixie` or restore a
+ * snapshot without publishing an image.
+ *
+ * `Containers.bind` returns a native Effect client without starting the
+ * container. Its `exec` takes an argument vector and returns a scoped process
+ * with streams, an exit code, and an `output()` collector. Your application's
+ * own RPC methods remain separate from the native client.
+ *
+ * **Example:** Execute a command in a named image
+ * ```typescript
+ * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ *   schedulingPolicy: "durable_object",
+ *   images: { node: { image: "node:24-slim" } },
+ * }) {}
+ *
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Cloudflare.Containers.bind(Sandbox);
+ *     return Effect.succeed({
+ *       exec: (args: string[]) => Effect.gen(function* () {
+ *         if (!(yield* sandbox.running)) {
+ *           const images = yield* sandbox.images;
+ *           yield* sandbox.start({
+ *             image: images.node,
+ *             instance: "lite",
+ *             entrypoint: ["sleep", "infinity"],
+ *             enableInternet: false,
+ *           });
+ *         }
+ *         const process = yield* sandbox.exec(args);
+ *         const result = yield* process.output();
+ *         return { text: new TextDecoder().decode(result.stdout), exitCode: result.exitCode };
+ *       }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Save and restore the writable filesystem
+ * ```typescript
+ * const snapshot = yield* sandbox.snapshotContainer({ name: "workspace" });
+ * // Persist this handle in Durable Object storage before stopping the instance.
+ * yield* state.storage.put("snapshot", snapshot);
+ * yield* sandbox.destroy();
+ * yield* sandbox.start({
+ *   containerSnapshot: snapshot,
+ *   entrypoint: ["sleep", "infinity"],
+ *   enableInternet: false,
+ * });
+ * ```
+ *
+ * Snapshots capture the writable root filesystem, not memory, processes, or
+ * mounted filesystems. Restoring starts a new entrypoint process. Snapshot
+ * handles expire after 30 days without a restore. `exec` does not start a
+ * stopped container or invoke a shell; pass `['sh', '-c', command]` explicitly
+ * when needed. Scope closure kills an unfinished exec process, but does not
+ * signal its descendants. Use an Effect timeout to bound a command's lifetime.
+ *
+ * Native async Durable Objects use the same declaration on a Worker's `env`
+ * and call `this.ctx.container` directly. Local development exposes the named
+ * images through workerd and Docker.
+ *
+ * Switching an existing application to this scheduling policy requires a new
+ * application and a new Durable Object class/namespace. Alchemy rejects an
+ * in-place policy change; existing Durable Object storage is not transferred.
+ * Replacing only a wrapper with the native API while retaining the original
+ * policy and class preserves the namespace. Deployment properties such as
+ * `maxInstances`, `instanceType`, `env`, and `rollout` are not valid with the
+ * new policy; pass per-instance settings to `start()`.
  *
  * ### Image Sources
  * A container's image comes from one of three sources, picked by which
@@ -645,11 +742,24 @@ export type Container<Id extends string = string> = Named<Id> & {
  */
 export const Container: ResourceClassLike<ContainerApplication> &
   Pick<ResourceClass<ContainerApplication>, "ref"> & {
+    <
+      DOShape = unknown,
+      const Id extends string = string,
+      PropsReq = never,
+      ImageName extends string = string,
+    >(
+      id: Id,
+      props: NamedImageContainerProps<ImageName, PropsReq>,
+    ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape, ImageName>;
     <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
     ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
     <Self>(): {
+      <const Id extends string, ImageName extends string, PropsReq = never>(
+        id: Id,
+        props: NamedImageContainerProps<ImageName, PropsReq>,
+      ): Container.Decl<Self, {}, Id, PropsReq, unknown, ImageName>;
       <const Id extends string, PropsReq = never>(
         id: Id,
         props: ImageContainerProps<PropsReq>,
@@ -733,6 +843,7 @@ export declare namespace Container {
     Id extends string = string,
     Req = never,
     DOShape = unknown,
+    ImageName extends string = string,
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
@@ -742,6 +853,8 @@ export declare namespace Container {
      * `InferEnv` (`env.NAME` becomes `DurableObjectNamespace<DOShape>`).
      */
     readonly "~alchemy/Container/Shape": DOShape;
+    /** @internal phantom — required image names available to the native client. */
+    readonly "~alchemy/Container/Images": ImageName;
     /**
      * @internal — the explicit `className` from props (`undefined` defaults
      * to the binding name at bind time). Doubles as the runtime marker that
@@ -756,7 +869,11 @@ export declare namespace Container {
      * The underlying {@link ContainerApplication} resource declaration —
      * `yield*` it to get the application's Output attributes.
      */
-    Application: Effect.Effect<ContainerApplication<Self>, never, Providers>;
+    Application: Effect.Effect<
+      ContainerApplication<Self>,
+      never,
+      Providers | Req
+    >;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
         | InputProps<EffectfulContainerProps>

@@ -2,6 +2,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -10,6 +11,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NodeHttp from "node:http";
+import * as NodeNet from "node:net";
 import * as NodeStream from "node:stream";
 import {
   attachLoopbackNetnsForwarder,
@@ -24,6 +26,7 @@ import {
   usesUnixSocketLoopback,
 } from "./DockerLoopback.ts";
 import { getAddress } from "./internal/get-address.ts";
+import { connectDockerSocket } from "./internal/connect-docker-socket.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 
@@ -195,10 +198,19 @@ export const DockerLive = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const runPromise = yield* FiberSet.makeRuntimePromise();
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage =
       yield* ContainerEgressInterceptorImage;
+    const proxyServers = new Set<NodeNet.Server>();
+    const proxySockets = new Set<NodeStream.Duplex>();
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        for (const socket of proxySockets) socket.destroy();
+        for (const server of proxyServers) server.close();
+      }),
+    );
     const registeredImages = new Map<
       string,
       { tag: string; env: Record<string, string> }
@@ -267,6 +279,15 @@ export const DockerLive = Layer.effect(
             Env: Array<string>;
           }>(req);
           const image = registeredImages.get(original.Image);
+          // Native start({ image }) can select a managed image without a
+          // deployment image. workerd resolves its alias to a Docker ref.
+          try {
+            await ensureImage(image?.tag ?? original.Image);
+          } catch (error) {
+            res.writeHead(500, { "content-type": "application/json" });
+            res.end(JSON.stringify({ message: String(error) }));
+            return;
+          }
           const transformed = JSON.stringify({
             ...original,
             Image: image?.tag ?? original.Image,
@@ -459,6 +480,28 @@ export const DockerLive = Layer.effect(
         (result) => result.stdout,
       );
 
+    const availableImages = new Map<string, Promise<void>>();
+    const ensureImage = (image: string): Promise<void> => {
+      const existing = availableImages.get(image);
+      if (existing) return existing;
+      const ready = runPromise(
+        inspect(image, "{{.Id}}").pipe(
+          Effect.flatMap((id) =>
+            id.trim()
+              ? Effect.void
+              : pull({ imageUri: image, platform: "linux/amd64" }).pipe(
+                  Effect.asVoid,
+                ),
+          ),
+        ),
+      ).catch((error) => {
+        availableImages.delete(image);
+        throw error;
+      });
+      availableImages.set(image, ready);
+      return ready;
+    };
+
     const list = (ancestor: string) =>
       run([
         "ps",
@@ -485,17 +528,81 @@ export const DockerLive = Layer.effect(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
         Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
-        Effect.flatMap((socketPath) => {
-          const server = makeDockerProxyServer(socketPath);
-          server.listen(0);
-          return getAddress(server);
-        }),
+        Effect.flatMap((socketPath) =>
+          Effect.gen(function* () {
+            const server = makeDockerProxyServer(socketPath);
+            proxyServers.add(server);
+            yield* Effect.promise(
+              () =>
+                new Promise<void>((resolve) =>
+                  server.listen(0, "127.0.0.1", resolve),
+                ),
+            );
+            const address = server.address();
+            if (!address || typeof address === "string")
+              return yield* new SystemError({
+                subtag: "DockerProxyAddress",
+                message: "Docker proxy has no TCP address.",
+              });
+            // Bun 1.3 cannot hand arbitrary upgraded HTTP sockets to userland.
+            // Route Docker's raw exec stream before HTTP parsing, preserving
+            // its 101 response, stdin, and multiplexed stdout/stderr bytes.
+            const proxy = NodeNet.createServer(
+              { allowHalfOpen: true },
+              (client) => {
+                // Bun 1.3 does not copy the server's allowHalfOpen option onto
+                // accepted sockets. workerd closes stdin before reading output.
+                client.allowHalfOpen = true;
+                proxySockets.add(client);
+                client.on("close", () => proxySockets.delete(client));
+                client.on("error", () => client.destroy());
+                let headers = Buffer.alloc(0);
+                const route = (chunk: Buffer) => {
+                  headers = Buffer.concat([headers, chunk]);
+                  const end = headers.indexOf("\r\n\r\n");
+                  if (end === -1) {
+                    if (headers.length > 65536) client.destroy();
+                    return;
+                  }
+                  client.pause();
+                  client.removeListener("data", route);
+                  const upgrade = /^upgrade:\s*tcp\s*$/im.test(
+                    headers.subarray(0, end).toString(),
+                  );
+                  const upstream = upgrade
+                    ? connectDockerSocket(socketPath.replace(/^unix:/, ""))
+                    : NodeNet.createConnection({
+                        host: "127.0.0.1",
+                        port: address.port,
+                        allowHalfOpen: true,
+                      });
+                  proxySockets.add(upstream);
+                  upstream.on("close", () => proxySockets.delete(upstream));
+                  upstream.write(headers);
+                  client.pipe(upstream);
+                  upstream.pipe(client);
+                  client.on("close", () => upstream.destroy());
+                  upstream.on("error", () => client.destroy());
+                };
+                client.on("data", route);
+              },
+            );
+            proxyServers.add(proxy);
+            yield* Effect.promise(
+              () =>
+                new Promise<void>((resolve) =>
+                  proxy.listen(0, "127.0.0.1", resolve),
+                ),
+            );
+            return yield* getAddress(proxy);
+          }),
+        ),
       ),
       // Skip the eager pull when the interceptor image is already present
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
       // local-only tag that exists in the Docker daemon but resolves in no
       // registry (e.g. a locally-built dev image) — an unconditional
-      // `docker pull` there fails, this detached fiber dies, and every
+      // `docker pull` there fails, this startup fiber dies, and every
       // caller of `getWorkerdDockerConfiguration` (joined on first use)
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
@@ -518,9 +625,7 @@ export const DockerLive = Layer.effect(
         },
       }),
       { concurrent: true },
-    ).pipe(
-      Effect.forkDetach({ startImmediately: false, uninterruptible: true }),
-    );
+    ).pipe(Effect.forkScoped({ startImmediately: false }));
 
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
