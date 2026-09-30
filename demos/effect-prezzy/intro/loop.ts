@@ -955,21 +955,21 @@ const tests: StepSpec[] = [
   chat({
     ...TEST,
     title: "A test deploys the whole Stack first, and destroys it after",
-    omit: ["local", "dev", "test", "stage"],
+    omit: ["dev", "test", "stage"],
     notes:
       "An end-to-end test starts by deploying the same Stack. deploy(Stack) runs once for the file, so every test shares one deployment, and destroy(Stack) tears it all down when the file is done.",
   }),
   chat({
     ...TEST,
     title: "Then it talks to the app the way a user would",
-    omit: ["local", "dev", "history", "stage"],
+    omit: ["dev", "history", "stage"],
     notes:
       "Then it uses the app like a person would. Alice and Bob join the lobby over WebSockets, Alice says hi, Bob hears it. That goes through the Worker and the Durable Object.",
   }),
   chat({
     ...TEST,
     title: "It checks the queue and the database too",
-    omit: ["local", "dev", "stage"],
+    omit: ["dev", "stage"],
     notes:
       "And the message should land in history, which means it went through the queue, the consumer and Postgres. One test covers every piece of the app.",
   }),
@@ -991,9 +991,9 @@ const tests: StepSpec[] = [
     regions: ["make"],
     omit: ["stage"],
     title: "An environment variable decides where it runs",
-    emphasize: ["Config.Boolean(\"LOCAL\")", "dev: local"],
+    emphasize: ["dev: !!process.env.LOCAL"],
     notes:
-      "Make it a Config value, read from the LOCAL environment variable, and the agent picks: LOCAL=1 while it iterates, and without it, the next box, the real cloud.",
+      "Make it an environment variable, and the agent picks: LOCAL=1 while it iterates, and without it, the next box, the real cloud.",
   }),
   term({
     group: "test-run",
