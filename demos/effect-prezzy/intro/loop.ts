@@ -121,18 +121,18 @@ const opening: StepSpec[] = [
     layout: "section",
     title: "Agents write code faster than we can check it",
     heading: "Agents write code faster than we can check it",
-    subtitle: "Writing code is no longer the slow part",
+    subtitle: "…and checking it means checking the whole app",
     notes:
-      "Agents are very good at writing code now. What slows them down, and what makes them wrong, is everything that comes after: finding out whether the code actually works.",
+      "Agents are very good at writing code now. What slows them down, and what makes them wrong, is finding out whether it actually works. And working doesn't mean the code compiles. It means the whole app works. So what is the whole app?",
   },
 ];
 
 const theStack: StepSpec[] = [
   pyramid({
-    title: "Every app sits on infrastructure",
+    title: "The whole app starts with the infrastructure it runs on",
     layers: [LAYER.infra],
     notes:
-      "Before we talk about checking an agent's work, what is the work? It's never just code. At the bottom, every app sits on infrastructure: databases, buckets, queues, networks.",
+      "It's never just code. At the bottom is the infrastructure it runs on: databases, buckets, queues, networks.",
   }),
   pyramid({
     title: "…wired together with configuration and policies",
