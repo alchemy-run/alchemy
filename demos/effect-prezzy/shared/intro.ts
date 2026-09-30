@@ -327,7 +327,30 @@ export interface PyramidStep {
   frames: number;
 }
 
+/**
+ * Code that stays put while a few spans of it roll to the next value, like a
+ * slot machine: each keypress swaps a provider, and nothing else moves.
+ */
+export interface RollStep {
+  kind: "roll";
+  title: string;
+  notes: string;
+  /** Consecutive roll steps of one group animate from each other. */
+  group: string;
+  file?: string;
+  fontSize: number;
+  lines: Token[][];
+  /** The spans that change between the steps of a group, by index. */
+  slots: { line: number; start: number; end: number; active?: boolean }[];
+  /** What the current code generates at deploy, beside it. */
+  beside?: { file: string; lines: Token[][] };
+  /** Every option in the roll, with the current one lit. */
+  reel?: { items: string[]; at: number };
+  frames: number;
+}
+
 export type IntroStep =
+  | RollStep
   | CodeStep
   | SlideStep
   | BoardStep

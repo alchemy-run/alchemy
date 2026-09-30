@@ -9,7 +9,7 @@
  * Code comes from `snippets/chat/` and is type-checked; `*.error.ts` must fail.
  */
 import type { LoopPart, MiniGraph, MiniNode, PyramidLayer } from "../shared/intro.ts";
-import type { CodeSpec, CommentSpec, LoopSpec, PyramidSpec, StepSpec, TerminalSpec } from "./steps.ts";
+import type { CodeSpec, CommentSpec, LoopSpec, PyramidSpec, RollSpec, StepSpec, TerminalSpec } from "./steps.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -1041,6 +1041,212 @@ const release: StepSpec[] = [
   ),
 ];
 
+// ── anywhere: every provider has the same shape ─────────────────────────
+const roll = (s: Omit<RollSpec, "kind">): RollSpec => ({ kind: "roll", ...s });
+
+const HOST_TEMPLATE = `export default ⟨0⟩(
+  "Api",
+  Effect.gen(function* () {
+    return { main: import.meta.url⟨1⟩ };
+  }),
+  Effect.gen(function* () {
+    const files = yield* Files;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        yield* files.upload(request.url, yield* request.text);
+        return HttpServerResponse.empty({ status: 201 });
+      }),
+    };
+  }).pipe(Effect.provide(⟨2⟩)),
+);`;
+const HOSTS = ["Cloudflare Workers", "AWS Lambda", "Kubernetes on GKE"];
+const host = (at: number, title: string, values: string[], check: string, generated: string, notes: string) =>
+  roll({
+    group: "hosts",
+    file: "src/Api.ts",
+    fontSize: 24,
+    title,
+    template: HOST_TEMPLATE,
+    values,
+    check: `anywhere/${check}`,
+    beside: { file: "generated at deploy", code: generated },
+    reel: { items: HOSTS, at },
+    notes,
+  });
+
+const DB_TEMPLATE = `export const DatabaseLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const database = yield* ⟨0⟩;
+    const db = yield* ⟨1⟩;
+    const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", { origin: ⟨2⟩ });
+    const connection = yield* Cloudflare.Hyperdrive.Connect(pool);
+    return Postgres.PostgresLayer({ url: connection.connectionString });
+  }),
+).pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));`;
+const POSTGRES = ["Neon", "PlanetScale", "Prisma Postgres"];
+const postgres = (at: number, title: string, values: string[], check: string, notes: string) =>
+  roll({ group: "postgres", file: "src/Db.ts", fontSize: 24, title, template: DB_TEMPLATE, values, check: `anywhere/${check}`, reel: { items: POSTGRES, at }, notes });
+
+const WEB_TEMPLATE = `export const Web = Effect.gen(function* () {
+  const api = yield* Api;
+
+  return yield* ⟨0⟩.Website.⟨1⟩("Web", {
+    rootDir: "./apps/web",
+    env: { API_URL: api.url.as<string>() },
+  });
+});`;
+const CLOUDS = ["Cloudflare", "AWS", "Fly", "Hetzner", "Railway", "Prisma", "Neon"];
+const FRAMEWORKS = ["Astro", "Nextjs", "Nuxt", "SvelteKit"];
+const web = (cloud: string, framework: string, title: string, notes: string) =>
+  roll({
+    group: "web",
+    file: "src/Web.ts",
+    fontSize: 40,
+    title,
+    template: WEB_TEMPLATE,
+    values: [cloud, framework],
+    check: `anywhere/Web${cloud}${framework === "Astro" ? "" : framework}.ts`,
+    reel: framework === "Astro" ? { items: CLOUDS, at: CLOUDS.indexOf(cloud) } : { items: FRAMEWORKS, at: FRAMEWORKS.indexOf(framework) },
+    notes,
+  });
+
+const anywhere: StepSpec[] = [
+  {
+    kind: "slide",
+    layout: "section",
+    title: "The same loop, on any cloud",
+    heading: "The same loop, on any cloud",
+    subtitle: "Every provider has the same shape",
+    notes:
+      "Everything so far was Cloudflare, with a detour to AWS. But none of it depended on Cloudflare. Let's flip through what else the same program can reach, from the compute up to the website, and watch how little changes.",
+  },
+  chat({
+    snippet: "../anywhere/Files.ts",
+    file: "src/Files.ts",
+    group: "files-anywhere",
+    fontSize: 21,
+    title: "Files can have a Layer for each cloud, behind one interface",
+    quiet: true,
+    notes:
+      "Start with Files. Same interface as before, upload a file. Here are three Layers for it: R2, S3 and Google Cloud Storage. Each constructor declares its bucket and the narrowest access its cloud allows.",
+  }),
+  host(
+    0,
+    "The API runs on a Cloudflare Worker…",
+    ["Cloudflare.Worker", "", "FilesR2"],
+    "ApiWorker.ts",
+    `# Worker bindings
+r2_buckets:
+  - binding: Files
+    bucket_name: chat-dev-sam-files`,
+    "Here's an API that takes uploads. On a Cloudflare Worker, with the R2 Layer, the bucket is bound straight into the Worker.",
+  ),
+  host(
+    1,
+    "…on AWS Lambda…",
+    ["AWS.Lambda.Function", "", "FilesS3"],
+    "ApiLambda.ts",
+    `# IAM policy on the Lambda's role
+Effect: Allow
+Action: s3:PutObject
+Resource: arn:aws:s3:::chat-dev-sam-files/*`,
+    "Change the host to a Lambda function and the Layer to S3. The body doesn't change. The binding now becomes an IAM policy, exactly PutObject on exactly this bucket.",
+  ),
+  host(
+    2,
+    "…or on Kubernetes, in Google Cloud",
+    ["Kubernetes.Deployment", ", cluster: yield* Gke, port: 3000", "FilesGCS"],
+    "ApiGke.ts",
+    `# IAM binding for the Pod's ServiceAccount
+role: roles/storage.objectUser
+member: principal://…/sa/api
+resource: chat-dev-sam-files`,
+    "Or a Kubernetes Deployment on a GKE cluster, with Cloud Storage. Same body again. The binding becomes a Google IAM role granted to the Pod's ServiceAccount through Workload Identity: no keys, no YAML.",
+  ),
+  postgres(
+    0,
+    "Postgres can come from Neon…",
+    ['Neon.Project("Db")', 'Neon.Branch("Db", { project: database })', "db.origin"],
+    "DbNeon.ts",
+    "Down to the database. This is the Database Layer from the chat app, on Neon: a project and a branch, fronted by Hyperdrive.",
+  ),
+  postgres(
+    1,
+    "…from PlanetScale…",
+    ['Planetscale.PostgresDatabase("Db", { clusterSize: "PS_10", arch: "arm" })', 'Planetscale.PostgresRole("Db", { database, inheritedRoles: ["postgres"] })', "db.origin"],
+    "DbPlanetscale.ts",
+    "Swap in PlanetScale: a Postgres database and a role. Its origin feeds Hyperdrive the same way.",
+  ),
+  postgres(
+    2,
+    "…or from Prisma Postgres, and nothing above it changes",
+    ['Prisma.Postgres("Db", { project: "chat" })', 'Prisma.Connection("Db", { database })', "db.origin.as<Prisma.PostgresOrigin>()"],
+    "DbPrisma.ts",
+    "Or Prisma Postgres. Three different companies, one Layer. History and everything above it still just get a SQL client.",
+  ),
+  chat({
+    snippet: "Commits.ts",
+    file: "src/Commits.ts",
+    group: "commits",
+    fontSize: 24,
+    title: "Events can come from anywhere, even a GitHub repository",
+    emphasize: ["GitHub.consumeRepositoryEvents", "events: [\"push\"]"],
+    beside: {
+      file: "generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# GitHub webhook on alchemy-run/alchemy
+url: https://chat-dev-sam-commits.workers.dev/…
+events: [push]`,
+      },
+    },
+    notes:
+      "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at this Worker.",
+  }),
+  chat({
+    snippet: "Commits.ts",
+    file: "src/Commits.ts",
+    group: "commits",
+    fontSize: 24,
+    title: "…and every push lands in the chat's commits room",
+    emphasize: ["messages.send", "yield* Queues.WriteQueue("],
+    marks: [{ kind: "underline", find: "event.payload.head_commit", label: "typed per event", side: "below", tone: "good" }],
+    notes:
+      "Each event is typed by its name, so the push payload is fully typed. Every push goes onto the same Messages queue the rooms use, so commits show up in the chat's history.",
+  }),
+  web(
+    "Cloudflare",
+    "Astro",
+    "At the top, the chat's website deploys to Cloudflare…",
+    "Finally the top of the pyramid: the website. One call deploys an Astro site to Cloudflare, with the API's URL passed in.",
+  ),
+  web("AWS", "Astro", "…AWS…", "Change the namespace and the same site deploys to AWS."),
+  web("Fly", "Astro", "…Fly…", "To Fly."),
+  web("Hetzner", "Astro", "…a Hetzner server…", "To a Hetzner box."),
+  web("Railway", "Astro", "…Railway…", "To Railway."),
+  web("Prisma", "Astro", "…Prisma…", "To Prisma."),
+  web("Neon", "Astro", "…or Neon, with the same props every time", "Or Neon. Seven clouds, the same props every time."),
+  web("Neon", "Nextjs", "The framework is one word too", "And the framework is one word too: Next.js…"),
+  web("Neon", "Nuxt", "The framework is one word too", "…Nuxt…"),
+  web("Neon", "SvelteKit", "The framework is one word too", "…SvelteKit. On every one of those clouds, alchemy dev runs the framework's own dev server."),
+  {
+    kind: "slide",
+    layout: "section",
+    title: "Seven clouds, one Website",
+    heading: "Seven clouds, one Website",
+    subtitle: "Cloudflare · AWS · Fly · Hetzner · Railway · Prisma · Neon",
+    notes:
+      "We made every Website variant take the same props, so where your site runs is one word. Same for the compute, the database and the events underneath it.",
+  },
+  loop(
+    "Whatever you pick, it's the same loop",
+    "And whichever of these you pick, it's the same program, the same test file, and the same loop from edit to production.",
+    undefined,
+    ["edit", "types", "local", "live", "push", "pr", "prTest", "comment", "merge", "staging", "stagingTest", "prod", "feedback"],
+  ),
+];
+
 export const steps: StepSpec[] = [
   ...opening,
   ...theStack,
@@ -1053,4 +1259,5 @@ export const steps: StepSpec[] = [
   ...ci,
   ...shared,
   ...release,
+  ...anywhere,
 ];

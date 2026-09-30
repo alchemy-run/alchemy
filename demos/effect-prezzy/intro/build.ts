@@ -14,7 +14,7 @@ import path from "node:path";
 import { createHighlighter } from "shiki";
 import { diffArrays } from "diff";
 import { API } from "tsgo/unstable/sync";
-import type { CodeError, CodeStep, IntroJson, IntroStep, Mark, Token } from "../shared/intro.ts";
+import type { CodeError, CodeStep, IntroJson, IntroStep, Mark, RollStep, Token } from "../shared/intro.ts";
 import type { CodeSpec, Find, StepSpec } from "./steps.ts";
 
 /** Which deck to build: `intro` (intro/steps.ts) or `loop` (intro/loop.ts). */
@@ -321,6 +321,42 @@ for (const spec of steps) {
       // New lines appear two frames apart; hold until the last one has faded in.
       frames: spec.frames ?? Math.max(24, (spec.fresh ?? lines.length) * 2 + 8),
     });
+  } else if (spec.kind === "roll") {
+    let code = "";
+    const slots: { line: number; start: number; end: number }[] = [];
+    for (const part of spec.template.split(/(⟨\d+⟩)/)) {
+      const m = /^⟨(\d+)⟩$/.exec(part);
+      if (!m) {
+        code += part;
+        continue;
+      }
+      const value = spec.values[Number(m[1])];
+      if (value === undefined || value.includes("\n")) throw new Error(`roll "${spec.title}": bad value for slot ${m[1]}`);
+      const lines = code.split("\n");
+      const start = lines.at(-1)!.length;
+      slots[Number(m[1])] = { line: lines.length - 1, start, end: start + value.length };
+      code += value;
+    }
+    if (spec.check) {
+      const shown = cut(await readFile(path.join(snippetsDir, spec.check), "utf8"), ["show"]).code;
+      if (shown.trim() !== code.trim()) {
+        throw new Error(`roll "${spec.title}": template doesn't match ${spec.check}\n--- roll\n${code}\n--- snippet\n${shown}`);
+      }
+      if ((diagnostics.get(spec.check) ?? []).length) throw new Error(`roll "${spec.title}": ${spec.check} has type errors`);
+    }
+    resolved.push({
+      kind: "roll",
+      title: spec.title,
+      notes: spec.notes ?? "",
+      group: spec.group,
+      file: spec.file,
+      fontSize: spec.fontSize ?? 30,
+      lines: tokenize(code, false),
+      slots,
+      beside: spec.beside ? { file: spec.beside.file, lines: tokenize(spec.beside.code, false, spec.beside.lang ?? "yaml") } : undefined,
+      reel: spec.reel,
+      frames: spec.frames ?? 24,
+    });
   } else if (spec.kind === "browser") {
     resolved.push({ kind: "browser", title: spec.title, notes: spec.notes ?? "", url: spec.url, image: spec.image, frames: spec.frames ?? 20 });
   } else {
@@ -452,6 +488,25 @@ steps.forEach((spec, i) => {
 });
 
 await mkdir(out, { recursive: true });
+// A roll slot is lit only on the steps it rolls into or out of, so the eye goes to what changes.
+{
+  const value = (step: RollStep, k: number) => {
+    const slot = step.slots[k]!;
+    return step.lines[slot.line]!.map((t) => t.text).join("").slice(slot.start, slot.end);
+  };
+  for (const [i, step] of resolved.entries()) {
+    if (step.kind !== "roll") continue;
+    const before = resolved[i - 1];
+    const after = resolved[i + 1];
+    const prev = before?.kind === "roll" && before.group === step.group ? before : undefined;
+    const next = after?.kind === "roll" && after.group === step.group ? after : undefined;
+    step.slots = step.slots.map((slot, k) => ({
+      ...slot,
+      active: (!!prev && value(prev, k) !== value(step, k)) || (!!next && value(next, k) !== value(step, k)),
+    }));
+  }
+}
+
 const json: IntroJson = { steps: resolved };
 // Images the steps reference (e.g. an aside's photo), served next to intro.json.
 await cp(path.join(import.meta.dirname, "assets"), path.join(shared, "assets"), { recursive: true });

@@ -158,7 +158,24 @@ export interface CommentSpec {
 /** An application's layers as a pyramid (loop deck). */
 export type PyramidSpec = Omit<PyramidStep, "notes" | "frames"> & { notes?: string; frames?: number };
 
-export type StepSpec = CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec | PyramidSpec;
+/** Code with ⟨0⟩, ⟨1⟩… slots that roll to new values from step to step (loop deck). */
+export interface RollSpec {
+  kind: "roll";
+  group: string;
+  title: string;
+  notes?: string;
+  file?: string;
+  fontSize?: number;
+  template: string;
+  values: string[];
+  /** A snippet whose shown code must equal the filled template, so every variant is type-checked. */
+  check?: string;
+  beside?: { file: string; lang?: "yaml" | "typescript"; code: string };
+  reel?: { items: string[]; at: number };
+  frames?: number;
+}
+
+export type StepSpec = RollSpec | CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec | PyramidSpec;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {
