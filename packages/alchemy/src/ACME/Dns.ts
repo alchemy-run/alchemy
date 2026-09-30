@@ -152,7 +152,8 @@ export const resolveTxt = (
 /**
  * Poll until `fqdn` carries `value` — at every authoritative nameserver
  * where `node:dns` is available, else at every DoH resolver — then wait
- * `delay`. Fails with {@link DnsPropagationTimeout} after `timeout`.
+ * `delay`. Fails with {@link DnsPropagationTimeout} when polling exceeds
+ * `timeout`; the delay afterwards is not counted against it.
  */
 export const waitForTxt = (
   fqdn: string,
@@ -162,12 +163,10 @@ export const waitForTxt = (
   Effect.gen(function* () {
     const interval = options.interval ?? "3 seconds";
     const timeout = options.timeout ?? "45 seconds";
+    // Bounded by `timeout` below, so poll for the caller's whole budget.
     const attempts = Math.max(
       1,
-      Math.min(
-        8,
-        Math.ceil(Duration.toMillis(timeout) / Duration.toMillis(interval)),
-      ),
+      Math.ceil(Duration.toMillis(timeout) / Duration.toMillis(interval)),
     );
     const dns = yield* nodeDns;
     const servers =
@@ -195,14 +194,14 @@ export const waitForTxt = (
         until: (seen) => seen,
         times: attempts,
       }),
+      // The timeout covers polling only, not the settle delay after it.
+      Effect.timeoutOrElse({
+        duration: timeout,
+        orElse: () => Effect.fail(new DnsPropagationTimeout({ fqdn, value })),
+      }),
     );
     if (!propagated) {
       return yield* new DnsPropagationTimeout({ fqdn, value });
     }
     yield* propagationDelay(options);
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: options.timeout ?? "45 seconds",
-      orElse: () => Effect.fail(new DnsPropagationTimeout({ fqdn, value })),
-    }),
-  );
+  });
