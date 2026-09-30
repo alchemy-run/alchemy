@@ -193,9 +193,9 @@ const UPLOAD = {
 };
 const twoPrograms: StepSpec[] = [
   sst({
-    title: "Take one feature, uploading a file, built with SST",
+    title: "Today, we'd build its file uploads with SST",
     notes:
-      "Take one feature of that chat: uploading a file. Here it is with SST, which is one of the nicest tools we have today. sst.config.ts creates a bucket and a function, and links them.",
+      "So how would we build this today, in a way an agent can check? Take one feature, uploading a file, and build it with SST, one of the nicest tools we have. sst.config.ts creates a bucket and a function, and links them.",
   }),
   sst({
     title: "The infrastructure is one program, the code that runs is another",
@@ -292,7 +292,7 @@ const MODULE_BESIDE_CLASS = {
 const modules: StepSpec[] = [
   chat({
     ...FILES,
-    title: "A module starts with the interface its callers use",
+    title: "In Alchemy, the Files module starts with the interface its callers use",
     regions: ["service"],
     notes:
       "Here's that module in Alchemy. It starts with an interface: Files can upload. That's a Context.Service, a plain Effect service. Callers only ever see this.",
@@ -336,7 +336,7 @@ const modules: StepSpec[] = [
     error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
     emphasize: ["R2.ReadBucket(bucket)"],
     notes:
-      "Because the access is declared in the same program as the code, the type checker connects them. Ask for read-only access and the client has no put. The agent finds out in milliseconds, in the editor.",
+      "Remember deleting the link in SST, and nothing noticed? Here the access is declared in the same program as the code, so the type checker connects them. Ask for read-only access and the client has no put. The agent finds out in milliseconds, in the editor.",
   }),
   chat({
     snippet: "FilesS3.ts",
@@ -423,10 +423,10 @@ const compose: StepSpec[] = [
   ),
   chat({
     ...HISTORY,
-    title: "A module can depend on other modules",
+    title: "History gets its SQL client from the Database module",
     emphasize: ["Layer.provide(Database)", "yield* SqlClient.SqlClient"],
     notes:
-      "Chat history is another module. Its constructor needs a SQL client, which comes from the Database module: a Neon Postgres database reached through Hyperdrive. It says so with Layer.provide.",
+      "Chat history is the next module. Its constructor asks for a SQL client, and Layer.provide says where it comes from: the Database module we just built. Modules depend on modules, like any Effect service.",
   }),
   chat({
     ...HISTORY,
@@ -495,10 +495,10 @@ FunctionName: chat-dev-sam-archive`,
   ),
   chat({
     ...ROOM_FILE,
-    title: "Back on Cloudflare, a chat room is a Durable Object",
+    title: "Each chat room is a Durable Object, with the same shape",
     omit: ["archive", "send"],
     notes:
-      "Back on Cloudflare. Each chat room is a Durable Object, one small stateful server per room name, and it has the same shape: a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
+      "Each chat room is a Durable Object, one small stateful server per room name, and it has the same shape: a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
   }),
   chat({
     ...ROOM_FILE,
@@ -513,7 +513,7 @@ FunctionName: chat-dev-sam-archive`,
   ),
   chat({
     ...WORKER,
-    title: "The Worker yields the modules it uses and provides their Layers",
+    title: "The Chat Worker uses the modules and provides their Layers",
     emphasize: ["yield* Room", "yield* Files", "yield* History", "Effect.provide"],
     notes:
       "The Worker is a module too. It yields the rooms, Files and History, routes requests to them, and provides the Layers that implement them. It has no idea there's a bucket, a queue or a database underneath.",
@@ -542,14 +542,6 @@ FunctionName: chat-dev-sam-archive`,
     notes:
       "So the whole pyramid, infrastructure to frontend, is one program made of Layers. One type checker sees all of it. One test file can exercise all of it. One command deploys it.",
   }),
-  pyramid({
-    title: "Swap a Layer and the same app runs somewhere else",
-    layers: CHAT_LAYERS,
-    bricks: [{ ...BRICKS.database, detail: "Neon ⇄ D1 ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat],
-    lit: ["Database"],
-    notes:
-      "And because each piece is a Layer, you can swap one. A different Database Layer means D1 instead of Neon, or, as we'll see, a branch of staging's database for a pull request. Same app, different place. That's what makes the loop fast.",
-  }),
 ];
 
 // ── the Stack: deploy, destroy, dev ──────────────────────────────────────
@@ -558,9 +550,9 @@ const program: StepSpec[] = [
     snippet: "alchemy.run.ts",
     file: "alchemy.run.ts",
     group: "stack",
-    title: "The Stack is the top of the pyramid",
+    title: "That one program is the Stack you deploy",
     notes:
-      "At the very top is the Stack: the Worker, which pulls in every Layer beneath it, plus which providers can create things and where state lives.",
+      "That one program has an entry point: the Stack. It yields the Chat Worker, which pulls in every Layer beneath it, and says which providers can create things and where state lives.",
   }),
   term({
     group: "cli",
@@ -615,7 +607,7 @@ const program: StepSpec[] = [
       `${T.dim}watching for changes…${T.reset}`,
     ],
     notes:
-      "And alchemy dev runs the same program locally, with emulated Cloudflare services. Because the whole app is one declarative program, an agent can stand it up, tear it down, and run it locally, all by itself. Now: how does it know the app works?",
+      "And alchemy dev runs the same program locally, with emulated Cloudflare services. Because the whole app is one declarative program, an agent can stand it up, tear it down, and run it locally, all by itself. Which brings us back to the question we started with: how does it know the app works?",
   }),
 ];
 
@@ -635,8 +627,8 @@ const PULL: LoopPart[] = ["push", "pr", "prTest", "comment"];
 const MAIN: LoopPart[] = ["merge", "staging", "stagingTest", "prod"];
 const theLoop: StepSpec[] = [
   reveal(
-    "An agent can change this app in seconds",
-    "Now, the agent. It can change any part of this app in seconds, and it'll happily tell you it's done. How does it actually find out?",
+    "So an agent can change any part of this app in seconds",
+    "Here's the agent. It can change any layer of this app in seconds, and it'll happily tell you it's done. How does it actually find out?",
     ["edit"],
   ),
   reveal(
@@ -645,8 +637,8 @@ const theLoop: StepSpec[] = [
     ["edit", "prod"],
   ),
   reveal(
-    "The type checker is the first thing that answers",
-    "The first check is the type checker. It answers in milliseconds, and it points at the exact line. Every failure goes back to the agent, which fixes it and tries again.",
+    "The type checker answers first, and now it sees every layer",
+    "The first check is the one we just built: the type checker. Because the whole app is one program, it covers the bucket, the permission and the code, in milliseconds, pointing at the exact line. Every failure goes back to the agent, which fixes it and tries again.",
     ["edit", "types", "feedback", "prod"],
     ["types"],
   ),
@@ -680,7 +672,7 @@ const theLoop: StepSpec[] = [
   ),
   loop(
     "Every failure goes straight back to the agent",
-    "At every step, a failure is feedback the agent can read and act on. The faster and more precise that feedback, the faster it converges on something that works. The rest of this talk builds each of these steps.",
+    "At every step, a failure is feedback the agent can read and act on. The faster and more precise that feedback, the faster it converges on something that works. We have the first box. The rest of this talk builds the others.",
     undefined,
     ["feedback"],
   ),
@@ -690,8 +682,8 @@ const theLoop: StepSpec[] = [
 const TEST = { snippet: "chat.test.ts", file: "test/chat.test.ts", group: "test", fontSize: 27 };
 const tests: StepSpec[] = [
   loop(
-    "Now the agent needs a way to check its own work",
-    "That's a real app: a Worker, Durable Objects, WebSockets, a bucket, a queue and a database. Types catch a lot, but the agent still needs to know the whole thing works. That's the next two boxes.",
+    "Next, tests that prove the whole app works",
+    "Types say the pieces fit together. They can't say that a message Alice sends actually reaches Bob. For that the agent needs tests that run the whole app, on its machine and in the real cloud.",
     ["local", "live"],
   ),
   chat({
@@ -801,9 +793,14 @@ jobs:
     steps:
       - run: pnpm alchemy destroy --stage pr-\${{ github.event.number }}`;
 const ci: StepSpec[] = [
+  loop(
+    "Green on your machine, the agent opens a pull request",
+    "Once the tests pass locally, the agent opens a pull request. CI should run the same tests, but it can't use the agent's copy of the app. It needs one of its own.",
+    ["push", "pr", "prTest", "comment"],
+  ),
   term({
     group: "stages",
-    title: "Every stage is a complete, isolated copy of the app",
+    title: "A stage gives it a complete, isolated copy of the app",
     lines: [
       $("alchemy deploy --stage pr-42"),
       `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}6 to create${T.reset}`,
@@ -885,13 +882,21 @@ const shared: StepSpec[] = [
     "A full copy per PR is great for isolation, but a brand new database has no data in it. Real apps need realistic data to test against, and creating a database per PR is slow and costs money.",
     ["pr"],
   ),
+  pyramid({
+    title: "But the database is just a Layer, so a pull request can swap it",
+    layers: CHAT_LAYERS,
+    bricks: [{ ...BRICKS.database, detail: "new project ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat],
+    lit: ["Database"],
+    notes:
+      "Remember the pyramid. The database is one block, one Layer. Swap it and nothing above it changes: History still gets a SQL client, the Worker still works. So a pull request can use a different Database Layer.",
+  }),
   chat({
     snippet: "Db.ts",
     file: DB_FILE.file,
     group: DB_FILE.group,
     fontSize: DB_FILE.fontSize,
-    title: "Right now every stage creates its own Neon project",
-    notes: "Here's the database layer. Every stage creates its own Neon project, reached through Hyperdrive.",
+    title: "Today, every stage's Database Layer creates a new project",
+    notes: "Here's the Database Layer from before. Every stage creates a brand new Neon project.",
     quiet: true,
   }),
   chat({
@@ -906,7 +911,7 @@ const shared: StepSpec[] = [
     group: "preview",
     fontSize: 27,
     regions: ["top", "bottom"],
-    title: "The Worker becomes a preview of staging's Worker",
+    title: "The Worker does the same, as a preview of staging's Worker",
     emphasize: ["preview", "Worker.ref"],
     notes:
       "Same idea for the Worker. In a PR stage, it's uploaded as a preview of staging's Worker, with its own URL and its own Durable Object state, instead of a whole new Worker.",
@@ -914,7 +919,7 @@ const shared: StepSpec[] = [
   {
     kind: "code",
     group: "shared",
-    title: "Staging is shared, and every pull request branches off it",
+    title: "So staging is shared, and every pull request branches off it",
     src: {
       code: `Cloudflare.Worker.ref("Chat", { stage: "staging" })
 Neon.Project.ref("Db", { stage: "staging" })`,
@@ -934,7 +939,7 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     title: "The Stack comments the preview link on the pull request",
     emphasize: ["GitHub.Comment", "PULL_REQUEST", "Preview deployed", "GitHub.providers"],
     notes:
-      "Finally, a GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
+      "One more thing a pull request needs: a link to try it. A GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
   }),
   {
     kind: "comment",
@@ -967,6 +972,11 @@ jobs:
       - run: pnpm test
         env: { STAGE: staging }`;
 const release: StepSpec[] = [
+  loop(
+    "Once it's approved, main takes over",
+    "The reviewer tried the preview, the checks are green, and the PR is approved. The last lane is main.",
+    ["merge", "staging", "stagingTest", "prod"],
+  ),
   inline({
     group: "main",
     file: ".github/workflows/main.yml",

@@ -51,11 +51,11 @@ const Stage = () => (
   />
 );
 
-/** The most recent pyramid before step `at`: the drawing picks up where it left off. */
-const lastPyramid = (steps: IntroStep[], at: number) => {
+/** The most recent step of a kind before step `at`: maps pick up where they left off. */
+const lastOf = <K extends IntroStep["kind"]>(steps: IntroStep[], at: number, kind: K) => {
   for (let i = at - 1; i >= 0; i--) {
     const s = steps[i]!;
-    if (s.kind === "pyramid") return s;
+    if (s.kind === kind) return s as Extract<IntroStep, { kind: K }>;
   }
   return undefined;
 };
@@ -108,9 +108,9 @@ export const Intro = ({ intro }: IntroProps) => {
       ) : step.kind === "browser" ? (
         <BrowserPane step={step} prev={prev} local={local} />
       ) : step.kind === "loop" ? (
-        <LoopView step={step} prev={prev?.kind === "loop" ? prev : undefined} local={local} />
+        <LoopView step={step} prev={lastOf(intro.steps, at, "loop")} local={local} />
       ) : step.kind === "pyramid" ? (
-        <PyramidView step={step} prev={lastPyramid(intro.steps, at)} local={local} />
+        <PyramidView step={step} prev={lastOf(intro.steps, at, "pyramid")} local={local} />
       ) : step.kind === "comment" ? (
         <PullRequestView step={step} prev={prev?.kind === "comment" ? prev : undefined} local={local} />
       ) : (
