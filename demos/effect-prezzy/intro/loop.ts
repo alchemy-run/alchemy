@@ -135,15 +135,6 @@ const opening: StepSpec[] = [
     notes:
       "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
   },
-  {
-    kind: "slide",
-    layout: "section",
-    title: "Agents build, test and maintain whole apps",
-    heading: "Agents build, test and maintain whole apps",
-    subtitle: "…so the app should be pieces that span the entire stack",
-    notes:
-      "Agents don't just write a function anymore. They build a whole app, test it, and keep changing it for months. They do that best when the app is broken into pieces that each span the entire stack, so a feature's infrastructure, permissions and code live together, and the agent can change and test one piece without hunting through the rest. So what is the entire stack made of?",
-  },
 ];
 
 const theStack: StepSpec[] = [
@@ -151,7 +142,7 @@ const theStack: StepSpec[] = [
     title: "The whole app starts with the infrastructure it runs on",
     layers: [LAYER.infra],
     notes:
-      "It's never just code. At the bottom is the infrastructure it runs on: compute, databases, buckets, queues, networks.",
+      "Agents build, test and maintain whole apps, and a whole app is never just code. At the bottom is the infrastructure it runs on: compute, databases, buckets, queues, networks.",
   }),
   pyramid({
     title: "…wired together with configuration and policies",
