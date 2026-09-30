@@ -950,15 +950,9 @@ const theLoop: StepSpec[] = [
   ),
   reveal(
     "Merging runs the same tests again on staging",
-    "Merging deploys staging and runs the same tests one more time. Only a green staging goes to prod. That's every step between an edit and production: your machine, the pull request, and main.",
+    "Merging deploys staging and runs the same tests one more time. Only a green staging goes to prod. That's every step between an edit and production: your machine, the pull request, and main. We have the first box. The rest of this talk builds the others.",
     [...MACHINE, ...PULL, ...MAIN],
     ["merge", "staging", "stagingTest"],
-  ),
-  loop(
-    "Every failure goes straight back to the agent",
-    "Now ignore the boxes and look at the arrow. At every step, a failure is feedback the agent can read and act on. The faster and more precise that feedback, the faster it converges on something that works. We have the first box. The rest of this talk builds the others.",
-    ["edit", "feedback"],
-    ["feedback"],
   ),
 ];
 
