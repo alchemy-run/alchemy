@@ -1,7 +1,7 @@
 import * as GCP from "@/GCP";
 import * as Kubernetes from "@/Kubernetes";
 import * as Effect from "effect/Effect";
-import { CAPACITY_REGION } from "../../zones.ts";
+import { SMOKE_REGION } from "../../zones.ts";
 
 /**
  * Shared infrastructure for the GKE smoke. Resources are memoized by
@@ -21,14 +21,14 @@ export const JOB_MARKER_BODY = "written by the GKE smoke job";
  * Autopilot clusters are always regional.
  */
 export const SmokeCluster = GCP.Container.Cluster("GkeSmokeCluster", {
-  location: CAPACITY_REGION,
+  location: SMOKE_REGION,
   autopilot: true,
   releaseChannel: "REGULAR",
 });
 
 /** The bucket both workloads reach through Workload Identity. */
 export const SmokeBucket = GCP.Storage.Bucket("GkeSmokeBucket", {
-  location: CAPACITY_REGION.toUpperCase(),
+  location: SMOKE_REGION.toUpperCase(),
   uniformBucketLevelAccess: true,
   forceDestroy: true,
 });

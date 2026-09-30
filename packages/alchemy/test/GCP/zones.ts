@@ -16,6 +16,14 @@ export const CAPACITY_REGION = "us-west1";
 /** Primary zone in {@link CAPACITY_REGION}. */
 export const CAPACITY_ZONE = "us-west1-b";
 
+/**
+ * Region for the GKE smoke test. Its LoadBalancer needs an external IP, and
+ * the project allows 8 in-use external addresses per region; the other GKE,
+ * Dataproc and Composer tests use up {@link CAPACITY_REGION}'s during a full
+ * run, which leaves the smoke Service without an address.
+ */
+export const SMOKE_REGION = "us-east1";
+
 /** Second zone in {@link CAPACITY_REGION}, for tests that need two zones. */
 export const CAPACITY_ZONE_2 = "us-west1-c";
 

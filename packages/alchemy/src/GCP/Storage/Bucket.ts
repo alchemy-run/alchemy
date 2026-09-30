@@ -1,6 +1,7 @@
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -525,7 +526,7 @@ export const BucketProvider = () =>
 
     delete: Effect.fn(function* ({ olds, output, force }) {
       const mayEmpty = olds.forceDestroy === true || force === true;
-      if (mayEmpty) {
+      const empty = Effect.gen(function* () {
         yield* emptyBucket(output.bucketName);
         if (output.hierarchicalNamespace) {
           yield* emptyFolders(output.bucketName);
@@ -533,9 +534,21 @@ export const BucketProvider = () =>
         if (output.uniformBucketLevelAccess) {
           yield* emptyManagedFolders(output.bucketName);
         }
-      }
-      yield* storage
-        .deleteBuckets({ bucket: output.bucketName })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      });
+      // A writer that is still running (e.g. a Dataflow job staging temp
+      // files) can add objects between the empty and the delete, which fails
+      // with 409 "not empty"; with forceDestroy, empty again and retry.
+      yield* Effect.gen(function* () {
+        if (mayEmpty) yield* empty;
+        yield* storage
+          .deleteBuckets({ bucket: output.bucketName })
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      }).pipe(
+        Effect.retry({
+          while: (error) => mayEmpty && error._tag === "Conflict",
+          times: 6,
+          schedule: Schedule.spaced("10 seconds"),
+        }),
+      );
     }),
   });

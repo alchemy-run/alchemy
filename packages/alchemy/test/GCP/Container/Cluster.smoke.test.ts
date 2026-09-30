@@ -33,7 +33,7 @@ import {
   SmokeCluster,
   SmokeNamespace,
 } from "./fixtures/smoke-resources.ts";
-import { CAPACITY_REGION } from "../zones.ts";
+import { SMOKE_REGION } from "../zones.ts";
 
 /**
  * GKE flagship smoke — the GCP counterpart of the ECS Task / EKS path:
@@ -197,11 +197,11 @@ const namespaceLoadBalancers = Effect.gen(function* () {
   const marker = `"kubernetes.io/service-name":"${SMOKE_NAMESPACE}/`;
   const rules = yield* compute.listForwardingRules({
     project,
-    region: CAPACITY_REGION,
+    region: SMOKE_REGION,
   });
   const backends = yield* compute.listRegionBackendServices({
     project,
-    region: CAPACITY_REGION,
+    region: SMOKE_REGION,
   });
   return [
     ...(rules.items ?? []).filter((r) =>
