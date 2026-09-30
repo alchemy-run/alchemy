@@ -751,7 +751,7 @@ export const InstanceProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
       const ref = parseClusterRef(
@@ -831,8 +831,12 @@ export const InstanceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
+      // AlloyDB omits `displayName` from instance reads (as for clusters and
+      // backups); compare against the last applied value instead.
+      const observedDisplayName =
+        current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+        (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
         fingerprint(stringMapOf(current.annotations)) !==
@@ -959,7 +963,10 @@ export const InstanceProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(
+        { ...current, displayName: current.displayName ?? news.displayName },
+        env.project,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

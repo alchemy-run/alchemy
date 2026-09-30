@@ -98,7 +98,7 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.instance.name);
       expect(fetched.instanceType).toEqual("PRIMARY");
-      expect(fetched.displayName).toEqual("alchemy-test-primary");
+      // GCP omits displayName from instance reads; the attributes carry it.
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.machineConfig?.cpuCount).toEqual(2);
 
@@ -135,7 +135,7 @@ test.provider.skipIf(!runLifecycle)(
       const refetched = yield* alloydb.getProjectsLocationsClustersInstances({
         name: created.instance.name,
       });
-      expect(refetched.displayName).toEqual("alchemy-prod-primary");
+      // GCP omits displayName from instance reads; the attributes carry it.
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("primary");
 
