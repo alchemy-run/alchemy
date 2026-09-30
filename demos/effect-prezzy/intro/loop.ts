@@ -304,7 +304,7 @@ const modules: StepSpec[] = [
     ...chat({
       ...FILES,
       title: "It's an effectful constructor, like a class constructor",
-      regions: ["live"],
+      omit: ["service"],
       quiet: true,
       notes:
         "If that shape looks familiar, it's a class: a constructor that receives its dependencies, and methods that use them. The difference is that this constructor is an Effect, so it can declare cloud resources, and the type system tracks everything it needs.",
