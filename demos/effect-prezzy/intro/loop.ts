@@ -760,10 +760,23 @@ const program: StepSpec[] = [
       "The body yields the Chat Worker. That one line pulls in everything: the rooms, History, Files, Database, and all their resources and bindings.",
   }),
   chat({
+    snippet: "StackNoProviders.error.ts",
+    file: "alchemy.run.ts",
+    group: "stack",
+    fontSize: 30,
+    omit: ["ret"],
+    title: "Leave out the providers and the Stack doesn't compile",
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Layer<never, never, never>'")).slice(0, 1), below: true },
+    showRemoved: true,
+    notes:
+      "Take the providers away and it's a type error. Because the body yields the Chat Worker, the Stack's type knows every kind of resource underneath it: a Cloudflare Worker, an R2 bucket, a queue, a Neon project. So it knows exactly which providers it needs, and it won't compile until you configure all of them.",
+  }),
+  chat({
     snippet: "alchemy.run.ts",
     file: "alchemy.run.ts",
     group: "stack",
     fontSize: 30,
+    emphasize: ["return { url"],
     title: "…and returns what the app exposes: its URL",
     notes:
       "And it returns the Stack's outputs, here the Worker's URL, so deploys and tests can find the app.",
