@@ -13,6 +13,7 @@ import {
 import { Webhook } from "../../GitHub/Webhook.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { Random } from "../../Random.ts";
 import { isWorkerEvent, Worker } from "./Worker.ts";
 
 /**
@@ -20,8 +21,9 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  *
  * Deploy-time: provisions a {@link Webhook} on the repository whose delivery
  * URL points at this Worker (at a deterministic per-repo path). The webhook
- * secret is bound onto the Worker via an `Output` accessor so the runtime can
- * verify delivery signatures.
+ * secret (the caller's `secret`, or a generated random one when omitted) is
+ * bound onto the Worker via an `Output` accessor so the runtime can verify
+ * delivery signatures.
  *
  * Runtime: registers a `fetch` listener that claims requests on the
  * repository's delivery path, verifies the `HMAC-SHA256` signature against the
@@ -47,6 +49,15 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
     ) {
       const path = webhookPath(props);
 
+      // Every delivery is verified: without a caller-supplied secret, mint a
+      // stable random one that is shared by the webhook and the Worker.
+      const webhookSecret =
+        props.secret ??
+        (yield* Namespace.push(
+          ctx.LogicalId,
+          Random(`${props.owner}/${props.repository}WebhookSecret`),
+        )).text;
+
       // Deploy-time: provision the repository webhook pointing at this Worker.
       // Skipped once running inside the deployed Worker (the global guard).
       // Namespaced under the host so the webhook's logical identity matches the
@@ -60,7 +71,7 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
               repository: props.repository,
               url: Output.interpolate`${ctx.url}${path}`,
               events: [...(props.events ?? ["push"])],
-              secret: props.secret,
+              secret: webhookSecret,
               contentType: "json",
             });
           }),
@@ -73,12 +84,10 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
       // `Redacted` values as Cloudflare secrets), and it returns an Effect
       // that reads the value back from `WorkerEnvironment` at runtime —
       // reconstructing the `Redacted` wrapper. No direct `event.env` access.
-      const secret = props.secret
-        ? yield* Output.named(
-            Output.asOutput(props.secret),
-            webhookSecretEnvName(props),
-          )
-        : undefined;
+      const secret = yield* Output.named(
+        Output.asOutput(webhookSecret),
+        webhookSecretEnvName(props),
+      );
 
       yield* ctx.listen((event) => {
         if (!isWorkerEvent(event) || event.type !== "fetch") return;
@@ -101,9 +110,7 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
 
 const handleDelivery = <Req>(
   request: cf.Request,
-  // The bound secret accessor (see `Output.named` above). `undefined` when
-  // no secret was configured, in which case deliveries are accepted
-  // unverified.
+  // The bound secret accessor (see `Output.named` above).
   secret: Effect.Effect<Redacted.Redacted<string> | undefined> | undefined,
   process: (event: WebhookEvent<any>) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<Response, never, Req> =>
