@@ -177,6 +177,8 @@ export interface CodeStep {
   beside?: CodeStep;
   /** Lines from text in this pane to text in `beside`: how the two are coupled. */
   links?: CodeLink[];
+  /** A file generated from this one, drawn under it with a labelled arrow, and its links to `beside`. */
+  under?: { step: CodeStep; label: string; links?: CodeLink[] };
   /** Arcs from text in the code to what it becomes in `diagram`: a node, or an edge's label. */
   diagramLinks?: { from: Span; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A big hand-drawn red X across the code: this approach is wrong. */

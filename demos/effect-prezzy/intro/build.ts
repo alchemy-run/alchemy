@@ -253,6 +253,25 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     to: locate(besideCode, link.to, spec.title),
     tone: link.tone,
   }));
+  const underStep = spec.under
+    ? await resolveCode(
+        { kind: "code", title: spec.title, group: `${spec.group}-under`, file: spec.under.file, src: spec.under.src, lang: spec.under.lang, marks: spec.under.marks, fontSize: spec.fontSize },
+        true,
+      )
+    : undefined;
+  const underCode = underStep?.lines.map((l) => l.map((t) => t.text).join("")).join("\n") ?? "";
+  const under =
+    spec.under && underStep
+      ? {
+          step: underStep,
+          label: spec.under.label,
+          links: spec.under.links?.map((link) => ({
+            from: locate(underCode, link.from, spec.title),
+            to: locate(besideCode, link.to, spec.title),
+            tone: link.tone,
+          })),
+        }
+      : undefined;
   const longest = Math.max(...code.split("\n").map((l) => l.length));
   // Fit the code: at most 30px, smaller for long files, larger for short snippets.
   const erroring = "snippet" in spec.src && spec.src.snippet.endsWith(".error.ts") && !spec.error?.hide && !spec.error?.below;
@@ -282,6 +301,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     bundle: spec.bundle,
     beside,
     links: links.length ? links : undefined,
+    under,
     aside: spec.aside,
     cross: spec.cross,
     diagramLinks: spec.diagramLinks?.map((link) => ({ ...link, from: locate(code, link.from, spec.title) })),
@@ -500,6 +520,7 @@ steps.forEach((spec, i) => {
     step.fontSize = groupSize.get(step.group)!;
     if (step.beside) step.beside.fontSize = step.fontSize;
   }
+  if (step.kind === "code" && step.under) step.under.step.fontSize = step.fontSize;
 });
 
 await mkdir(out, { recursive: true });

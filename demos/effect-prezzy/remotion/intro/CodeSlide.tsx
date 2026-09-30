@@ -17,6 +17,10 @@ export type Area = typeof AREA;
 export const SPLIT = {
   left: { ...AREA, width: 850 },
   right: { ...AREA, x: 990, width: 820 },
+  /** The left pane's top half, when a generated file sits under it. */
+  leftTop: { ...AREA, width: 850, height: 390 },
+  /** Under the left pane: a file generated from it. */
+  leftBottom: { ...AREA, y: 620, width: 850, height: 420 },
 };
 const PANEL_WIDTH = 560;
 /** Width kept for the drawing when a step has one. */

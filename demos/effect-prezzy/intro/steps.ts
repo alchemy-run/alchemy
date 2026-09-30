@@ -69,6 +69,11 @@ export interface CodeSpec {
   beside?: Pick<CodeSpec, "file" | "src" | "lang" | "tints" | "marks">;
   /** Lines from text in this file to text in `beside`. */
   links?: { from: Find; to: Find; tone?: Tone }[];
+  /**
+   * A third file under this one, on the left, generated from it: an arrow labelled
+   * `label` runs down from this file to it, and `links` run from it to `beside`.
+   */
+  under?: Pick<CodeSpec, "file" | "src" | "lang" | "marks"> & { label: string; links?: { from: Find; to: Find; tone?: Tone }[] };
   /** Arcs from text in the code to a node or an edge's label in `diagram`. */
   diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */

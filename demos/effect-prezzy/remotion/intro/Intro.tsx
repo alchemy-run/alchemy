@@ -10,7 +10,7 @@ import {
 } from "remotion";
 import { introTimeline, type CodeStep, type IntroJson, type IntroStep } from "../../shared/intro.ts";
 import { VIDEO } from "../../shared/types.ts";
-import { sans } from "../fonts.ts";
+import { hand, sans } from "../fonts.ts";
 import { Slide } from "../slides/Slide.tsx";
 import { brand } from "../theme.ts";
 import { Board } from "./boards.tsx";
@@ -54,6 +54,25 @@ const Stage = () => (
   />
 );
 
+/** A thick hand-drawn arrow down the left edge, from a file to the one generated from it. */
+const GeneratedArrow = ({ label, progress }: { label: string; progress: number }) => {
+  const x = 160;
+  const y1 = 530;
+  const y2 = 600;
+  const y = y1 + (y2 - y1) * progress;
+  return (
+    <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
+      <g opacity={progress > 0 ? 1 : 0} stroke="#e0a86b" strokeWidth={5} strokeLinecap="round" fill="none">
+        <path d={`M ${x} ${y1} L ${x} ${y}`} />
+        {progress >= 1 ? <path d={`M ${x - 14} ${y2 - 18} L ${x} ${y2} L ${x + 14} ${y2 - 18}`} /> : null}
+      </g>
+      <text x={x + 30} y={(y1 + y2) / 2 + 12} fontFamily={hand} fontWeight={700} fontSize={40} fill="#e0a86b" opacity={progress}>
+        {label}
+      </text>
+    </svg>
+  );
+};
+
 /** The most recent step of a kind before step `at`: maps pick up where they left off. */
 const lastOf = <K extends IntroStep["kind"]>(steps: IntroStep[], at: number, kind: K) => {
   for (let i = at - 1; i >= 0; i--) {
@@ -91,7 +110,7 @@ export const Intro = ({ intro }: IntroProps) => {
             prev={prevCode}
             prev2={prev2Code}
             local={local}
-            area={step.beside ? SPLIT.left : undefined}
+            area={step.beside ? (step.under ? SPLIT.leftTop : SPLIT.left) : undefined}
           />
           {step.beside ? (
             <>
@@ -102,7 +121,21 @@ export const Intro = ({ intro }: IntroProps) => {
                 local={local}
                 area={SPLIT.right}
               />
-              <LinksView step={step} prev={prevCode} left={SPLIT.left} right={SPLIT.right} local={local} delay={8} />
+              <LinksView step={step} prev={prevCode} left={step.under ? SPLIT.leftTop : SPLIT.left} right={SPLIT.right} local={local} delay={8} />
+            </>
+          ) : null}
+          {step.under && step.beside ? (
+            <>
+              <CodeSlide step={step.under.step} prev={prevCode?.under?.step} local={local} area={SPLIT.leftBottom} />
+              <GeneratedArrow label={step.under.label} progress={prevCode?.under ? 1 : Math.min(1, Math.max(0, (local - 2) / 8))} />
+              <LinksView
+                step={{ ...step.under.step, links: step.under.links, beside: step.beside }}
+                prev={prevCode?.under ? { ...prevCode.under.step, links: prevCode.under.links, beside: prevCode.beside } : undefined}
+                left={SPLIT.leftBottom}
+                right={SPLIT.right}
+                local={local}
+                delay={14}
+              />
             </>
           ) : null}
         </>

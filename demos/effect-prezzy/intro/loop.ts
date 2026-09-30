@@ -223,6 +223,13 @@ export const handler = async (event) => {
   return { statusCode: 201 };
 };`;
 const SST_BESIDE = { file: "src/upload.ts", src: { code: SST_HANDLER } };
+/** What SST generates from the config, at the project root: one type for the whole app. */
+const SST_ENV = `declare module "sst" {
+  export interface Resource {
+    "Files": { "name": string; "type": "sst.aws.Bucket" }
+    "Upload": { "name": string; "type": "sst.aws.Function" }
+  }
+}`;
 const sst = (s: Omit<CodeSpec, "kind" | "group" | "file" | "src" | "fontSize">): CodeSpec => ({
   kind: "code",
   group: "sst",
@@ -244,14 +251,17 @@ const twoPrograms: StepSpec[] = [
       "So how would other infrastructure-as-code frameworks build this? Take one feature, uploading a file, with SST. sst.config.ts creates a bucket and a function and links them; it runs on your laptop at deploy time. The code that actually runs is a different file, bundled into Lambda. Two programs.",
   }),
   sst({
-    title: "They're joined only by a file path and a name",
+    title: "They're joined only by a file path and a generated name",
     beside: SST_BESIDE,
-    links: [
-      { from: '"src/upload.handler"', to: "export const handler", tone: "bad" },
-      { from: '"Files"', to: "Resource.Files.name", tone: "bad" },
-    ],
+    links: [{ from: '"src/upload.handler"', to: "export const handler", tone: "bad" }],
+    under: {
+      file: "sst-env.d.ts",
+      src: { code: SST_ENV },
+      label: "code generation",
+      links: [{ from: '"Files": {', to: "Resource.Files.name", tone: "bad" }],
+    },
     notes:
-      "The two programs meet at a string with a file path in it, and at a name. SST generates types for Resource, but they cover every resource in the app, not what this function was linked to.",
+      "The two programs meet at a string with a file path in it, and at a name. To make that name type-safe, SST runs code generation: it writes sst-env.d.ts from the config, with a type for every resource in the app, and the handler reads Resource.Files.name through it.",
   }),
   sst({
     title: "Delete the link and nothing notices, and the link grants s3:* anyway",
@@ -260,8 +270,14 @@ const twoPrograms: StepSpec[] = [
       marks: [{ kind: "underline", find: "Resource.Files.name", label: "type-checks, fails at runtime", side: "right", tone: "bad" }],
     },
     marks: [{ kind: "strike", find: "link: [bucket],", label: "s3:* on the whole bucket", side: "right", tone: "bad" }],
+    under: {
+      file: "sst-env.d.ts",
+      src: { code: SST_ENV },
+      label: "code generation",
+      marks: [{ kind: "underline", find: '"Files": {', label: "still generated", side: "right", tone: "bad" }],
+    },
     notes:
-      "Delete the link: the handler still type-checks, and the upload fails the first time someone uses it in production. The agent editing the handler has no way to know. And while it is there, link grants s3:* on the bucket and every object in it, though the handler only calls PutObject.",
+      "Delete the link: the generated types still declare Files, because they describe the whole app, so the handler still type-checks, and the upload fails the first time someone uses it in production. The agent editing the handler has no way to know. And while it is there, link grants s3:* on the bucket and every object in it, though the handler only calls PutObject.",
   }),
   pyramid({
     title: "SST, Pulumi, Terraform and the CDK all draw this line",
