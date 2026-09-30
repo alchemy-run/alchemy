@@ -30,10 +30,14 @@ export const HistoryLive = Layer.effect(
     // #region consume
     const messages = yield* Messages;
 
-    yield* Queues.consumeQueueMessages<Message>(messages, (batch) =>
-      Stream.runForEach(batch, ({ body }) => sql`INSERT INTO messages ${sql.insert(body)}`),
+    yield* Queues.consumeQueueMessages<Message>(
+      messages,
+      Stream.runForEach(({ body }) =>
+        sql`INSERT INTO messages ${sql.insert(body)}`,
+      ),
     );
     // #endregion consume
+    // #region methods
 
     return {
       list: (room: string) =>
@@ -44,6 +48,7 @@ export const HistoryLive = Layer.effect(
           yield* sql`INSERT INTO messages ${sql.insert({ room, text: file })}`/*hide*/.pipe(Effect.orDie)/*end*/;
         }),
     };
+    // #endregion methods
   }),
 )/*hide*/.pipe(Layer.provide(Queues.EventSourceLive))/*end*/;
 // #endregion live

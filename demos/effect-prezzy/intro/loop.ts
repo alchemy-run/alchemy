@@ -498,18 +498,6 @@ $BUCKET_NAME: chat-dev-sam-files`,
 const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
 const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 19 };
-/** The consumer on AWS: a Lambda fed by SQS (shown, not type-checked). */
-const ARCHIVE = `export default AWS.Lambda.Function(
-  "Archive",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const messages = yield* Messages;
-
-    yield* SQS.consumeQueueMessages(messages, (batch) =>
-      Stream.runForEach(batch, save),
-    );
-  }),
-);`;
 const compose: StepSpec[] = [
   built(
     "Next, a Database block beside it",
@@ -596,37 +584,13 @@ const compose: StepSpec[] = [
     notes:
       "History reads that queue and inserts each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the Messages queue's consumer.",
   }),
-  inline({
-    group: "aws-sqs",
-    file: "src/Archive.ts",
-    fontSize: 24,
-    title: "On AWS, that line grants three permissions…",
-    code: ARCHIVE,
+  chat({
+    ...HISTORY,
+    title: "On AWS, the same line would grant three permissions and wire the trigger",
+    omit: ["service", "methods"],
+    emphasize: ["consumeQueueMessages"],
     beside: {
-      file: "generated at deploy",
-      lang: "yaml",
-      src: {
-        code: `# IAM policy on the Lambda's role
-Effect: Allow
-Action:
-  - sqs:ReceiveMessage
-  - sqs:DeleteMessage
-  - sqs:GetQueueAttributes
-Resource: arn:aws:sqs:…:chat-dev-sam-messages`,
-      },
-    },
-    links: [{ from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" }],
-    notes:
-      "The same detour for event sources. On AWS the consumer is a Lambda, and consumeQueueMessages grants exactly the three actions a consumer needs, on exactly this queue.",
-  }),
-  inline({
-    group: "aws-sqs",
-    file: "src/Archive.ts",
-    fontSize: 24,
-    title: "…and creates the event source mapping that triggers it",
-    code: ARCHIVE,
-    beside: {
-      file: "generated at deploy",
+      file: "on AWS, generated at deploy",
       lang: "yaml",
       src: {
         code: `# IAM policy on the Lambda's role
@@ -639,15 +603,15 @@ Resource: arn:aws:sqs:…:chat-dev-sam-messages
 
 # Event source mapping
 EventSourceArn: arn:aws:sqs:…:chat-dev-sam-messages
-FunctionName: chat-dev-sam-archive`,
+FunctionName: chat-dev-sam-history`,
       },
     },
     links: [
-      { from: "SQS.consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" },
-      { from: "SQS.consumeQueueMessages", to: "EventSourceArn", tone: "good" },
+      { from: "consumeQueueMessages", to: "sqs:ReceiveMessage", tone: "good" },
+      { from: "consumeQueueMessages", to: "EventSourceArn", tone: "good" },
     ],
     notes:
-      "It also creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
+      "On Cloudflare that's all there is to it. On AWS, where the queue would be SQS and History would run in a Lambda, the same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
   built(
     "Rooms go on top of History",
