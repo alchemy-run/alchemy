@@ -479,7 +479,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
 ];
 
 // ── composing modules as Layers ──────────────────────────────────────────
-const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
+const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 19 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
 const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 17 };
 const compose: StepSpec[] = [
@@ -584,7 +584,6 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "On AWS, the same line would grant three permissions and wire the trigger",
     omit: ["service"],
-    fontSize: 19,
     emphasize: ["consumeQueueMessages"],
     beside: {
       file: "on AWS, generated at deploy",
