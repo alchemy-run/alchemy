@@ -563,7 +563,12 @@ export interface Function extends Resource<
   Providers
 > {}
 
-export type FunctionServices = Credentials | Region | AWSEnvironment;
+export type FunctionServices =
+  | Credentials
+  | Region
+  | AWSEnvironment
+  // The host itself, provided to the implementation at runtime (like Cloudflare's Worker).
+  | Function;
 
 export type FunctionShape = Main<FunctionServices>;
 
