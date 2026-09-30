@@ -389,7 +389,9 @@ export default CostExplorerTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/anomalies") {
-          const Start = yield* monthStart(-2);
+          // GetAnomalies only accepts a start date within the last 90 days;
+          // two months back exceeds that at some month ends.
+          const Start = yield* monthStart(-1);
           const result = yield* getAnomalies({
             DateInterval: { StartDate: Start },
           });

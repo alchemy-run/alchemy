@@ -109,7 +109,9 @@ export const shareProvisionedNetwork = (hooks: {
     options?: { timeout?: number },
   ) => void;
 }) => {
-  hooks.beforeAll(acquireProvisionedNetwork, { timeout: 180_000 });
+  // The acquire queues on the shared VPC-capacity lease behind long EC2
+  // suites, so the budget must cover the wait as well as the deploy.
+  hooks.beforeAll(acquireProvisionedNetwork, { timeout: 3_600_000 });
   hooks.afterAll(releaseProvisionedNetwork, { timeout: 180_000 });
 };
 
