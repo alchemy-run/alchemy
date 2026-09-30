@@ -582,6 +582,35 @@ const compose: StepSpec[] = [
   }),
   chat({
     ...HISTORY,
+    title: "On Cloudflare, that line registers the Worker as the queue's consumer",
+    omit: ["service"],
+    emphasize: ["Queues.consumeQueueMessages", "Queues.WriteQueue(messages)"],
+    beside: {
+      file: "on Cloudflare, generated at deploy",
+      lang: "yaml",
+      src: {
+        code: `# Worker binding (send access)
+- type: queue
+  name: Messages
+  queue_name: chat-dev-sam-messages
+
+# Queue consumer
+queue: chat-dev-sam-messages
+script: chat-dev-sam-chat
+settings:
+  batch_size: 10
+  max_retries: 3`,
+      },
+    },
+    links: [
+      { from: "consumeQueueMessages", to: "# Queue consumer", tone: "good" },
+      { from: "Queues.WriteQueue(messages)", to: "type: queue", tone: "good" },
+    ],
+    notes:
+      "Here's what those lines do on Cloudflare. consumeQueueMessages registers this Worker as the Messages queue's consumer, with its batch settings. WriteQueue adds a queue binding to the Worker, so it can send. No policies: on Cloudflare, access is the binding itself.",
+  }),
+  chat({
+    ...HISTORY,
     title: "On AWS, the same line would grant three permissions and wire the trigger",
     omit: ["service"],
     emphasize: ["consumeQueueMessages"],
@@ -607,7 +636,7 @@ FunctionName: chat-dev-sam-history`,
       { from: "consumeQueueMessages", to: "EventSourceArn", tone: "good" },
     ],
     notes:
-      "On Cloudflare that's all there is to it. On AWS, where the queue would be SQS and History would run in a Lambda, the same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
+      "Now the same code on AWS, where the queue would be SQS and History would run in a Lambda. The same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
   chat({
     ...ROOM_FILE,

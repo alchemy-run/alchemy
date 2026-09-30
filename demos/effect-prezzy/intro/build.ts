@@ -551,6 +551,15 @@ steps.forEach((spec, i) => {
   }
   if (step.kind === "code" && step.under) step.under.step.fontSize = step.fontSize;
 });
+// Side panels in a sequence share one size too, so consecutive panels line up.
+const besideSize = new Map<string, number>();
+for (const step of resolved) {
+  if (step.kind !== "code" || !step.beside) continue;
+  besideSize.set(step.group, Math.min(besideSize.get(step.group) ?? Infinity, step.beside.fontSize));
+}
+for (const step of resolved) {
+  if (step.kind === "code" && step.beside) step.beside.fontSize = besideSize.get(step.group)!;
+}
 
 await mkdir(out, { recursive: true });
 // A roll slot is lit only on the steps it rolls into or out of, so the eye goes to what changes.
