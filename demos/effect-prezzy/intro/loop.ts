@@ -495,7 +495,7 @@ const compose: StepSpec[] = [
     title: "The Database module starts with a Neon Postgres project",
     layer: "resource",
     notes:
-      "Same shape as Files: an interface, then a Layer. The interface is just a SQL client, called Database. The Layer's constructor declares what it needs, starting with a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
+      "Same shape as Files: an interface, then a Layer. The interface is a Context.Service called Database, whose shape is a SQL client. The Layer's constructor declares what it needs, starting with a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
   }),
   chat({
     snippet: "DbSteps.ts",
@@ -527,7 +527,7 @@ const compose: StepSpec[] = [
     title: "The constructor returns a SQL client for the rest of the app",
     layer: "api",
     notes:
-      "Then the constructor returns a Postgres Layer built from that connection string. That's why this is Layer.unwrap: the constructor's result is itself a Layer, and anything above it just asks for a SQL client.",
+      "Then it returns how Database is implemented: a Postgres SQL client, built from that connection string. That result is itself a Layer, which is why this is Layer.unwrap. Anything above it just asks for Database.",
   }),
   chat({
     snippet: "Db.ts",
