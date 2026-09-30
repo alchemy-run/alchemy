@@ -1088,16 +1088,6 @@ const ci: StepSpec[] = [
     notes:
       "A stage is a name, like dev_sam, test_sam or pr-42. Every resource's physical name includes it, and every stage keeps its own state. Deploy a new stage and you get a whole new copy of the app.",
   }),
-  chat({
-    snippet: "chat.test.ts",
-    file: TEST.file,
-    group: "test-dev",
-    fontSize: 30,
-    regions: ["make"],
-    title: "The test can take its stage from the environment",
-    emphasize: ["stage: process.env.STAGE"],
-    notes: "Let the test file read its stage from the environment. Unset, it's test_sam on your machine.",
-  }),
   inline({
     group: "ci",
     file: ".github/workflows/pr.yml",
@@ -1107,7 +1097,17 @@ const ci: StepSpec[] = [
     code: PR_YAML,
     emphasize: ["STAGE: pr-", "pnpm test"],
     notes:
-      "Then CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys a copy of the app for that PR and runs the same tests against it. Set LOCAL too and CI runs it emulated instead.",
+      "CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys a copy of the app for that PR and runs the same tests against it. Set LOCAL too and CI runs it emulated instead.",
+  }),
+  chat({
+    snippet: "chat.test.ts",
+    file: TEST.file,
+    group: "test-dev",
+    fontSize: 30,
+    regions: ["make"],
+    title: "The test can take its stage from the environment",
+    emphasize: ["stage: process.env.STAGE"],
+    notes: "For that to work, the test file reads its stage from the environment. In CI that's pr-42; unset, it's test_sam on your machine.",
   }),
   inline({
     group: "ci",
