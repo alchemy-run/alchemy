@@ -182,13 +182,12 @@ const theStack: StepSpec[] = [
       { label: "infrastructure", y: 890, color: "#8b9cf6" },
     ],
     nodes: [
-      { id: "browser", title: "Browser", sub: "the chat page", color: "#8b9cf6", x: 900, y: 250 },
+      { id: "browser", title: "Website", sub: "Vite chat page", color: "#8b9cf6", x: 900, y: 250 },
       { id: "chat", title: "Chat", sub: "Cloudflare Worker", color: "#f38020", x: 900, y: 460 },
       { id: "rooms", title: "Rooms", sub: "Durable Objects", color: "#e06c9f", x: 900, y: 670 },
       { id: "files", title: "Files", sub: "R2 bucket", color: "#8b7cf6", x: 480, y: 890 },
       { id: "messages", title: "Messages", sub: "Cloudflare Queue", color: "#e0a86b", x: 900, y: 890 },
       { id: "history", title: "History", sub: "Neon Postgres", color: "#34d399", x: 1320, y: 890 },
-      { id: "axiom", title: "Axiom", sub: "traces · logs · alerts", color: "#56b6c2", x: 1640, y: 565, w: 330, h: 330 },
     ],
     edges: [
       { from: "browser", to: "chat", label: "WebSocket" },
@@ -196,11 +195,9 @@ const theStack: StepSpec[] = [
       { from: "chat", to: "files", label: "upload", elbow: true },
       { from: "rooms", to: "messages", label: "append" },
       { from: "messages", to: "history", label: "consume" },
-      { from: "chat", to: "axiom", dashed: true },
-      { from: "rooms", to: "axiom", dashed: true },
     ],
     notes:
-      "Here's what we'll build, top to bottom, the same way the pyramid reads. The page connects to a Worker over a WebSocket. The Worker hands each room to its own Durable Object and stores uploads in an R2 bucket. Rooms append every message to a queue, which fills a Postgres database on Neon with the history. And beside all of it, the code reports traces and logs to Axiom, which alerts when something breaks.",
+      "Here's what we'll build, top to bottom, the same way the pyramid reads. A Vite site is the chat page, and it connects to a Worker over a WebSocket. The Worker hands each room to its own Durable Object and stores uploads in an R2 bucket. Rooms append every message to a queue, which fills a Postgres database on Neon with the history. And all of it will be traced, so we can see it in production.",
   },
 ];
 
