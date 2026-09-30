@@ -362,9 +362,12 @@ export interface ArchStep {
   kind: "arch";
   title: string;
   notes: string;
-  nodes: { id: string; title: string; sub?: string; color: string; x: number; y: number; w?: number }[];
+  nodes: { id: string; title: string; sub?: string; color: string; x: number; y: number; w?: number; h?: number }[];
+  /** Row labels down the left edge, so the drawing reads top to bottom. */
+  lanes?: { label: string; y: number; color: string }[];
   /** `dashed` edges are telemetry, not requests. */
-  edges: { from: string; to: string; label?: string; dashed?: boolean }[];
+  /** `dashed` edges are telemetry; `elbow` edges leave sideways, then turn down. */
+  edges: { from: string; to: string; label?: string; dashed?: boolean; elbow?: boolean }[];
   frames: number;
 }
 
