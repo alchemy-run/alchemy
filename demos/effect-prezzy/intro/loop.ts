@@ -137,9 +137,9 @@ const opening: StepSpec[] = [
     layout: "section",
     title: "Agents build, test and maintain whole apps",
     heading: "Agents build, test and maintain whole apps",
-    subtitle: "…so the app should be pieces that all follow one pattern",
+    subtitle: "…so the app should be pieces that span the entire stack",
     notes:
-      "Agents don't just write a function anymore. They build a whole app, test it, and keep changing it for months. They do that best when the app is broken into small pieces that all follow the same pattern, so every new piece looks like the last one and every change can be tested the same way. So what is a whole app made of?",
+      "Agents don't just write a function anymore. They build a whole app, test it, and keep changing it for months. They do that best when the app is broken into pieces that each span the entire stack, so a feature's infrastructure, permissions and code live together, and the agent can change and test one piece without hunting through the rest. So what is the entire stack made of?",
   },
 ];
 
