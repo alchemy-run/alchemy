@@ -3,7 +3,9 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Neon from "alchemy/Neon";
 import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import Chat from "./ChatModules.ts";
 
@@ -17,12 +19,16 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const chat = yield* Chat;
     // #region comment
+    const pullRequest = yield* Config.Int("PULL_REQUEST").pipe(
+      Config.option,
+      Config.map(Option.getOrUndefined),
+    );
 
-    if (process.env.PULL_REQUEST) {
+    if (pullRequest) {
       yield* GitHub.Comment("Preview", {
         owner: "alchemy-run",
         repository: "chat",
-        issueNumber: Number(process.env.PULL_REQUEST),
+        issueNumber: pullRequest,
         body: Output.interpolate`🚀 Preview deployed to ${chat.url}`,
       });
     }
