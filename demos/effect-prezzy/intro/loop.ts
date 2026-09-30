@@ -667,23 +667,14 @@ FunctionName: chat-dev-sam-history`,
     title: "Collecting every trace and log is one line in the Worker",
     emphasize: ["Axiom.Telemetry("],
     notes:
-      "Start with the simplest version. One line in the Worker: Axiom.Telemetry. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
-  }),
-  chat({
-    snippet: "Telemetry.ts",
-    file: "src/Telemetry.ts",
-    group: "telemetry",
-    fontSize: 26,
-    title: "…sending to two Axiom datasets, with a token that can only write to them",
-    notes:
-      "Ingest, Traces and Logs are three Axiom resources: a dataset for traces, one for logs, and an ingest token that can only write to those two. At deploy, Telemetry binds their endpoints and the token to the Worker as secrets.",
+      "Start with the simplest version. One line in the Worker: Axiom.Telemetry, pointed at an Axiom token and two datasets. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
   }),
   ...[
     {
       omit: ["dashboard", "monitor"],
       title: "Production also needs dashboards and alarms, so move it into a Layer",
       notes:
-        "Collecting is only half of it. Production also needs something that plots the data and something that wakes you up. So move that line into its own module: an Observability Layer that returns the same Axiom.Telemetry.",
+        "Collecting is only half of it. Production also needs something that plots the data and something that wakes you up. So move it into its own module: an Observability Layer. Its constructor declares where telemetry goes, two Axiom datasets and an ingest token that can only write to them, and returns the same Axiom.Telemetry.",
     },
     {
       omit: ["monitor"],
