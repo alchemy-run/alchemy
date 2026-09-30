@@ -1270,18 +1270,7 @@ const job = (at: number, title: string, values: string[], check: string, generat
     notes,
   });
 
-const DB_TEMPLATE = `export const DatabaseLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const database = yield* ⟨0⟩;
-    const db = yield* ⟨1⟩;
-    const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", { origin: ⟨2⟩ });
-    const connection = yield* Cloudflare.Hyperdrive.Connect(pool);
-    return Postgres.PostgresLayer({ url: connection.connectionString });
-  }),
-).pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding));`;
-const POSTGRES = ["Neon", "PlanetScale", "Prisma Postgres"];
-const postgres = (at: number, title: string, values: string[], check: string, notes: string) =>
-  roll({ group: "postgres", file: "src/Db.ts", fontSize: 24, title, template: DB_TEMPLATE, values, check: `anywhere/${check}`, reel: { items: POSTGRES, at }, notes });
+const DATABASES = ["Neon", "PlanetScale", "Prisma Postgres", "Cloudflare D1", "AWS Aurora"];
 
 const WEB_TEMPLATE = `export const Web = Effect.gen(function* () {
   const api = yield* Api;
@@ -1509,26 +1498,44 @@ resource: chat-dev-sam-files`,
       notes: flow.notes,
     }),
   ),
-  postgres(
-    0,
-    "Postgres can come from Neon…",
-    ['Neon.Project("Db")', 'Neon.Branch("Db", { project: database })', "db.origin"],
-    "DbNeon.ts",
-    "Down to the database. This is the Database Layer from the chat app, on Neon: a project and a branch, fronted by Hyperdrive.",
-  ),
-  postgres(
-    1,
-    "…from PlanetScale…",
-    ['Planetscale.PostgresDatabase("Db", { clusterSize: "PS_10", arch: "arm" })', 'Planetscale.PostgresRole("Db", { database, inheritedRoles: ["postgres"] })', "db.origin"],
-    "DbPlanetscale.ts",
-    "Swap in PlanetScale: a Postgres database and a role. Its origin feeds Hyperdrive the same way.",
-  ),
-  postgres(
-    2,
-    "…or from Prisma Postgres, and nothing above it changes",
-    ['Prisma.Postgres("Db", { project: "chat" })', 'Prisma.Connection("Db", { database })', "db.origin.as<Prisma.PostgresOrigin>()"],
-    "DbPrisma.ts",
-    "Or Prisma Postgres. Three different companies, one Layer. History and everything above it still just get a SQL client.",
+  ...[
+    {
+      snippet: "DbNeon.ts",
+      title: "The database can be Neon…",
+      notes: "Down to the database. This is the Database Layer from the chat app, on Neon: a project and a branch, fronted by Hyperdrive.",
+    },
+    {
+      snippet: "DbPlanetscale.ts",
+      title: "…PlanetScale…",
+      notes: "Swap in PlanetScale: a Postgres database and a role. Its origin feeds Hyperdrive the same way.",
+    },
+    {
+      snippet: "DbPrisma.ts",
+      title: "…Prisma Postgres…",
+      notes: "Or Prisma Postgres. Three different companies, and only the first two lines changed.",
+    },
+    {
+      snippet: "DbD1.ts",
+      title: "…Cloudflare D1, which is SQLite…",
+      notes:
+        "It doesn't even have to be Postgres. Cloudflare D1 is SQLite, bound straight into the Worker with no connection pool, and SQL.D1Layer turns it into the same SQL client. History's queries don't change.",
+    },
+    {
+      snippet: "DbAurora.ts",
+      title: "…or Aurora on AWS, and nothing above it changes",
+      notes:
+        "Or Aurora on AWS, for the Lambda version of the app. RDS.Connect grants read access to the cluster's secret and attaches the function to the database's network, and the Postgres Layer connects with the URL it returns. Five databases, one Layer: History and everything above it still just get a SQL client.",
+    },
+  ].map((db, at) =>
+    chat({
+      snippet: `../anywhere/${db.snippet}`,
+      file: "src/Db.ts",
+      group: "db-anywhere",
+      fontSize: 22,
+      title: db.title,
+      reel: { items: DATABASES, at },
+      notes: db.notes,
+    }),
   ),
   chat({
     snippet: "Commits.ts",
