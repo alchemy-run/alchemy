@@ -80,6 +80,18 @@ export namespace ContainerApplication {
   export type Configuration = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]
   >;
+  /**
+   * One named image of a Durable Object-managed container: a Dockerfile to
+   * build (`context` / `dockerfile`, as on {@link ExternalContainerProps}) or
+   * a pre-built `image` to re-publish (as on {@link RemoteContainerProps}).
+   */
+  export type ImageSource =
+    | {
+        context?: string;
+        dockerfile?: string | InlineDockerfile;
+        image?: undefined;
+      }
+    | { image: string; context?: undefined; dockerfile?: undefined };
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -123,9 +135,43 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   maxInstances?: number;
   /**
    * Scheduling policy used by Cloudflare's containers control plane.
+   *
+   * `"durable_object"` makes the container Durable Object-managed: the
+   * application carries no image, instance type or instance count. Its
+   * images ({@link images}, plus this container's own image under
+   * `"default"` when it declares one) are published with the Worker instead,
+   * and the Durable Object picks one — and the instance type to run it on —
+   * each time it starts a container:
+   *
+   * ```typescript
+   * const container = yield* Sandbox;
+   * const images = yield* container.images;
+   * yield* container.start({ image: images.python, instance: "standard-2" });
+   * ```
+   *
+   * {@link instances}, {@link maxInstances}, {@link instanceType} and the
+   * rest of the per-deployment configuration do not apply to it.
    * @default "default"
    */
-  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  schedulingPolicy?: ContainerApplication.SchedulingPolicy | "durable_object";
+  /**
+   * Named images a Durable Object-managed container (`schedulingPolicy:
+   * "durable_object"`) may start with. Each is built or re-published like
+   * the container's own image, into a repository of its own, and prepared on
+   * Cloudflare's network before the Worker that references it uploads.
+   *
+   * @example
+   * ```typescript
+   * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+   *   schedulingPolicy: "durable_object",
+   *   images: {
+   *     node: { context: "./images/node" },
+   *     python: { image: "python:3.13-slim" },
+   *   },
+   * }) {}
+   * ```
+   */
+  images?: Record<string, ContainerApplication.ImageSource>;
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
@@ -815,7 +861,17 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       image: string;
       digest?: string;
       configuration?: string;
+      /**
+       * Durable Object-managed containers: per named image, the build hash
+       * and the prepared reference it produced.
+       */
+      images?: Record<string, { image: string; ref: string }>;
     };
+    /**
+     * Durable Object-managed containers only: image name → prepared registry
+     * reference, declared with the Worker that hosts the Durable Object.
+     */
+    images: Record<string, string> | undefined;
     dev: DevContainerImage | undefined;
   },
   {

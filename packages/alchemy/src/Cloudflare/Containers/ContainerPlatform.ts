@@ -14,7 +14,7 @@ import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import { ContainerTypeId } from "./Container.ts";
+import { ContainerError, ContainerTypeId } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
@@ -168,6 +168,8 @@ export const ContainerPlatform: Platform<
             className,
             dev: container.dev,
             hash: container.hash.pipe(Output.map((h) => h?.image)),
+            name: container.applicationName,
+            images: container.images,
           },
         ],
       });
@@ -211,6 +213,16 @@ export const ContainerPlatform: Platform<
             ),
           start: (options?: ContainerStartupOptions) =>
             Effect.sync(() => state.container!.start(options)),
+          images: Effect.sync(() => state.container!.images),
+          snapshotContainer: (options: ContainerSnapshotOptions) =>
+            Effect.tryPromise({
+              try: () => state.container!.snapshotContainer(options),
+              catch: (cause) =>
+                new ContainerError({
+                  message: `Container snapshot failed: ${String(cause)}`,
+                  cause,
+                }),
+            }),
         } as unknown;
       });
     }),

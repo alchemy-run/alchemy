@@ -23,6 +23,8 @@ import {
   materializeInlineDockerfileContext,
   prepareContainerBuildContext,
   validateContainerImageProps,
+  durableObjectImageSources,
+  isDurableObjectManaged,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -146,11 +148,31 @@ export const LocalContainerProvider = () =>
        * still carry Outputs/Effects (the `.make` form's `exports` impl
        * Effect never resolves at all) without disabling the content check.
        */
+      // A Durable Object-managed container runs its `"default"` image locally,
+      // or its first named one: workerd starts one image per class, so
+      // `ctx.container.images` is not emulated.
+      const localImageProps = (news: AnyContainerApplicationProps) =>
+        isDurableObjectManaged(news)
+          ? durableObjectImageSources(news, "local").pipe(
+              Effect.map(([[, first]]) => first),
+            )
+          : Effect.succeed(news);
+
       const resolvedImageInputs = (
         input: unknown,
       ): AnyContainerApplicationProps | undefined => {
         if (typeof input !== "object" || input === null) return undefined;
-        const news = input as AnyContainerApplicationProps;
+        const declared = input as AnyContainerApplicationProps;
+        const first = isDurableObjectManaged(declared)
+          ? Object.values(declared.images ?? {})[0]
+          : undefined;
+        const news =
+          first === undefined ||
+          declared.image !== undefined ||
+          declared.context !== undefined ||
+          declared.dockerfile !== undefined
+            ? declared
+            : { ...declared, ...first };
         const picked = {
           main: news.main,
           image: news.image,
@@ -215,7 +237,10 @@ export const LocalContainerProvider = () =>
       }) {
         const accountId = yield* localAccountId;
         const env = makeContainerEnv(news, accountId, bindings);
-        const { dev, hash } = yield* prepareImage(id, news);
+        const { dev, hash } = yield* prepareImage(
+          id,
+          yield* localImageProps(news),
+        );
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),
@@ -231,6 +256,7 @@ export const LocalContainerProvider = () =>
           version: 1,
           dev: { ...dev, env },
           hash: { image: hash },
+          images: undefined,
         } satisfies ContainerApplication["Attributes"];
       });
 

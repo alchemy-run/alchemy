@@ -400,6 +400,8 @@ const bindContainerClass = Effect.fn(function* (
         className,
         dev: application.dev,
         hash: application.hash.pipe(Output.map((h) => h?.image)),
+        name: application.applicationName,
+        images: application.images,
       },
     ],
   });

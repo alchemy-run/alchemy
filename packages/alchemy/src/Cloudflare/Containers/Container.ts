@@ -153,6 +153,21 @@ export type Container<Id extends string = string> = Named<Id> & {
   interceptAllOutboundHttp(
     binding: Fetcher,
   ): Effect.Effect<void, never, RuntimeContext>;
+  /**
+   * Images a Durable Object-managed container (`schedulingPolicy:
+   * "durable_object"`) may start with: image name → prepared registry
+   * reference, as declared by the container's `images`. Pass one to
+   * {@link start} as `{ image }`, with the `instance` type to run it on.
+   * Empty for a container whose application carries its own image.
+   */
+  get images(): Effect.Effect<Record<string, string>, never, RuntimeContext>;
+  /**
+   * Snapshot the running container's filesystem. Restore it by passing
+   * `{ containerSnapshot: { id } }` to {@link start}.
+   */
+  snapshotContainer(
+    options: cf.ContainerSnapshotOptions,
+  ): Effect.Effect<cf.ContainerSnapshot, ContainerError, RuntimeContext>;
 };
 
 /**

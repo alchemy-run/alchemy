@@ -172,6 +172,35 @@ export const resolveNamespaceName = (
  *
  * @internal
  */
+/**
+ * Upload metadata for Durable Object-managed containers (`schedulingPolicy:
+ * "durable_object"`), keyed by class: the application name and the images the
+ * Durable Object may start with. Classes whose application carries its own
+ * image, and values not yet resolved (a precreate placeholder), are absent —
+ * callers fall back to a class-only entry for those.
+ */
+export const uploadContainerMetadata = (
+  bindings: readonly ResourceBinding<Worker["Binding"]>[],
+) => {
+  const metadata = new Map<
+    string,
+    { className: string; name: string; images: Record<string, string> }
+  >();
+  for (const binding of bindings) {
+    for (const container of binding.data.containers ?? []) {
+      const { className, name, images } = container;
+      if (
+        typeof name === "string" &&
+        images !== undefined &&
+        Object.values(images).every((image) => typeof image === "string")
+      ) {
+        metadata.set(className, { className, name, images });
+      }
+    }
+  }
+  return metadata;
+};
+
 export const resolveTailConsumers = (
   tailConsumers: WorkerProps["tailConsumers" | "streamingTailConsumers"],
 ): { service: string }[] | undefined => {
@@ -4025,6 +4054,7 @@ export const LiveWorkerProvider = () =>
             (b.data.containers ?? []).map((c) => c.className),
           ),
         );
+        const containerMetadata = uploadContainerMetadata(bindings);
 
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
@@ -4154,9 +4184,7 @@ export const LiveWorkerProvider = () =>
         };
 
         const metadataContainers = [...containerClassNames].map(
-          (className) => ({
-            className,
-          }),
+          (className) => containerMetadata.get(className) ?? { className },
         );
 
         const compatibility = getCompatibility(news);
@@ -5256,13 +5284,18 @@ export const LiveWorkerProvider = () =>
           // Container binding (mirrors reconcile's `containerClassNames`).
           // Mapping every DO class to a container would wrongly mark plain DOs
           // as container-backed in the placeholder.
+          const placeholderContainerMetadata =
+            uploadContainerMetadata(bindings);
           const containers = Array.from(
             new Set(
               bindings.flatMap((b) =>
                 (b.data.containers ?? []).map((c) => c.className),
               ),
             ),
-          ).map((className) => ({ className }));
+          ).map(
+            (className) =>
+              placeholderContainerMetadata.get(className) ?? { className },
+          );
           const alchemyDoTags = encodeDurableObjectTags(durableObjects);
           const alchemyTags = [
             ...createAlchemyWorkerTags(id),

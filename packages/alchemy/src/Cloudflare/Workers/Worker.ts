@@ -1301,6 +1301,18 @@ export type Worker<Bindings = any> = Resource<
        * instance and the running container would serve stale code.
        */
       hash: string | undefined;
+      /**
+       * Durable Object-managed containers (`schedulingPolicy:
+       * "durable_object"`) only: the container application's name, declared
+       * beside the class in the upload's `containers` metadata.
+       */
+      name?: string;
+      /**
+       * Durable Object-managed containers only: image name → prepared
+       * registry reference. The Durable Object picks one at runtime through
+       * `ctx.container.images` and passes it to `start({ image })`.
+       */
+      images?: Record<string, string>;
     }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;

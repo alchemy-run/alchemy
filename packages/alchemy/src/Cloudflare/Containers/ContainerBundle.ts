@@ -1,3 +1,4 @@
+import type * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -450,3 +451,72 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     }),
   };
 });
+
+/**
+ * Whether a container is Durable Object-managed: its application carries no
+ * image, and the Durable Object picks one of its {@link durableObjectImageSources}
+ * at `start()`.
+ */
+export const isDurableObjectManaged = (
+  props: Pick<AnyContainerApplicationProps, "schedulingPolicy">,
+) => props.schedulingPolicy === "durable_object";
+
+/**
+ * Every image a Durable Object-managed container publishes, as the props each
+ * one builds from: the container's own image under `"default"` when it
+ * declares a source, then each of `images`. A named image publishes to its
+ * own repository (`<repository>-<name>`), so images never share a build-cache
+ * tag.
+ */
+export const durableObjectImageSources = (
+  props: AnyContainerApplicationProps,
+  repository: string,
+): Effect.Effect<
+  Arr.NonEmptyReadonlyArray<
+    readonly [name: string, props: AnyContainerApplicationProps]
+  >
+> => {
+  if (props.main !== undefined) {
+    return Effect.die(
+      new Error(
+        'A Durable Object-managed container (`schedulingPolicy: "durable_object"`) cannot bundle `main`: its application carries no environment, so the bundled program would start without its bindings. Declare `images` built from a Dockerfile or a pre-built image.',
+      ),
+    );
+  }
+  const declaresOwnImage =
+    props.image !== undefined ||
+    props.context !== undefined ||
+    props.dockerfile !== undefined;
+  if (declaresOwnImage && props.images?.default !== undefined) {
+    return Effect.die(
+      new Error(
+        'A Durable Object-managed container publishes its own image as `"default"`, so `images.default` would replace it. Rename that image or drop the container\'s own `image`/`context`/`dockerfile`.',
+      ),
+    );
+  }
+  const named = Object.entries(props.images ?? {}).map(
+    ([name, source]) =>
+      [
+        name,
+        {
+          ...props,
+          image: source.image,
+          context: source.context,
+          dockerfile: source.dockerfile,
+          publish: { repository: `${repository}-${name}` },
+        },
+      ] as const,
+  );
+  if (declaresOwnImage) {
+    return Effect.succeed([["default", props] as const, ...named]);
+  }
+  const [first, ...rest] = named;
+  if (first === undefined) {
+    return Effect.die(
+      new Error(
+        'A Durable Object-managed container (`schedulingPolicy: "durable_object"`) needs at least one image: declare `images`, or an `image`/`context`/`dockerfile` of its own.',
+      ),
+    );
+  }
+  return Effect.succeed([first, ...rest]);
+};
