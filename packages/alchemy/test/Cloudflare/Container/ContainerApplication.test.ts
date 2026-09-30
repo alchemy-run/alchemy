@@ -74,7 +74,7 @@ const live = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
     Effect.map((app) => ({
       version: app.version,
-      image: app.configuration.image,
+      image: app.configuration?.image,
       durableObjects: app.durableObjects ?? undefined,
     })),
   );
@@ -99,7 +99,7 @@ const waitForImage = (
 
 /** `<repo>:<sourceHash>` — the mutable tag the provider pushed `app` as. */
 const taggedRefOf = (app: {
-  configuration: { image?: string };
+  configuration: { image?: string | null };
   hash?: { image: string };
 }) => {
   const digestRef = app.configuration.image!;
@@ -620,7 +620,7 @@ describe.concurrent(
                 accountId: app.accountId,
                 applicationId: app.applicationId,
               });
-              expect(observed.configuration.image).toBe(
+              expect(observed.configuration?.image).toBe(
                 shared.first.configuration.image,
               );
             }
@@ -706,13 +706,15 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             });
-            expect(observed.configuration.image).toBe(
+            expect(observed.configuration?.image).toBe(
               first.first.configuration.image,
             );
-            expect(observed.configuration.environmentVariables).toContainEqual({
-              name: "SLOT",
-              value: slot,
-            });
+            expect(observed.configuration?.environmentVariables).toContainEqual(
+              {
+                name: "SLOT",
+                value: slot,
+              },
+            );
             expect(observed.maxInstances).toBe(slot === "first" ? 2 : 3);
           }
           const unchanged = yield* stack.deploy(program);
@@ -1362,7 +1364,7 @@ describe.concurrent(
               accountId,
               applicationId,
             });
-            expect(observed.configuration.image).toBe(
+            expect(observed.configuration?.image).toBe(
               deployed.app.configuration.image,
             );
 
@@ -1592,8 +1594,8 @@ describe.concurrent(
             accountId: app.accountId,
             applicationId: app.applicationId,
           });
-          expect(live.configuration.memoryMib).toBe(4096);
-          expect(live.configuration.instanceType).not.toBe("lite");
+          expect(live.configuration?.memoryMib).toBe(4096);
+          expect(live.configuration?.instanceType).not.toBe("lite");
 
           yield* stack.destroy();
           const deleted = yield* Containers.getContainerApplication({

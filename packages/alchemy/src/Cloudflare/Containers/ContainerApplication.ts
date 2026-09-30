@@ -19,37 +19,57 @@ export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
 export namespace ContainerApplication {
   export type InstanceType = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["instanceType"]
   >;
   export type SchedulingPolicy = NonNullable<
     Containers.CreateContainerApplicationRequest["schedulingPolicy"]
   >;
   export type Observability = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["observability"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["observability"]
   >;
   export type Secret = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["secrets"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["secrets"]
   >[number];
   export type Disk = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["disk"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["disk"]
   >;
   export type EnvironmentVariable = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["environmentVariables"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["environmentVariables"]
   >[number];
   export type Label = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["labels"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["labels"]
   >[number];
   export type Network = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["network"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["network"]
   >;
   export type Dns = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["dns"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["dns"]
   >;
   export type Port = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["ports"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["ports"]
   >[number];
   export type Check = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["checks"]
+    NonNullable<
+      Containers.CreateContainerApplicationRequest["configuration"]
+    >["checks"]
   >[number];
   export type Constraints = {
     tier?: number;
@@ -57,8 +77,9 @@ export namespace ContainerApplication {
   export type Affinities = {
     colocation?: "datacenter";
   };
-  export type Configuration =
-    Containers.CreateContainerApplicationRequest["configuration"];
+  export type Configuration = NonNullable<
+    Containers.CreateContainerApplicationRequest["configuration"]
+  >;
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";

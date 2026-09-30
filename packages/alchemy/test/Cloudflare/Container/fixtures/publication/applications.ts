@@ -47,7 +47,8 @@ export const historyApplications = (converge = false) =>
         }).Application
       : undefined;
     const image = target?.configuration.pipe(
-      Output.map((configuration) => configuration.image),
+      // A legacy application always carries its image.
+      Output.map((configuration) => configuration.image as string),
     );
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",

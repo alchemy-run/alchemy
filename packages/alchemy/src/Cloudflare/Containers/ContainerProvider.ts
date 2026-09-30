@@ -959,27 +959,31 @@ export const LiveContainerProvider = () =>
           news,
           env,
         );
-        let deploymentImageRef = existing.configuration.image;
+        const existingImageRef = existing.configuration.image ?? undefined;
+        let deploymentImageRef = existingImageRef;
         let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
+        // An application without an image (e.g. one created for a Durable
+        // Object-managed container) has nothing to reuse: publish.
+        if (
+          imageHash !== existing.hash?.image ||
+          deploymentImageRef === undefined
+        ) {
           const published = yield* buildAndPushImage(
             id,
             news,
             build,
             imageRef,
             imageHash,
-            existing.hash?.digest === undefined
-              ? existing.configuration.image
-              : undefined,
+            existing.hash?.digest === undefined ? existingImageRef : undefined,
             session,
           );
           const existingDigest =
             existing.hash?.digest ?? published.previousDigest;
           deploymentImageRef =
-            published.digest === existingDigest &&
+            (published.digest === existingDigest &&
             news.publish?.repository === undefined
-              ? existing.configuration.image
-              : published.imageRef;
+              ? existingImageRef
+              : undefined) ?? published.imageRef;
           imageDigest = published.digest;
         }
         const configuration = desiredConfiguration(
@@ -1372,9 +1376,15 @@ export const LiveContainerProvider = () =>
                 });
               }
             }
-            let deploymentImageRef = existing.configuration.image;
+            const existingImageRef = existing.configuration.image ?? undefined;
+            let deploymentImageRef = existingImageRef;
             let imageDigest = existing.hash?.digest;
-            if (imageHash !== existing.hash?.image) {
+            // An application without an image (e.g. one created for a Durable
+            // Object-managed container) has nothing to reuse: publish.
+            if (
+              imageHash !== existing.hash?.image ||
+              deploymentImageRef === undefined
+            ) {
               const published = yield* buildAndPushImage(
                 id,
                 news,
@@ -1382,17 +1392,17 @@ export const LiveContainerProvider = () =>
                 imageRef,
                 imageHash,
                 existing.hash?.digest === undefined
-                  ? existing.configuration.image
+                  ? existingImageRef
                   : undefined,
                 session,
               );
               const existingDigest =
                 existing.hash?.digest ?? published.previousDigest;
               deploymentImageRef =
-                published.digest === existingDigest &&
+                (published.digest === existingDigest &&
                 news.publish?.repository === undefined
-                  ? existing.configuration.image
-                  : published.imageRef;
+                  ? existingImageRef
+                  : undefined) ?? published.imageRef;
               imageDigest = published.digest;
             }
             const configuration = desiredConfiguration(
@@ -1696,8 +1706,10 @@ const toAttributes = (
   applicationName: application.name,
   accountId: application.accountId,
   schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances,
-  maxInstances: application.maxInstances,
+  // A Durable Object-managed application has no instance counts or
+  // configuration of its own: the Durable Object chooses them at start().
+  instances: application.instances ?? 0,
+  maxInstances: application.maxInstances ?? 0,
   constraints: normalizeNulls(
     application.constraints as ContainerApplication.Constraints | undefined,
   ),
@@ -1705,7 +1717,7 @@ const toAttributes = (
     application.affinities as ContainerApplication.Affinities | undefined,
   ),
   configuration: normalizeNulls(
-    application.configuration as ContainerApplication.Configuration,
+    (application.configuration ?? {}) as ContainerApplication.Configuration,
   ),
   durableObjects: normalizeNulls(application.durableObjects) as
     | { namespaceId: string }
