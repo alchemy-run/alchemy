@@ -264,20 +264,20 @@ const twoPrograms: StepSpec[] = [
       "The two programs meet at a string with a file path in it, and at a name. To make that name type-safe, SST runs code generation: it writes sst-env.d.ts from the config, with a type for every resource in the app, and the handler reads Resource.Files.name through it.",
   }),
   sst({
-    title: "Delete the link and nothing notices, and the link grants s3:* anyway",
+    title: "Code generation bridges the two, but it's an extra step to keep in sync",
     beside: {
       ...SST_BESIDE,
-      marks: [{ kind: "underline", find: "Resource.Files.name", label: "type-checks, fails at runtime", side: "right", tone: "bad" }],
+      marks: [{ kind: "underline", find: "Resource.Files.name", label: "only as fresh as the last codegen", side: "right", tone: "bad" }],
     },
-    marks: [{ kind: "strike", find: "link: [bucket],", label: "s3:* on the whole bucket", side: "right", tone: "bad" }],
+    marks: [{ kind: "circle", find: "link: [bucket]", label: "grants s3:* on the bucket", side: "right", tone: "bad" }],
     under: {
       file: "sst-env.d.ts",
       src: { code: SST_ENV },
       label: "code generation",
-      marks: [{ kind: "underline", find: '"Files": {', label: "still generated", side: "right", tone: "bad" }],
+      marks: [{ kind: "underline", find: "export interface Resource", label: "one type for the whole app", side: "right", tone: "bad" }],
     },
     notes:
-      "Delete the link: the generated types still declare Files, because they describe the whole app, so the handler still type-checks, and the upload fails the first time someone uses it in production. The agent editing the handler has no way to know. And while it is there, link grants s3:* on the bucket and every object in it, though the handler only calls PutObject.",
+      "So the two programs are connected, but only through code generation. That's friction: a generated file that has to be regenerated whenever the config changes, and until it is, the handler is typed against a stale picture. It describes the whole app, not what this function can use. And link can't know what the handler does, so it grants s3:* on the bucket and every object in it, even though the handler only calls PutObject. That's a lot of machinery for an agent to keep in its head.",
   }),
   pyramid({
     title: "SST, Pulumi, Terraform and the CDK all draw this line",
