@@ -30,6 +30,14 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
         if (request.method === "GET" && operation === "snapshot") {
           return yield* HttpServerResponse.json(yield* object.snapshot());
         }
+        if (request.method === "GET" && operation === "bounded") {
+          return yield* HttpServerResponse.json(
+            yield* object.bounded(
+              url.searchParams.get("mode") ?? "failure",
+              "status",
+            ),
+          );
+        }
         if (request.method === "GET" && operation === "legacy") {
           return yield* HttpServerResponse.json(
             yield* legacyObjects.getByName(id).snapshot(),
@@ -39,6 +47,19 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
         }
         switch (operation) {
+          case "bounded":
+          case "bounded-resume":
+          case "bounded-cancel":
+            return yield* HttpServerResponse.json(
+              yield* object.bounded(
+                url.searchParams.get("mode") ?? "failure",
+                operation === "bounded"
+                  ? "start"
+                  : operation === "bounded-resume"
+                    ? "resume"
+                    : "cancel",
+              ),
+            );
           case "worker-registration": {
             const snapshot = yield* object.snapshot();
             const context = yield* Alchemy.RuntimeContext;

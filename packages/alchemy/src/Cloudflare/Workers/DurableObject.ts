@@ -865,20 +865,48 @@ export class DurableObjectScope extends Context.Service<
  *
  * Callbacks receive JSON-serializable payloads and deliver at least once, so
  * external writes must be idempotent. A recovery wake is persisted before each
- * attempt; configure its delay with the third argument, `{ retry: { delay:
- * "1 minute" } }`. Scheduling the same callback name and ID replaces the pending
- * job; `onArchive.cancel(id)` cancels it. Retain handlers for old callback names
- * while their jobs are pending. Each native alarm processes up to 100 due jobs;
- * direct `setAlarm`/`deleteAlarm` calls bypass the scheduler's coordination.
+ * attempt. Failures use exponential backoff with a 30-second initial delay and
+ * park after eight attempts without progress, retaining work for hourly recovery.
+ * Configure these with the third argument, `{ retry: { delay: "1 second",
+ * maxAttempts: 8, parkedDelay: "1 hour" } }`. The retry floor is one second;
+ * parked retries are at least one hour apart. Scheduling the same callback name
+ * and ID replaces the pending job; `onArchive.cancel(id)` cancels it. Retain
+ * handlers for old callback names while their jobs are pending. Each native
+ * alarm processes up to 100 due jobs; direct `setAlarm`/`deleteAlarm` calls
+ * bypass the scheduler's coordination.
  * Leave native alarm retries enabled when aborting an instance. Passing
  * `{ retryAlarm: false }` removes the automatic-recovery guarantee: Cloudflare
  * can suppress a replacement wake even after its timestamp is persisted. Jobs
  * remain stored, but may need an explicitly rearmed native alarm.
  *
- * The scheduler migrates its original unversioned SQLite schema to version 1
- * atomically, preserving existing events. Old events still use the explicit
- * `alarm` handler below; their rows have no callback name to infer. Both APIs
- * coordinate the same native alarm. Unknown newer schema versions fail closed.
+ * Self-rescheduling inherits the invocation's budget, even when cancelling or
+ * changing IDs. Commit application state and an increasing `progress` cursor
+ * in the same storage transaction to reset that budget. Replayed external
+ * cursors cannot replace newer work; an external schedule without a cursor
+ * explicitly starts a fresh budget. Detached fibers cannot mutate callbacks
+ * after their invocation ends.
+ *
+ * **Example:** Inspect and recover a parked job from an incoming request
+ * ```typescript
+ * const status = yield* onArchive.getStatus("revision-42");
+ * if (status?.parked) {
+ *   yield* onArchive.schedule("revision-42", {
+ *     after: 0,
+ *     payload: { key: "42.txt", body: "hello" },
+ *   });
+ * }
+ * ```
+ *
+ * Status includes the original `scheduledAt`, separate `retryAt`, attempt count,
+ * parked flag, and latest progress cursor without decoding the payload. Parking
+ * emits a warning without job identifiers or payloads. Status remains durable
+ * across instance reconstruction.
+ *
+ * The scheduler migrates its unversioned and version-one SQLite schemas to
+ * version two atomically, preserving existing events and callback deadlines.
+ * Old events still use the explicit `alarm` handler below; their rows have no
+ * callback name to infer. Both APIs coordinate the same native alarm. Unknown
+ * newer schema versions fail closed.
  *
  * ### Scheduled Alarms
  * Each Durable Object can have a single alarm timestamp. Alchemy
