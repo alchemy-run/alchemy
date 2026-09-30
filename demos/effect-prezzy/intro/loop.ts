@@ -1099,26 +1099,6 @@ const ci: StepSpec[] = [
     notes:
       "CI is one command. For pull request 42, STAGE is pr-42, so pnpm test deploys a copy of the app for that PR and runs the same tests against it. Set LOCAL too and CI runs it emulated instead.",
   }),
-  chat({
-    snippet: "chat.test.ts",
-    file: TEST.file,
-    group: "test-dev",
-    fontSize: 30,
-    regions: ["make"],
-    title: "The test can take its stage from the environment",
-    emphasize: ["stage: process.env.STAGE"],
-    notes: "For that to work, the test file reads its stage from the environment. In CI that's pr-42; unset, it's test_sam on your machine.",
-  }),
-  inline({
-    group: "ci",
-    file: ".github/workflows/pr.yml",
-    lang: "yaml",
-    fontSize: 24,
-    title: "Closing the pull request destroys that copy",
-    code: PR_YAML_CLOSE,
-    emphasize: ["closed", "cleanup", "alchemy destroy"],
-    notes: "When the PR closes, destroy that stage. Every resource the PR created goes with it.",
-  }),
 ];
 
 // ── act 5: shared infrastructure, by reference ───────────────────────────
@@ -1226,6 +1206,16 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     notes:
       "The PR shows green tests from its own copy, and a link to try it. The agent can read the check, and a reviewer can click the link and chat in the preview.",
   } satisfies CommentSpec,
+  inline({
+    group: "ci",
+    file: ".github/workflows/pr.yml",
+    lang: "yaml",
+    fontSize: 24,
+    title: "Closing the pull request destroys that copy",
+    code: PR_YAML_CLOSE,
+    emphasize: ["closed", "cleanup", "alchemy destroy"],
+    notes: "And when the PR is merged or closed, the copy goes away: destroy that stage, and every resource the PR created goes with it.",
+  }),
 ];
 
 // ── act 6: main → staging → prod ─────────────────────────────────────────
