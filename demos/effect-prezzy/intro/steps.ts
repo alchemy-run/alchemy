@@ -172,6 +172,11 @@ export interface RollSpec {
   check?: string;
   beside?: { file: string; lang?: "yaml" | "typescript"; code: string };
   reel?: { items: string[]; at: number };
+  /**
+   * Spin slot `slot` through `through` before landing. Each value is checked like the
+   * landing one: `check(value)` names a snippet that must equal the filled template.
+   */
+  spin?: { slot: number; through: string[]; check?: (value: string) => string };
   frames?: number;
 }
 

@@ -322,6 +322,20 @@ for (const spec of steps) {
       frames: spec.frames ?? Math.max(24, (spec.fresh ?? lines.length) * 2 + 8),
     });
   } else if (spec.kind === "roll") {
+    const fill = (values: string[]) => spec.template.replace(/⟨(\d+)⟩/g, (_, i) => values[Number(i)]!);
+    const verify = async (values: string[], check: string) => {
+      const shown = cut(await readFile(path.join(snippetsDir, check), "utf8"), ["show"]).code;
+      if (shown.trim() !== fill(values).trim()) {
+        throw new Error(`roll "${spec.title}": template doesn't match ${check}\n--- roll\n${fill(values)}\n--- snippet\n${shown}`);
+      }
+      if ((diagnostics.get(check) ?? []).length) throw new Error(`roll "${spec.title}": ${check} has type errors`);
+    };
+    for (const value of spec.spin?.through ?? []) {
+      if (!spec.spin!.check) continue;
+      const values = [...spec.values];
+      values[spec.spin!.slot] = value;
+      await verify(values, spec.spin!.check(value));
+    }
     let code = "";
     const slots: { line: number; start: number; end: number }[] = [];
     for (const part of spec.template.split(/(⟨\d+⟩)/)) {
@@ -337,13 +351,7 @@ for (const spec of steps) {
       slots[Number(m[1])] = { line: lines.length - 1, start, end: start + value.length };
       code += value;
     }
-    if (spec.check) {
-      const shown = cut(await readFile(path.join(snippetsDir, spec.check), "utf8"), ["show"]).code;
-      if (shown.trim() !== code.trim()) {
-        throw new Error(`roll "${spec.title}": template doesn't match ${spec.check}\n--- roll\n${code}\n--- snippet\n${shown}`);
-      }
-      if ((diagnostics.get(spec.check) ?? []).length) throw new Error(`roll "${spec.title}": ${spec.check} has type errors`);
-    }
+    if (spec.check) await verify(spec.values, spec.check);
     resolved.push({
       kind: "roll",
       title: spec.title,
@@ -355,7 +363,10 @@ for (const spec of steps) {
       slots,
       beside: spec.beside ? { file: spec.beside.file, lines: tokenize(spec.beside.code, false, spec.beside.lang ?? "yaml") } : undefined,
       reel: spec.reel,
-      frames: spec.frames ?? 24,
+      spin: spec.spin
+        ? { slot: spec.spin.slot, through: spec.spin.through, reelFrom: spec.reel ? spec.reel.at - spec.spin.through.length : 0 }
+        : undefined,
+      frames: spec.frames ?? (spec.spin ? 30 + spec.spin.through.length * 6 : 24),
     });
   } else if (spec.kind === "browser") {
     resolved.push({ kind: "browser", title: spec.title, notes: spec.notes ?? "", url: spec.url, image: spec.image, frames: spec.frames ?? 20 });

@@ -348,6 +348,8 @@ export interface RollStep {
   beside?: { file: string; lines: Token[][] };
   /** Every option in the roll, with the current one lit. */
   reel?: { items: string[]; at: number };
+  /** Spin one slot through these values, slot-machine style, before it lands on its own. */
+  spin?: { slot: number; through: string[]; reelFrom: number };
   frames: number;
 }
 

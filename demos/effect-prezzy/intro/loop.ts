@@ -1185,7 +1185,7 @@ const WEB_TEMPLATE = `export const Web = Effect.gen(function* () {
   });
 });`;
 const CLOUDS = ["Cloudflare", "AWS", "Fly", "Hetzner", "Railway", "Prisma", "Neon"];
-const FRAMEWORKS = ["Astro", "Nextjs", "Nuxt", "SvelteKit"];
+const FRAMEWORKS = ["Astro", "Nextjs", "Nuxt", "SvelteKit", "ReactRouter", "SolidStart", "TanStackStart", "Vite", "Waku", "Vocs", "Octane", "Foldkit"];
 const web = (cloud: string, framework: string, title: string, notes: string) =>
   roll({
     group: "web",
@@ -1317,7 +1317,20 @@ events: [push]`,
   web("Neon", "Astro", "…or Neon, with the same props every time", "Or Neon. Seven clouds, the same props every time."),
   web("Neon", "Nextjs", "The framework is one word too", "And the framework is one word too: Next.js…"),
   web("Neon", "Nuxt", "The framework is one word too", "…Nuxt…"),
-  web("Neon", "SvelteKit", "The framework is one word too", "…SvelteKit. On every one of those clouds, alchemy dev runs the framework's own dev server."),
+  web("Neon", "SvelteKit", "The framework is one word too", "…SvelteKit…"),
+  {
+    ...web(
+      "Neon",
+      "Foldkit",
+      "…and the rest",
+      "…and React Router, SolidStart, TanStack Start, Vite, Waku, Vocs, Octane and Foldkit. Twelve frameworks, same props, and on every cloud alchemy dev runs the framework's own dev server.",
+    ),
+    spin: {
+      slot: 1,
+      through: ["ReactRouter", "SolidStart", "TanStackStart", "Vite", "Waku", "Vocs", "Octane"],
+      check: (framework: string) => `anywhere/WebNeon${framework}.ts`,
+    },
+  },
   {
     kind: "slide",
     layout: "section",

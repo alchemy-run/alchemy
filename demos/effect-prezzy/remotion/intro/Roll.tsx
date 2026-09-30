@@ -55,6 +55,14 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
   const top = 260;
   const labelTop = 170;
 
+  // A spin: the slot runs through every value in `spin.through` and lands on its own,
+  // fast at first and settling like a slot machine. `pos` is how far along the strip it is.
+  const spin = step.spin;
+  const spinLen = spin ? spin.through.length + 1 : 0;
+  const pos = spin
+    ? spinLen * interpolate(local, [0, step.frames - 6], [0, 1], { ...clamp, easing: Easing.bezier(0.15, 0.55, 0.25, 1) })
+    : 0;
+
   const renderLine = (line: Token[], i: number) => {
     const here = step.slots.map((slot, k) => ({ slot, k })).filter(({ slot }) => slot.line === i);
     const parts: ReactNode[] = [];
@@ -63,6 +71,38 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
       parts.push(<Tokens key={`f${k}`} tokens={slice(line, col, slot.start)} />);
       const now = slice(line, slot.start, slot.end);
       const was = same?.slots[k] ? slice(same.lines[same.slots[k]!.line]!, same.slots[k]!.start, same.slots[k]!.end) : now;
+      if (spin && spin.slot === k) {
+        const color = now[0]?.color ?? brand.fg;
+        const strip: Token[][] = [was, ...spin.through.map((text) => [{ text, color }]), now];
+        const j = Math.min(Math.floor(pos), strip.length - 2);
+        const f = pos - j;
+        const width = length(strip[j]!) + (length(strip[j + 1]!) - length(strip[j]!)) * f;
+        parts.push(
+          <span
+            key={`s${k}`}
+            style={{
+              display: "inline-block",
+              verticalAlign: "top",
+              width: `${width * CHAR * size}px`,
+              height: lh,
+              overflow: "hidden",
+              background: `rgba(126, 231, 135, ${pos < spinLen ? 0.3 : 0.12})`,
+              boxShadow: `inset 0 -3px 0 ${GREEN}`,
+              borderRadius: 6,
+            }}
+          >
+            <span style={{ display: "block", transform: `translateY(${-pos * lh}px)` }}>
+              {strip.map((tokens, n) => (
+                <span key={n} style={{ display: "block", height: lh }}>
+                  <Tokens tokens={tokens} />
+                </span>
+              ))}
+            </span>
+          </span>,
+        );
+        col = slot.end;
+        continue;
+      }
       const rolling = text(was) !== text(now);
       const p = rolling ? t : 1;
       const width = length(was) + (length(now) - length(was)) * p;
@@ -134,18 +174,23 @@ export const RollView = ({ step, prev, local }: { step: RollStep; prev?: RollSte
           style={{
             position: "absolute",
             left: 110,
-            top: 960,
+            right: 110,
+            top: step.reel.items.length > 8 ? 900 : 960,
             display: "flex",
-            gap: 44,
+            flexWrap: "wrap",
+            rowGap: 14,
+            columnGap: step.reel.items.length > 8 ? 34 : 44,
             fontFamily: sans,
-            fontSize: 30,
+            fontSize: step.reel.items.length > 8 ? 26 : 30,
             fontWeight: 600,
           }}
         >
           {step.reel.items.map((item, i) => {
             const lit = (s: RollStep | undefined) => (s?.reel?.at === i ? 1 : 0);
             const was = same ? lit(same) : lit(step);
-            const on = was + (lit(step) - was) * t;
+            const passing = spin ? Math.round(pos) : 0;
+            const at = spin ? (passing === 0 ? (same?.reel?.at ?? -1) : spin.reelFrom + passing - 1) : -1;
+            const on = spin ? (at === i ? 1 : 0) : was + (lit(step) - was) * t;
             return (
               <div
                 key={item}
