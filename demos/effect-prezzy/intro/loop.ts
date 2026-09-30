@@ -333,22 +333,17 @@ const PROVIDES = {
     text: "const DatabaseLive = Layer.unwrap(…)\nconst FilesLive = Layer.effect(Files, …)",
     code: true,
   },
-  history: {
-    layer: "config",
-    text: "const HistoryLive = Layer.effect(History, …)\n  .pipe(Layer.provide([DatabaseLive, FilesLive]))",
-    code: true,
-  },
-  rooms: {
-    layer: "api",
-    text: "const RoomsLive = Layer.effect(Rooms, …)\n  .pipe(Layer.provide(HistoryLive))",
-    code: true,
-  },
-  chat: {
-    layer: "web",
-    text: 'export default Cloudflare.Worker("Chat", …,\n  Effect.gen(…).pipe(Effect.provide(RoomsLive)))',
-    code: true,
-  },
+  history: { layer: "config", text: "const HistoryLive = Layer.effect(History, …)", code: true },
+  rooms: { layer: "api", text: "const RoomsLive = Layer.effect(Rooms, …)", code: true },
+  chat: { layer: "web", text: 'export default Cloudflare.Worker("Chat", …)', code: true },
 };
+/** Beside each row on the last slide: the Worker's wiring, which reads top to bottom as the pyramid. */
+const WIRED = [
+  { layer: "web", text: "Effect.provide(", code: true },
+  { layer: "api", text: "  RoomsLive.pipe(", code: true },
+  { layer: "config", text: "    Layer.provide(HistoryLive),", code: true },
+  { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesLive]),\n  ),\n)", code: true },
+];
 /** The chat app's pyramid, rebuilt from the modules implemented so far. */
 const built = (title: string, bricks: typeof ALL_BRICKS, notes: string, side?: PyramidSpec["side"]): PyramidSpec =>
   pyramid({ title, layers: CHAT_LAYERS, bricks, notes, side });
@@ -473,7 +468,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
 // ── composing modules as Layers ──────────────────────────────────────────
 const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history", fontSize: 22 };
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
-const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 23 };
+const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 19 };
 /** The consumer on AWS: a Lambda fed by SQS (shown, not type-checked). */
 const ARCHIVE = `export default AWS.Lambda.Function(
   "Archive",
@@ -544,16 +539,16 @@ const compose: StepSpec[] = [
   built(
     "History goes on top of both",
     [BRICKS.database, BRICKS.files, BRICKS.history],
-    "Next is chat history. It keeps messages in Postgres and attachments in Files, so it sits on both blocks. In code, that's one line: HistoryLive provides DatabaseLive and FilesLive.",
+    "Next is chat history. It keeps messages in Postgres and attachments in Files, so it sits on both blocks.",
     [PROVIDES.bottom, PROVIDES.history],
   ),
   chat({
     ...HISTORY,
-    title: "HistoryLive sits on DatabaseLive and FilesLive",
+    title: "History asks for Database and Files",
     omit: ["service"],
-    emphasize: ["Layer.provide([DatabaseLive, FilesLive])", "yield* Database;", "yield* Files;"],
+    emphasize: ["yield* Database;", "yield* Files;"],
     notes:
-      "Here's that line. The constructor asks for Database and for Files, and Layer.provide says where they come from: the two blocks we just built. That last line is exactly the pyramid: History on top of Database and Files.",
+      "The constructor asks for Database and for Files, the two blocks beneath it. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
     ...HISTORY,
@@ -619,7 +614,7 @@ FunctionName: chat-dev-sam-archive`,
   built(
     "Rooms go on top of History",
     [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms],
-    "Then the chat rooms. They read and write History, so they sit on top of it: RoomsLive provides HistoryLive.",
+    "Then the chat rooms. They read and write History, so they sit on top of it.",
     [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms],
   ),
   chat({
@@ -641,23 +636,23 @@ FunctionName: chat-dev-sam-archive`,
     group: "rooms",
     fontSize: 24,
     omit: ["service"],
-    title: "RoomsLive wraps the Durable Object and sits on HistoryLive",
-    emphasize: ["Layer.provide(HistoryLive)", "yield* Room;", "yield* History;"],
+    title: "Rooms wraps the Durable Object and asks for History",
+    emphasize: ["yield* Room;", "yield* History;"],
     notes:
-      "The Rooms module puts the Durable Object and History behind one interface: join a room, attach a file, read its history. And its last line is the next row of the pyramid: RoomsLive provides HistoryLive.",
+      "The Rooms module puts the Durable Object and History behind one interface: join a room, attach a file, read its history. Again it just asks for History, the block beneath it.",
   }),
   built(
     "The Chat Worker goes on top",
     ALL_BRICKS,
-    "Last, the Worker that serves requests. It uses Rooms, so it goes on top and provides RoomsLive. Read the code beside the pyramid from bottom to top: it's the same stack.",
+    "Last, the Worker that serves requests. It uses Rooms, so it goes on top. And it's where the whole stack gets wired together.",
     [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms, PROVIDES.chat],
   ),
   chat({
     ...WORKER,
-    title: "The Chat Worker uses Rooms and provides RoomsLive",
-    emphasize: ["yield* Rooms", "Effect.provide(RoomsLive)"],
+    title: "The Chat Worker wires up the whole stack of Layers",
+    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesLive])"],
     notes:
-      "The Worker only knows about Rooms. It routes requests to it and provides RoomsLive, and RoomsLive brings everything beneath it. It has no idea there's a bucket, a queue or a database underneath.",
+      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
@@ -665,18 +660,18 @@ FunctionName: chat-dev-sam-archive`,
     group: WORKER.group,
     fontSize: WORKER.fontSize,
     title: "Forget a Layer and the Worker doesn't compile",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Rooms' is not assignable")).slice(0, 1), below: true },
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'History' is not assignable")).slice(0, 1), below: true },
     showRemoved: true,
     notes:
-      "Forget to provide RoomsLive, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
+      "Leave HistoryLive out of the stack, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
   pyramid({
     title: "The pyramid is literally a stack of Layers",
     layers: CHAT_LAYERS,
     bricks: ALL_BRICKS,
-    side: [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms, PROVIDES.chat],
+    side: WIRED,
     notes:
-      "Read the code from the bottom up and it's the pyramid: DatabaseLive and FilesLive at the bottom, HistoryLive provided with both, RoomsLive with HistoryLive, and the Chat Worker with RoomsLive. So the whole thing, infrastructure to frontend, is one program made of Layers. One type checker sees all of it, one test file can exercise all of it, and one command deploys it.",
+      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. So the whole thing, infrastructure to frontend, is one program made of Layers. One type checker sees all of it, one test file can exercise all of it, and one command deploys it.",
   }),
 ];
 

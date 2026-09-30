@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { UploadError } from "./Files.ts";
-import { History, HistoryLive } from "./History.ts";
+import { History } from "./History.ts";
 import Room from "./Room.ts";
 
 // #region show
@@ -33,6 +33,6 @@ export const RoomsLive = Layer.effect(
       history: history.list,
     };
   }),
-).pipe(Layer.provide(HistoryLive));
+);
 // #endregion live
 // #endregion show

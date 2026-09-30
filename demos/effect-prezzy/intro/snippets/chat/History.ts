@@ -4,8 +4,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { Database, DatabaseLive } from "./Db.ts";
-import { Files, FilesLive, type UploadError } from "./Files.ts";
+import { Database } from "./Db.ts";
+import { Files, type UploadError } from "./Files.ts";
 import { Messages, type Message } from "./Messages.ts";
 
 // #region show
@@ -45,6 +45,6 @@ export const HistoryLive = Layer.effect(
         }),
     };
   }),
-).pipe(Layer.provide([DatabaseLive, FilesLive]))/*hide*/.pipe(Layer.provide(Queues.EventSourceLive))/*end*/;
+)/*hide*/.pipe(Layer.provide(Queues.EventSourceLive))/*end*/;
 // #endregion live
 // #endregion show
