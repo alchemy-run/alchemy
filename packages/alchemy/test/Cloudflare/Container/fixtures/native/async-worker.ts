@@ -4,17 +4,22 @@ import type { NativeAsyncWorker } from "./stack.ts";
 
 export class NativeAsyncObject extends DurableObject {
   async fetch(request: Request) {
-    const container = this.ctx.container!;
+    const container = this.ctx.container;
+    if (!container)
+      throw new Error("No container is attached to this Durable Object.");
     const path = new URL(request.url).pathname;
-    if (!container.running)
+    if (!container.running) {
+      const image = path.startsWith("/builtin")
+        ? "cloudflare/debian-trixie"
+        : container.images.shell;
+      if (!image) throw new Error("The shell image is not configured.");
       container.start({
-        image: path.startsWith("/builtin")
-          ? "cloudflare/debian-trixie"
-          : container.images.shell!,
+        image,
         entrypoint: ["sleep", "infinity"],
         enableInternet: false,
         instance: "lite",
       });
+    }
     const child = await container.exec(
       path === "/stdin" ? ["cat"] : ["sh", "-c", "printf native; exit 7"],
       path === "/stdin" ? { stdin: "pipe" } : undefined,

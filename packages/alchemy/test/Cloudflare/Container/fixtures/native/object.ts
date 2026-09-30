@@ -21,7 +21,7 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
         if (!(yield* container.running)) {
           const images = yield* container.images;
           yield* container.start({
-            image: images.shell!,
+            image: images.shell,
             entrypoint: ["sleep", "infinity"],
             enableInternet: false,
             instance: "lite",

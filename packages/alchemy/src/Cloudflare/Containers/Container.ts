@@ -72,6 +72,7 @@ export class ContainerCrashedError extends Data.TaggedError("ContainerCrashedErr
 export type ContainerStartupOptions = cf.ContainerStartupOptions;
 
 import type {
+  ContainerImageProps,
   DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
@@ -120,6 +121,22 @@ export type ImageContainerProps<Req = never> =
       | InputProps<ExternalContainerProps>
       | InputProps<RemoteContainerProps>
       | InputProps<DurableObjectContainerProps>,
+      Config.ConfigError,
+      Req
+    >;
+
+type NamedImageContainerProps<ImageName extends string, Req> =
+  | InputProps<
+      Omit<DurableObjectContainerProps, "images"> & {
+        images: Record<ImageName, ContainerImageProps>;
+      }
+    >
+  | Effect.Effect<
+      InputProps<
+        Omit<DurableObjectContainerProps, "images"> & {
+          images: Record<ImageName, ContainerImageProps>;
+        }
+      >,
       Config.ConfigError,
       Req
     >;
@@ -293,7 +310,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  *         if (!(yield* sandbox.running)) {
  *           const images = yield* sandbox.images;
  *           yield* sandbox.start({
- *             image: images.node!,
+ *             image: images.node,
  *             instance: "lite",
  *             entrypoint: ["sleep", "infinity"],
  *             enableInternet: false,
@@ -701,11 +718,24 @@ export type Container<Id extends string = string> = Named<Id> & {
  */
 export const Container: ResourceClassLike<ContainerApplication> &
   Pick<ResourceClass<ContainerApplication>, "ref"> & {
+    <
+      DOShape = unknown,
+      const Id extends string = string,
+      PropsReq = never,
+      ImageName extends string = string,
+    >(
+      id: Id,
+      props: NamedImageContainerProps<ImageName, PropsReq>,
+    ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape, ImageName>;
     <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
     ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
     <Self>(): {
+      <const Id extends string, ImageName extends string, PropsReq = never>(
+        id: Id,
+        props: NamedImageContainerProps<ImageName, PropsReq>,
+      ): Container.Decl<Self, {}, Id, PropsReq, unknown, ImageName>;
       <const Id extends string, PropsReq = never>(
         id: Id,
         props: ImageContainerProps<PropsReq>,
@@ -787,6 +817,7 @@ export declare namespace Container {
     Id extends string = string,
     Req = never,
     DOShape = unknown,
+    ImageName extends string = string,
   >
     extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
@@ -796,6 +827,8 @@ export declare namespace Container {
      * `InferEnv` (`env.NAME` becomes `DurableObjectNamespace<DOShape>`).
      */
     readonly "~alchemy/Container/Shape": DOShape;
+    /** @internal phantom — required image names available to the native client. */
+    readonly "~alchemy/Container/Images": ImageName;
     /**
      * @internal — the explicit `className` from props (`undefined` defaults
      * to the binding name at bind time). Doubles as the runtime marker that

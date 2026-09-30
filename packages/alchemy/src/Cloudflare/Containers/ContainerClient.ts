@@ -20,6 +20,10 @@ export type ContainerInfo = cf.ContainerInfo;
 export type ContainerSnapshot = cf.ContainerSnapshot;
 export type ContainerSnapshotOptions = cf.ContainerSnapshotOptions;
 
+type PreparedImages<ImageName extends string> = string extends ImageName
+  ? Readonly<Record<string, string | undefined>>
+  : Readonly<Record<ImageName, string>>;
+
 /** A native process, owned by the scope that called {@link ContainerClient.exec}. */
 export interface ContainerProcess {
   /** Process ID inside the container. */
@@ -55,10 +59,10 @@ export interface ContainerProcess {
  * Direct Effect access to the Durable Object Container API. Binding does not
  * start the container or create an application RPC proxy.
  */
-export interface ContainerClient {
-  /** Prepared image references, keyed by the names in the declaration. */
+export interface ContainerClient<ImageName extends string = string> {
+  /** Prepared image references. Required names retain their declaration's keys. */
   readonly images: Effect.Effect<
-    Readonly<Record<string, string>>,
+    PreparedImages<ImageName>,
     ContainerError,
     RuntimeContext
   >;
@@ -179,9 +183,9 @@ const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
 };
 
 /** @internal Adapt lazily: construction also runs while planning a Worker. */
-export const fromContainer = (
+export const fromContainer = <ImageName extends string = string>(
   get: () => cf.Container | undefined,
-): ContainerClient => {
+): ContainerClient<ImageName> => {
   const container = () => {
     const value = get();
     if (!value)
@@ -193,7 +197,8 @@ export const fromContainer = (
   const promise = <A>(f: (value: cf.Container) => Promise<A>) =>
     Effect.tryPromise({ try: () => f(container()), catch: containerError });
   return {
-    images: sync((c) => c.images),
+    // The binding publishes every required image under its declared name.
+    images: sync((c) => c.images as PreparedImages<ImageName>),
     running: sync((c) => c.running),
     start: (options) => sync((c) => c.start(options)),
     inspect: () => promise((c) => c.inspect()),
@@ -275,10 +280,15 @@ export const fromContainer = (
  * @product Containers
  * @category Workers & Compute
  */
-export const bind = Effect.fn(function* <Shape, Req>(declaration: {
+export const bind = Effect.fn(function* <
+  Shape,
+  Req,
+  ImageName extends string = string,
+>(declaration: {
   Application: Effect.Effect<ContainerApplication<Shape>, never, Req>;
+  readonly "~alchemy/Container/Images"?: ImageName;
 }) {
   yield* ContainerPlatform.bind(declaration.Application);
   const state = yield* DurableObjectState;
-  return fromContainer(() => state.container);
+  return fromContainer<ImageName>(() => state.container);
 });
