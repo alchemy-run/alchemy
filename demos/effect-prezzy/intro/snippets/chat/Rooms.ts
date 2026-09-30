@@ -6,7 +6,7 @@ import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { UploadError } from "./Files.ts";
 import { History } from "./History.ts";
-import { Room } from "./Room.ts";
+import Room from "./Room.ts";
 
 // #region show
 // #region service

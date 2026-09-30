@@ -6,7 +6,6 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { DatabaseLive } from "./Db.ts";
 import { FilesR2 } from "./Files.ts";
 import { HistoryLive } from "./History.ts";
-import { RoomLive } from "./Room.ts";
 import { Rooms, RoomsLive } from "./Rooms.ts";
 
 // #region show
@@ -31,7 +30,6 @@ export default Cloudflare.Worker(
   }).pipe(
     Effect.provide(
       RoomsLive.pipe(
-        Layer.provide(RoomLive),
         Layer.provide(HistoryLive),
         Layer.provide([DatabaseLive, FilesR2]),
       ),

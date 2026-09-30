@@ -336,7 +336,7 @@ const PROVIDES = {
 /** Beside each row on the last slide: the Worker's wiring, which reads top to bottom as the pyramid. */
 const WIRED = [
   { layer: "web", text: "Effect.provide(", code: true },
-  { layer: "api", text: "  RoomsLive.pipe(\n    Layer.provide(RoomLive),", code: true },
+  { layer: "api", text: "  RoomsLive.pipe(", code: true },
   { layer: "config", text: "    Layer.provide(HistoryLive),", code: true },
   { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesR2]),\n  ),\n)", code: true },
 ];
@@ -635,16 +635,17 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...ROOM_FILE,
     title: "Each chat room is a Durable Object, with the same shape",
-    omit: ["history", "send"],
+    omit: ["history", "send", "provideHistory"],
     notes:
       "Each chat room is a Durable Object, one small stateful server per room name, and it has the same shape: a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
   }),
   chat({
     ...ROOM_FILE,
     title: "…and each room appends its messages to History",
-    emphasize: ["yield* History", "history.append"],
+    omit: ["noHistory"],
+    emphasize: ["yield* History", "history.append", "Effect.provide(HistoryLive"],
     notes:
-      "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business.",
+      "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business. A Durable Object runs on its own, so it provides the History Layer it uses right where it's defined.",
   }),
   chat({
     snippet: "Rooms.ts",
@@ -660,9 +661,9 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(RoomLive)", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesR2])"],
+    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesR2])"],
     notes:
-      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each block gets.",
+      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each block gets.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",

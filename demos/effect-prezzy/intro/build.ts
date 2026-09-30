@@ -111,6 +111,8 @@ for (const file of snippetFiles) {
 const REGION = /^\s*\/\/ #(end)?region\b/;
 /** Code that must be there to type-check but isn't worth showing: `/*hide*\/ … /*end*\/`. */
 const HIDDEN = /\/\*hide\*\/.*?\/\*end\*\//g;
+/** `// @slide code` is a comment in the real file and `code` on the slide (e.g. a stand-in closing line). */
+const SLIDE_ONLY = /^(\s*)\/\/ @slide (.*)$/;
 interface Cut {
   code: string;
   /** Snippet line (0-based) of each kept line. */
@@ -169,10 +171,10 @@ const cut = (text: string, keep?: string[], omit: string[] = [], fold: string[] 
       return;
     }
     if (folding) {
-      folding.lines.push([line.replace(HIDDEN, ""), i]);
+      folding.lines.push([line.replace(SLIDE_ONLY, "$1$2").replace(HIDDEN, ""), i]);
       return;
     }
-    kept.push(line.replace(HIDDEN, ""));
+    kept.push(line.replace(SLIDE_ONLY, "$1$2").replace(HIDDEN, ""));
     origin.push(i);
   });
   // Drop the shared indentation and blank edges, and a "…" standing for the file's tail.

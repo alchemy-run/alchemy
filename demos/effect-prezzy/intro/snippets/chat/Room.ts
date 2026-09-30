@@ -1,18 +1,13 @@
-import type { RuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import type * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { History } from "./History.ts";
-
-type RoomShape = {
-  fetch: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Cloudflare.DurableObjectState | RuntimeContext>;
-  webSocketMessage: (socket: Cloudflare.WebSocket, text: string) => Effect.Effect<void, never, RuntimeContext>;
-};
+import * as Layer from "effect/Layer";
+import { DatabaseLive } from "./Db.ts";
+import { FilesR2 } from "./Files.ts";
+import { History, HistoryLive } from "./History.ts";
 
 // #region show
-export class Room extends Cloudflare.DurableObject<Room, RoomShape>()("Room") {}
-
-export const RoomLive = Room.make(
+export default class Room extends Cloudflare.DurableObject<Room>()(
+  "Room",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     // #region history
@@ -41,6 +36,11 @@ export const RoomLive = Room.make(
         // #endregion message
       };
     });
-  }),
-);
+  // #region noHistory
+  // @slide }),
+  // #endregion noHistory
+  // #region provideHistory
+  }).pipe(Effect.provide(HistoryLive.pipe(Layer.provide([DatabaseLive, FilesR2])))),
+  // #endregion provideHistory
+) {}
 // #endregion show
