@@ -1180,7 +1180,6 @@ export const LiveContainerProvider = () =>
           news,
           (news.publish?.repository ?? name).toLowerCase(),
         );
-        const [firstSource, ...otherSources] = sources;
         const publishOne = ([imageName, source]: (typeof sources)[number]) =>
           Effect.gen(function* () {
             // The `"default"` image builds under the container's own id so
@@ -1207,15 +1206,9 @@ export const LiveContainerProvider = () =>
             yield* prepareImage(ref, session);
             return { imageName, image: imageHash, ref, dev };
           });
-        const [first, rest] = yield* Effect.all(
-          [
-            publishOne(firstSource),
-            // Two publications at a time: the first beside the rest in turn.
-            Effect.forEach(otherSources, publishOne),
-          ],
-          { concurrency: 2 },
-        );
-        const published = [first, ...rest];
+        const published = yield* Effect.forEach(sources, publishOne, {
+          concurrency: 2,
+        });
         const images = Object.fromEntries(
           published.map(({ imageName, image, ref }) => [
             imageName,
@@ -1230,8 +1223,9 @@ export const LiveContainerProvider = () =>
             image: (yield* sha256Object(images)).slice(0, 16),
             images,
           },
-          // `alchemy dev` runs one image per class: the first.
-          dev: first.dev,
+          // `alchemy dev` runs one image per class: the first, when there
+          // is one.
+          dev: published[0]?.dev,
         };
       });
 
@@ -1365,7 +1359,7 @@ export const LiveContainerProvider = () =>
             image: string;
             images: Record<string, { image: string; ref: string }>;
           };
-          dev: DevContainerImage;
+          dev: DevContainerImage | undefined;
         },
       ): ContainerApplication["Attributes"] => ({
         ...toAttributes(application),

@@ -2,7 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
 import * as path from "pathe";
-import type { Sandbox } from "./worker.ts";
+import type { Sandbox, SystemSandbox } from "./worker.ts";
 
 /**
  * A Durable Object-managed container (`schedulingPolicy: "durable_object"`):
@@ -24,6 +24,12 @@ export const DurableObjectContainerWorker = Cloudflare.Worker(
           whoami: { image: "traefik/whoami:latest" },
         },
         observability: { logs: { enabled: true } },
+      }),
+      // No images at all: the Durable Object starts Cloudflare's
+      // pre-distributed system image by name.
+      SYSTEM: Cloudflare.Container<SystemSandbox>("SYSTEM", {
+        className: "SystemSandbox",
+        schedulingPolicy: "durable_object",
       }),
     },
   },

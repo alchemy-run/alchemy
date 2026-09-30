@@ -1,4 +1,3 @@
-import type * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -466,15 +465,15 @@ export const isDurableObjectManaged = (
  * one builds from: the container's own image under `"default"` when it
  * declares a source, then each of `images`. A named image publishes to its
  * own repository (`<repository>-<name>`), so images never share a build-cache
- * tag.
+ * tag. None at all is valid: the Durable Object then starts Cloudflare's
+ * pre-distributed system image (`"cloudflare/debian-trixie"`) by name, or a
+ * filesystem snapshot of one.
  */
 export const durableObjectImageSources = (
   props: AnyContainerApplicationProps,
   repository: string,
 ): Effect.Effect<
-  Arr.NonEmptyReadonlyArray<
-    readonly [name: string, props: AnyContainerApplicationProps]
-  >
+  ReadonlyArray<readonly [name: string, props: AnyContainerApplicationProps]>
 > => {
   if (props.main !== undefined) {
     return Effect.die(
@@ -507,16 +506,7 @@ export const durableObjectImageSources = (
         },
       ] as const,
   );
-  if (declaresOwnImage) {
-    return Effect.succeed([["default", props] as const, ...named]);
-  }
-  const [first, ...rest] = named;
-  if (first === undefined) {
-    return Effect.die(
-      new Error(
-        'A Durable Object-managed container (`schedulingPolicy: "durable_object"`) needs at least one image: declare `images`, or an `image`/`context`/`dockerfile` of its own.',
-      ),
-    );
-  }
-  return Effect.succeed([first, ...rest]);
+  return Effect.succeed(
+    declaresOwnImage ? [["default", props] as const, ...named] : named,
+  );
 };

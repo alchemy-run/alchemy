@@ -175,16 +175,18 @@ export const resolveNamespaceName = (
 /**
  * Upload metadata for Durable Object-managed containers (`schedulingPolicy:
  * "durable_object"`), keyed by class: the application name and the images the
- * Durable Object may start with. Classes whose application carries its own
- * image, and values not yet resolved (a precreate placeholder), are absent —
- * callers fall back to a class-only entry for those.
+ * Durable Object may start with. An image-less one (it starts Cloudflare's
+ * system image or a snapshot) declares its name alone. Classes whose
+ * application carries its own image (`images` undefined), and values not yet
+ * resolved (a precreate placeholder), are absent — callers fall back to a
+ * class-only entry for those.
  */
 export const uploadContainerMetadata = (
   bindings: readonly ResourceBinding<Worker["Binding"]>[],
 ) => {
   const metadata = new Map<
     string,
-    { className: string; name: string; images: Record<string, string> }
+    { className: string; name: string; images?: Record<string, string> }
   >();
   for (const binding of bindings) {
     for (const container of binding.data.containers ?? []) {
@@ -194,7 +196,12 @@ export const uploadContainerMetadata = (
         images !== undefined &&
         Object.values(images).every((image) => typeof image === "string")
       ) {
-        metadata.set(className, { className, name, images });
+        metadata.set(
+          className,
+          Object.keys(images).length > 0
+            ? { className, name, images }
+            : { className, name },
+        );
       }
     }
   }

@@ -113,11 +113,46 @@ export class Sandbox extends DurableObject {
   }
 }
 
+/**
+ * An image-less Durable Object-managed container: starts Cloudflare's
+ * pre-distributed system image by name and serves from Node inside it.
+ */
+export class SystemSandbox extends DurableObject {
+  override async fetch(): Promise<Response> {
+    const container = this.ctx.container!;
+    const start = () =>
+      container.start({
+        image: "cloudflare/debian-trixie",
+        enableInternet: false,
+        instance: "lite",
+        entrypoint: [
+          "node",
+          "-e",
+          "require('http').createServer((q,s)=>s.end('system:'+process.version)).listen(8080)",
+        ],
+      });
+    if (!container.running) start();
+    for (let i = 0; i < 60; i++) {
+      try {
+        return await container.getTcpPort(8080).fetch("http://container/");
+      } catch {
+        // "no container instance ... try again later": start() again.
+        if (!container.running) start();
+      }
+      await scheduler.wait(500);
+    }
+    return new Response("system image never answered", { status: 503 });
+  }
+}
+
 type Env = Cloudflare.InferEnv<typeof DurableObjectContainerWorker>;
 
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
+    if (url.pathname === "/system") {
+      return env.SYSTEM.getByName("system").fetch(request);
+    }
     const name =
       url.pathname === "/snapshot"
         ? "snapshot"

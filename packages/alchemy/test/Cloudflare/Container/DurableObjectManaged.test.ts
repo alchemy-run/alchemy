@@ -111,6 +111,16 @@ describe.sequential(
     );
 
     test(
+      "starts Cloudflare's system image from an image-less container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const body = yield* fetchReady(new URL("/system", url), "system:v");
+        expect(body).toMatch(/^system:v\d+/);
+      }),
+      { timeout: 180_000 },
+    );
+
+    test(
       "restores a container from a filesystem snapshot",
       Effect.gen(function* () {
         const { url } = yield* stack;

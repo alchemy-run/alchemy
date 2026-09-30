@@ -60,8 +60,17 @@ describe(
         }),
       );
 
+      it.effect("allows a container with no images of its own", () =>
+        Effect.gen(function* () {
+          const sources = yield* durableObjectImageSources(
+            { schedulingPolicy: "durable_object" },
+            "sandbox",
+          );
+          expect(sources).toEqual([]);
+        }),
+      );
+
       for (const [label, props] of [
-        ["declares no image", { schedulingPolicy: "durable_object" }],
         [
           "bundles main",
           {
@@ -107,6 +116,24 @@ describe(
           className: "Sandbox",
           name: "sandbox-app",
           images: { node: "registry.cloudflare.com/a/node@sha256:1" },
+        });
+      });
+
+      test("declares an image-less container by name alone", () => {
+        const metadata = uploadContainerMetadata([
+          binding([
+            {
+              className: "System",
+              dev: undefined,
+              hash: "h",
+              name: "system-app",
+              images: {},
+            },
+          ]),
+        ]);
+        expect(metadata.get("System")).toEqual({
+          className: "System",
+          name: "system-app",
         });
       });
 

@@ -154,7 +154,15 @@ export const LocalContainerProvider = () =>
       const localImageProps = (news: AnyContainerApplicationProps) =>
         isDurableObjectManaged(news)
           ? durableObjectImageSources(news, "local").pipe(
-              Effect.map(([[, first]]) => first),
+              Effect.flatMap(([source]) =>
+                source === undefined
+                  ? Effect.die(
+                      new Error(
+                        "`alchemy dev` runs a Durable Object-managed container from one of its declared images, and this one declares none (it starts Cloudflare's system image or a snapshot, which workerd cannot). Declare the container differently under dev.",
+                      ),
+                    )
+                  : Effect.succeed(source[1]),
+              ),
             )
           : Effect.succeed(news);
 
