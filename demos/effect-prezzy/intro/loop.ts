@@ -1366,6 +1366,19 @@ const web = (cloud: string, framework: string, title: string, notes: string) =>
     notes,
   });
 
+const EVENTS_TEMPLATE = `export default AWS.Lambda.Function(
+  "Archive",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const source = yield* ⟨0⟩;
+
+    yield* ⟨1⟩(source, ⟨2⟩(records) =>
+      records.pipe(Stream.runForEach((record) => Effect.log(record))),
+    );
+
+    return {};
+  }).pipe(Effect.provide(AWS.Lambda.⟨3⟩)),
+);`;
 const OBS_PLATFORMS = ["Axiom", "Cloudflare", "CloudWatch", "Datadog (someday)"];
 const DATADOG_CODE = `export const ObservabilityLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -1642,7 +1655,7 @@ resource: chat-dev-sam-files`,
   ),
   section(
     "Events from anywhere",
-    "Queues · buckets · schedules · even a GitHub repository",
+    "GitHub repositories · SQS · Kinesis · DynamoDB Streams",
     "Events don't have to come from your own cloud. Anything that can call a webhook can be an event source.",
   ),
   chat({
@@ -1664,17 +1677,69 @@ events: [push]`,
     notes:
       "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at this Worker.",
   }),
-  chat({
-    snippet: "Commits.ts",
-    file: "src/Commits.ts",
-    group: "commits",
-    fontSize: 24,
-    title: "…and every push lands in the chat's commits room",
-    emphasize: ["messages.send", "yield* Queues.WriteQueue("],
-    marks: [{ kind: "underline", find: "event.payload.head_commit", label: "typed per event", side: "below", tone: "good" }],
-    notes:
-      "Each event is typed by its name, so the push payload is fully typed. Every push goes onto the same Messages queue the rooms use, so commits show up in the chat's history.",
-  }),
+  ...[
+    {
+      values: ['AWS.SQS.Queue("Messages")', "AWS.SQS.consumeQueueMessages", "", "QueueEventSource"],
+      check: "EventsSqs.ts",
+      title: "On AWS, the same line consumes an SQS queue…",
+      generated: `# IAM policy
+- sqs:ReceiveMessage
+- sqs:DeleteMessage
+- sqs:GetQueueAttributes
+
+# Event source mapping
+Source: sqs:…:messages`,
+      notes: "Back on AWS, event sources all look alike. Consume an SQS queue: the call grants the three consumer permissions and creates the event source mapping that invokes the Lambda.",
+    },
+    {
+      values: ['AWS.Kinesis.Stream("Messages")', "AWS.Kinesis.consumeStreamRecords", '{ startingPosition: "LATEST" }, ', "StreamEventSource"],
+      check: "EventsKinesis.ts",
+      title: "…a Kinesis stream…",
+      generated: `# IAM policy
+- kinesis:GetRecords
+- kinesis:GetShardIterator
+- kinesis:DescribeStream
+- kinesis:ListShards
+
+# Event source mapping
+Source: kinesis:…:stream/messages`,
+      notes: "A Kinesis stream: swap the resource and the consume call. The permissions and the mapping change to match, the handler doesn't.",
+    },
+    {
+      values: [
+        'AWS.DynamoDB.Table("Messages", { partitionKey: "room", attributes: { room: "S" } })',
+        "AWS.DynamoDB.consumeTableChanges",
+        '{ streamViewType: "NEW_IMAGE" }, ',
+        "TableEventSource",
+      ],
+      check: "EventsDynamo.ts",
+      title: "…or every change to a DynamoDB table",
+      generated: `# Table stream: NEW_IMAGE
+
+# IAM policy
+- dynamodb:GetRecords
+- dynamodb:GetShardIterator
+- dynamodb:DescribeStream
+- dynamodb:ListStreams
+
+# Event source mapping
+Source: dynamodb:…:messages/stream`,
+      notes: "Or every change to a DynamoDB table. This one even turns on the table's stream for you, then grants the stream permissions and creates the mapping. Four event sources, one shape.",
+    },
+  ].map((ev, at) =>
+    roll({
+      group: "events",
+      file: "src/Archive.ts",
+      fontSize: 17,
+      title: ev.title,
+      template: EVENTS_TEMPLATE,
+      values: ev.values,
+      check: `anywhere/${ev.check}`,
+      beside: { file: "generated at deploy", code: ev.generated },
+      reel: { items: ["SQS", "Kinesis", "DynamoDB Streams"], at },
+      notes: ev.notes,
+    }),
+  ),
   section(
     "Seven clouds, one Website",
     "Cloudflare · AWS · Fly · Hetzner · Railway · Prisma · Neon",
