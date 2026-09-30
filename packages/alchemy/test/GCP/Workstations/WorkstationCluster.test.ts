@@ -70,14 +70,17 @@ test.provider.skipIf(!runLifecycle)(
         ),
       );
       // The cluster is accepted and provisioned before the network is
-      // validated, so the create operation fails late.
+      // validated, so the create operation fails late (~50 minutes).
       expect(error._tag).toEqual("GCP.OperationFailed");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:workstations", "live"],
-    timeout: 1_800_000,
+    // One attempt that outlasts GCP's late failure; a retry would restart
+    // the ~50-minute wait from scratch.
+    timeout: 4_500_000,
+    retry: 0,
   },
 );
 
