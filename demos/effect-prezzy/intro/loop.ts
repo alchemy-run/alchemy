@@ -197,7 +197,7 @@ const theStack: StepSpec[] = [
       { from: "messages", to: "history", label: "consume" },
     ],
     notes:
-      "Here's what we'll build, top to bottom, the same way the pyramid reads. A Vite site is the chat page, and it connects to a Worker over a WebSocket. The Worker hands each room to its own Durable Object and stores uploads in an R2 bucket. Rooms append every message to a queue, which fills a Postgres database on Neon with the history. And all of it will be traced, so we can see it in production.",
+      "Here's what we'll build, top to bottom, the same way the pyramid reads. A Vite site is the chat page, and it connects to a Worker over a WebSocket. The Worker hands each room to its own Durable Object and stores uploads in an R2 bucket. Each room appends its messages to a queue, which fills a Postgres database on Neon with the history. And all of it will be traced, so we can see it in production.",
   },
 ];
 
@@ -623,21 +623,11 @@ FunctionName: chat-dev-sam-history`,
     notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History needs both Database and Files.",
   }),
   chat({
-    snippet: "Rooms.ts",
-    file: "src/Rooms.ts",
-    group: "rooms",
-    fontSize: 22,
-    regions: ["service"],
-    title: "Next, the Rooms module: join a room, attach a file, read its history",
-    notes:
-      "Next is the module the Worker actually talks to: Rooms. Same as Files and History, it starts with an interface. You can join a room over a WebSocket, attach a file to it, and read its history.",
-  }),
-  chat({
     ...ROOM_FILE,
     title: "Each room is a Durable Object that holds its sockets",
     omit: ["history", "send"],
     notes:
-      "To implement it, each room gets its own Durable Object: one small stateful server per room name. It has the same shape as everything else, a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
+      "Next, the chat rooms. Each room is its own Durable Object: one small stateful server per room name. It has the same shape as everything else, a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
   }),
   chat({
     ...ROOM_FILE,
@@ -647,22 +637,11 @@ FunctionName: chat-dev-sam-history`,
       "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business. And like every other module, it doesn't say where History comes from; the Worker decides that.",
   }),
   chat({
-    snippet: "Rooms.ts",
-    file: "src/Rooms.ts",
-    group: "rooms",
-    fontSize: 22,
-    omit: ["service"],
-    title: "RoomsLive implements Rooms with those Durable Objects",
-    emphasize: ["yield* Room;", "room.getByName(name).fetch(request)"],
-    notes:
-      "Now back to Rooms. Its Layer asks for the Room Durable Object and for History. join hands the request to that room's Durable Object; attach and history go straight to History.",
-  }),
-  chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesR2])"],
+    emphasize: ["yield* Room;", "yield* History;", "Effect.provide(", "HistoryLive.pipe(Layer.provide([DatabaseLive, FilesR2]))"],
     notes:
-      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each block gets.",
+      "The Worker asks for the rooms and for History. join hands the WebSocket to that room's Durable Object; attach and history go to History. At the bottom it wires the Layers: HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each module gets. The rooms get History from here too.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
@@ -670,10 +649,10 @@ FunctionName: chat-dev-sam-history`,
     group: WORKER.group,
     fontSize: WORKER.fontSize,
     title: "Forget a Layer and the Worker doesn't compile",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'History' is not assignable")).slice(0, 1), below: true },
+    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Files' is not assignable")).slice(0, 1), below: true },
     showRemoved: true,
     notes:
-      "Leave HistoryLive out of the stack, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
+      "Leave FilesR2 out of the stack, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
   chat({
     snippet: "ChatTraced.ts",
@@ -683,7 +662,7 @@ FunctionName: chat-dev-sam-history`,
     title: "Collecting every trace and log is one line in the Worker",
     emphasize: ["Axiom.Telemetry("],
     notes:
-      "One thing is missing for production: observability, the column beside the pyramid. Start with the simplest version. One line in the Worker: Axiom.Telemetry, pointed at an Axiom token and two datasets. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
+      "One thing is missing for production: observability, the column beside the pyramid. Start with the simplest version. One line in the Worker: Axiom.Telemetry, pointed at an Axiom token and two datasets. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in the rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
   }),
   ...[
     {
@@ -778,7 +757,7 @@ const program: StepSpec[] = [
     omit: ["ret"],
     title: "Its body yields the Chat Worker, and every Layer beneath it",
     notes:
-      "The body yields the Chat Worker. That one line pulls in everything: Rooms, History, Files, Database, and all their resources and bindings.",
+      "The body yields the Chat Worker. That one line pulls in everything: the rooms, History, Files, Database, and all their resources and bindings.",
   }),
   chat({
     snippet: "alchemy.run.ts",
