@@ -72,6 +72,16 @@ const T = { ok: "\x1b[38;5;113m", soft: "\x1b[38;5;150m", accent: "\x1b[38;5;173
 const RULE = `${T.grey}${T.dim}${"─".repeat(52)}${T.reset}`;
 const $ = (cmd: string) => `${T.dim}$${T.reset} ${cmd}`;
 const res = (name: string, type: string) => `${T.bold}${name}${T.reset} ${T.dim}(${type})${T.reset}`;
+/** The test run's bracketing phases: what it stands up before the tests and tears down after. */
+const DEPLOYED = [
+  `${T.ok}${T.bold}▲ deploy${T.reset}   ${T.dim}Chat → stage${T.reset} ${T.bold}test_sam${T.reset}`,
+  `  ${T.ok}+ Files  + Messages  + Db  + Pool  + Chat${T.reset}`,
+];
+const DESTROYED = [
+  `${T.red}${T.bold}▼ destroy${T.reset}  ${T.dim}Chat ← stage${T.reset} ${T.bold}test_sam${T.reset}`,
+  `  ${T.red}- Chat  - Pool  - Db  - Messages  - Files${T.reset}`,
+];
+const PASSED = `${T.ok}✓${T.reset} a message reaches everyone in the room`;
 const term = (s: Omit<TerminalSpec, "kind" | "lines"> & { lines: string[] }): TerminalSpec => ({
   kind: "terminal",
   ...s,
@@ -717,10 +727,10 @@ const tests: StepSpec[] = [
   ),
   chat({
     ...TEST,
-    title: "A test deploys the whole Stack before it runs",
+    title: "A test deploys the whole Stack first, and destroys it after",
     omit: ["dev", "test", "stage"],
     notes:
-      "An end-to-end test starts by deploying the same Stack. deploy(Stack) runs once for the file, so every test shares one deployment.",
+      "An end-to-end test starts by deploying the same Stack. deploy(Stack) runs once for the file, so every test shares one deployment, and destroy(Stack) tears it all down when the file is done.",
   }),
   chat({
     ...TEST,
@@ -739,15 +749,9 @@ const tests: StepSpec[] = [
   term({
     group: "test-run",
     title: "By default it runs against the real cloud, in its own stage",
-    lines: [
-      $("pnpm test"),
-      `${T.dim}deploying Chat to stage ${T.reset}${T.bold}test_sam${T.reset}`,
-      `${T.ok}✓${T.reset} a message reaches everyone in the room`,
-      ``,
-      `${T.ok}1 passed${T.reset}`,
-    ],
+    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
     notes:
-      "Run it, and it deploys to a stage of its own, test_sam, in the real cloud. Real Workers, real queues, a real Neon database. Nothing shared with your dev stage or anyone else's.",
+      "Run it, and it deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
   }),
   chat({
     snippet: "chat-dev.test.ts",
@@ -776,12 +780,14 @@ const tests: StepSpec[] = [
     title: "Emulated for speed, live for the real thing",
     lines: [
       $("LOCAL=1 pnpm test"),
-      `${T.dim}starting Chat on ${T.reset}${T.bold}http://localhost:1337${T.reset}`,
-      `${T.ok}✓${T.reset} a message reaches everyone in the room`,
+      `${T.ok}${T.bold}▲ start${T.reset}    ${T.dim}Chat →${T.reset} ${T.bold}http://localhost:1337${T.reset}`,
+      PASSED,
+      `${T.red}${T.bold}▼ stop${T.reset}     ${T.dim}Chat${T.reset}`,
       ``,
       $("pnpm test"),
-      `${T.dim}deploying Chat to stage ${T.reset}${T.bold}test_sam${T.reset}`,
-      `${T.ok}✓${T.reset} a message reaches everyone in the room`,
+      ...DEPLOYED,
+      PASSED,
+      ...DESTROYED,
     ],
     fresh: 7,
     notes:

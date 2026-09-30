@@ -9,7 +9,7 @@ import { connect, history } from "./client.ts";
 
 // #region show
 // #region make
-const { test, beforeAll, deploy } = Test.make({
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
   // #region dev
   dev: !!process.env.LOCAL,
@@ -22,6 +22,7 @@ const { test, beforeAll, deploy } = Test.make({
 // #region deploy
 
 const stack = beforeAll(deploy(Stack));
+afterAll(destroy(Stack));
 // #endregion deploy
 // #region test
 
