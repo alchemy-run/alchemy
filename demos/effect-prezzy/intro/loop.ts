@@ -645,17 +645,16 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...ROOM_FILE,
     title: "Each room is a Durable Object that holds its sockets",
-    omit: ["history", "send", "provideHistory"],
+    omit: ["history", "send"],
     notes:
       "To implement it, each room gets its own Durable Object: one small stateful server per room name. It has the same shape as everything else, a constructor, then methods. Its fetch accepts a WebSocket, and each message goes to every socket in the room.",
   }),
   chat({
     ...ROOM_FILE,
     title: "…and each room appends its messages to History",
-    omit: ["noHistory"],
-    emphasize: ["yield* History", "history.append", "Effect.provide(HistoryLive"],
+    emphasize: ["yield* History", "history.append"],
     notes:
-      "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business. A Durable Object runs on its own, so it provides the History Layer it uses right where it's defined.",
+      "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business. And like every other module, it doesn't say where History comes from; the Worker decides that.",
   }),
   chat({
     snippet: "Rooms.ts",
