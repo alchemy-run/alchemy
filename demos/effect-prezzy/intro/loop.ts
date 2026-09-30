@@ -973,13 +973,6 @@ const tests: StepSpec[] = [
     notes:
       "And the message should land in history, which means it went through the queue, the consumer and Postgres. One test covers every piece of the app.",
   }),
-  term({
-    group: "test-run",
-    title: "By default it runs against the real cloud, in its own stage",
-    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
-    notes:
-      "Run it, and it deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
-  }),
   chat({
     snippet: "chat-dev.test.ts",
     file: TEST.file,
@@ -988,7 +981,7 @@ const tests: StepSpec[] = [
     title: "dev: true runs the same Stack on emulated services",
     emphasize: ["dev: true"],
     notes:
-      "Set dev to true and the same file runs against emulated services instead: workerd for the Worker, Durable Objects, R2 and queues, locally. Same Stack, same test.",
+      "First box: emulated. Set dev to true and the test runs the whole Stack on emulated services: workerd for the Worker, Durable Objects, R2 and queues, locally. Same Stack, same test.",
   }),
   chat({
     snippet: "chat.test.ts",
@@ -1000,7 +993,14 @@ const tests: StepSpec[] = [
     title: "An environment variable decides where it runs",
     emphasize: ["dev: !!process.env.LOCAL"],
     notes:
-      "Make it an environment variable, and the agent picks. Local while it iterates, live when it wants the real thing.",
+      "Make it an environment variable, and the agent picks: LOCAL=1 while it iterates, and without it, the next box, the real cloud.",
+  }),
+  term({
+    group: "test-run",
+    title: "Without it, the same test runs against the real cloud",
+    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
+    notes:
+      "Unset LOCAL, and the same test deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
   }),
   term({
     group: "test-run",
@@ -1057,8 +1057,13 @@ jobs:
 const ci: StepSpec[] = [
   loop(
     "Green on your machine, the agent opens a pull request",
-    "Once the tests pass locally, the agent opens a pull request. CI should run the same tests, but it can't use the agent's copy of the app. It needs one of its own.",
-    ["push", "pr", "prTest", "comment"],
+    "Once the tests pass locally, the agent pushes and opens a pull request. Now we walk the pull request lane, left to right.",
+    ["push"],
+  ),
+  loop(
+    "CI deploys a copy of the app just for that pull request",
+    "First box: deploy. CI can't use the agent's copy of the app, so it deploys one of its own, just for pull request 42.",
+    ["pr"],
   ),
   term({
     group: "stages",
@@ -1108,18 +1113,14 @@ const SHARED: MiniGraph = {
   ],
 };
 const shared: StepSpec[] = [
-  loop(
-    "A new database for every pull request starts empty",
-    "A full copy per PR is great for isolation, but a brand new database has no data in it. Real apps need realistic data to test against, and creating a database per PR is slow and costs money.",
-    ["pr"],
-  ),
   chat({
     snippet: "Db.ts",
     file: DB_FILE.file,
     group: DB_FILE.group,
     fontSize: DB_FILE.fontSize,
-    title: "So far, every stage's Database Layer creates a new project",
-    notes: "Here's the Database Layer from before. Every stage creates a brand new Neon project.",
+    title: "But a new database for every pull request starts empty",
+    notes:
+      "A full copy per PR is great for isolation, but look at the Database Layer: every stage creates a brand new Neon project, with no data in it. Real apps need realistic data to test against, and creating a database per PR is slow and costs money.",
     quiet: true,
   }),
   chat({
@@ -1228,8 +1229,8 @@ jobs:
 const release: StepSpec[] = [
   loop(
     "Once it's approved, main takes over",
-    "The reviewer tried the preview, the checks are green, and the PR is approved. The last lane is main.",
-    ["merge", "staging", "stagingTest", "prod"],
+    "The reviewer tried the preview, the checks are green, and the PR is approved. The last lane is main: merge, deploy staging, and run the same tests on it.",
+    ["merge", "staging", "stagingTest"],
   ),
   inline({
     group: "main",
@@ -1241,6 +1242,11 @@ const release: StepSpec[] = [
     emphasize: ["branches: [main]", "STAGE: staging"],
     notes: "On main, the same command runs with STAGE set to staging. Staging is updated and tested in one step.",
   }),
+  loop(
+    "Last box: prod, only when staging is green",
+    "And the last box on the map: prod.",
+    ["prod"],
+  ),
   inline({
     group: "main",
     file: ".github/workflows/main.yml",
