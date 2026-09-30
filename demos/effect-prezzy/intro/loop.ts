@@ -170,13 +170,31 @@ const theStack: StepSpec[] = [
     notes:
       "One more piece, and it isn't a layer. Production needs observability: traces, logs, metrics, and the dashboards and alarms that watch them. It's not on top or underneath. It runs beside the whole stack, because every layer feeds it. An agent has to get all of this right.",
   }),
-  pyramid({
+  {
+    kind: "arch",
     title: "Our example is a chat app that touches every layer",
-    layers: CHAT_LAYERS,
-    pillar: { ...OBSERVE, lines: ["Axiom", "traces", "logs", "dashboard", "monitor"] },
+    nodes: [
+      { id: "browser", title: "Browser", sub: "the chat page", color: "#8b9cf6", x: 250, y: 560 },
+      { id: "chat", title: "Chat", sub: "Cloudflare Worker", color: "#f38020", x: 710, y: 560 },
+      { id: "rooms", title: "Rooms", sub: "Durable Objects", color: "#e06c9f", x: 1170, y: 560 },
+      { id: "messages", title: "Messages", sub: "Cloudflare Queue", color: "#e0a86b", x: 1630, y: 560 },
+      { id: "files", title: "Files", sub: "R2 bucket", color: "#8b7cf6", x: 710, y: 880 },
+      { id: "history", title: "History", sub: "Neon Postgres", color: "#34d399", x: 1630, y: 880 },
+      { id: "axiom", title: "Axiom", sub: "traces · logs · dashboard · monitor", color: "#56b6c2", x: 1170, y: 270, w: 560 },
+    ],
+    edges: [
+      { from: "browser", to: "chat", label: "WebSocket" },
+      { from: "chat", to: "rooms", label: "join" },
+      { from: "rooms", to: "messages", label: "send" },
+      { from: "chat", to: "files", label: "upload" },
+      { from: "messages", to: "history", label: "consume" },
+      { from: "chat", to: "axiom", dashed: true },
+      { from: "rooms", to: "axiom", dashed: true },
+      { from: "messages", to: "axiom", dashed: true },
+    ],
     notes:
-      "To make this concrete: a chat app on Cloudflare. A bucket for shared files, a queue and a Postgres database for history; the bindings and permissions between them; a Worker with a Durable Object per room; a chat page talking to it over WebSockets; and Axiom beside it all, collecting traces and logs, with a dashboard and a monitor.",
-  }),
+      "To make this concrete, here's what we'll build: a chat app on Cloudflare. The page connects to a Worker over a WebSocket, and the Worker hands each room to its own Durable Object. Rooms put every message on a queue, which fills a Postgres database on Neon with the history. Uploads go to an R2 bucket. And everything reports traces and logs to Axiom, with a dashboard and a monitor. That's every layer of the pyramid, plus observability beside it.",
+  },
 ];
 
 // ── other IaC frameworks: two programs ─────────────────────────────────────────────────

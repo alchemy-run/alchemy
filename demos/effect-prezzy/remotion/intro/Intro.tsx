@@ -20,6 +20,7 @@ import { LoopView } from "./Loop.tsx";
 import { PullRequestView } from "./PullRequest.tsx";
 import { PyramidView } from "./Pyramid.tsx";
 import { RollView } from "./Roll.tsx";
+import { ArchView } from "./Arch.tsx";
 import { BrowserPane, TerminalPane } from "./Panes.tsx";
 
 /** Width available to a step title (the frame minus its side margins). */
@@ -110,6 +111,8 @@ export const Intro = ({ intro }: IntroProps) => {
         <BrowserPane step={step} prev={prev} local={local} />
       ) : step.kind === "loop" ? (
         <LoopView step={step} prev={lastOf(intro.steps, at, "loop")} local={local} />
+      ) : step.kind === "arch" ? (
+        <ArchView step={step} local={local} />
       ) : step.kind === "roll" ? (
         <RollView step={step} prev={lastOf(intro.steps, at, "roll")} local={local} />
       ) : step.kind === "pyramid" ? (

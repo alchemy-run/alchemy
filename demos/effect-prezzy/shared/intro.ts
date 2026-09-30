@@ -357,7 +357,19 @@ export interface RollStep {
   frames: number;
 }
 
+/** A full-screen architecture drawing: boxes, and arrows between them. */
+export interface ArchStep {
+  kind: "arch";
+  title: string;
+  notes: string;
+  nodes: { id: string; title: string; sub?: string; color: string; x: number; y: number; w?: number }[];
+  /** `dashed` edges are telemetry, not requests. */
+  edges: { from: string; to: string; label?: string; dashed?: boolean }[];
+  frames: number;
+}
+
 export type IntroStep =
+  | ArchStep
   | RollStep
   | CodeStep
   | SlideStep
