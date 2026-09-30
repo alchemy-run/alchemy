@@ -292,6 +292,11 @@ const MODULE_BESIDE_CLASS = {
   },
 };
 const modules: StepSpec[] = [
+  built(
+    "We'll build the chat app as blocks like this, starting with Files",
+    [BRICKS.files],
+    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. Let's write it.",
+  ),
   chat({
     ...FILES,
     title: "In Alchemy, the Files module starts with the interface its callers use",
@@ -385,11 +390,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
     ],
     notes:
       "It also sets $BUCKET_NAME, so putObject knows where to write. Nobody writes the policy or the variable by hand. Delete the line and the permission goes with it, and anything that used it stops compiling. And callers don't change at all: it's still Files.",
-  }),  built(
-    "Files is the first block of the stack",
-    [BRICKS.files],
-    "Back to the pyramid. Files is one block, and it spans the stack: its bucket, its permission and its upload method, all in one module. Let's build the rest of the chat app the same way.",
-  ),
+  }),
 ];
 
 // ── composing modules as Layers ──────────────────────────────────────────
@@ -409,6 +410,11 @@ const ARCHIVE = `export default AWS.Lambda.Function(
   }),
 );`;
 const compose: StepSpec[] = [
+  built(
+    "Next, a Database block beside it",
+    [BRICKS.database, BRICKS.files],
+    "Next to Files goes the database. It doesn't depend on anything either, so it sits at the bottom too.",
+  ),
   chat({
     snippet: "Db.ts",
     file: "src/Db.ts",
@@ -416,12 +422,12 @@ const compose: StepSpec[] = [
     fontSize: 25,
     title: "The Database module declares a Neon database behind Hyperdrive",
     notes:
-      "Next, the database. Same idea: its constructor declares a Neon Postgres project and a Hyperdrive pool in front of it, binds the pool to the Worker, and provides a SQL client built from the pool's connection string.",
+      "Same idea as Files: its constructor declares a Neon Postgres project and a Hyperdrive pool in front of it, binds the pool to the Worker, and provides a SQL client built from the pool's connection string.",
   }),
   built(
-    "Database sits beside it, with nothing beneath it",
-    [BRICKS.database, BRICKS.files],
-    "Database has no dependencies of its own, so it sits at the bottom next to Files.",
+    "History goes on top, because it needs the database",
+    [BRICKS.database, BRICKS.files, BRICKS.history],
+    "Next is chat history. It keeps messages in Postgres, so it sits on the Database block. Let's see how it says so in code.",
   ),
   chat({
     ...HISTORY,
@@ -491,9 +497,9 @@ FunctionName: chat-dev-sam-archive`,
       "It also creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
   built(
-    "History sits on the Database it depends on",
-    [BRICKS.database, BRICKS.files, BRICKS.history],
-    "History needs a SQL client, so it sits on top of Database. That Layer.provide is literally this stacking.",
+    "The chat rooms go on top of History",
+    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room],
+    "Then the chat rooms. They hand every message to History through a queue, so they sit on top of it.",
   ),
   chat({
     ...ROOM_FILE,
@@ -509,9 +515,9 @@ FunctionName: chat-dev-sam-archive`,
     notes: "Each room also sends every message to the queue that History consumes. Send-only access, declared in its constructor.",
   }),
   built(
-    "Room sits on the queue that History consumes",
-    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room],
-    "Rooms feed History through the queue, so they sit on top of it.",
+    "The Chat Worker goes on top of all of them",
+    ALL_BRICKS,
+    "Last, the Worker that serves requests. It uses every block below it, so it goes on top.",
   ),
   chat({
     ...WORKER,
@@ -531,11 +537,6 @@ FunctionName: chat-dev-sam-archive`,
     notes:
       "Forget to provide History, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
-  built(
-    "The Chat Worker sits on top of all of them",
-    ALL_BRICKS,
-    "And the Chat Worker, which yields all of them, sits on top. Every block carries its own infrastructure, permissions and code, and each one sits on the blocks it depends on.",
-  ),
   pyramid({
     title: "The pyramid is literally a stack of Layers",
     layers: CHAT_LAYERS,
