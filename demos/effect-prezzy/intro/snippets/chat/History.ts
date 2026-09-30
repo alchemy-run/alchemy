@@ -1,4 +1,5 @@
 import type * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import { Queues } from "alchemy/Cloudflare";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -6,7 +7,9 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { Database } from "./Db.ts";
 import { Files, type UploadError } from "./Files.ts";
-import { Messages, type Message } from "./Messages.ts";
+
+/** A chat message: a room name and some text. */
+export type Message = { room: string; text: string };
 
 // #region show
 // #region service
@@ -29,7 +32,7 @@ export const HistoryLive = Layer.effect(
     const files = yield* Files;
     // #endregion deps
     // #region queue
-    const messages = yield* Messages;
+    const messages = yield* Cloudflare.Queues.Queue("Messages");
     const queue = yield* Queues.WriteQueue(messages);
     // #endregion queue
     // #region consume
@@ -47,13 +50,17 @@ export const HistoryLive = Layer.effect(
       // #region append
       append: (room: string, text: string) => queue.send({ room, text })/*hide*/.pipe(Effect.orDie)/*end*/,
       // #endregion append
+      // #region list
       list: (room: string) =>
         sql<{ text: string }>`SELECT text FROM messages WHERE room = ${room}`/*hide*/.pipe(Effect.map((rows) => rows.map((row) => row.text)), Effect.orDie)/*end*/,
+      // #endregion list
+      // #region attach
       attach: (room: string, file: string, body: string) =>
         Effect.gen(function* () {
           yield* files.upload(file, body);
           yield* sql`INSERT INTO messages ${sql.insert({ room, text: file })}`/*hide*/.pipe(Effect.orDie)/*end*/;
         }),
+      // #endregion attach
     };
     // #endregion methods
   }),

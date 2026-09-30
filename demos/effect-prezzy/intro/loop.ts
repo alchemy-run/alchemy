@@ -528,36 +528,48 @@ const compose: StepSpec[] = [
   ),
   chat({
     ...HISTORY,
-    title: "History asks for Database and Files",
-    omit: ["service", "queue", "consume", "append"],
-    emphasize: ["yield* Database;", "yield* Files;"],
+    title: "History starts as an empty Layer",
+    omit: ["service", "deps", "queue", "consume", "append", "list", "attach"],
+    notes: "Chat history is the next module. Like the others, it's a Layer: a constructor that returns the methods the rest of the app calls. It starts empty.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "It asks for Database and Files",
+    omit: ["service", "queue", "consume", "append", "list", "attach"],
     notes:
       "The constructor asks for Database and for Files, the two blocks beneath it. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
-    snippet: "Messages.ts",
-    file: "src/Messages.ts",
-    group: "messages",
-    fontSize: 30,
-    title: "Chat messages arrive on a queue called Messages",
-    notes:
-      "Where do the messages come from? A Cloudflare Queue called Messages. Every chat room will put what people say onto it, and each message is just a room name and some text. Declaring the queue is one line.",
+    ...HISTORY,
+    title: "list reads a room's messages from Postgres",
+    omit: ["service", "queue", "consume", "append", "attach"],
+    notes: "The first method: list. One query against the database for a room's messages.",
   }),
   chat({
     ...HISTORY,
-    title: "History owns that queue, and appends to it",
+    title: "New messages go on a queue that History declares itself",
+    omit: ["service", "consume", "append", "attach"],
+    notes:
+      "Messages arrive faster than we want to write them one at a time, so they go through a queue. History declares the queue right in its constructor, a Cloudflare Queue called Messages, and asks for send access to it. Nothing else in the app knows the queue exists.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "append puts a message on that queue",
+    omit: ["service", "consume", "attach"],
+    notes: "append sends a room name and the text onto the queue. That's what every chat room will call.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "…and History consumes the queue into Postgres",
+    omit: ["service", "attach"],
+    notes:
+      "And History consumes its own queue, inserting each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "attach stores a file, and records it in the room",
     omit: ["service", "consume"],
-    emphasize: ["const messages", "Queues.WriteQueue", "append:"],
-    notes:
-      "The queue belongs to History. Its constructor asks for the Messages queue and send access to it, and History's new append method puts a message on it. Nothing else in the app touches the queue.",
-  }),
-  chat({
-    ...HISTORY,
-    title: "…and consumes it into Postgres",
-    omit: ["service", "methods"],
-    emphasize: ["consumeQueueMessages", "Stream.runForEach"],
-    notes:
-      "History reads that queue and inserts each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the Messages queue's consumer.",
+    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History sits on both Database and Files.",
   }),
   chat({
     ...HISTORY,
