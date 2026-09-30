@@ -759,23 +759,57 @@ export const ClusterProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* container
-          .createProjectsLocationsClusters({
-            parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              cluster: toCreateBody(
-                news,
-                clusterId,
-                desiredLabels,
-                autopilot,
-                env.project,
-              ),
-            },
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(env.project, location, created);
-        }
+        const create = Effect.gen(function* () {
+          const created = yield* container
+            .createProjectsLocationsClusters({
+              parent: `projects/${env.project}/locations/${location}`,
+              body: {
+                cluster: toCreateBody(
+                  news,
+                  clusterId,
+                  desiredLabels,
+                  autopilot,
+                  env.project,
+                ),
+              },
+            })
+            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          if (created !== undefined) {
+            yield* waitForOperation(env.project, location, created);
+          }
+        });
+        // GKE intermittently fails a create with INTERNAL ("Failed to create
+        // cluster") and leaves the cluster in ERROR; delete it and try again.
+        const removeFailed = Effect.gen(function* () {
+          const operation = yield* container
+            .deleteProjectsLocationsClusters({ name })
+            .pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.retry({
+                while: (error) => error._tag === "Conflict",
+                times: 8,
+                schedule: Schedule.spaced("5 seconds"),
+              }),
+            );
+          if (operation !== undefined) {
+            yield* waitForOperation(env.project, location, operation, {
+              notFoundOk: true,
+            });
+          }
+          yield* waitUntilGone(name);
+        });
+        const isInternal = (error: { _tag: string; code?: number }) =>
+          error._tag === "GCP.OperationFailed" && error.code === 13;
+        yield* create.pipe(
+          Effect.tapError((error) =>
+            isInternal(error) ? removeFailed : Effect.void,
+          ),
+          Effect.retry({
+            while: isInternal,
+            times: 2,
+            schedule: Schedule.spaced("30 seconds"),
+          }),
+        );
         current = yield* waitUntilExists(name);
       }
 
