@@ -40,6 +40,7 @@ const chat = (s: {
   error?: CodeSpec["error"];
   quiet?: boolean;
   tints?: CodeSpec["tints"];
+  showRemoved?: boolean;
 }): CodeSpec => ({
   kind: "code",
   group: s.group,
@@ -55,6 +56,7 @@ const chat = (s: {
   error: s.error,
   quiet: s.quiet,
   tints: s.tints,
+  showRemoved: s.showRemoved,
   notes: s.notes,
   frames: s.diagram ? 45 : undefined,
 });
@@ -521,11 +523,11 @@ FunctionName: chat-dev-sam-archive`,
   chat({
     snippet: "ChatMissing.error.ts",
     file: WORKER.file,
-    group: "chat-missing",
+    group: WORKER.group,
     fontSize: WORKER.fontSize,
     title: "Forget a Layer and the Worker doesn't compile",
     error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'History' is not assignable")).slice(0, 1), below: true },
-    emphasize: ["Effect.provide"],
+    showRemoved: true,
     notes:
       "Forget to provide History, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),

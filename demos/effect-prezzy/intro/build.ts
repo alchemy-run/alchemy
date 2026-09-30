@@ -374,7 +374,18 @@ for (const spec of steps) {
             const small = pre + suf >= Math.max(x.length, y.length) * 0.4;
             void small;
           }
-          // Removed lines aren't shown: only what's there now, with changed lines in green.
+          // Removed lines are only shown when a step asks for them.
+          if (spec.showRemoved && textOf(old).trim()) {
+            const x = textOf(old);
+            const y = rewritten ? textOf(step.lines[a + n]!) : "";
+            let pre = 0;
+            while (pre < x.length && pre < y.length && x[pre] === y[pre]) pre++;
+            let suf = 0;
+            while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
+            const cut = rewritten && x.length - suf > pre ? { start: pre, end: x.length - suf } : {};
+            lines.push(old);
+            diff.push({ kind: "del", ...cut });
+          }
         }
         b += part.count!;
         if (rewritten) {
