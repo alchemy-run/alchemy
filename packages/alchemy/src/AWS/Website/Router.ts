@@ -183,15 +183,21 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
         if (typeof route === "string" || "url" in (route as any)) {
           const url = typeof route === "string" ? route : (route as any).url;
-          const host = typeof url === "string" ? new URL(url).host : url;
+          const origin = (route as any).origin;
           inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-            host,
-            (resolvedHost) =>
-              JSON.stringify({
-                host: resolvedHost,
-                origin: (route as any).origin,
+            url,
+            (resolvedUrl) => {
+              const { host, protocol } = new URL(resolvedUrl);
+              return JSON.stringify({
+                host,
+                // `setUrlOrigin` defaults to https:443.
+                origin:
+                  protocol === "http:"
+                    ? { protocol: "http", ...origin }
+                    : origin,
                 rewrite: (route as any).rewrite,
-              }),
+              });
+            },
           );
           yield* KvRoutesUpdate(`Route${routeIndex}`, {
             store: kvStore.keyValueStoreArn as any,
@@ -224,15 +230,16 @@ export const Router = Effect.fn("AWS.Website.Router")(
             entry: `bucket,${routeNs},,${normalizePattern(pattern)}`,
           });
         }
-      }
-    }
 
-    if (Object.keys(inlineRouteEntries).length > 0) {
-      yield* KvEntries("InlineRouteEntries", {
-        store: kvStore.keyValueStoreArn as any,
-        namespace: kvNamespace,
-        entries: inlineRouteEntries,
-      });
+        // Each route owns its namespace, like a site: the edge function
+        // reads `<routeNs>:metadata`, and the router namespace holds only
+        // the `routes` table.
+        yield* KvEntries(`Route${routeIndex}Metadata`, {
+          store: kvStore.keyValueStoreArn as any,
+          namespace: routeNs,
+          entries: { metadata: inlineRouteEntries[`${routeNs}:metadata`] },
+        });
+      }
     }
 
     // One behavior serves every attached site — static AND server-rendered

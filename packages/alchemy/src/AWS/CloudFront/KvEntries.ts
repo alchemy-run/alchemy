@@ -21,7 +21,12 @@ export interface KvEntriesProps {
   namespace: string;
   /** Map of key → value entries to manage. */
   entries: Record<string, Input<string>>;
-  /** Whether to delete keys under this namespace that are not in `entries`. @default false */
+  /**
+   * Whether to delete keys under this namespace that are not in `entries`.
+   * With `purge`, deleting this resource clears the whole namespace; without
+   * it, only the keys in `entries` are removed.
+   * @default false
+   */
   purge?: boolean;
 }
 
@@ -205,6 +210,24 @@ export const KvEntriesProvider = () =>
         }
       });
 
+      const remove = Effect.fn(function* (
+        store: string,
+        namespace: string,
+        entries: ResolvedEntries,
+      ) {
+        const allKeys = yield* collectAllKeys(store);
+        const prefix = `${namespace}:`;
+        const deletes: kvs.DeleteKeyRequestListItem[] = [];
+        for (const item of allKeys) {
+          if (!item.Key.startsWith(prefix)) continue;
+          if (!(item.Key.slice(prefix.length) in entries)) continue;
+          deletes.push({ Key: item.Key });
+        }
+        if (deletes.length > 0) {
+          yield* batchUpdateKeys(store, undefined, [], deletes);
+        }
+      });
+
       return {
         // Non-listable: a KvEntries resource is a logical group of key/value
         // data keyed entirely by its parent store ARN + namespace (both chosen
@@ -256,10 +279,19 @@ export const KvEntriesProvider = () =>
           }),
         ),
         delete: withKvsRegionFn(
-          Effect.fn(function* ({ output }) {
+          Effect.fn(function* ({ olds, output }) {
             if (!output.store) return;
+            // Without `purge` the namespace may hold keys this resource
+            // doesn't own (e.g. a Router's `routes` table), so only remove
+            // the entries it wrote.
             yield* retryForKvsReadiness(
-              purge(output.store, output.namespace, undefined),
+              olds.purge
+                ? purge(output.store, output.namespace, undefined)
+                : remove(
+                    output.store,
+                    output.namespace,
+                    resolveEntries(output.entries),
+                  ),
             ).pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
