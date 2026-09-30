@@ -973,6 +973,13 @@ const tests: StepSpec[] = [
     notes:
       "And the message should land in history, which means it went through the queue, the consumer and Postgres. One test covers every piece of the app.",
   }),
+  term({
+    group: "test-run",
+    title: "pnpm test runs it against the real cloud",
+    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
+    notes:
+      "Run it, and the test deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
+  }),
   chat({
     snippet: "chat-dev.test.ts",
     file: TEST.file,
@@ -993,14 +1000,7 @@ const tests: StepSpec[] = [
     title: "An environment variable decides where it runs",
     emphasize: ["dev: !!process.env.LOCAL"],
     notes:
-      "Make it an environment variable, and the agent picks: LOCAL=1 while it iterates, and without it, the next box, the real cloud.",
-  }),
-  term({
-    group: "test-run",
-    title: "Without it, the same test runs against the real cloud",
-    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
-    notes:
-      "Unset LOCAL, and the same test deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
+      "Make it an environment variable, and the agent picks: LOCAL=1 while it iterates, and without it, the real cloud.",
   }),
   term({
     group: "test-run",
