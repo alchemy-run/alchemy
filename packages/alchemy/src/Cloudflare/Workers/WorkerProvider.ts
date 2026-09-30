@@ -3698,7 +3698,15 @@ export const LiveWorkerProvider = () =>
           newSqliteClasses,
         };
 
-        const metadataContainers = [...containerClassNames].map((className) => ({ className }));
+        const metadataContainers = [
+          ...new Map(
+            bindings.flatMap((binding) =>
+              (binding.data.containers ?? []).map(
+                ({ className, name, images }) => [className, { className, name, images }] as const,
+              ),
+            ),
+          ).values(),
+        ];
 
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
