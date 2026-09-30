@@ -359,6 +359,9 @@ for (const spec of steps) {
     });
   } else if (spec.kind === "browser") {
     resolved.push({ kind: "browser", title: spec.title, notes: spec.notes ?? "", url: spec.url, image: spec.image, frames: spec.frames ?? 20 });
+  } else if (spec.kind === "pyramid") {
+    const side = spec.side?.map((note) => (note.code ? { ...note, tokens: tokenize(note.text, false) } : note));
+    resolved.push({ ...spec, side, notes: spec.notes ?? "", frames: spec.frames ?? 60 });
   } else {
     resolved.push({ ...spec, notes: spec.notes ?? "", frames: spec.frames ?? 60 });
   }

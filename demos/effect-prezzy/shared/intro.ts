@@ -305,8 +305,10 @@ export interface PyramidStep {
     layer: string;
     text: string;
     tone?: Tone;
-    /** Code set just right of the band, instead of a hand-written note. */
+    /** Code set in a column right of the pyramid, instead of a hand-written note. */
     code?: boolean;
+    /** The code, highlighted (filled in by the build). */
+    tokens?: Token[][];
   }[];
   /** A bracket over every layer, with a label. */
   brace?: { text: string; sub?: string };

@@ -326,11 +326,28 @@ const BRICKS = {
 const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms, BRICKS.chat];
 /** Beside each row, the code that puts that block on the ones beneath it. */
 const PROVIDES = {
-  files: { layer: "infra", text: "FilesLive", code: true },
-  bottom: { layer: "infra", text: "DatabaseLive, FilesLive", code: true },
-  history: { layer: "config", text: "Layer.provide([DatabaseLive, FilesLive])", code: true },
-  rooms: { layer: "api", text: "Layer.provide(HistoryLive)", code: true },
-  chat: { layer: "web", text: "Effect.provide(RoomsLive)", code: true },
+  // Line one is Database's, line two is Files'; Files alone keeps its line.
+  files: { layer: "infra", text: "\nconst FilesLive = Layer.effect(Files, …)", code: true },
+  bottom: {
+    layer: "infra",
+    text: "const DatabaseLive = Layer.unwrap(…)\nconst FilesLive = Layer.effect(Files, …)",
+    code: true,
+  },
+  history: {
+    layer: "config",
+    text: "const HistoryLive = Layer.effect(History, …)\n  .pipe(Layer.provide([DatabaseLive, FilesLive]))",
+    code: true,
+  },
+  rooms: {
+    layer: "api",
+    text: "const RoomsLive = Layer.effect(Rooms, …)\n  .pipe(Layer.provide(HistoryLive))",
+    code: true,
+  },
+  chat: {
+    layer: "web",
+    text: 'export default Cloudflare.Worker("Chat", …,\n  Effect.gen(…).pipe(Effect.provide(RoomsLive)))',
+    code: true,
+  },
 };
 /** The chat app's pyramid, rebuilt from the modules implemented so far. */
 const built = (title: string, bricks: typeof ALL_BRICKS, notes: string, side?: PyramidSpec["side"]): PyramidSpec =>
@@ -657,9 +674,9 @@ FunctionName: chat-dev-sam-archive`,
     title: "The pyramid is literally a stack of Layers",
     layers: CHAT_LAYERS,
     bricks: ALL_BRICKS,
-    brace: { text: "one program", sub: "one type checker\none test file\none deploy" },
+    side: [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms, PROVIDES.chat],
     notes:
-      "So the whole pyramid, infrastructure to frontend, is one program made of Layers. One type checker sees all of it. One test file can exercise all of it. One command deploys it.",
+      "Read the code from the bottom up and it's the pyramid: DatabaseLive and FilesLive at the bottom, HistoryLive provided with both, RoomsLive with HistoryLive, and the Chat Worker with RoomsLive. So the whole thing, infrastructure to frontend, is one program made of Layers. One type checker sees all of it, one test file can exercise all of it, and one command deploys it.",
   }),
 ];
 

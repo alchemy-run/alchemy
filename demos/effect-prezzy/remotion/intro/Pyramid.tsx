@@ -23,6 +23,10 @@ const band = (slot: number) => {
 /** Where the notes beside the pyramid start. */
 const NOTE_X = CX + WIDE / 2 + 70;
 const SLICE_W = 420;
+/** The code column beside the pyramid: clear of its widest band, same left edge for every row. */
+const CODE_X = 1225;
+const CODE_SIZE = 22;
+const CODE_LH = 34;
 
 const DIM = 0.3;
 
@@ -192,12 +196,40 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
         const q = k < 0 ? 1 : interpolate(local, [4 + k * 4, 12 + k * 4], [0, 1], clamp);
         const color = TONE[note.tone ?? "neutral"];
         if (note.code) {
-          const x = CX + widthAt(mid) / 2 + 44;
+          // One left-aligned column beside the pyramid; each line keeps its place, and only
+          // lines that weren't there before fade in.
+          const lines = note.tokens ?? note.text.split("\n").map((text) => [{ text, color: brand.fg }]);
+          const before = new Set(
+            (prev?.side ?? [])
+              .filter((n) => n.code && n.layer === note.layer)
+              .flatMap((n) => n.text.split("\n")),
+          );
+          const y0 = mid + 8 - ((lines.length - 1) * CODE_LH) / 2;
           return (
-            <g key={noteKey(note)} opacity={q} transform={`translate(${(1 - q) * 14} 0)`}>
-              <text x={x} y={mid + 10} fontFamily={mono} fontSize={27} fill={note.tone ? color : brand.fg}>
-                {note.text}
-              </text>
+            <g key={note.layer}>
+              {lines.map((line, j) => {
+                const raw = line.map((t) => t.text).join("");
+                if (!raw.trim()) return null;
+                const lq = before.has(raw) ? 1 : interpolate(local, [4, 12], [0, 1], clamp);
+                return (
+                  <text
+                    key={raw}
+                    x={CODE_X}
+                    y={y0 + j * CODE_LH}
+                    fontFamily={mono}
+                    fontSize={CODE_SIZE}
+                    opacity={lq}
+                    transform={`translate(${(1 - lq) * 14} 0)`}
+                    style={{ whiteSpace: "pre" }}
+                  >
+                    {line.map((t, k) => (
+                      <tspan key={k} fill={t.color}>
+                        {t.text}
+                      </tspan>
+                    ))}
+                  </text>
+                );
+              })}
             </g>
           );
         }
