@@ -692,6 +692,7 @@ export const CodeSlide = ({
       {step.panel ? (
         <Panel step={step} local={local} delay={marksStart + step.marks.length * 4} fps={fps} />
       ) : null}
+      {step.reel ? <Reel reel={step.reel} prev={prev?.reel} local={local} /> : null}
     </AbsoluteFill>
   );
 };
@@ -848,3 +849,43 @@ const Panel = ({ step, local, delay }: { step: CodeStep; local: number; delay: n
 /** Where a span of text sits on screen, for drawing between panes. */
 export const spanRect = (step: CodeStep, area: Area, span: { line: number; col: number; len: number }) =>
   rect(step, layout(step, area), span);
+
+/** The option row under the code, at the same place as on roll slides. */
+const Reel = ({ reel, prev, local }: { reel: NonNullable<CodeStep["reel"]>; prev?: CodeStep["reel"]; local: number }) => {
+  const t = interpolate(local, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 110,
+        right: 110,
+        top: 985,
+        display: "flex",
+        flexWrap: "wrap",
+        rowGap: 14,
+        columnGap: 44,
+        fontFamily: sans,
+        fontSize: 30,
+        fontWeight: 600,
+      }}
+    >
+      {reel.items.map((item, i) => {
+        const was = prev ? (prev.at === i ? 1 : 0) : reel.at === i ? 1 : 0;
+        const on = was + ((reel.at === i ? 1 : 0) - was) * t;
+        return (
+          <div
+            key={item}
+            style={{
+              color: on > 0.5 ? brand.fg : brand.fgMuted,
+              opacity: 0.45 + 0.55 * on,
+              paddingBottom: 8,
+              borderBottom: `3px solid rgba(126, 231, 135, ${on})`,
+            }}
+          >
+            {item}
+          </div>
+        );
+      })}
+    </div>
+  );
+};

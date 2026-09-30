@@ -41,6 +41,7 @@ const chat = (s: {
   quiet?: boolean;
   tints?: CodeSpec["tints"];
   showRemoved?: boolean;
+  reel?: CodeSpec["reel"];
 }): CodeSpec => ({
   kind: "code",
   group: s.group,
@@ -57,6 +58,7 @@ const chat = (s: {
   quiet: s.quiet,
   tints: s.tints,
   showRemoved: s.showRemoved,
+  reel: s.reel,
   notes: s.notes,
   frames: s.diagram ? 45 : undefined,
 });
@@ -1388,6 +1390,40 @@ role: roles/storage.objectUser
 member: principal://…/sa/report
 resource: chat-dev-sam-files`,
     "Or a Kubernetes Job on GKE. Services and jobs, on nine hosts, and it's all the same program.",
+  ),
+  ...[
+    {
+      snippet: "FlowWorkflow.ts",
+      title: "Durable workflows survive restarts and can sleep for days",
+      emphasize: ["Cloudflare.Workflow", "Workflows.task", "Workflows.sleep"],
+      notes:
+        "Some work takes days: summarize a room tonight, wait a day, save the digest. A durable workflow checkpoints each step, so it survives restarts and can sleep for a day without holding a server. On Cloudflare it's a Workflow: task and sleep, each with a name it replays from.",
+    },
+    {
+      snippet: "FlowDurable.ts",
+      title: "…on AWS, the same workflow is a Lambda durable function…",
+      emphasize: ["AWS.Lambda.DurableFunction", "Durable.step", "Durable.sleep", "{ main: import.meta.url }", "FilesS3"],
+      notes:
+        "On AWS it's a Lambda durable function, with almost the same code: step instead of task, and the S3 Files Layer instead of R2. Lambda checkpoints each step and resumes the function after the sleep.",
+    },
+    {
+      snippet: "FlowSfn.ts",
+      title: "…or a Step Functions state machine, written as an Effect",
+      emphasize: ["StateMachine.fromProgram", "Sfn.gen", "Sfn.invoke", "Sfn.sleep"],
+      notes:
+        "Or Step Functions. Normally that means hand-writing Amazon States Language JSON. Here it's written like an Effect, with Sfn.gen, Sfn.invoke and Sfn.sleep, and compiled to that JSON at deploy, along with the IAM permissions to invoke each Lambda.",
+    },
+  ].map((flow, at) =>
+    chat({
+      snippet: `../anywhere/${flow.snippet}`,
+      file: "src/Digest.ts",
+      group: "flows",
+      fontSize: 24,
+      title: flow.title,
+      emphasize: flow.emphasize,
+      reel: { items: ["Cloudflare Workflows", "Lambda durable functions", "Step Functions"], at },
+      notes: flow.notes,
+    }),
   ),
   postgres(
     0,

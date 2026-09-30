@@ -82,6 +82,8 @@ export interface CodeSpec {
    * the green is for drawing the eye, not a faithful patch.
    */
   emphasize?: string[];
+  /** A row of options under the code, with the current one lit (as on roll slides). */
+  reel?: { items: string[]; at: number };
   /** Show lines removed since this file was last on screen, in red, above what replaced them. */
   showRemoved?: boolean;
   frames?: number;

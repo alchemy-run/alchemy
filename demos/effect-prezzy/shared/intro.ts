@@ -152,6 +152,8 @@ export interface CodeStep {
   kind: "code";
   title: string;
   notes: string;
+  /** A row of options under the code, with the current one lit (as on roll slides). */
+  reel?: { items: string[]; at: number };
   /** Consecutive code steps in the same group morph into each other. */
   group: string;
   /** File name on the editor tab, or undefined for a pseudo-code block. */
