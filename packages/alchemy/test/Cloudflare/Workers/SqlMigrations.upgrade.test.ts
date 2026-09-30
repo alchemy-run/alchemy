@@ -57,9 +57,19 @@ for (const dev of [true, false]) {
             const client = yield* HttpClient.HttpClient;
             const read = (url: string) =>
               client.get(url).pipe(
-                Effect.flatMap(HttpClientResponse.filterStatusOk),
-                Effect.flatMap((response) => response.json),
+                Effect.flatMap((response) =>
+                  Effect.gen(function* () {
+                    if (response.status !== 200)
+                      return yield* Effect.fail(
+                        new Error(
+                          `GET ${url}: ${response.status}: ${yield* response.text}`,
+                        ),
+                      );
+                    return yield* response.json;
+                  }),
+                ),
                 Effect.map((value) => value as State),
+                Effect.timeout("5 seconds"),
               );
             const ready = (url: string, count: number) =>
               read(url).pipe(
@@ -68,9 +78,10 @@ for (const dev of [true, false]) {
                   () => new Error("Migration version not ready"),
                 ),
                 Effect.retry({
-                  schedule: Schedule.spaced("1 second"),
+                  schedule: Schedule.spaced("3 seconds"),
                   times: 10,
                 }),
+                Effect.timeout("45 seconds"),
               );
             const original = yield* ready(first.url, 1);
             expect(original.rows).toEqual([{ value: "seed" }]);
@@ -83,14 +94,23 @@ for (const dev of [true, false]) {
             );
             const broken = yield* deploy;
             const failed = yield* client.get(broken.url).pipe(
-              Effect.map((response) => response.status),
+              Effect.flatMap((response) =>
+                response.text.pipe(
+                  Effect.map((body) => ({ status: response.status, body })),
+                ),
+              ),
+              Effect.timeout("5 seconds"),
               Effect.repeat({
-                until: (status) => status === 500,
-                schedule: Schedule.spaced("1 second"),
+                until: (response) =>
+                  response.status === 500 &&
+                  response.body.includes("Failed to apply SQL migration"),
+                schedule: Schedule.spaced("3 seconds"),
                 times: 10,
               }),
+              Effect.timeout("45 seconds"),
             );
-            expect(failed).toBe(500);
+            expect(failed.status).toBe(500);
+            expect(failed.body).toContain("Failed to apply SQL migration");
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('migration-two');",
@@ -105,7 +125,8 @@ for (const dev of [true, false]) {
               { value: "migration-two" },
             ]);
             const third = yield* deploy;
-            expect(yield* read(third.url)).toEqual(upgraded);
+            // Worker and Durable Object versions can propagate independently.
+            expect(yield* ready(third.url, 2)).toEqual(upgraded);
             yield* stack.destroy();
           }),
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },

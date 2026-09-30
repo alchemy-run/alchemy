@@ -48,6 +48,7 @@ type AdoptionState = {
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
+  message: string;
 }> {}
 
 const migrationNames = ["20240101000000_init", "20240102000000_posts"];
@@ -92,12 +93,19 @@ for (const dev of [true, false]) {
             const body = yield* response.text;
             if (response.status !== 200 || body !== "sql-migrations:ready") {
               return yield* Effect.fail(
-                new WorkerNotReady({ status: response.status }),
+                new WorkerNotReady({
+                  status: response.status,
+                  message: `GET ${deployed.url}/health: ${response.status}: ${body}`,
+                }),
               );
             }
           }).pipe(
             Effect.timeout("2 seconds"),
-            Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+            Effect.tapError((error) =>
+              Effect.logWarning("SQL Worker readiness", error),
+            ),
+            Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+            Effect.timeout("45 seconds"),
           );
           return deployed;
         }),
