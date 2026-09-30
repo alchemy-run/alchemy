@@ -29,7 +29,7 @@ export const deck: DeckItem[] = [
 ];
 
 /**
- * The second talk: the fastest feedback loop for an agent, built from
+ * The second talk: the tightest feedback loop for an agent, built from
  * `intro/loop.ts`. The presenter opens it by default; `?deck=talk` opens `deck`.
  */
 export const loopDeck: DeckItem[] = [{ kind: "intro", id: "loop" }];

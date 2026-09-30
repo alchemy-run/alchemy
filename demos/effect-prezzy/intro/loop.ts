@@ -1,5 +1,5 @@
 /**
- * The second talk: the fastest feedback loop you can give an agent. A chat
+ * The second talk: the tightest feedback loop you can give an agent. A chat
  * app grows one piece at a time (Worker → Durable Object rooms over
  * WebSockets → R2 uploads → a queue into Postgres on Neon), and the same
  * end-to-end test follows it from the laptop, to a pull request's own copy,
@@ -111,9 +111,9 @@ const opening: StepSpec[] = [
   {
     kind: "slide",
     layout: "title",
-    title: "The fastest feedback loop for agents",
+    title: "The tightest feedback loop for agents",
     eyebrow: "Alchemy",
-    heading: "The fastest feedback loop for agents",
+    heading: "The tightest feedback loop for agents",
     subtitle: "One program and one test file, from an edit to production",
     notes:
       "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
