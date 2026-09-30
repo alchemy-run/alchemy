@@ -129,10 +129,11 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
       {(step.bricks ?? []).map((brick) => {
         const { top, bottom } = band(brick.row);
         const inRow = step.bricks!.filter((b) => b.row === brick.row);
-        const i = inRow.indexOf(brick);
+        const i = brick.col ?? inRow.indexOf(brick);
+        const n = brick.of ?? inRow.length;
         const rowW = widthAt(top) - 60;
         const gap = 18;
-        const w = (rowW - gap * (inRow.length - 1)) / inRow.length;
+        const w = (rowW - gap * (n - 1)) / n;
         const x = CX - rowW / 2 + i * (w + gap);
         const y = top + 10;
         const h = bottom - top - 20;

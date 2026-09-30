@@ -51,6 +51,15 @@ const Stage = () => (
   />
 );
 
+/** The most recent pyramid before step `at`: the drawing picks up where it left off. */
+const lastPyramid = (steps: IntroStep[], at: number) => {
+  for (let i = at - 1; i >= 0; i--) {
+    const s = steps[i]!;
+    if (s.kind === "pyramid") return s;
+  }
+  return undefined;
+};
+
 export const Intro = ({ intro }: IntroProps) => {
   const frame = useCurrentFrame();
   if (!intro) return null;
@@ -101,7 +110,7 @@ export const Intro = ({ intro }: IntroProps) => {
       ) : step.kind === "loop" ? (
         <LoopView step={step} prev={prev?.kind === "loop" ? prev : undefined} local={local} />
       ) : step.kind === "pyramid" ? (
-        <PyramidView step={step} prev={prev?.kind === "pyramid" ? prev : undefined} local={local} />
+        <PyramidView step={step} prev={lastPyramid(intro.steps, at)} local={local} />
       ) : step.kind === "comment" ? (
         <PullRequestView step={step} prev={prev?.kind === "comment" ? prev : undefined} local={local} />
       ) : (

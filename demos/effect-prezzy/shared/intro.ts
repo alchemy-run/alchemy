@@ -309,7 +309,15 @@ export interface PyramidStep {
   /** One feature, cut vertically through every layer: what it needs in each. */
   slice?: { label: string; items: Record<string, string> };
   /** The stack rebuilt from modules: bricks laid in the pyramid's rows, bottom first. */
-  bricks?: { row: number; title: string; detail: string; color: string }[];
+  bricks?: {
+    row: number;
+    title: string;
+    detail: string;
+    color: string;
+    /** Fixed place in the row (0-based) out of `of`, so a row doesn't reflow as bricks arrive. */
+    col?: number;
+    of?: number;
+  }[];
   frames: number;
 }
 

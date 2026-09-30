@@ -263,6 +263,18 @@ const twoPrograms: StepSpec[] = [
   }),
 ];
 
+const BRICKS = {
+  files: { row: 0, col: 1, of: 2, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
+  database: { row: 0, col: 0, of: 2, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
+  history: { row: 1, title: "History", detail: "queue consumer · list()", color: "#e0a86b" },
+  room: { row: 2, title: "Room", detail: "Durable Object · sockets", color: "#e06c9f" },
+  chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
+};
+const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat];
+/** The chat app's pyramid, rebuilt from the modules implemented so far. */
+const built = (title: string, bricks: typeof ALL_BRICKS, notes: string): PyramidSpec =>
+  pyramid({ title, layers: CHAT_LAYERS, bricks, notes });
+
 // ── modules: effectful constructors ─────────────────────────────────────
 const FILES = { snippet: "Files.ts", file: "src/Files.ts", group: "files", fontSize: 25 };
 const MODULE_BESIDE_CLASS = {
@@ -371,7 +383,11 @@ $BUCKET_NAME: chat-dev-sam-files`,
     ],
     notes:
       "It also sets $BUCKET_NAME, so putObject knows where to write. Nobody writes the policy or the variable by hand. Delete the line and the permission goes with it, and anything that used it stops compiling. And callers don't change at all: it's still Files.",
-  }),
+  }),  built(
+    "Files is the first block of the stack",
+    [BRICKS.files],
+    "Back to the pyramid. Files is one block, and it spans the stack: its bucket, its permission and its upload method, all in one module. Let's build the rest of the chat app the same way.",
+  ),
 ];
 
 // ── composing modules as Layers ──────────────────────────────────────────
@@ -390,15 +406,21 @@ const ARCHIVE = `export default AWS.Lambda.Function(
     );
   }),
 );`;
-const BRICKS = {
-  database: { row: 0, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
-  files: { row: 0, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
-  history: { row: 1, title: "History", detail: "queue consumer · list()", color: "#e0a86b" },
-  room: { row: 2, title: "Room", detail: "Durable Object · sockets", color: "#e06c9f" },
-  chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
-};
-const ALL_BRICKS = [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room, BRICKS.chat];
 const compose: StepSpec[] = [
+  chat({
+    snippet: "Db.ts",
+    file: "src/Db.ts",
+    group: "db",
+    fontSize: 25,
+    title: "The Database module declares a Neon database behind Hyperdrive",
+    notes:
+      "Next, the database. Same idea: its constructor declares a Neon Postgres project and a Hyperdrive pool in front of it, binds the pool to the Worker, and provides a SQL client built from the pool's connection string.",
+  }),
+  built(
+    "Database sits beside it, with nothing beneath it",
+    [BRICKS.database, BRICKS.files],
+    "Database has no dependencies of its own, so it sits at the bottom next to Files.",
+  ),
   chat({
     ...HISTORY,
     title: "A module can depend on other modules",
@@ -466,6 +488,11 @@ FunctionName: chat-dev-sam-archive`,
     notes:
       "It also creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
+  built(
+    "History sits on the Database it depends on",
+    [BRICKS.database, BRICKS.files, BRICKS.history],
+    "History needs a SQL client, so it sits on top of Database. That Layer.provide is literally this stacking.",
+  ),
   chat({
     ...ROOM_FILE,
     title: "Back on Cloudflare, a chat room is a Durable Object",
@@ -479,6 +506,11 @@ FunctionName: chat-dev-sam-archive`,
     emphasize: ["archive"],
     notes: "Each room also sends every message to the queue that History consumes. Send-only access, declared in its constructor.",
   }),
+  built(
+    "Room sits on the queue that History consumes",
+    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.room],
+    "Rooms feed History through the queue, so they sit on top of it.",
+  ),
   chat({
     ...WORKER,
     title: "The Worker yields the modules it uses and provides their Layers",
@@ -497,20 +529,11 @@ FunctionName: chat-dev-sam-archive`,
     notes:
       "Forget to provide History, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
-  pyramid({
-    title: "Each module carries its own slice of the stack",
-    layers: CHAT_LAYERS,
-    bricks: [BRICKS.database, BRICKS.files],
-    notes:
-      "Now back to the pyramid. Database and Files have no dependencies, so they sit at the bottom. Each one carries its own infrastructure, permissions and code.",
-  }),
-  pyramid({
-    title: "Each Layer sits on the Layers it depends on",
-    layers: CHAT_LAYERS,
-    bricks: ALL_BRICKS,
-    notes:
-      "History sits on Database. Rooms sit on the queue History consumes. The Chat Worker sits on all of them. Layer.provide is literally stacking them.",
-  }),
+  built(
+    "The Chat Worker sits on top of all of them",
+    ALL_BRICKS,
+    "And the Chat Worker, which yields all of them, sits on top. Every block carries its own infrastructure, permissions and code, and each one sits on the blocks it depends on.",
+  ),
   pyramid({
     title: "The pyramid is literally a stack of Layers",
     layers: CHAT_LAYERS,
