@@ -202,7 +202,11 @@ test.provider(
       const credentials = yield* yield* GitHubCredentials;
       const client = credentials.octokit({ baseUrl: undefined });
       client.hook.before("request", (options) => {
-        if (options.url === "/user/repos") options.url = `/orgs/${owner}/repos`;
+        const url = new URL(options.url, "https://api.github.com");
+        if (url.pathname === "/user/repos") {
+          url.pathname = `/orgs/${owner}/repos`;
+          options.url = url.toString();
+        }
       });
       const provider = yield* Provider.findProvider(GitHub.Milestone);
       const allMilestones = yield* provider

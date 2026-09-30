@@ -124,7 +124,8 @@ const assertRemoved = (repo: string, username: string) =>
     ).toBe(false);
   });
 
-test.provider(
+// Permission changes require an explicitly authorized non-owner test member.
+test.provider.skipIf(!process.env.GITHUB_TEST_COLLABORATOR_USERNAME)(
   "add, update, replace, and remove an authorized collaborator",
   (stack) =>
     Effect.gen(function* () {
