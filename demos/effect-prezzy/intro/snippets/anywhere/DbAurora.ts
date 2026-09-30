@@ -11,5 +11,5 @@ export const DatabaseLive = Layer.unwrap(
     const db = yield* AWS.RDS.Connect(database.cluster, { secret: database.secret, database: "chat" });
     return Postgres.PostgresLayer({ url: Effect.map(db, (info) => info.url) });
   }),
-).pipe(Layer.provide(AWS.RDS.ConnectHttp));
+)/*hide*/.pipe(Layer.provide(AWS.RDS.ConnectHttp))/*end*/;
 // #endregion show

@@ -10,5 +10,5 @@ export const DatabaseLive = Layer.unwrap(
     const db = yield* Cloudflare.D1.QueryDatabase(database);
     return SQL.D1Layer(db);
   }),
-).pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding));
+)/*hide*/.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding))/*end*/;
 // #endregion show

@@ -527,17 +527,7 @@ const compose: StepSpec[] = [
     title: "The constructor returns a SQL client for the rest of the app",
     layer: "api",
     notes:
-      "Then the constructor returns a Postgres Layer built from that connection string. That's why this is Layer.unwrap: the constructor's result is itself a Layer, and anything above it just asks for a SQL client.",
-  }),
-  chat({
-    snippet: "Db.ts",
-    file: "src/Db.ts",
-    group: "db",
-    fontSize: 25,
-    title: "…and it provides how Connect works on a Worker",
-    layer: "binding",
-    notes:
-      "Last line: ConnectBinding is the Worker implementation of Connect, the native Hyperdrive binding. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one file.",
+      "Then the constructor returns a Postgres Layer built from that connection string. That's why this is Layer.unwrap: the constructor's result is itself a Layer, and anything above it just asks for a SQL client. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one file.",
   }),
   chat({
     ...HISTORY,
@@ -1618,14 +1608,14 @@ resource: chat-dev-sam-files`,
     },
     {
       snippet: "DbD1.ts",
-      emphasize: ["D1.Database", "D1.QueryDatabase", "SQL.D1Layer", "QueryDatabaseBinding"],
+      emphasize: ["D1.Database", "D1.QueryDatabase", "SQL.D1Layer"],
       title: "…Cloudflare D1, which is SQLite…",
       notes:
         "It doesn't even have to be Postgres. Cloudflare D1 is SQLite, bound straight into the Worker with no connection pool, and SQL.D1Layer turns it into the same SQL client. History's queries don't change.",
     },
     {
       snippet: "DbAurora.ts",
-      emphasize: ["RDS.Aurora", "RDS.Connect(", "Effect.map(db", "RDS.ConnectHttp"],
+      emphasize: ["RDS.Aurora", "RDS.Connect(", "Effect.map(db"],
       title: "…or Aurora on AWS, and nothing above it changes",
       notes:
         "Or Aurora on AWS, for the Lambda version of the app. RDS.Connect grants read access to the cluster's secret and attaches the function to the database's network, and the Postgres Layer connects with the URL it returns. Five databases, one Layer: History and everything above it still just get a SQL client.",
