@@ -1639,10 +1639,7 @@ resource: chat-dev-sam-files`,
       snippet: "EventsGitHub.ts",
       title: "A GitHub repository can be an event source",
       emphasize: ["GitHub.consumeRepositoryEvents", "GitHubRepositoryEventSourceLive"],
-      generated: `# Random secret, generated once and kept in state
-text: *****
-
-# GitHub webhook on alchemy-run/chat
+      generated: `# GitHub webhook on alchemy-run/chat
 url: https://chat-dev-sam-archive.workers.dev
        /__alchemy/github/alchemy-run/chat
 events: [push]
