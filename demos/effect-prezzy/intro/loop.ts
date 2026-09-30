@@ -112,6 +112,8 @@ const CHAT_LAYERS: PyramidLayer[] = [
   { ...LAYER.api, detail: "a Worker · a Durable Object per room" },
   { ...LAYER.web, detail: "the chat page, over WebSockets" },
 ];
+/** Observability: beside the pyramid, spanning every layer. */
+const OBSERVE = { title: "Observability", lines: ["traces", "logs", "metrics", "dashboards", "alarms"], color: "#56b6c2" };
 const pyramid = (s: Omit<PyramidSpec, "kind" | "layers"> & { layers?: PyramidLayer[] }): PyramidSpec => ({
   kind: "pyramid",
   layers: ALL_LAYERS,
@@ -160,13 +162,20 @@ const theStack: StepSpec[] = [
   }),
   pyramid({
     title: "…behind a frontend served from a CDN",
-    notes: "And at the top, the frontend people actually see, served from a CDN on a domain. An agent has to get every one of these layers right.",
+    notes: "And at the top, the frontend people actually see, served from a CDN on a domain.",
+  }),
+  pyramid({
+    title: "…and in production, you have to see every layer",
+    pillar: OBSERVE,
+    notes:
+      "One more piece, and it isn't a layer. Production needs observability: traces, logs, metrics, and the dashboards and alarms that watch them. It's not on top or underneath. It runs beside the whole stack, because every layer feeds it. An agent has to get all of this right.",
   }),
   pyramid({
     title: "Our example is a chat app that touches every layer",
     layers: CHAT_LAYERS,
+    pillar: { ...OBSERVE, lines: ["Axiom", "traces", "logs", "dashboard", "monitor"] },
     notes:
-      "To make this concrete: a chat app on Cloudflare. A bucket for shared files, a queue and a Postgres database for history; the bindings and permissions between them; a Worker with a Durable Object per room; and a chat page talking to it over WebSockets.",
+      "To make this concrete: a chat app on Cloudflare. A bucket for shared files, a queue and a Postgres database for history; the bindings and permissions between them; a Worker with a Durable Object per room; a chat page talking to it over WebSockets; and Axiom beside it all, collecting traces and logs, with a dashboard and a monitor.",
   }),
 ];
 
@@ -682,7 +691,67 @@ FunctionName: chat-dev-sam-archive`,
     bricks: ALL_BRICKS,
     side: WIRED,
     notes:
-      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. So the whole thing, infrastructure to frontend, is one program made of Layers. One type checker sees all of it, one test file can exercise all of it, and one command deploys it.",
+      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesLive. So the whole thing, infrastructure to frontend, is one program made of Layers.",
+  }),
+  pyramid({
+    title: "Observability is a block too, beside the whole stack",
+    layers: CHAT_LAYERS,
+    bricks: ALL_BRICKS,
+    pillar: { ...OBSERVE, lines: [] },
+    notes:
+      "One block is missing: observability. It doesn't sit on top of anything or under anything. It sits beside the stack, because every block reports to it. And it's built exactly like the others.",
+  }),
+  ...[
+    {
+      omit: ["dashboard", "monitor", "export"],
+      title: "Its constructor declares where telemetry goes…",
+      notes:
+        "Here's the Observability module, on Axiom. Its constructor declares two Axiom datasets, one for traces and one for logs, and an ingest token that can only write to them.",
+    },
+    {
+      omit: ["monitor", "export"],
+      title: "…a dashboard to plot it…",
+      notes: "Then a dashboard, with a chart of errors over time. It's a resource like any other, so it's deployed and versioned with the app.",
+    },
+    {
+      omit: ["export"],
+      title: "…a monitor that alerts on it…",
+      notes: "And a monitor that fires when errors pass a threshold. In production, that alert is one more failure that goes back to the agent.",
+    },
+    {
+      omit: [],
+      title: "…and returns the exporter that ships every trace and log",
+      notes:
+        "Then it returns Axiom.Telemetry: an OpenTelemetry exporter pointed at those datasets with that token. At deploy it binds the endpoints and the token to the Worker as secrets.",
+    },
+  ].map((step) =>
+    chat({
+      snippet: "Observability.ts",
+      file: "src/Observability.ts",
+      group: "observability",
+      fontSize: 22,
+      omit: step.omit,
+      title: step.title,
+      notes: step.notes,
+    }),
+  ),
+  chat({
+    snippet: "ChatObserved.ts",
+    file: WORKER.file,
+    group: WORKER.group,
+    fontSize: WORKER.fontSize,
+    title: "The Worker provides it beside the stack, so every module is traced",
+    emphasize: ["Effect.provide(ObservabilityLive)"],
+    notes:
+      "Back in the Worker, one more line provides it beside the stack. Every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span, with no changes to any of them.",
+  }),
+  pyramid({
+    title: "The whole stack, with observability beside it",
+    layers: CHAT_LAYERS,
+    bricks: ALL_BRICKS,
+    pillar: { ...OBSERVE, lines: ["ObservabilityLive", "", "Axiom", "traces · logs", "dashboard", "monitor"] },
+    notes:
+      "So that's the whole app: a stack of Layers, with observability beside it watching every layer. One program. One type checker sees all of it, one test file can exercise all of it, and one command deploys it, dashboards and monitors included.",
   }),
 ];
 
@@ -703,21 +772,27 @@ const program: StepSpec[] = [
       $("alchemy deploy"),
       `${T.ok}✓${T.reset} Plan ready`,
       RULE,
-      `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}5 to create${T.reset}${T.dim} · ${T.reset}${T.soft}3 bindings${T.reset}`,
+      `${T.accent}${T.bold}Deploy${T.reset}${T.dim} · ${T.reset}${T.ok}10 to create${T.reset}${T.dim} · ${T.reset}${T.soft}4 bindings${T.reset}`,
       ``,
       `${T.ok}+${T.reset} ${res("Files", "Cloudflare.R2.Bucket")}`,
       `${T.ok}+${T.reset} ${res("Messages", "Cloudflare.Queues.Queue")}`,
       `${T.ok}+${T.reset} ${res("Db", "Neon.Project")}`,
       `${T.ok}+${T.reset} ${res("Pool", "Cloudflare.Hyperdrive")}`,
+      `${T.ok}+${T.reset} ${res("Traces", "Axiom.Dataset")}`,
+      `${T.ok}+${T.reset} ${res("Logs", "Axiom.Dataset")}`,
+      `${T.ok}+${T.reset} ${res("Ingest", "Axiom.ApiToken")}`,
+      `${T.ok}+${T.reset} ${res("Chat", "Axiom.Dashboard")}`,
+      `${T.ok}+${T.reset} ${res("Errors", "Axiom.Monitor")}`,
       `${T.ok}+${T.reset} ${res("Chat", "Cloudflare.Worker")}`,
       `  ${T.ok}+${T.reset} ${T.soft}Files${T.reset}`,
       `  ${T.ok}+${T.reset} ${T.soft}Messages${T.reset}`,
       `  ${T.ok}+${T.reset} ${T.soft}Room${T.reset}`,
+      `  ${T.ok}+${T.reset} ${T.soft}Telemetry${T.reset}`,
       RULE,
-      `${T.ok}Stack deployed (5/5)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
+      `${T.ok}Stack deployed (10/10)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
     ],
     notes:
-      "alchemy deploy compares that program with what's in the cloud and does whatever it takes to make them match: every resource, and every binding between them.",
+      "alchemy deploy compares that program with what's in the cloud and does whatever it takes to make them match: every resource, every binding between them, and the dashboard and monitor that watch them.",
   }),
   term({
     group: "cli",
@@ -1240,6 +1315,24 @@ const web = (cloud: string, framework: string, title: string, notes: string) =>
     notes,
   });
 
+const OBS_PLATFORMS = ["Axiom", "Cloudflare", "CloudWatch", "Datadog (someday)"];
+const DATADOG_CODE = `export const ObservabilityLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const apiKey = yield* Config.Redacted("DD_API_KEY");
+
+    // hypothetical: there's no Datadog provider yet
+    yield* Datadog.Dashboard("Chat", { widgets: [errors] });
+    yield* Datadog.Monitor("Errors", {
+      query: "sum(last_5m):errors{service:chat} > 10",
+    });
+
+    return Telemetry.layerOtlp({
+      url: "https://otlp.datadoghq.com",
+      headers: { "dd-api-key": apiKey },
+    });
+  }),
+);`;
+
 const anywhere: StepSpec[] = [
   {
     kind: "slide",
@@ -1513,6 +1606,56 @@ events: [push]`,
     notes:
       "We made every Website variant take the same props, so where your site runs is one word. Same for the compute, the database and the events underneath it.",
   },
+  ...[
+    {
+      snippet: "Observability.ts",
+      title: "Observability is a Layer, so the platform is one swap away",
+      notes:
+        "Last, the pillar beside the pyramid. Observability is a Layer like the rest, so the platform behind it is a choice. Here's the Axiom version: datasets, a token, a dashboard, a monitor, and the exporter.",
+    },
+    {
+      snippet: "ObservabilityCloudflare.ts",
+      title: "…Cloudflare's own Workers Observability is one line…",
+      notes: "Cloudflare has observability built into Workers. That Layer is one line, and it sends the same spans to Cloudflare's dashboard.",
+    },
+    {
+      snippet: "../anywhere/ObservabilityCloudWatch.ts",
+      title: "…CloudWatch plots and alarms on what Lambda already collects…",
+      notes:
+        "For the Lambda version of the API, it's CloudWatch. Lambda already ships logs and metrics there, so this Layer only declares a CloudWatch dashboard and an alarm on the function's errors.",
+    },
+  ].map((step, at) =>
+    chat({
+      snippet: step.snippet,
+      file: "src/Observability.ts",
+      group: "observability-swap",
+      fontSize: 20,
+      title: step.title,
+      reel: { items: OBS_PLATFORMS, at },
+      notes: step.notes,
+    }),
+  ),
+  inline({
+    group: "observability-swap",
+    file: "src/Observability.ts",
+    fontSize: 20,
+    title: "…and a Datadog Layer would have exactly the same shape",
+    code: DATADOG_CODE,
+    emphasize: ["Datadog.Dashboard", "Datadog.Monitor", "Telemetry.layerOtlp"],
+    reel: { items: OBS_PLATFORMS, at: 3 },
+    notes:
+      "Datadog isn't an Alchemy provider yet, so this one is hypothetical. But it would be the same shape: a dashboard and a monitor in the constructor, and an exporter at the end. The exporter part is real today: Telemetry.layerOtlp sends to any OpenTelemetry backend.",
+  }),
+  chat({
+    snippet: "ObservabilityTwo.ts",
+    file: "src/Observability.ts",
+    group: "observability-two",
+    fontSize: 24,
+    title: "Layers compose, so telemetry can go to two places at once",
+    emphasize: ["Telemetry.layerOtlp", "Layer.mergeAll(Axiom, Honeycomb)"],
+    notes:
+      "And because they're Layers, they compose. Merge Axiom with a Honeycomb exporter and every span goes to both, with the same trace ids. That's how you migrate between platforms without a gap.",
+  }),
   loop(
     "Whatever you pick, it's the same loop",
     "And whichever of these you pick, it's the same program, the same test file, and the same loop from edit to production.",

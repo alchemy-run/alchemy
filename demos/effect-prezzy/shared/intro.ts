@@ -312,6 +312,8 @@ export interface PyramidStep {
     /** The code, highlighted (filled in by the build). */
     tokens?: Token[][];
   }[];
+  /** A column beside the pyramid, spanning every layer (observability). */
+  pillar?: { title: string; lines: string[]; color: string };
   /** A bracket over every layer, with a label. */
   brace?: { text: string; sub?: string };
   /** A dashed line under a layer, splitting the stack into two programs. */

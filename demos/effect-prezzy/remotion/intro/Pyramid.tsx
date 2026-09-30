@@ -23,6 +23,9 @@ const band = (slot: number) => {
 /** Where the notes beside the pyramid start. */
 const NOTE_X = CX + WIDE / 2 + 70;
 const SLICE_W = 420;
+/** The observability column: right of the pyramid's widest band. */
+const PILLAR_X = CX + WIDE / 2 + 70;
+const PILLAR_W = 300;
 /** The code column beside the pyramid: clear of its widest band, same left edge for every row. */
 const CODE_X = 1225;
 const CODE_SIZE = 22;
@@ -187,6 +190,56 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
           </g>
         );
       })}
+
+      {/* A column beside the pyramid: it spans every layer, and each layer feeds it. */}
+      {step.pillar
+        ? (() => {
+            const pillar = step.pillar;
+            const top = band(step.layers.length - 1).top;
+            const x = PILLAR_X;
+            const was = prev?.pillar;
+            const q = was ? 1 : interpolate(local, [2, 12], [0, 1], clamp);
+            const linesIn = was && was.lines.join() === pillar.lines.join() ? 1 : interpolate(local, [6, 14], [0, 1], clamp);
+            const mid = (top + BOTTOM) / 2;
+            return (
+              <g opacity={q} transform={`translate(${(1 - q) * 24} 0)`}>
+                {step.layers.map((layer, slot) => {
+                  const b = band(slot);
+                  const from = CX + widthAt(b.mid) / 2 + 10;
+                  return (
+                    <path
+                      key={layer.id}
+                      d={`M ${from} ${b.mid} L ${x - 12} ${b.mid}`}
+                      stroke={pillar.color}
+                      strokeWidth={3}
+                      strokeDasharray="8 8"
+                      opacity={0.7}
+                    />
+                  );
+                })}
+                <rect x={x} y={top} width={PILLAR_W} height={BOTTOM - top} rx={18} fill={brand.bgElevated} stroke={pillar.color} strokeWidth={3.5} />
+                <text x={x + PILLAR_W / 2} y={top + 64} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={34} fill={brand.fg}>
+                  {pillar.title}
+                </text>
+                <g opacity={linesIn}>
+                  {pillar.lines.map((line, i) => (
+                    <text
+                      key={line}
+                      x={x + PILLAR_W / 2}
+                      y={mid - ((pillar.lines.length - 1) * 44) / 2 + i * 44 + 10}
+                      textAnchor="middle"
+                      fontFamily={mono}
+                      fontSize={24}
+                      fill={brand.fgMuted}
+                    >
+                      {line}
+                    </text>
+                  ))}
+                </g>
+              </g>
+            );
+          })()
+        : null}
 
       {(step.side ?? []).map((note) => {
         const slot = step.layers.findIndex((l) => l.id === note.layer);
