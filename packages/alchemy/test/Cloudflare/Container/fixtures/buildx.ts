@@ -2,12 +2,15 @@ import { Docker } from "@/Docker/Docker.ts";
 import { Stage } from "@/Stage.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { randomUUID } from "node:crypto";
 
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      const name = `${prefix}-${yield* Stage}`;
+      // A killed test process cannot release its builder. Give each invocation
+      // a fresh cache without colliding with leftovers or another test process.
+      const name = `${prefix}-${yield* Stage}-${randomUUID()}`;
       const docker = yield* Docker;
       return yield* Effect.acquireUseRelease(
         docker.run([
