@@ -47,7 +47,9 @@ test.provider(
   },
 );
 
-test.provider(
+// Needs Contact Center AI Insights features the testing project does not
+// have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found."
+test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
   "create, update, and delete an authorized view",
   (stack) =>
     Effect.gen(function* () {

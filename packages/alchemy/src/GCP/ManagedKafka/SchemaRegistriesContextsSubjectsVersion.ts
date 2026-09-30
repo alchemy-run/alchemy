@@ -159,6 +159,13 @@ export class SchemaRegistriesContextsSubjectsVersionNotResolved extends Data.Tag
 const registryOf = (value: string, project: string, location: string) =>
   expandParent(value, project, location, "schemaRegistries");
 
+/**
+ * Context-scoped subjects come back qualified as `:.{context}:{subject}`;
+ * resource paths and attributes use the bare subject.
+ */
+const unqualifySubject = (subject: string | undefined, context: string) =>
+  subject?.replace(`:.${context}:`, "");
+
 const toAttrs = (
   version: kafka.SchemaVersion,
   schemaRegistry: string,
@@ -174,8 +181,7 @@ const toAttrs = (
     context,
     project: parsed.project || project,
     location: parsed.location || location,
-    // Context-scoped subjects come back qualified as `:.{context}:{subject}`.
-    subject: (version.subject ?? "").replace(`:.${context}:`, ""),
+    subject: unqualifySubject(version.subject, context) ?? "",
     version: version.version ?? 0,
     schemaId: version.id,
     schema: version.schema,
@@ -468,7 +474,11 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
       }
 
       const resolved = versionName(
-        subjectParent(schemaRegistry, current.subject ?? subject, context),
+        subjectParent(
+          schemaRegistry,
+          unqualifySubject(current.subject, context) ?? subject,
+          context,
+        ),
         current.version ?? versionHint ?? "latest",
       );
       return toAttrs(

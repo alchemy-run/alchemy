@@ -47,7 +47,9 @@ test.provider(
   },
 );
 
-test.provider(
+// Needs Contact Center AI Insights features the testing project does not
+// have enabled: create returns 404 NOT_FOUND "Requested entity was not found." and list returns 400 INVALID_ARGUMENT.
+test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
   "create, update, and delete an authorized view set",
   (stack) =>
     Effect.gen(function* () {

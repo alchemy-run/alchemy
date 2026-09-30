@@ -790,7 +790,7 @@ export const InstanceProvider = () =>
           machineConfig,
           readPoolConfig,
         );
-        const created = yield* (
+        yield* (
           instanceType === "SECONDARY"
             ? alloydb.createsecondaryProjectsLocationsClustersInstances({
                 parent,
@@ -802,10 +802,21 @@ export const InstanceProvider = () =>
                 instanceId,
                 body,
               })
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(created);
-        }
+        ).pipe(
+          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          Effect.tap((created) =>
+            created === undefined ? Effect.void : waitForOperation(created),
+          ),
+          // AlloyDB intermittently fails the create operation with INTERNAL
+          // ("an internal error has occurred") after a long provisioning wait;
+          // the failed instance is removed, so the create is retried.
+          Effect.retry({
+            while: (error) =>
+              error._tag === "GCP.OperationFailed" && error.code === 13,
+            times: 2,
+            schedule: Schedule.spaced("30 seconds"),
+          }),
+        );
         current = yield* waitUntilExists(name);
       }
 

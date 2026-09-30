@@ -9,6 +9,14 @@ import { stripInternalLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
+
+/**
+ * Generated ids are shorter than the 63-character id limit: GCP rejects a
+ * workstation's full resource name as "Malformed name" once it passes ~280
+ * characters, which three 63-character ids (cluster, config, workstation)
+ * exceed.
+ */
+const GENERATED_NAME_LENGTH = 50;
 export const DEFAULT_NETWORK = "default";
 export const DEFAULT_SUBNETWORK = "default";
 
@@ -70,7 +78,7 @@ export const toPhysicalId = (
     return rfc1035(
       yield* createPhysicalName({
         id,
-        maxLength: MAX_NAME_LENGTH,
+        maxLength: GENERATED_NAME_LENGTH,
         lowercase: true,
       }),
       fallback,
