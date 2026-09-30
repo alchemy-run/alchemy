@@ -1313,6 +1313,15 @@ const DATADOG_CODE = `export const ObservabilityLive = Layer.unwrap(
   }),
 );`;
 
+const section = (heading: string, subtitle: string, notes: string): StepSpec => ({
+  kind: "slide",
+  layout: "section",
+  title: heading,
+  heading,
+  subtitle,
+  notes,
+});
+
 const anywhere: StepSpec[] = [
   {
     kind: "slide",
@@ -1333,6 +1342,11 @@ const anywhere: StepSpec[] = [
     notes:
       "Start with Files. Same interface as before, upload a file. Here are three Layers for it: R2, S3 and Google Cloud Storage. Each constructor declares its bucket and the narrowest access its cloud allows.",
   }),
+  section(
+    "Nine hosts, one API",
+    "Workers · Lambda · ECS · Cloud Run · GKE · Fly · Railway · Hetzner · Neon",
+    "First, where the code runs. The same API, with the same request handler, on nine different hosts.",
+  ),
   host(
     0,
     "The API runs on a Cloudflare Worker…",
@@ -1432,6 +1446,11 @@ AWS_ENDPOINT_URL_S3: https://…neon…
 AWS_ACCESS_KEY_ID: …  # scoped to Files`,
     "Or a Neon Function, with a Neon bucket. Nine hosts. The props change, the Files Layer changes, and the request handler never changed once.",
   ),
+  section(
+    "Three hosts, one background job",
+    "ECS Tasks · Cloud Run Jobs · Kubernetes Jobs",
+    "Not everything serves requests. Jobs run once and exit, and they have the same shape too.",
+  ),
   job(
     0,
     "Background jobs have the same shape, with run instead of fetch",
@@ -1463,6 +1482,11 @@ role: roles/storage.objectUser
 member: principal://…/sa/report
 resource: chat-dev-sam-files`,
     "Or a Kubernetes Job on GKE. Services and jobs, on nine hosts, and it's all the same program.",
+  ),
+  section(
+    "Three engines, one durable workflow",
+    "Cloudflare Workflows · Lambda durable functions · Step Functions",
+    "Some work takes days and has to survive restarts. Three workflow engines, one way of writing a workflow.",
   ),
   ...[
     {
@@ -1497,6 +1521,11 @@ resource: chat-dev-sam-files`,
       reel: { items: ["Cloudflare Workflows", "Lambda durable functions", "Step Functions"], at },
       notes: flow.notes,
     }),
+  ),
+  section(
+    "Five databases, one Layer",
+    "Neon · PlanetScale · Prisma Postgres · Cloudflare D1 · AWS Aurora",
+    "Down to the database. Five databases from five companies, all behind the same Database Layer.",
   ),
   ...[
     {
@@ -1537,12 +1566,17 @@ resource: chat-dev-sam-files`,
       notes: db.notes,
     }),
   ),
+  section(
+    "Events from anywhere",
+    "Queues · buckets · schedules · even a GitHub repository",
+    "Events don't have to come from your own cloud. Anything that can call a webhook can be an event source.",
+  ),
   chat({
     snippet: "Commits.ts",
     file: "src/Commits.ts",
     group: "commits",
     fontSize: 24,
-    title: "Events can come from anywhere, even a GitHub repository",
+    title: "A GitHub repository can be an event source",
     emphasize: ["GitHub.consumeRepositoryEvents", "events: [\"push\"]"],
     beside: {
       file: "generated at deploy",
@@ -1567,6 +1601,11 @@ events: [push]`,
     notes:
       "Each event is typed by its name, so the push payload is fully typed. Every push goes onto the same Messages queue the rooms use, so commits show up in the chat's history.",
   }),
+  section(
+    "Seven clouds, one Website",
+    "Cloudflare · AWS · Fly · Hetzner · Railway · Prisma · Neon",
+    "At the top of the pyramid, the website. We made every Website variant take the same props, so where your site runs is one word, and so is the framework.",
+  ),
   web(
     "Cloudflare",
     "Astro",
@@ -1595,15 +1634,11 @@ events: [push]`,
     "…and the rest",
     "…and Foldkit. Twelve frameworks, same props, and on every cloud alchemy dev runs the framework's own dev server.",
   ),
-  {
-    kind: "slide",
-    layout: "section",
-    title: "Seven clouds, one Website",
-    heading: "Seven clouds, one Website",
-    subtitle: "Cloudflare · AWS · Fly · Hetzner · Railway · Prisma · Neon",
-    notes:
-      "We made every Website variant take the same props, so where your site runs is one word. Same for the compute, the database and the events underneath it.",
-  },
+  section(
+    "Four platforms, one observability Layer",
+    "Axiom · Cloudflare · CloudWatch · Datadog (someday)",
+    "Last, the column beside the pyramid. Observability is a Layer like the rest, so the platform behind it is a choice.",
+  ),
   ...[
     {
       snippet: "Observability.ts",
