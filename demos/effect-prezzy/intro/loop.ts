@@ -1646,7 +1646,7 @@ events: [push]
 secret: ••••••••
 
 # Worker secret, to verify each delivery
-ALCHEMY_GITHUB_WEBHOOK_SECRET_alchemy_run_chat`,
+WEBHOOK_SECRET=*****`,
       notes:
         "Events don't have to come from a cloud. A GitHub repository is an event source too. At deploy, Alchemy creates the webhook on the repository, pointed at a path on this Worker, and gives it the secret. The same secret is bound to the Worker, so it can verify every delivery really came from GitHub. Each event is typed by its name.",
     },
