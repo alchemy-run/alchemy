@@ -1650,7 +1650,7 @@ content_type: json
 secret: *****
 
 # Worker secret binding, to verify each delivery
-ALCHEMY_GITHUB_WEBHOOK_SECRET_alchemy_run_chat=*****`,
+WEBHOOK_SECRET=*****`,
       notes:
         "Events don't have to come from a cloud. A GitHub repository is an event source too. You don't manage a secret: at deploy, the binding generates a random one, creates the webhook on the repository pointed at a path on this Worker, and binds the same secret to the Worker, so it can verify every delivery really came from GitHub. Each event is typed by its name.",
     },
