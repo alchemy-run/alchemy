@@ -89,6 +89,8 @@ export interface CodeSpec {
   emphasize?: string[];
   /** A row of options under the code, with the current one lit (as on roll slides). */
   reel?: { items: string[]; at: number };
+  /** What the new lines add, in pyramid terms: tints them and labels them. */
+  layer?: "resource" | "binding" | "api";
   /** Show lines removed since this file was last on screen, in red, above what replaced them. */
   showRemoved?: boolean;
   frames?: number;

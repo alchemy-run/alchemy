@@ -342,7 +342,10 @@ export const CodeSlide = ({
         ? step.diff.map((d, i) => {
             if (!d) return null;
             const add = d.kind === "add";
-            const color = add ? "#2ea043" : "#f85149";
+            // A step that says what it adds (resource, binding, API) tints its new lines in the pyramid's colour.
+            const layer = add && step.layer ? LAYER[step.layer] : undefined;
+            const color = layer ? layer.color : add ? "#2ea043" : "#f85149";
+            const first = add && !step.diff![i - 1]?.kind;
             return (
               <div key={`diff-${i}`} style={{ opacity: add ? newIn : 1 }}>
                 <div
@@ -352,9 +355,27 @@ export const CodeSlide = ({
                     top: g.top + i * g.lh,
                     width: g.blockW + 66,
                     height: g.lh,
-                    background: add ? "rgba(46, 160, 67, 0.16)" : "rgba(248, 81, 73, 0.16)",
+                    background: layer ? `${layer.color}24` : add ? "rgba(46, 160, 67, 0.16)" : "rgba(248, 81, 73, 0.16)",
                   }}
                 />
+                {layer && first && step.diff!.findIndex((x) => x?.kind === "add") === i ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: g.left + g.blockW + 44,
+                      top: g.top + i * g.lh,
+                      height: g.lh,
+                      lineHeight: `${g.lh}px`,
+                      fontFamily: hand,
+                      fontWeight: 700,
+                      fontSize: Math.max(30, g.size * 1.3),
+                      color: layer.color,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ← {layer.label}
+                  </div>
+                ) : null}
                 {d.start !== undefined && d.end !== undefined && d.end > d.start ? (
                   <div
                     style={{
@@ -364,7 +385,7 @@ export const CodeSlide = ({
                       width: (d.end - d.start) * g.cw + 6,
                       height: g.lh - 6,
                       borderRadius: 4,
-                      background: add ? "rgba(46, 160, 67, 0.4)" : "rgba(248, 81, 73, 0.4)",
+                      background: layer ? `${layer.color}66` : add ? "rgba(46, 160, 67, 0.4)" : "rgba(248, 81, 73, 0.4)",
                     }}
                   />
                 ) : null}
@@ -853,6 +874,13 @@ const Panel = ({ step, local, delay }: { step: CodeStep; local: number; delay: n
 /** Where a span of text sits on screen, for drawing between panes. */
 export const spanRect = (step: CodeStep, area: Area, span: { line: number; col: number; len: number }) =>
   rect(step, layout(step, area), span);
+
+/** The pyramid's colours, for the kind of thing a step adds. */
+const LAYER = {
+  resource: { color: "#8b9cf6", label: "resource" },
+  binding: { color: "#e0a86b", label: "binding" },
+  api: { color: "#a3c473", label: "API" },
+} as const;
 
 /** The option row under the code, at the same place as on roll slides. */
 const Reel = ({ reel, prev, local }: { reel: NonNullable<CodeStep["reel"]>; prev?: CodeStep["reel"]; local: number }) => {

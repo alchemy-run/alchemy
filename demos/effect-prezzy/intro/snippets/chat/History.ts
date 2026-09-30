@@ -33,7 +33,9 @@ export const HistoryLive = Layer.effect(
     // #endregion deps
     // #region queue
     const messages = yield* Cloudflare.Queues.Queue("Messages");
+    // #region queueBinding
     const queue = yield* Queues.WriteQueue(messages);
+    // #endregion queueBinding
     // #endregion queue
     // #region consume
 

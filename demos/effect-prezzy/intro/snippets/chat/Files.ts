@@ -22,8 +22,12 @@ export const FilesR2 = Layer.effect(
   Files,
   Effect.gen(function* () {
     // #region construct
+    // #region bucket
     const bucket = yield* R2.Bucket("Files");
+    // #endregion bucket
+    // #region binding
     const files = yield* R2.ReadWriteBucket(bucket);
+    // #endregion binding
     // #endregion construct
     // #region methods
 

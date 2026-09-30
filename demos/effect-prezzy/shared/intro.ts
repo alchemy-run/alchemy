@@ -154,6 +154,8 @@ export interface CodeStep {
   notes: string;
   /** A row of options under the code, with the current one lit (as on roll slides). */
   reel?: { items: string[]; at: number };
+  /** What the new lines add, in pyramid terms: tints them and labels them. */
+  layer?: "resource" | "binding" | "api";
   /** Consecutive code steps in the same group morph into each other. */
   group: string;
   /** File name on the editor tab, or undefined for a pseudo-code block. */

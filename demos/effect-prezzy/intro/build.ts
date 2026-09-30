@@ -307,6 +307,7 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
     diagramLinks: spec.diagramLinks?.map((link) => ({ ...link, from: locate(code, link.from, spec.title) })),
     quiet: spec.quiet,
     reel: spec.reel,
+    layer: spec.layer,
     frames: spec.frames ?? 30,
   };
 };

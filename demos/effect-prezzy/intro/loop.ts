@@ -42,6 +42,7 @@ const chat = (s: {
   tints?: CodeSpec["tints"];
   showRemoved?: boolean;
   reel?: CodeSpec["reel"];
+  layer?: CodeSpec["layer"];
 }): CodeSpec => ({
   kind: "code",
   group: s.group,
@@ -59,6 +60,7 @@ const chat = (s: {
   tints: s.tints,
   showRemoved: s.showRemoved,
   reel: s.reel,
+  layer: s.layer,
   notes: s.notes,
   frames: s.diagram ? 45 : undefined,
 });
@@ -374,18 +376,28 @@ const modules: StepSpec[] = [
   }),
   chat({
     ...FILES,
-    title: "Its constructor declares the bucket and access to it",
-    omit: ["methods"],
-    tints: [{ region: "construct", tone: "construct" }],
+    title: "Its implementation starts with a resource: an R2 bucket",
+    omit: ["service", "binding", "methods"],
+    emphasize: ["R2.Bucket("],
+    layer: "resource",
     notes:
-      "The implementation is a Layer. Its constructor declares what the module needs from the cloud: an R2 bucket, and read-write access to it. At deploy, those two lines create the bucket and bind it to whatever Worker uses this module.",
+      "The implementation is a Layer, and its constructor starts with what the module needs from the cloud: a resource, an R2 bucket. At deploy, this line creates it.",
   }),
   chat({
     ...FILES,
-    title: "…and returns the methods that run on each request",
-    tints: [{ region: "methods", tone: "runtime" }],
+    title: "…adds a binding to it: read-write access…",
+    omit: ["service", "methods"],
+    layer: "binding",
     notes:
-      "Then it returns the methods, which close over the client the constructor got back. These are what run on each request. One file holds both halves of the feature.",
+      "Then a binding: read-write access to that bucket. At deploy, it attaches the bucket to whatever Worker uses this module. At runtime, it hands back a client.",
+  }),
+  chat({
+    ...FILES,
+    title: "…and implements an API with it",
+    omit: ["service"],
+    layer: "api",
+    notes:
+      "Then the API: the methods the rest of the app calls, closing over that client. They're what run on each request. Resource, binding, API: one file holds the whole feature.",
   }),
   {
     ...chat({
@@ -479,6 +491,7 @@ const compose: StepSpec[] = [
     fontSize: 25,
     omit: ["pool", "connect", "ret"],
     title: "The Database module starts with a Neon Postgres project",
+    layer: "resource",
     notes:
       "Same shape as Files: an interface, then a Layer. The interface is just a SQL client, called Database. The Layer's constructor declares what it needs, starting with a Neon Postgres project. Alchemy creates it at deploy and applies the migrations in ./migrations.",
   }),
@@ -489,6 +502,7 @@ const compose: StepSpec[] = [
     fontSize: 25,
     omit: ["connect", "ret"],
     title: "Hyperdrive puts a connection pool in front of it",
+    layer: "resource",
     notes:
       "Workers are short-lived, so opening a Postgres connection on every request is slow. Hyperdrive keeps a pool of connections near the database. Its origin is the project's origin: one resource's output is the next one's input.",
   }),
@@ -499,6 +513,7 @@ const compose: StepSpec[] = [
     fontSize: 25,
     omit: ["ret"],
     title: "Connect binds that pool to whichever Worker uses this module",
+    layer: "binding",
     notes:
       "Connect is a binding, like ReadWriteBucket was for Files. At deploy it adds the Hyperdrive pool to the Worker that ends up using this module. At runtime it hands back the pool's connection string.",
   }),
@@ -508,6 +523,7 @@ const compose: StepSpec[] = [
     group: "db",
     fontSize: 25,
     title: "The constructor returns a SQL client for the rest of the app",
+    layer: "api",
     notes:
       "Then the constructor returns a Postgres Layer built from that connection string. That's why this is Layer.unwrap: the constructor's result is itself a Layer, and anything above it just asks for a SQL client.",
   }),
@@ -517,6 +533,7 @@ const compose: StepSpec[] = [
     group: "db",
     fontSize: 25,
     title: "…and it provides how Connect works on a Worker",
+    layer: "binding",
     notes:
       "Last line: ConnectBinding is the Worker implementation of Connect, the native Hyperdrive binding. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one block.",
   }),
@@ -543,25 +560,36 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "list reads a room's messages from Postgres",
     omit: ["service", "queue", "consume", "append", "attach"],
+    layer: "api",
     notes: "The first method: list. One query against the database for a room's messages.",
   }),
   chat({
     ...HISTORY,
     title: "New messages go on a queue that History declares itself",
-    omit: ["service", "consume", "append", "attach"],
+    omit: ["service", "queueBinding", "consume", "append", "attach"],
+    layer: "resource",
     notes:
-      "Messages arrive faster than we want to write them one at a time, so they go through a queue. History declares the queue right in its constructor, a Cloudflare Queue called Messages, and asks for send access to it. Nothing else in the app knows the queue exists.",
+      "Messages arrive faster than we want to write them one at a time, so they go through a queue. History declares the queue right in its constructor: a resource, a Cloudflare Queue called Messages. Nothing else in the app knows it exists.",
+  }),
+  chat({
+    ...HISTORY,
+    title: "…with a binding that can send to it",
+    omit: ["service", "consume", "append", "attach"],
+    layer: "binding",
+    notes: "Then a binding: send access to that queue, and a client for it.",
   }),
   chat({
     ...HISTORY,
     title: "append puts a message on that queue",
     omit: ["service", "consume", "attach"],
+    layer: "api",
     notes: "append sends a room name and the text onto the queue. That's what every chat room will call.",
   }),
   chat({
     ...HISTORY,
     title: "…and History consumes the queue into Postgres",
     omit: ["service", "attach"],
+    layer: "binding",
     notes:
       "And History consumes its own queue, inserting each message into Postgres. Subscribing to a queue is an event source, and it's declared in the constructor like any binding: at deploy, it registers this Worker as the queue's consumer.",
   }),
@@ -569,6 +597,7 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "attach stores a file, and records it in the room",
     omit: ["service", "consume"],
+    layer: "api",
     notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History sits on both Database and Files.",
   }),
   chat({
