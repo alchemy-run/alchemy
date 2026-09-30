@@ -312,6 +312,18 @@ const twoPrograms: StepSpec[] = [
     notes:
       "So erase the line. Instead of cutting the app horizontally into two programs, cut it vertically into modules. The Files module owns everything uploading needs: the bucket, the permission, and the code.",
   }),
+  pyramid({
+    title: "Every module is a slice like that: a resource, a binding, an API",
+    layers: CHAT_LAYERS,
+    slices: [
+      { label: "Files", items: { infra: "R2 bucket", config: "read-write", api: "upload()" } },
+      { label: "Database", items: { infra: "Neon", config: "Hyperdrive", api: "SQL client" } },
+      { label: "History", items: { infra: "Queue", config: "send · consume", api: "append()" } },
+      { label: "Rooms", items: { infra: "Durable Obj.", config: "namespace", api: "join()" } },
+    ],
+    notes:
+      "And that's the pattern for the whole app. Every module is its own slice through the stack: a resource at the bottom, a binding that gives the code access to it, and an API on top that the rest of the app calls. We'll build each one exactly that way: resource, then binding, then API.",
+  }),
 ];
 
 const BRICKS = {
@@ -361,12 +373,6 @@ const MODULE_BESIDE_CLASS = {
   },
 };
 const modules: StepSpec[] = [
-  built(
-    "We'll build the chat app as blocks like this, starting with Files",
-    [BRICKS.files],
-    "Here's where we're going. Instead of two programs, the chat app becomes a stack of blocks, one per module. The first is Files: its bucket, its permission and its upload method in one block. In code, that block is a Layer called FilesR2. Let's write it.",
-    [PROVIDES.files],
-  ),
   chat({
     ...FILES,
     title: "In Alchemy, the Files module starts with the interface its callers use",
@@ -478,12 +484,6 @@ const HISTORY = { snippet: "History.ts", file: "src/History.ts", group: "history
 const ROOM_FILE = { snippet: "Room.ts", file: "src/Room.ts", group: "room", fontSize: 22 };
 const WORKER = { snippet: "ChatModules.ts", file: "src/Chat.ts", group: "chat", fontSize: 19 };
 const compose: StepSpec[] = [
-  built(
-    "Next, a Database block beside it",
-    [BRICKS.database, BRICKS.files],
-    "Next to Files goes the database, DatabaseLive. It doesn't depend on anything either, so it sits at the bottom too.",
-    [PROVIDES.bottom],
-  ),
   chat({
     snippet: "DbSteps.ts",
     file: "src/Db.ts",
@@ -535,14 +535,8 @@ const compose: StepSpec[] = [
     title: "…and it provides how Connect works on a Worker",
     layer: "binding",
     notes:
-      "Last line: ConnectBinding is the Worker implementation of Connect, the native Hyperdrive binding. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one block.",
+      "Last line: ConnectBinding is the Worker implementation of Connect, the native Hyperdrive binding. That's the whole Database module: a project, a pool, a binding, and a SQL client, in one file.",
   }),
-  built(
-    "History goes on top of both",
-    [BRICKS.database, BRICKS.files, BRICKS.history],
-    "Next is chat history. It keeps messages in Postgres and attachments in Files, so it sits on both blocks.",
-    [PROVIDES.bottom, PROVIDES.history],
-  ),
   chat({
     ...HISTORY,
     title: "History starts as an empty Layer",
@@ -554,7 +548,7 @@ const compose: StepSpec[] = [
     title: "It asks for Database and Files",
     omit: ["service", "queue", "consume", "append", "list", "attach"],
     notes:
-      "The constructor asks for Database and for Files, the two blocks beneath it. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
+      "The constructor asks for Database and for Files, the two modules we just built. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
   chat({
     ...HISTORY,
@@ -598,7 +592,7 @@ const compose: StepSpec[] = [
     title: "attach stores a file, and records it in the room",
     omit: ["service", "consume"],
     layer: "api",
-    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History sits on both Database and Files.",
+    notes: "Last, attach: upload the file through Files, then record it in the room's history. That's why History needs both Database and Files.",
   }),
   chat({
     ...HISTORY,
@@ -629,12 +623,6 @@ FunctionName: chat-dev-sam-history`,
     notes:
       "On Cloudflare that's all there is to it. On AWS, where the queue would be SQS and History would run in a Lambda, the same call does more: it grants exactly the three actions a consumer needs, on exactly this queue, and creates the event source mapping that invokes the Lambda with each batch. The trigger and its permissions exist exactly as long as that line does.",
   }),
-  built(
-    "Rooms go on top of History",
-    [BRICKS.database, BRICKS.files, BRICKS.history, BRICKS.rooms],
-    "Then the chat rooms. They read and write History, so they sit on top of it.",
-    [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms],
-  ),
   chat({
     ...ROOM_FILE,
     title: "Each chat room is a Durable Object, with the same shape",
@@ -647,7 +635,7 @@ FunctionName: chat-dev-sam-history`,
     title: "…and each room appends its messages to History",
     emphasize: ["yield* History", "history.append"],
     notes:
-      "Each room asks for History, the block beneath it, and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business.",
+      "Each room asks for History and appends every message to it. The room doesn't know there's a queue or a database behind History. That's History's business.",
   }),
   chat({
     snippet: "Rooms.ts",
@@ -658,20 +646,14 @@ FunctionName: chat-dev-sam-history`,
     title: "Rooms wraps the Durable Object and asks for History",
     emphasize: ["yield* Room;", "yield* History;"],
     notes:
-      "The Rooms module puts the Durable Object and History behind one interface: join a room, attach a file, read its history. Again it just asks for History, the block beneath it.",
+      "The Rooms module puts the Durable Object and History behind one interface: join a room, attach a file, read its history. Again it just asks for History.",
   }),
-  built(
-    "The Chat Worker goes on top",
-    ALL_BRICKS,
-    "Last, the Worker that serves requests. It uses Rooms, so it goes on top. And it's where the whole stack gets wired together.",
-    [PROVIDES.bottom, PROVIDES.history, PROVIDES.rooms, PROVIDES.chat],
-  ),
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
     emphasize: ["yield* Rooms", "Effect.provide(", "RoomsLive.pipe(", "Layer.provide(RoomLive)", "Layer.provide(HistoryLive)", "Layer.provide([DatabaseLive, FilesR2])"],
     notes:
-      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the pyramid, and it's the only place that decides which implementation each block gets.",
+      "The Worker only uses Rooms. At the bottom it stacks the Layers, top to bottom: RoomsLive with its Durable Object, on HistoryLive, on DatabaseLive and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each block gets.",
   }),
   chat({
     snippet: "ChatMissing.error.ts",
@@ -684,22 +666,6 @@ FunctionName: chat-dev-sam-history`,
     notes:
       "Leave HistoryLive out of the stack, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
   }),
-  pyramid({
-    title: "The pyramid is literally a stack of Layers",
-    layers: CHAT_LAYERS,
-    bricks: ALL_BRICKS,
-    side: WIRED,
-    notes:
-      "Here's the Worker's wiring again, set beside the pyramid. It reads top to bottom as the pyramid: the Worker gets RoomsLive, on HistoryLive, on DatabaseLive and FilesR2. So the whole thing, infrastructure to frontend, is one program made of Layers.",
-  }),
-  pyramid({
-    title: "Observability is a block too, beside the whole stack",
-    layers: CHAT_LAYERS,
-    bricks: ALL_BRICKS,
-    pillar: { ...OBSERVE, lines: [] },
-    notes:
-      "One block is missing: observability. It doesn't sit on top of anything or under anything. It sits beside the stack, because every block reports to it. And it's built exactly like the others.",
-  }),
   chat({
     snippet: "ChatTraced.ts",
     file: WORKER.file,
@@ -708,7 +674,7 @@ FunctionName: chat-dev-sam-history`,
     title: "Collecting every trace and log is one line in the Worker",
     emphasize: ["Axiom.Telemetry("],
     notes:
-      "Start with the simplest version. One line in the Worker: Axiom.Telemetry, pointed at an Axiom token and two datasets. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
+      "One thing is missing for production: observability, the column beside the pyramid. Start with the simplest version. One line in the Worker: Axiom.Telemetry, pointed at an Axiom token and two datasets. It's an OpenTelemetry exporter, and every module is already written in Effect, so every step in Rooms, History, Files and Database becomes a span and every log line is shipped, with no changes to any of them.",
   }),
   ...[
     {
@@ -761,14 +727,6 @@ FunctionName: chat-dev-sam-history`,
     notes:
       "And when something breaks in production, say uploads start timing out, the errors cross the threshold and the monitor fires. The trace points straight at Files.upload. That alert is one more failure that goes back to the agent, from production this time.",
   },
-  pyramid({
-    title: "The whole stack, with observability beside it",
-    layers: CHAT_LAYERS,
-    bricks: ALL_BRICKS,
-    pillar: { ...OBSERVE, lines: ["ObservabilityLive", "", "Axiom", "traces · logs", "dashboard", "monitor"] },
-    notes:
-      "So that's the whole app: a stack of Layers, with observability beside it watching every layer. One program. One type checker sees all of it, one test file can exercise all of it, and one command deploys it, dashboards and monitors included.",
-  }),
 ];
 
 // ── the Stack: deploy, destroy, dev ──────────────────────────────────────
@@ -1107,14 +1065,6 @@ const shared: StepSpec[] = [
     "A full copy per PR is great for isolation, but a brand new database has no data in it. Real apps need realistic data to test against, and creating a database per PR is slow and costs money.",
     ["pr"],
   ),
-  pyramid({
-    title: "But the database is just a Layer, so a pull request can swap it",
-    layers: CHAT_LAYERS,
-    bricks: [{ ...BRICKS.database, detail: "new project ⇄ a branch" }, BRICKS.files, BRICKS.history, BRICKS.rooms, BRICKS.chat],
-    lit: ["Database"],
-    notes:
-      "Remember the pyramid. The database is one block, one Layer. Swap it and nothing above it changes: History still gets a SQL client, the Worker still works. So a pull request can use a different Database Layer.",
-  }),
   chat({
     snippet: "Db.ts",
     file: DB_FILE.file,

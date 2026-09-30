@@ -54,7 +54,7 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
   const braceWas = !!prev?.brace;
 
   // Bands fade back when something is drawn over them.
-  const covered = (s: PyramidStep | undefined) => (s?.bricks || s?.slice ? 0 : 1);
+  const covered = (s: PyramidStep | undefined) => (s?.bricks || s?.slice || s?.slices ? 0 : 1);
   const bandText = blend(covered(step), prev ? covered(prev) : covered(step));
   const bandFill = blend(step.bricks ? 0.25 : 1, prev ? (prev.bricks ? 0.25 : 1) : step.bricks ? 0.25 : 1);
 
@@ -162,6 +162,54 @@ export const PyramidView = ({ step, prev, local }: { step: PyramidStep; prev?: P
               </g>
             );
           })()
+        : null}
+
+      {/* Several slices side by side, widening with the pyramid: every module spans the same layers. */}
+      {step.slices
+        ? step.slices.map((sl, k) => {
+            const n = step.slices!.length;
+            const gap = 14;
+            /** The slice's left and right edge at height y. */
+            const edges = (y: number) => {
+              const w = widthAt(y);
+              const left = CX - w / 2;
+              return [left + (k * w) / n + gap / 2, left + ((k + 1) * w) / n - gap / 2] as const;
+            };
+            const topY = band(step.layers.length - 1).top;
+            const [tl, tr] = edges(topY);
+            const [bl, br] = edges(BOTTOM);
+            const q = prev?.slices?.some((p) => p.label === sl.label) ? 1 : interpolate(local, [2 + k * 4, 10 + k * 4], [0, 1], clamp);
+            return (
+              <g key={sl.label} opacity={q} transform={`translate(0 ${(1 - q) * 18})`}>
+                {step.layers.map((layer, slot) => {
+                  const b = band(slot);
+                  const [a1, a2] = edges(b.top);
+                  const [c1, c2] = edges(b.bottom);
+                  const item = sl.items[layer.id];
+                  const [m1, m2] = edges(b.mid);
+                  return (
+                    <g key={layer.id}>
+                      <path d={`M ${a1} ${b.top} L ${a2} ${b.top} L ${c2} ${b.bottom} L ${c1} ${b.bottom} Z`} fill={brand.bg} />
+                      <path
+                        d={`M ${a1} ${b.top} L ${a2} ${b.top} L ${c2} ${b.bottom} L ${c1} ${b.bottom} Z`}
+                        fill={layer.color}
+                        fillOpacity={item ? 0.2 : 0.05}
+                      />
+                      {item ? (
+                        <text x={(m1 + m2) / 2} y={b.mid + 9} textAnchor="middle" fontFamily={mono} fontSize={22} fill={brand.fg}>
+                          {item}
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+                <path d={`M ${tl} ${topY} L ${tr} ${topY} L ${br} ${BOTTOM} L ${bl} ${BOTTOM} Z`} fill="none" stroke={TONE.good} strokeWidth={3} strokeLinejoin="round" />
+                <text x={(bl + br) / 2} y={BOTTOM + 50} textAnchor="middle" fontFamily={hand} fontWeight={700} fontSize={40} fill={TONE.good}>
+                  {sl.label}
+                </text>
+              </g>
+            );
+          })
         : null}
 
       {(step.bricks ?? []).map((brick) => {

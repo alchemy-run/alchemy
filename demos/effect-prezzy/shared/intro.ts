@@ -324,6 +324,8 @@ export interface PyramidStep {
   cut?: { under: string; above: string; below: string };
   /** One feature, cut vertically through every layer: what it needs in each. */
   slice?: { label: string; items: Record<string, string> };
+  /** Several features, each cut vertically through the layers, side by side. */
+  slices?: { label: string; items: Record<string, string> }[];
   /** The stack rebuilt from modules: bricks laid in the pyramid's rows, bottom first. */
   bricks?: {
     row: number;
