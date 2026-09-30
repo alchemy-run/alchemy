@@ -131,11 +131,11 @@ const opening: StepSpec[] = [
   {
     kind: "slide",
     layout: "section",
-    title: "Agents write code faster than we can check it",
-    heading: "Agents write code faster than we can check it",
-    subtitle: "…and checking it means checking the whole app",
+    title: "Agents build, test and maintain whole apps",
+    heading: "Agents build, test and maintain whole apps",
+    subtitle: "…so the app should be pieces that all follow one pattern",
     notes:
-      "Agents are very good at writing code now. What slows them down, and what makes them wrong, is finding out whether it actually works. And working doesn't mean the code compiles. It means the whole app works. So what is the whole app?",
+      "Agents don't just write a function anymore. They build a whole app, test it, and keep changing it for months. They do that best when the app is broken into small pieces that all follow the same pattern, so every new piece looks like the last one and every change can be tested the same way. So what is a whole app made of?",
   },
 ];
 
