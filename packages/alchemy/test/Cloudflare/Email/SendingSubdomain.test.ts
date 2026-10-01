@@ -32,6 +32,7 @@ const NAME_REPLACE_A = `alchemy-sendsub-replace-a.${zoneName}`;
 const NAME_REPLACE_B = `alchemy-sendsub-replace-b.${zoneName}`;
 const NAME_ADOPT = `alchemy-sendsub-adopt.${zoneName}`;
 const NAME_LIST = `alchemy-sendsub-list.${zoneName}`;
+const NAME_PREVIEW = `alchemy-sendsub-preview.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -137,6 +138,51 @@ test.provider.skipIf(!emailRoutingScoped)(
       expect(gone).toEqual("gone");
 
       // Destroy again — delete is idempotent.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:email",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+  },
+);
+
+test.provider.skipIf(!emailRoutingScoped)(
+  "previewEnabled is set on create and updated in place",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeSubdomain(zoneId, NAME_PREVIEW);
+
+      const deploy = (previewEnabled: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Email.SendingSubdomain("PreviewSending", {
+              zoneId,
+              name: NAME_PREVIEW,
+              previewEnabled,
+            });
+          }),
+        );
+
+      const off = yield* deploy(false);
+      expect(off.previewEnabled).toEqual(false);
+      expect(
+        (yield* getSubdomain(zoneId, off.subdomainId)).previewEnabled,
+      ).toEqual(false);
+
+      const on = yield* deploy(true);
+      expect(on.subdomainId).toEqual(off.subdomainId);
+      expect(on.previewEnabled).toEqual(true);
+      expect(
+        (yield* getSubdomain(zoneId, on.subdomainId)).previewEnabled,
+      ).toEqual(true);
+
       yield* stack.destroy();
     }).pipe(logLevel),
   {

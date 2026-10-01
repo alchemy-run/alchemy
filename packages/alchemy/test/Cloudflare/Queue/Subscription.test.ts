@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -305,6 +306,67 @@ describe.sequential(
 
         yield* stack.destroy();
       }).pipe(logLevel),
+    );
+
+    test.provider(
+      "create an email.sending subscription that keeps its zone and domain",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const zoneName =
+            process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+          const zone = yield* findZoneByName({ accountId, name: zoneName });
+          if (!zone) {
+            return yield* Effect.die(new Error(`zone "${zoneName}" not found`));
+          }
+          const domain = `alchemy-sub-mail.${zoneName}`;
+
+          yield* stack.destroy();
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const queue = yield* Cloudflare.Queues.Queue("MailQueue", {
+                name: "alchemy-test-sub-mail-queue",
+              });
+              const sending = yield* Cloudflare.Email.SendingSubdomain(
+                "MailSending",
+                { zoneId: zone.id, name: domain },
+              );
+              const subscription = yield* Cloudflare.Queues.Subscription(
+                "MailEvents",
+                {
+                  source: {
+                    type: "email.sending",
+                    zoneId: sending.zoneId,
+                    domain: sending.name,
+                  },
+                  events: ["message.bounced", "message.complained"],
+                  queueId: queue.queueId,
+                },
+              );
+              return { queue, subscription };
+            }),
+          );
+
+          const sub = deployed.subscription;
+          expect(sub.source).toEqual({
+            type: "email.sending",
+            zoneId: zone.id,
+            domain,
+          });
+
+          const live = yield* getSubscription(accountId, sub.subscriptionId);
+          expect(live.source).toMatchObject({
+            type: "email.sending",
+            zoneId: zone.id,
+            domain,
+          });
+
+          yield* stack.destroy();
+
+          yield* expectGone(accountId, sub.subscriptionId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:email"] },
     );
   },
 );
