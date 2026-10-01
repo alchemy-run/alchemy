@@ -18,7 +18,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.,
    * and `retainPrevious` to keep the previous build's hashed files served
-   * for one more deploy.
+   * after a deploy.
    */
   assets?: AssetsConfig & Pick<AssetsProps, "retainPrevious">;
 }

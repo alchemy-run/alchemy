@@ -38,6 +38,7 @@ import {
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
+  previousBuildAssets,
   readAssets,
   readAssetsConfigFiles,
   selectRetainedAssets,
@@ -3749,10 +3750,13 @@ export const LiveWorkerProvider = () =>
           | undefined;
         let keepAssets = false;
         // `retainPrevious`: the current build's matching entries, recorded
-        // in state for the next deploy to carry. Only the build's own
-        // entries, never the ones carried from the deploy before.
+        // in state for a deploy of a different build to carry. Only the
+        // build's own entries, never the ones carried from the build
+        // before. `carriedAssets` records what this deploy carried, so a
+        // redeploy of the same build carries it again.
         const retainPrevious = resolveRetainPrevious(news.assets);
         let retainedAssets: AssetManifest | undefined;
+        let carriedAssets: AssetManifest | undefined;
         if (prebuiltAssets?.skip) {
           // Hash matched what's already on Cloudflare: keep the
           // existing asset manifest and skip the upload session.
@@ -3762,6 +3766,7 @@ export const LiveWorkerProvider = () =>
           keepAssets = true;
           // Same build as the recorded one, so its entries still hold.
           retainedAssets = retainPrevious ? output?.retainedAssets : undefined;
+          carriedAssets = retainPrevious ? output?.carriedAssets : undefined;
           // `keepAssets` only preserves the uploaded files — the PUT
           // replaces the asset config wholesale. The skip path never
           // walked the directory, so read just `_headers`/`_redirects`
@@ -3796,6 +3801,8 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
+            // The served manifest is unchanged, and so is what it carries.
+            carriedAssets = retainPrevious ? output?.carriedAssets : undefined;
             // Fold the build-emitted `_headers`/`_redirects` into the PUT
             // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
             // files and carry them on the read result, but only `readAssets`
@@ -3809,17 +3816,24 @@ export const LiveWorkerProvider = () =>
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
             );
+            const previous = retainedAssets
+              ? previousBuildAssets(retainedAssets, output)
+              : undefined;
             const { jwt, carried } = yield* uploadAssets(
               accountId,
               name,
               assets,
               session,
               dispatchNamespace,
-              retainPrevious ? output?.retainedAssets : undefined,
+              previous,
             );
+            // Without the carried files Cloudflare no longer stored.
+            carriedAssets =
+              previous &&
+              Object.fromEntries(carried.map((path) => [path, previous[path]]));
             if (carried.length > 0) {
               yield* Effect.logInfo(
-                `Cloudflare Worker update: keeping ${carried.length} asset(s) of the previous deploy for ${name}`,
+                `Cloudflare Worker update: keeping ${carried.length} asset(s) of the previous build for ${name}`,
               );
             }
             metadataAssets = {
@@ -4414,6 +4428,7 @@ export const LiveWorkerProvider = () =>
             // `streaming_tail_consumers`; record what this deploy uploaded.
             streamingTailConsumers,
             retainedAssets,
+            carriedAssets,
             hash,
           } satisfies Worker["Attributes"];
         }
@@ -4690,6 +4705,7 @@ export const LiveWorkerProvider = () =>
           deploymentId,
           affinityZoneIds,
           retainedAssets,
+          carriedAssets,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -5586,6 +5602,7 @@ export const LiveWorkerProvider = () =>
                 hash: output?.hash,
                 // Recorded from the local build, like the hash.
                 retainedAssets: output?.retainedAssets,
+                carriedAssets: output?.carriedAssets,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -5724,6 +5741,7 @@ export const LiveWorkerProvider = () =>
               hash: output?.hash,
               // Recorded from the local build, like the hash.
               retainedAssets: output?.retainedAssets,
+              carriedAssets: output?.carriedAssets,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.

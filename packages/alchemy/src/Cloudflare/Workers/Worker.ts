@@ -1262,10 +1262,18 @@ export type Worker<Bindings = any> = Resource<
     affinityZoneIds?: string[] | undefined;
     /**
      * The current build's asset manifest entries matching
-     * `assets.retainPrevious.paths`, recorded so the next deploy can keep
-     * serving them. `undefined` when `retainPrevious` is not set.
+     * `assets.retainPrevious.paths`, recorded so a deploy of a different
+     * build can keep serving them. `undefined` when `retainPrevious` is not
+     * set.
      */
     retainedAssets?: AssetManifest | undefined;
+    /**
+     * The previous build's entries this deploy kept serving under
+     * `assets.retainPrevious`. A redeploy of the same build carries them
+     * again. `undefined` when `retainPrevious` is not set or no previous
+     * build is recorded.
+     */
+    carriedAssets?: AssetManifest | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;

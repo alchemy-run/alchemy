@@ -1,9 +1,10 @@
 /**
  * `assets.retainPrevious`: the manifest arithmetic that keeps the previous
- * deploy's content-hashed files served for one more deploy.
+ * build's content-hashed files served after a deploy.
  */
 import {
   mergeRetainedAssets,
+  previousBuildAssets,
   readAssets,
   requestedCarriedAssets,
   selectRetainedAssets,
@@ -76,7 +77,7 @@ describe("mergeRetainedAssets", () => {
     expect(Object.keys(manifest)).toEqual(Object.keys(manifest).sort());
   });
 
-  it("carries exactly one generation", () => {
+  it("carries one generation", () => {
     // deploy 1 records build 1; deploy 2 carries it and records build 2
     const build1: AssetManifest = { "/assets/one.js": entry("1") };
     const build2: AssetManifest = { "/assets/two.js": entry("2") };
@@ -97,6 +98,48 @@ describe("mergeRetainedAssets", () => {
       "/assets/three.js": entry("3"),
       "/assets/two.js": entry("2"),
     });
+  });
+});
+
+describe("previousBuildAssets", () => {
+  const build1: AssetManifest = { "/assets/one.js": entry("1") };
+  const build2: AssetManifest = { "/assets/two.js": entry("2") };
+  const build3: AssetManifest = { "/assets/three.js": entry("3") };
+
+  it("carries nothing without a recorded build", () => {
+    expect(previousBuildAssets(build1, undefined)).toBeUndefined();
+    expect(previousBuildAssets(build1, {})).toBeUndefined();
+  });
+
+  it("carries the recorded build when the build changed", () => {
+    expect(
+      previousBuildAssets(build2, {
+        retainedAssets: build1,
+        carriedAssets: undefined,
+      }),
+    ).toEqual(build1);
+  });
+
+  it("keeps the previous build across redeploys of the same build", () => {
+    // deploy 2 recorded build 2 and carried build 1; deploying build 2
+    // again (a Worker-only change) must not drop build 1
+    const afterDeploy2 = { retainedAssets: build2, carriedAssets: build1 };
+    expect(previousBuildAssets({ ...build2 }, afterDeploy2)).toEqual(build1);
+    // deploy 3 moves on to build 2 and drops build 1
+    expect(previousBuildAssets(build3, afterDeploy2)).toEqual(build2);
+  });
+
+  it("identifies a build by its paths and content hashes", () => {
+    const rebuilt: AssetManifest = { "/assets/two.js": entry("2-changed") };
+    const recorded = { retainedAssets: build2, carriedAssets: build1 };
+    expect(previousBuildAssets(rebuilt, recorded)).toEqual(build2);
+    expect(
+      previousBuildAssets(
+        { ...build2, "/assets/extra.js": entry("x") },
+        recorded,
+      ),
+    ).toEqual(build2);
+    expect(previousBuildAssets({}, recorded)).toEqual(build2);
   });
 });
 

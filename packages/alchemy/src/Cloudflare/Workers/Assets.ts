@@ -91,19 +91,19 @@ export interface AssetsConfig {
 export type AssetManifest = Record<string, { hash: string; size: number }>;
 
 /**
- * Keep the previous deploy's content-hashed files served for one more
- * deploy. See {@link AssetsProps.retainPrevious}.
+ * Keep the previous build's content-hashed files served after a deploy.
+ * See {@link AssetsProps.retainPrevious}.
  */
 export interface RetainPreviousAssets {
   /**
    * Globs, relative to the assets directory, selecting the files to keep
-   * for one more deploy (e.g. `["assets/**"]`). Only match content-hashed
-   * build output: a retained path is served until the next deploy even
-   * though it is no longer in the build.
+   * served after a deploy of a different build (e.g. `["assets/**"]`).
+   * Only match content-hashed build output: a retained path stays served
+   * while the next build is live, even though that build no longer has it.
    */
   paths: string[];
   /**
-   * How many previous deploys to keep files from. Only `1` is supported.
+   * How many previous builds to keep files from. Only `1` is supported.
    *
    * @default 1
    */
@@ -153,18 +153,25 @@ export interface AssetsProps extends AssetsConfig {
    */
   base?: string;
   /**
-   * Keep serving the previous deploy's files matching `paths` for one more
-   * deploy, so a page loaded before a deploy can still fetch the
+   * Keep serving the previous build's files matching `paths` after a
+   * deploy, so a page loaded before the deploy can still fetch the
    * content-hashed chunks it references (e.g. a lazily loaded route).
    *
    * Each deploy records the current build's entries matching `paths` in the
-   * Worker's state. The next deploy adds the recorded entries whose paths
-   * the new build lacks to its upload manifest. Only the previous build's
-   * own files are carried, never files that were themselves carried, so the
-   * served set spans at most two builds. Cloudflare's upload session is
-   * content-addressed and does not ask for recently uploaded files again,
-   * so carrying them moves no bytes; a carried file Cloudflare asks for is
-   * dropped from the manifest instead of failing the deploy.
+   * Worker's state. These entries identify the build: they are
+   * content-hashed, so equal entries mean the same build. A deploy of a
+   * different build adds the recorded entries whose paths the new build
+   * lacks to its upload manifest. A redeploy of the same build (e.g. a
+   * Worker-only change) carries the same files again. So a build's files
+   * stay served while the next build is live and are dropped when the
+   * build after that is deployed. Only a build's own files are recorded,
+   * never files that were themselves carried, so the served set spans at
+   * most two builds.
+   *
+   * Carrying moves no bytes: Cloudflare's upload session is
+   * content-addressed and does not ask for files it still stores. A carried
+   * file Cloudflare no longer stores is dropped from the manifest with a
+   * warning instead of failing the deploy.
    *
    * `_headers`, `_redirects` and `.assetsignore` are never uploaded, so
    * they are never retained.
@@ -200,7 +207,37 @@ export const selectRetainedAssets = (
 };
 
 /**
- * Merge the previous deploy's retained entries into the current upload
+ * The entries a deploy carries: the previous build's. A deploy of a build
+ * other than the recorded one carries the recorded build's entries. A
+ * redeploy of the recorded build carries what the recorded deploy carried,
+ * so the build before it stays served.
+ *
+ * @param current the current build's retained entries
+ * @param recorded the Worker's state from the last deploy
+ */
+export const previousBuildAssets = (
+  current: AssetManifest,
+  recorded:
+    | { retainedAssets?: AssetManifest; carriedAssets?: AssetManifest }
+    | undefined,
+): AssetManifest | undefined =>
+  recorded?.retainedAssets !== undefined &&
+  sameAssets(current, recorded.retainedAssets)
+    ? recorded.carriedAssets
+    : recorded?.retainedAssets;
+
+const sameAssets = (a: AssetManifest, b: AssetManifest): boolean => {
+  const names = Object.keys(a);
+  return (
+    names.length === Object.keys(b).length &&
+    names.every(
+      (name) => Object.hasOwn(b, name) && b[name].hash === a[name].hash,
+    )
+  );
+};
+
+/**
+ * Merge the previous build's retained entries into the current upload
  * manifest. A path the current build also has keeps the current entry;
  * every other retained path is added and reported in `carried`.
  */
@@ -584,9 +621,9 @@ export const uploadAssets = Effect.fn(function* (
   { note }: ScopedPlanStatusSession,
   dispatchNamespace?: string,
   /**
-   * The previous deploy's retained entries (see
-   * {@link AssetsProps.retainPrevious}). Paths the current build lacks are
-   * added to the upload manifest.
+   * The previous build's retained entries (see
+   * {@link previousBuildAssets}). Paths the current build lacks are added
+   * to the upload manifest.
    */
   retained?: AssetManifest,
 ) {
