@@ -120,7 +120,7 @@ const run = <A, E>(
     effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-describe.sequential("Next.js Node serve entry", () => {
+describe("Next.js Node serve entry", { concurrent: false }, () => {
   it(
     "serves a real build without reloading next.config.ts at runtime",
     () =>

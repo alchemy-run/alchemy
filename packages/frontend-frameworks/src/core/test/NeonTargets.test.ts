@@ -70,7 +70,7 @@ const run = <A, E>(
     effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-describe.sequential("Neon production target feasibility", () => {
+describe("Neon production target feasibility", { concurrent: false }, () => {
   it(
     "builds actual Vite assets and serves a deep link",
     () =>
