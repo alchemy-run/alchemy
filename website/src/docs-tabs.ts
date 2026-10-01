@@ -85,6 +85,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Azure",
+    href: "/azure",
+    prefixes: ["/azure", "/providers/azure"],
+    slot: "more",
+    category: "Cloud",
+    hint: "resource groups · storage · identity",
+  },
+  {
     label: "Better Auth",
     href: "/better-auth",
     prefixes: ["/better-auth", "/providers/betterauth"],

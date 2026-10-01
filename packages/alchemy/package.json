@@ -68,6 +68,8 @@
     "./Cloudflare/*": "./src/Cloudflare/*/index.ts",
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
+    "./Azure": "./src/Azure/index.ts",
+    "./Azure/*": "./src/Azure/*/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
@@ -287,6 +289,16 @@
         "bun": "./src/Neon/*/index.ts",
         "default": "./lib/Neon/*/index.js"
       },
+      "./Azure": {
+        "types": "./lib/Azure/index.d.ts",
+        "bun": "./src/Azure/index.ts",
+        "default": "./lib/Azure/index.js"
+      },
+      "./Azure/*": {
+        "types": "./lib/Azure/*/index.d.ts",
+        "bun": "./src/Azure/*/index.ts",
+        "default": "./lib/Azure/*/index.js"
+      },
       "./Hetzner": {
         "types": "./lib/Hetzner/index.d.ts",
         "bun": "./src/Hetzner/index.ts",
@@ -399,6 +411,7 @@
     "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
+    "@distilled.cloud/azure": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/doppler": "workspace:*",
