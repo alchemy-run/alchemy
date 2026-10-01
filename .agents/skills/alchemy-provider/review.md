@@ -14,6 +14,18 @@ needs a one-line reason.
 `<P>` is the provider directory (`packages/alchemy/src/<P>`,
 `packages/alchemy/test/<P>`). The greps find candidates; read each hit.
 
+## 0. Coverage
+
+Run this first; the other sections only judge the code that exists.
+
+| Check | Command | Expect |
+| --- | --- | --- |
+| Every service cataloged | compare `ls submodules/distilled/packages/<pkg>/src/services` with `ls processes/<P>/catalog` | one catalog file per service |
+| Nothing left unbuilt | count statuses in `processes/<P>/catalog/INDEX.md` | no `missing` or `implemented` rows; every `out-of-scope` and `blocked` row has a reason or exact error |
+| Index matches the code | every `tested` row has a `Resource<...>("<P>.<Service>.<Name>")` in `src/<P>` and a registered provider in `Providers.ts` | yes |
+| One test file per resource | every `tested` row has `test/<P>/<Service>/<Name>.test.ts` | yes |
+| Out-of-scope list published | the overview page's "Out of scope" section | matches the `out-of-scope` rows |
+
 ## How to compare against what good looks like
 
 For each service, open the closest AWS or Cloudflare equivalent and compare
