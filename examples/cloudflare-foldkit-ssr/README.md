@@ -14,7 +14,7 @@ Load `/?count=7` and view source: the count is in the HTML before any JavaScript
 
 ## Nothing to configure
 
-`alchemy.run.ts` declares the site and nothing else. The build writes `dist/server/foldkit.build.json` recording what it prerendered — nothing, here — and Alchemy derives the asset routing from it: the unrendered `index.html` is left out of the upload, files are served straight from the asset layer, and everything else reaches the handler, which answers asset misses with a 404 and renders pages.
+`alchemy.run.ts` declares the site and nothing else. Alchemy reads the completed build metadata from Foldkit’s plugin API and derives the asset routing from it: the unrendered `index.html` is left out of the upload, files are served straight from the asset layer, and everything else reaches the handler, which answers asset misses with a 404 and renders pages.
 
 ## The build id
 

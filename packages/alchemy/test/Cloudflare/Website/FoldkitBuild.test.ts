@@ -1,14 +1,10 @@
 import {
-  FOLDKIT_BUILD_MANIFEST,
   foldkitAssetsFromManifest,
-  readFoldkitBuildManifest,
+  foldkitBuildMetadataReader,
   type FoldkitBuildManifest,
+  type FoldkitBuildMetadata,
 } from "@/Cloudflare/Website/FoldkitBuild";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it, layer } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { describe, expect, it } from "alchemy-test";
 
 const manifest = (
   prerendered: ReadonlyArray<string>,
@@ -20,6 +16,14 @@ const manifest = (
   prerendered,
 });
 
+const metadata = (): FoldkitBuildMetadata => ({
+  root: "/project",
+  clientDirectory: "/project/dist/client",
+  serverDirectory: "/project/dist/server",
+  serverEntry: "/project/dist/server/fetch.js",
+  manifest: manifest(["/about"]),
+});
+
 describe("foldkitAssetsFromManifest", () => {
   it("gives a client-only build the single-page-application fallback", () => {
     expect(foldkitAssetsFromManifest(undefined)).toEqual({
@@ -28,8 +32,6 @@ describe("foldkitAssetsFromManifest", () => {
   });
 
   it("derives nothing for a server-rendered build", () => {
-    // The build leaves no template in the client output, so every
-    // unrendered path already reaches the handler under the defaults.
     expect(foldkitAssetsFromManifest(manifest([]))).toBeUndefined();
   });
 
@@ -40,69 +42,66 @@ describe("foldkitAssetsFromManifest", () => {
   });
 });
 
-layer(NodeServices.layer)("readFoldkitBuildManifest", (it) => {
-  const withServerDirectory = <A, E, R>(
-    contents: string | undefined,
-    use: (directory: string) => Effect.Effect<A, E, R>,
-  ) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const directory = yield* fs.makeTempDirectoryScoped({
-        prefix: "alchemy-foldkit-manifest-",
-      });
-      if (contents !== undefined) {
-        yield* fs.writeFileString(
-          path.join(directory, FOLDKIT_BUILD_MANIFEST),
-          contents,
-        );
-      }
-      return yield* use(directory);
-    }).pipe(Effect.scoped);
+describe("foldkitBuildMetadataReader", () => {
+  it("allows a client-only app with a custom Worker entry", () => {
+    expect(foldkitBuildMetadataReader([], "src/worker.ts")).toBeUndefined();
+  });
 
-  it.effect("resolves to nothing without a server directory", () =>
-    Effect.gen(function* () {
-      expect(yield* readFoldkitBuildManifest(undefined)).toBeUndefined();
-    }),
-  );
+  it("reads metadata only when called after the full build", () => {
+    let complete = false;
+    const read = foldkitBuildMetadataReader(
+      [
+        {
+          name: "foldkit:build",
+          api: {
+            getBuildMetadata() {
+              if (!complete) throw new Error("Build is incomplete");
+              return metadata();
+            },
+          },
+        },
+      ],
+      undefined,
+    );
+    expect(() => read!()).toThrow("Build is incomplete");
+    complete = true;
+    expect(read!()).toEqual(metadata());
+  });
 
-  it.effect("resolves to nothing when the build wrote no manifest", () =>
-    withServerDirectory(undefined, (directory) =>
-      Effect.gen(function* () {
-        expect(yield* readFoldkitBuildManifest(directory)).toBeUndefined();
-      }),
-    ),
-  );
+  it("refuses an older build plugin instead of assuming SPA routing", () => {
+    expect(() =>
+      foldkitBuildMetadataReader(
+        [
+          {
+            name: "foldkit:build",
+            api: { serverEntry: "/src/entry.server.ts" },
+          },
+        ],
+        undefined,
+      ),
+    ).toThrow("Upgrade @foldkit/vite-plugin");
+  });
 
-  it.effect("reads what the Foldkit plugin writes", () =>
-    withServerDirectory(
-      JSON.stringify(manifest(["/", "/about"])),
-      (directory) =>
-        Effect.gen(function* () {
-          const read = yield* readFoldkitBuildManifest(directory);
-          expect(read?.prerendered).toEqual(["/", "/about"]);
-          expect(read?.serverEntry).toBe("fetch.js");
-        }),
-    ),
-  );
+  it("rejects a conflicting main before the build starts", () => {
+    expect(() =>
+      foldkitBuildMetadataReader([{ name: "foldkit:build" }], "src/fetch.ts"),
+    ).toThrow("cannot be combined with main");
+  });
 
-  it.effect("refuses a manifest shape it does not know", () =>
-    withServerDirectory(
-      JSON.stringify({ ...manifest([]), schemaVersion: 2 }),
-      (directory) =>
-        Effect.gen(function* () {
-          const exit = yield* Effect.exit(readFoldkitBuildManifest(directory));
-          expect(exit._tag).toBe("Failure");
-        }),
-    ),
-  );
-
-  it.effect("refuses a manifest that is not JSON", () =>
-    withServerDirectory("{", (directory) =>
-      Effect.gen(function* () {
-        const exit = yield* Effect.exit(readFoldkitBuildManifest(directory));
-        expect(exit._tag).toBe("Failure");
-      }),
-    ),
-  );
+  for (const [label, invalid] of Object.entries({
+    missing: undefined,
+    incomplete: { ...metadata(), serverEntry: undefined },
+    "unknown manifest version": {
+      ...metadata(),
+      manifest: { ...manifest([]), schemaVersion: 2 },
+    },
+  })) {
+    it(`rejects incompatible metadata: ${label}`, () => {
+      const read = foldkitBuildMetadataReader(
+        [{ name: "foldkit:build", api: { getBuildMetadata: () => invalid } }],
+        undefined,
+      );
+      expect(() => read!()).toThrow();
+    });
+  }
 });

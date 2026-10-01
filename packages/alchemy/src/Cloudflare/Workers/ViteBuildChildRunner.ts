@@ -36,25 +36,21 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   const config = yield* readConfig;
   const fs = yield* FileSystem.FileSystem;
-  const {
-    clientDirectory,
-    serverDirectory,
-    base,
-    serverBundle,
-    externalWorkspaces,
-  } = yield* viteBuildInProcess(config.rootDir, config.env, {
-    main: config.main,
-    compatibilityDate: config.compatibilityDate,
-    compatibilityFlags: config.compatibilityFlags,
-    viteEnvironments: config.viteEnvironments,
-  });
+  const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } =
+    yield* viteBuildInProcess(config.rootDir, config.env, {
+      main: config.main,
+      framework: config.framework,
+      compatibilityDate: config.compatibilityDate,
+      compatibilityFlags: config.compatibilityFlags,
+      viteEnvironments: config.viteEnvironments,
+    });
   const [bundle, workspaces] = yield* Effect.all([
     serverBundle,
     externalWorkspaces,
   ]);
   const result: ViteBuildChildResult = {
     clientDirectory,
-    serverDirectory,
+    foldkit,
     base,
     serverBundle: bundle,
     externalWorkspaces: Array.from(workspaces),

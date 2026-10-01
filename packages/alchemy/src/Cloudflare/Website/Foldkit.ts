@@ -62,7 +62,7 @@ export interface FoldkitProps<
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    *
    * A server-rendered or prerendered app needs nothing here. Its build
-   * writes `foldkit.build.json` beside the server bundle, recording which
+   * exposes completed build metadata through its plugin API, recording which
    * paths it prerendered, and the routing follows from that: a prerendered
    * route is a file the asset layer serves, and every other page request,
    * the front page included, reaches the `fetch` handler. The build keeps
@@ -142,8 +142,8 @@ export interface FoldkitProps<
  *
  * ### Choosing Asset Routing
  * No `assets` config is needed for any shape. A server-rendered or
- * prerendered app's build records what it prerendered in
- * `foldkit.build.json` and the routing follows from it; a client-only
+ * prerendered app's build reports what it prerendered through
+ * its plugin API and the routing follows from it; a client-only
  * app gets the single-page-application fallback, so deep links serve the
  * template and the app's own router resolves them (see
  * {@link FoldkitProps.assets}). Anything declared wins.

@@ -1,8 +1,5 @@
 import { pathToFileURL } from "node:url";
-import {
-  foldkitAssetsFromManifest,
-  readFoldkitBuildManifest,
-} from "@/Cloudflare/Website/FoldkitBuild.ts";
+import { foldkitAssetsFromManifest } from "@/Cloudflare/Website/FoldkitBuild.ts";
 import {
   Artifacts,
   createArtifactStore,
@@ -38,6 +35,7 @@ const build = (rootDir: string, main?: string) =>
     {},
     {
       main,
+      framework: "foldkit",
       compatibilityDate: "2024-09-23",
       compatibilityFlags: ["nodejs_compat"],
     },
@@ -53,9 +51,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         const path = yield* Path.Path;
         const root = yield* fixture("foldkit-ssr-fixture");
         const output = yield* build(root);
-        const manifest = yield* readFoldkitBuildManifest(
-          output.serverDirectory,
-        );
+        const manifest = output.foldkit?.manifest;
         expect(manifest).toEqual({
           schemaVersion: 1,
           client: "dist/client",
@@ -64,7 +60,18 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           prerendered: ["/about"],
         });
         expect(output.clientDirectory).toBe(path.join(root, manifest!.client));
-        expect(output.serverDirectory).toBe(path.join(root, manifest!.server));
+        expect(output.foldkit?.serverDirectory).toBe(
+          path.join(root, manifest!.server),
+        );
+        expect(output.foldkit?.root).toBe(root);
+        expect(output.foldkit?.clientDirectory).toBe(output.clientDirectory);
+        expect(
+          JSON.parse(
+            yield* fs.readFileString(
+              path.join(output.foldkit!.serverDirectory, "foldkit.build.json"),
+            ),
+          ),
+        ).toEqual(manifest);
         expect(
           yield* fs.exists(path.join(output.clientDirectory!, "index.html")),
         ).toBe(false);
@@ -79,9 +86,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           process.execPath,
           [
             path.join(import.meta.dirname, "fixtures/foldkit-handler-probe.ts"),
-            pathToFileURL(
-              path.join(output.serverDirectory!, manifest!.serverEntry),
-            ).href,
+            pathToFileURL(output.foldkit!.serverEntry).href,
           ],
           { stdout: "pipe", stderr: "pipe" },
         );
@@ -105,9 +110,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         expect(response.missingStatus).toBe(404);
 
         expect(
-          foldkitAssetsFromManifest(
-            yield* readFoldkitBuildManifest(output.serverDirectory),
-          ),
+          foldkitAssetsFromManifest(output.foldkit?.manifest),
         ).toBeUndefined();
       }).pipe(Effect.scoped),
     { timeout: 120_000 },
@@ -125,16 +128,6 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           yield* fs.writeFileString(
             main,
             'export default { fetch() { return new Response("wrong entry") } };',
-          );
-          // Turn off prerendering so even a custom entry named "fetch" can
-          // finish building: the source must reject it from the manifest.
-          const config = path.join(root, "vite.config.ts");
-          yield* fs.writeFileString(
-            config,
-            (yield* fs.readFileString(config)).replace(
-              "prerender: true",
-              "prerender: false",
-            ),
           );
           const result = yield* Effect.result(
             makeViteSource({ rootDir: root, main, framework: "foldkit" })
@@ -161,9 +154,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           expect(result._tag).toBe("Failure");
           if (result._tag === "Failure") {
             expect(String(result.failure)).toContain(
-              entryName === "fetch"
-                ? "cannot be combined with main"
-                : 'no entry chunk named "fetch"',
+              "cannot be combined with main",
             );
           }
         }).pipe(Effect.scoped),
@@ -172,7 +163,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
   }
 
   it.effect(
-    "supports pure SSR and custom output directories",
+    "supports pure SSR and custom output directories without a disk manifest",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -181,15 +172,35 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         const config = path.join(root, "vite.config.ts");
         yield* fs.writeFileString(
           config,
-          (yield* fs.readFileString(config)).replace(
-            "prerender: true",
-            'prerender: false, clientOutDir: "build/browser", serverOutDir: "build/edge"',
-          ),
+          (yield* fs.readFileString(config))
+            .replace(
+              "prerender: true",
+              'prerender: false, clientOutDir: "build/browser", serverOutDir: "build/edge"',
+            )
+            // Remove the disk manifest after Foldkit finalizes. Alchemy must
+            // get the completed metadata from the API across the child boundary.
+            .replace(
+              "  ],",
+              `
+              {
+                name: "test:remove-foldkit-manifest",
+                buildApp: {
+                  order: "post",
+                  async handler(builder) {
+                    const plugin = builder.config.plugins.find(
+                      (plugin) => plugin.name === "foldkit:build",
+                    );
+                    const { serverDirectory } = plugin.api.getBuildMetadata();
+                    const { unlink } = await import("node:fs/promises");
+                    await unlink(serverDirectory + "/foldkit.build.json");
+                  },
+                },
+              },
+            ],`,
+            ),
         );
         const output = yield* build(root);
-        const manifest = yield* readFoldkitBuildManifest(
-          output.serverDirectory,
-        );
+        const manifest = output.foldkit?.manifest;
         expect(manifest).toEqual({
           schemaVersion: 1,
           client: "build/browser",
@@ -197,8 +208,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           serverEntry: "fetch.js",
           prerendered: [],
         });
-        expect(output.serverDirectory).toBe(path.join(root, "build/edge"));
+        expect(output.foldkit?.serverDirectory).toBe(
+          path.join(root, "build/edge"),
+        );
         expect(output.clientDirectory).toBe(path.join(root, "build/browser"));
+        expect(
+          yield* fs.exists(
+            path.join(output.foldkit!.serverDirectory, "foldkit.build.json"),
+          ),
+        ).toBe(false);
         expect(
           yield* fs.exists(path.join(output.clientDirectory!, "index.html")),
         ).toBe(false);
@@ -324,12 +342,10 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         const root = yield* fixture("foldkit-fixture");
         const output = yield* build(root);
         expect(yield* output.serverBundle).toBeUndefined();
-        expect(output.serverDirectory).toBeUndefined();
-        expect(
-          foldkitAssetsFromManifest(
-            yield* readFoldkitBuildManifest(output.serverDirectory),
-          ),
-        ).toEqual({ notFoundHandling: "single-page-application" });
+        expect(output.foldkit).toBeUndefined();
+        expect(foldkitAssetsFromManifest(output.foldkit?.manifest)).toEqual({
+          notFoundHandling: "single-page-application",
+        });
       }).pipe(Effect.scoped),
     { timeout: 120_000 },
   );

@@ -63,33 +63,7 @@ layer(NodeServices.layer)("viteBuildOutputPlugin", (it) => {
     }),
   );
 
-  // A framework can leave a description of its build beside the server
-  // bundle (Foldkit's `foldkit.build.json`), so whoever deploys it needs to
-  // know where that is — the entry environment's own output directory.
-  it.effect("reports the entry environment's output directory", () =>
-    Effect.gen(function* () {
-      const output = yield* viteBuildOutputPlugin({ entryEnvironment: "ssr" });
-
-      yield* writeBundle(output.plugin, environment("client", "dist/client"), {
-        "index.html": {
-          type: "asset",
-          fileName: "index.html",
-          source: "<!-->",
-        },
-      });
-      yield* writeBundle(
-        output.plugin,
-        environment("ssr", "dist/server"),
-        entryChunk("fetch.js"),
-      );
-
-      const result = yield* output.output;
-
-      expect(result.serverDirectory).toBe("/project/dist/server");
-    }),
-  );
-
-  it.effect("reports no server directory for a client-only build", () =>
+  it.effect("produces no server bundle for a client-only build", () =>
     Effect.gen(function* () {
       const output = yield* viteBuildOutputPlugin({ entryEnvironment: "ssr" });
 
@@ -103,7 +77,6 @@ layer(NodeServices.layer)("viteBuildOutputPlugin", (it) => {
 
       const result = yield* output.output;
 
-      expect(result.serverDirectory).toBeUndefined();
       expect(yield* result.serverBundle).toBeUndefined();
     }),
   );
