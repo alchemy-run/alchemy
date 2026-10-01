@@ -46,7 +46,7 @@ package configuration and integration tests.
 
 ## Rendering examples
 
-- [SPA / CSR](../cloudflare-foldkit): browser-only counter.
+- [SPA / CSR](../cloudflare-foldkit-spa): browser-only counter.
 - [SSG](../cloudflare-foldkit-ssg): prerendered home and about pages.
 - [SSR](../cloudflare-foldkit-ssr): cookie-backed request rendering.
 - [Hybrid](../cloudflare-foldkit-hybrid): prerendered pages and a dynamic counter.

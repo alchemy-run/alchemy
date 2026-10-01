@@ -1620,11 +1620,8 @@ importers:
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118
 
-  examples/cloudflare-foldkit:
+  examples/cloudflare-foldkit-hybrid:
     dependencies:
-      '@foldkit/ui':
-        specifier: 'catalog:'
-        version: 0.164.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))
       effect:
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118
@@ -1654,8 +1651,11 @@ importers:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  examples/cloudflare-foldkit-hybrid:
+  examples/cloudflare-foldkit-spa:
     dependencies:
+      '@foldkit/ui':
+        specifier: 'catalog:'
+        version: 0.164.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))
       effect:
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118
@@ -2285,34 +2285,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-
-  examples/cloudflare-website-foldkit-spa:
-    dependencies:
-      effect:
-        specifier: 4.0.0-rc.118
-        version: 4.0.0-rc.118
-      foldkit:
-        specifier: 'catalog:'
-        version: 0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118)
-    devDependencies:
-      '@foldkit/vite-plugin':
-        specifier: 'catalog:'
-        version: 0.25.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))(redis@6.2.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@tailwindcss/vite':
-        specifier: 'catalog:'
-        version: 4.3.3(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      tailwindcss:
-        specifier: 'catalog:'
-        version: 4.3.3
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vite:
-        specifier: 'catalog:'
-        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
 
   examples/cloudflare-website-nextjs:
     dependencies:

@@ -206,7 +206,7 @@
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-foldkit/tsconfig.json"
+      "path": "./examples/cloudflare-foldkit-spa/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-foldkit-hybrid/tsconfig.json"
