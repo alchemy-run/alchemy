@@ -644,7 +644,11 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
-    Effect.timeout("90 seconds"),
+    Effect.timeoutOrElse({
+      duration: "90 seconds",
+      orElse: () =>
+        Effect.fail(new ServiceDeployPending({ serviceId, status: "pending" })),
+    }),
   );
 
 type DeployRef = {
@@ -747,7 +751,18 @@ const waitForDeploymentById = (input: {
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
-    Effect.timeout("90 seconds"),
+    // Surface the budget as a pending deploy so the final check below still
+    // reports a ready instance, or a failed deploy with its logs.
+    Effect.timeoutOrElse({
+      duration: "90 seconds",
+      orElse: () =>
+        Effect.fail(
+          new ServiceDeployPending({
+            serviceId: input.serviceId,
+            status: "pending",
+          }),
+        ),
+    }),
     Effect.catchTag("Railway.ServiceDeployPending", (pending) =>
       Effect.gen(function* () {
         const instance = yield* getInstance(
@@ -778,7 +793,12 @@ const waitForDeploymentById = (input: {
           serviceId: input.serviceId,
           status: status ?? pending.status,
         });
-      }).pipe(Effect.timeout("10 seconds")),
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "10 seconds",
+          orElse: () => Effect.fail(pending),
+        }),
+      ),
     ),
   );
 
