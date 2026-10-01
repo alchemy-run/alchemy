@@ -1,102 +1,82 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
-import * as Console from "effect/Console";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
-// Fresh `workers.dev` URLs transiently 404 while the route propagates.
-// `Test.getWhenReady` fails on that cold-start window and retries until the
-// worker serves a real response.
-const { getWhenReady } = Test;
-
-class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
-  body: string;
-}> {}
-
-// While the static-asset manifest is still propagating, Cloudflare can serve
-// placeholder content with a 200 — the status alone can't distinguish
-// "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = (url: string, expected: string) =>
-  Effect.gen(function* () {
-    const res = yield* getWhenReady(url);
-    expect(res.status).toBe(200);
-    const body = yield* res.text;
-    if (!body.includes(expected)) {
-      return yield* Effect.fail(new AssetNotReady({ body }));
-    }
-    return body;
-  }).pipe(
-    Effect.retry({
-      while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
-      ]),
-    }),
-  );
+const request = (url: string, init?: RequestInit) =>
+  Effect.tryPromise(async () => {
+    const response = await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(5000),
+    });
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: await response.text(),
+    };
+  });
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
 });
 
-// The first deploy runs the full Vite build, so give the hook more headroom
-// than the default 120s.
-const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
-  timeout: 600_000,
-});
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
-
-const base = Effect.map(stack, ({ url }) => {
-  if (!url) throw new Error("expected the site to expose a workers.dev url");
-  return url.replace(/\/+$/, "");
-});
+const stack = beforeAll(
+  destroy(Stack).pipe(
+    Effect.andThen(deploy(Stack)),
+    Effect.tap(({ url }) =>
+      request(url!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200 &&
+          response.body.includes("<title>Foldkit App</title>")
+            ? Effect.void
+            : Effect.fail(
+                new Error("The example has not reached the edge yet"),
+              ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+        Effect.timeout("60 seconds"),
+      ),
+    ),
+  ),
+  { timeout: 120_000 },
+);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 120_000 });
+const base = Effect.map(stack, ({ url }) => url!.replace(/\/+$/, ""));
 
 test(
-  "deploys and exposes a url",
+  "serves the SPA shell on root and deep links",
   Effect.gen(function* () {
-    const { url } = yield* stack;
-    expect(url).toBeString();
+    const url = yield* base;
+    for (const path of ["/", "/counter/42"]) {
+      const page = yield* request(url + path);
+      expect(page.status).toBe(200);
+      expect(page.body).toContain('<div id="root"></div>');
+      expect(page.body).toContain("<title>Foldkit App</title>");
+      expect(page.body).not.toContain("data-foldkit-app");
+    }
   }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test(
-  "serves the index HTML",
+  "serves the generated JavaScript and Tailwind stylesheet",
   Effect.gen(function* () {
     const url = yield* base;
-    const html = yield* getBodyWhenReady(url, '<div id="root">');
-    expect(html).toContain("Foldkit on Cloudflare");
+    const page = yield* request(url);
+    const script = page.body.match(/<script[^>]+src="([^" ]+)"/);
+    const style = page.body.match(/<link[^>]+href="([^" ]+\.css)"/);
+    expect(script).not.toBeNull();
+    expect(style).not.toBeNull();
+    const javascript = yield* request(new URL(script![1]!, url).href);
+    expect(javascript.status).toBe(200);
+    expect(javascript.headers.get("content-type")).toContain("javascript");
+    const css = yield* request(new URL(style![1]!, url).href);
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(css.body).toContain(".text-6xl");
   }),
-  { timeout: 180_000 },
-);
-
-test(
-  "compiles tailwind from vite.config.ts",
-  Effect.gen(function* () {
-    const url = yield* base;
-    // Foldkit is a client-only SPA — the markup renders in the browser, so
-    // assert on the compiled stylesheet Vite links from index.html instead
-    // of SSR output.
-    const html = yield* getBodyWhenReady(url, "stylesheet");
-    const link = html.match(
-      /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
-    );
-    expect(link).not.toBeNull();
-    const href = link![1]!;
-    const cssUrl = href.startsWith("http")
-      ? href
-      : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
-    // The compiled rule for a utility used in src/main.ts only exists if the
-    // @tailwindcss/vite plugin from the project's own vite.config.ts ran.
-    const css = yield* getBodyWhenReady(cssUrl, ".text-3xl");
-    expect(css).toContain(".text-3xl");
-  }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

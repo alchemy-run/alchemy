@@ -30,7 +30,7 @@ const stack = beforeAll(
       request(url!).pipe(
         Effect.flatMap((response) =>
           response.status === 200 &&
-          response.body.includes("Server-rendered counter")
+          response.body.includes("Statically generated home")
             ? Effect.void
             : Effect.fail(
                 new Error("The example has not reached the edge yet"),
@@ -47,26 +47,23 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 120_000 });
 const base = Effect.map(stack, ({ url }) => url!.replace(/\/+$/, ""));
 
 test(
-  "renders request cookies and serializes hydration flags",
+  "serves prerendered routes and hydration data",
   Effect.gen(function* () {
     const url = yield* base;
-    for (const count of [0, 7]) {
-      const page = yield* request(url + "/counter", {
-        headers: { cookie: `count=${count}` },
-      });
+    for (const [path, heading] of [
+      ["/", "Statically generated home"],
+      ["/about", "Statically generated about page"],
+    ]) {
+      const page = yield* request(url + path + "?count=7");
       expect(page.status).toBe(200);
-      expect(page.body).toContain(`<title>Count ${count}</title>`);
-      expect(page.body).toMatch(new RegExp(`id="count"[^>]*>${count}<`));
-      expect(page.body).toContain("Rendered on the Server");
-      expect(page.body).toContain("data-foldkit-flags");
+      expect(page.body).toContain(heading!);
+      expect(page.body).toContain("data-foldkit-app");
       expect(page.body).toContain("data-foldkit-build");
-      expect(page.headers.get("cache-control")).toBe("private, no-store");
-      expect(page.headers.get("vary")).toContain("cookie");
+      const head = yield* request(url + path, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(head.body).toBe("");
     }
-    const head = yield* request(url, { method: "HEAD" });
-    expect(head.status).toBe(200);
-    expect(head.body).toBe("");
-    expect((yield* request(url + "/assets/missing.js")).status).toBe(404);
+    expect((yield* request(url + "/not-prerendered")).status).toBe(404);
   }),
   { timeout: 120_000 },
 );
@@ -86,7 +83,7 @@ test(
     const css = yield* request(new URL(style![1]!, url).href);
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toContain("text/css");
-    expect(css.body).toContain(".text-6xl");
+    expect(css.body).toContain(".text-4xl");
   }),
   { timeout: 120_000 },
 );

@@ -3,13 +3,13 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "CloudflareFoldkitExample",
+  "CloudflareFoldkitSsgExample",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Website.Foldkit("Foldkit");
+    const worker = yield* Cloudflare.Website.Foldkit("FoldkitSsg");
     return { url: worker.url };
   }),
 );

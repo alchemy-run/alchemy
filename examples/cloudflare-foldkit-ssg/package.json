@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-foldkit",
+  "name": "cloudflare-foldkit-ssg",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,9 @@
     "build": "vite build",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
-    "test": "bun test test/integ.test.ts",
-    "preview": "vite preview"
+    "test": "bun test test/integ.test.ts"
   },
   "dependencies": {
-    "@foldkit/ui": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },
@@ -28,6 +26,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-foldkit"
+    "directory": "examples/cloudflare-foldkit-ssg"
   }
 }

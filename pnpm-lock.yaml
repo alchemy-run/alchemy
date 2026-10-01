@@ -84,6 +84,9 @@ catalogs:
     '@effect/vitest':
       specifier: '>=4.0.0-rc.118 || >=4.0.0'
       version: 4.0.0-rc.118
+    '@foldkit/ui':
+      specifier: ^0.164.0
+      version: 0.164.0
     '@foldkit/vite-plugin':
       specifier: ^0.25.0
       version: 0.25.0
@@ -1619,6 +1622,71 @@ importers:
 
   examples/cloudflare-foldkit:
     dependencies:
+      '@foldkit/ui':
+        specifier: 'catalog:'
+        version: 0.164.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))
+      effect:
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118)
+    devDependencies:
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.25.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))(redis@6.2.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@tailwindcss/vite':
+        specifier: 'catalog:'
+        version: 4.3.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/node':
+        specifier: catalog:node24
+        version: 24.13.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/cloudflare-foldkit-hybrid:
+    dependencies:
+      effect:
+        specifier: 4.0.0-rc.118
+        version: 4.0.0-rc.118
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118)
+    devDependencies:
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.25.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))(redis@6.2.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@tailwindcss/vite':
+        specifier: 'catalog:'
+        version: 4.3.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@types/node':
+        specifier: catalog:node24
+        version: 24.13.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
+  examples/cloudflare-foldkit-ssg:
+    dependencies:
       effect:
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118
@@ -1650,6 +1718,9 @@ importers:
 
   examples/cloudflare-foldkit-ssr:
     dependencies:
+      '@foldkit/ui':
+        specifier: 'catalog:'
+        version: 0.164.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))
       effect:
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118
@@ -1660,12 +1731,18 @@ importers:
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.25.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))(redis@6.2.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@tailwindcss/vite':
+        specifier: 'catalog:'
+        version: 4.3.3(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       '@types/node':
         specifier: catalog:node24
         version: 24.13.3
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -12149,6 +12226,13 @@ packages:
 
   '@floating-ui/vue@1.1.9':
     resolution: {integrity: sha512-BfNqNW6KA83Nexspgb9DZuz578R7HT8MZw1CfK9I6Ah4QReNWEJsXWHN+SdmOVLNGmTPDi+fDT535Df5PzMLbQ==}
+
+  '@foldkit/ui@0.164.0':
+    resolution: {integrity: sha512-sP2+Y+l2HftVQgDHvIulvoYR7wreuC6aeaPLoiu9cpipPngLGRa1PcMNeYz0jbw5lcwjWZJkst4csndyE0vo1w==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      effect: 4.0.0-rc.118
+      foldkit: '>=0.163.0'
 
   '@foldkit/vite-plugin@0.25.0':
     resolution: {integrity: sha512-lNOMlXZAHJOm5dDYE+UbOEXudR+zu9TNxmtgPfQnZ6V66jHYEELFu2cHkfz9TNTxNjz86jwGe2kNPMu9VTAadA==}
@@ -27179,6 +27263,12 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
+
+  '@foldkit/ui@0.164.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))':
+    dependencies:
+      '@floating-ui/dom': 1.8.0
+      effect: 4.0.0-rc.118
+      foldkit: 0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118)
 
   '@foldkit/vite-plugin@0.25.0(effect@4.0.0-rc.118)(foldkit@0.164.0(@effect/platform-browser@4.0.0-rc.118(effect@4.0.0-rc.118))(effect@4.0.0-rc.118))(redis@6.2.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:

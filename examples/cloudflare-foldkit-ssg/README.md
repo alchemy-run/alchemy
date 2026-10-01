@@ -1,8 +1,9 @@
-# cloudflare-foldkit
+# cloudflare-foldkit-ssg
 
-The counter scaffold from `create-foldkit-app --rendering spa --example counter`.
-HTML contains an empty app container; `Runtime.run` renders it in the browser.
-Cloudflare serves the same shell for deep links.
+The routed scaffold from `create-foldkit-app --rendering ssg`.
+Foldkit prerenders `/` and `/about` during `vite build`. Cloudflare serves those
+HTML files from its asset layer, and `Runtime.hydrate` makes them interactive.
+The server entry limits the app to those two routes; unknown pages return 404.
 
 ## Run on Cloudflare
 
@@ -23,7 +24,7 @@ or build identity declaration is required.
 
 ## Scaffold source
 
-Application files come from [Foldkit’s generator and examples](https://github.com/foldkit/foldkit/tree/24f1c43eaaf74a83b6e338d72ba98422b7ac8ec4/examples/counter)
+Application files come from [Foldkit’s generator and examples](https://github.com/foldkit/foldkit/tree/24f1c43eaaf74a83b6e338d72ba98422b7ac8ec4/packages/create-foldkit-app/templates/rendering/ssg)
 (`create-foldkit-app` 0.36.0, Foldkit 0.164.0). They were produced using the
 generator’s `createProject` function. Alchemy adds the deployment file, workspace
 package configuration and integration tests.
