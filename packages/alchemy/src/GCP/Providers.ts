@@ -3317,18 +3317,13 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * );
  * ```
  */
-const gcpCredentials = Credentials.fromAuthProvider().pipe(
-  Layer.provide(GcpAuth),
-);
-
 /** Auth + env + HTTP client for resource providers, HTTP bindings, and GKE. */
-const gcpLive = Layer.mergeAll(
-  gcpCredentials,
-  fromCredentials().pipe(Layer.provide(gcpCredentials)),
-  GcpAuth,
-  ProfileStoreLive,
-  CredentialsStoreLive,
-  FetchHttpClient.layer,
+const gcpLive = fromCredentials().pipe(
+  Layer.provideMerge(Credentials.fromAuthProvider()),
+  Layer.provideMerge(GcpAuth),
+  Layer.provideMerge(ProfileStoreLive),
+  Layer.provideMerge(CredentialsStoreLive),
+  Layer.provideMerge(FetchHttpClient.layer),
 );
 
 const makeProviders = () =>
