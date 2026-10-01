@@ -31,6 +31,12 @@ before writing code and follow them as written:
 - **Documentation Generation** — JSDoc is the only docs source.
 - **The Resource Factory Process** — how to fan the work out to agents.
 
+Those rules existed while the GCP provider was built, and its first review
+still found the same violations in hundreds of files. Reading the rules is
+not enough: [review.md](review.md) turns each of them into a check with a
+command and an expected result. Run that review at every wave boundary and
+before step 10; a provider with unexplained hits is not done.
+
 ## Step 0 — get credentials first
 
 **Always ask the user for credentials for the upstream provider before
@@ -151,7 +157,8 @@ rebuilds every layer per call and runs the test process out of memory.
 
 Implement each resource per **Reconciler doctrine**, co-locating the
 contract and provider in `src/<Provider>/<Service>/<Resource>.ts`. These
-are the mistakes that most often slip through review:
+are the mistakes that most often slip through review (each has a check in
+[review.md](review.md)):
 
 - **Block until ready.** `reconcile` returns only after the API reports the
   resource usable: poll the long-running operation to completion and then
@@ -215,7 +222,46 @@ Scarce account quotas (networks, clusters, IP addresses) are shared with a
 semaphore in a test helper, or moved to less-used regions. The suite still
 runs in one process: `pnpm test test/<Provider> --profile testing`.
 
-## Step 7 — close the loop
+## Step 7 — framework websites
+
+A provider that can run a web server or serve static files ships
+`<Provider>.Website.<Framework>` composites, so a user deploys an Astro or
+Next.js app with one call:
+
+```ts
+const site = yield* Hetzner.Website.Astro("Site", { rootDir: "./web" });
+```
+
+Ship the same framework set as the existing providers (`ls
+packages/alchemy/src/Hetzner/Website` is the current list: Astro, Foldkit,
+Nextjs, Nuxt, Octane, ReactRouter, SolidStart, StaticSite, SvelteKit,
+TanStackStart, Vinext, Vite, Vocs, Waku). Copy the layout of
+`src/Hetzner/Website/` or `src/Fly/Website/`:
+
+- `FrameworkSite.ts` owns `makeFrameworkSite`, which builds through the
+  framework integration (`@alchemy.run/frontend-frameworks/<framework>`)
+  and deploys the build output onto the provider's compute. Its shared
+  props (`rootDir`, `memo`, `dev`, `env`, `assets`, `domain`, `tags`) keep
+  the names and meaning the sibling providers use.
+- One small file per framework that only sets the framework specifier, the
+  deploy target, and the framework's own option block.
+- `StaticSite.ts` for assets-only sites, and `index.ts` exported from the
+  provider barrel as `export * as Website from "./Website/index.ts"`.
+
+The deploy target decides the work. Providers that run containers or VMs
+use the Node target (`@alchemy.run/frontend-frameworks/<framework>/node`)
+through the shared `src/Website/Server.ts`. A provider with its own
+serverless runtime needs a new target per framework in
+`packages/frontend-frameworks/src/<framework>/` next to `aws.ts`,
+`cloudflare.ts`, and `neon.ts`.
+
+Each framework gets a live `test/<Provider>/Website/<Framework>.test.ts`, a
+`<Framework>.local.test.ts` for `alchemy dev`, and a shared
+`PropSurface.test.ts`; an `examples/<provider>-website-<framework>`
+example listed in `scripts/test-examples.ts`; and a page under
+`website/src/content/docs/<provider>/frontend/`.
+
+## Step 8 — close the loop
 
 Every failure the live run exposes is classified before it is fixed, in
 this order: **provider bug > distilled patch > test fix**.
@@ -239,7 +285,13 @@ After a full run, list what is still alive in the test account
 provider's list calls). A green test that
 leaves resources behind is a provider bug.
 
-## Step 8 — docs, examples, and the PR
+## Step 9 — review gate
+
+Run every check in [review.md](review.md) with a fresh reviewer subagent
+and fix what it finds. Report the result table to the user with the
+counts, so they can see what was checked without re-reviewing by hand.
+
+## Step 10 — docs, examples, and the PR
 
 - JSDoc on every resource, prop, attribute, and binding, with `###`
   sections and `**Example:**` blocks; then `pnpm docs:check-jsdoc` and
@@ -251,6 +303,7 @@ leaves resources behind is a provider bug.
   distilled PRs it depends on.
 
 A provider is done when every in-scope resource has a passing live test,
-bindings follow the AWS/Cloudflare patterns and are least privilege,
-examples deploy, docs are generated, the test account is clean after a full
-run, and every SDK mismatch found along the way is a merged distilled patch.
+bindings follow the AWS/Cloudflare patterns and are least privilege, the
+framework websites deploy, examples deploy, docs are generated, the review
+gate is clean, the test account is clean after a full run, and every SDK
+mismatch found along the way is a merged distilled patch.
