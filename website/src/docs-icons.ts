@@ -50,6 +50,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   CLI: l("square-terminal"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
+  Azure: b("microsoftazure"),
   Hetzner: b("hetzner"),
   Fly: b("flydotio"),
   Railway: b("railway"),
@@ -108,6 +109,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
   Cloudflare: b("cloudflare"),
+  Azure: b("microsoftazure"),
   Hetzner: b("hetzner"),
   Fly: b("flydotio"),
   Railway: b("railway"),

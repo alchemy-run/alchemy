@@ -1,0 +1,63 @@
+---
+title: Setup
+description: Connect alchemy to Azure — a subscription, a service principal, and a profile.
+---
+
+Alchemy authenticates to Azure as a Microsoft Entra **service
+principal** and deploys into one **subscription**. Use a dedicated
+subscription for development and testing.
+
+## Create a service principal
+
+With the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli),
+sign in and create a service principal scoped to your subscription:
+
+```sh
+az login
+az account set --subscription <subscription-id>
+az ad sp create-for-rbac \
+  --name alchemy-deployer \
+  --role Owner \
+  --scopes /subscriptions/<subscription-id>
+```
+
+The command prints `appId` (client ID), `password` (client secret), and
+`tenant` (tenant ID). The `Owner` role is needed to create role
+assignments; `Contributor` is enough if your stacks don't grant roles.
+
+## Register the provider
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "alchemy/Azure";
+
+providers: Azure.providers(),
+```
+
+Run `alchemy profile edit --add Azure` and enter the tenant ID, client
+ID, client secret, subscription ID, and an optional default location.
+They are saved under `~/.alchemy/credentials/<profile>/`. Alchemy
+exchanges the client secret for a short-lived Azure Resource Manager
+token and refreshes it before it expires.
+
+In CI (`CI=true`), profiles are bypassed. Set the standard Azure SDK
+variables `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+and `AZURE_SUBSCRIPTION_ID`.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Resource providers
+
+A new subscription may not have every Azure resource provider
+registered. If a deploy fails with `MissingRegistration`, register the
+namespace once:
+
+```sh
+az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.ManagedIdentity
+```
+
+## Next steps
+
+- [Azure overview](/azure) — resources and ownership markers.

@@ -1,0 +1,99 @@
+---
+title: Azure
+description: Microsoft Azure resources — resource groups, storage, managed identities, and role assignments — declared as Effects and deployed through Azure Resource Manager.
+---
+
+The Azure provider deploys resources through Azure Resource Manager (ARM)
+with a Microsoft Entra service principal. Every resource is tagged with
+the stack, stage, and logical ID that own it, so `alchemy unsafe nuke`
+can find and clean up what Alchemy created.
+
+New here? [Set up credentials](/azure/setup) first.
+
+:::caution
+The Azure provider is in early preview. Its resources have not been
+verified against a live subscription yet.
+:::
+
+## Providers
+
+```typescript
+import * as Azure from "alchemy/Azure";
+import * as Layer from "effect/Layer";
+
+providers: Azure.providers().pipe(
+  // Optional: the default location for resources that don't set one.
+  Layer.provideMerge(Azure.location("westeurope")),
+),
+```
+
+Without an `Azure.location(...)` layer, resources default to the
+profile's location, then `eastus`. A resource's recorded location always
+wins, so changing the default never moves existing resources.
+
+## Resources
+
+Everything lives in a resource group:
+
+```typescript
+const group = yield* Azure.Resources.ResourceGroup("app");
+```
+
+A storage account holds Blob, Queue, Table, and File storage. Accounts
+are HTTPS-only, require TLS 1.2, and block anonymous blob access unless
+you opt in:
+
+```typescript
+const account = yield* Azure.Storage.StorageAccount("files", {
+  resourceGroup: group.resourceGroupName,
+});
+
+const uploads = yield* Azure.Storage.BlobContainer("uploads", {
+  resourceGroup: group.resourceGroupName,
+  storageAccount: account.storageAccountName,
+});
+```
+
+Grant access with a managed identity and a role assignment scoped to
+the one resource it needs:
+
+```typescript
+const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
+  resourceGroup: group.resourceGroupName,
+});
+
+yield* Azure.Authorization.RoleAssignment("api-reads-files", {
+  scope: account.storageAccountId,
+  roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
+  principalId: identity.principalId,
+  principalType: "ServicePrincipal",
+});
+```
+
+## Ownership markers
+
+Resources that support tags carry `alchemy::stack`, `alchemy::stage`, and
+`alchemy::id`. Two resource types have no tags:
+
+- **Blob containers** store the same markers in container metadata as
+  `alchemy_stack`, `alchemy_stage`, and `alchemy_id`.
+- **Role assignments** end their description with
+  `[alchemy <stack>/<stage>/<id>]`.
+
+## Out of scope
+
+The Azure SDK covers every Azure Resource Manager provider. These areas
+are not planned as Alchemy resources:
+
+- Data-plane APIs for end-user content (blobs, queue messages, secrets
+  values) — these belong in bindings, not resources.
+- Billing, reservations, consumption, cost management, and support
+  tickets.
+- Microsoft Entra directory objects (users, groups, app registrations),
+  which live in Microsoft Graph rather than ARM.
+- Retired or deprecated services (for example Azure Dev Spaces, Time
+  Series Insights, and classic Scheduler).
+
+## Next steps
+
+- [Setup](/azure/setup) — create a service principal and a profile.

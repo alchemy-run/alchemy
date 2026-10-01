@@ -21,6 +21,9 @@
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/azure/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/neon/tsconfig.json"
     },
     {
