@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-website-foldkit",
+  "name": "cloudflare-website-foldkit-spa",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -27,6 +27,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-website-foldkit"
+    "directory": "examples/cloudflare-website-foldkit-spa"
   }
 }

@@ -2286,7 +2286,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  examples/cloudflare-website-foldkit:
+  examples/cloudflare-website-foldkit-spa:
     dependencies:
       effect:
         specifier: 4.0.0-rc.118

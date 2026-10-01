@@ -42,7 +42,7 @@ const examples = [
   "./examples/cloudflare-foldkit-ssr",
   "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
-  "./examples/cloudflare-website-foldkit",
+  "./examples/cloudflare-website-foldkit-spa",
   "./examples/cloudflare-website-nextjs",
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-react-router",

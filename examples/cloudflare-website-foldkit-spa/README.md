@@ -1,4 +1,4 @@
-# Cloudflare Website: Foldkit
+# Cloudflare Website: Foldkit SPA
 
 Deploys a [Foldkit](https://foldkit.dev) app to Cloudflare Workers with
 `Cloudflare.Website.Foldkit` — no `main` entry, build command, or
