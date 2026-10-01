@@ -3,12 +3,13 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { nodeFileTrace } from "@vercel/nft";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { resolve } from "node:path";
+import * as Path from "effect/Path";
 import type { TraceInput } from "./Trace.ts";
 
 NodeRuntime.runMain(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const inputPath = process.argv[2];
     const outputPath = process.argv[3];
     if (!inputPath || !outputPath)
@@ -53,7 +54,7 @@ NodeRuntime.runMain(
                   /\.[cm]?[jt]sx?$/.test(file) &&
                   !file.split(/[\\/]/).includes(".alchemy"),
               )
-              .map((file) => resolve(input.base, file)),
+              .map((file) => path.resolve(input.base, file)),
           ]),
         ],
         false,

@@ -104,6 +104,8 @@ test.provider(
       expect(noop.evaluation.evaluationId).toEqual(
         initial.evaluation.evaluationId,
       );
+      // The observed evaluation lists no datasets; state keeps the requested ids.
+      expect(noop.evaluation.datasetIds).toEqual([initial.dataset.datasetId]);
 
       // Evaluations are create-only — renaming is a replacement.
       const renamed = yield* stack.deploy(program("alchemy-test-eval-v2"));
