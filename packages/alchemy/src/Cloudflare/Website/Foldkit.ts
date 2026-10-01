@@ -124,7 +124,6 @@ export interface FoldkitProps<
  * export default defineConfig({
  *   plugins: [
  *     foldkit({
- *       buildId: process.env.FOLDKIT_BUILD_ID,
  *       ssr: { serverEntry: "/src/entry.server.ts", build: true },
  *     }),
  *   ],
@@ -134,7 +133,6 @@ export interface FoldkitProps<
  * **Example:** vite.config.ts for a prerendered app
  * ```typescript
  * foldkit({
- *   buildId: process.env.FOLDKIT_BUILD_ID,
  *   ssr: {
  *     serverEntry: "/src/entry.server.ts",
  *     build: { prerender: true },

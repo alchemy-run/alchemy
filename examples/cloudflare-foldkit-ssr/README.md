@@ -18,7 +18,7 @@ Load `/?count=7` and view source: the count is in the HTML before any JavaScript
 
 ## The build id
 
-`renderToString` and `Runtime.hydrate` both require a build id, and hydration refuses a page whose id is not the running build's. `vite.config.ts` takes it from `FOLDKIT_BUILD_ID` and stores a generated fallback back into the environment, so a local build always has one and every config read within a build resolves the same id. A real deployment should pass a value it already has, such as a commit or release tag, and give the client and server builds the same one. It is published in the page, so it must not be a secret.
+`@foldkit/vite-plugin` automatically generates a shared build identity for the coordinated client and server builds. `renderToString` and `Runtime.hydrate` use it by default, so hydration can reject a page from another deployment without application code passing a build id.
 
 ## Commands
 

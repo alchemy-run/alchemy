@@ -18,4 +18,4 @@ const application = Runtime.makeApplication({
 // read back out of the page — `hydrate` takes no Flags producer of its own.
 // The build id is what makes adoption safe: hydration compares it against the
 // one the server stamped and refuses a page from another deployment.
-Runtime.hydrate(application, { buildId: import.meta.env.FOLDKIT_BUILD_ID });
+Runtime.hydrate(application);

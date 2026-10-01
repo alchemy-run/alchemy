@@ -55,7 +55,7 @@ catalog:
   "@effect/sql-sqlite-do": ">=4.0.0-rc.116 || >=4.0.0"
   "@effect/tsgo": "0.36.4"
   "@effect/vitest": ">=4.0.0-rc.116 || >=4.0.0"
-  "@foldkit/vite-plugin": "^0.24.0"
+  "@foldkit/vite-plugin": "^0.25.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
   "@fontsource-variable/jetbrains-mono": "^5.3.0"
@@ -138,7 +138,7 @@ catalog:
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.10.1"
-  foldkit: "^0.163.0"
+  foldkit: "^0.164.0"
   heap-js: "^2.5.0"
   hono: "^4.12.14"
   http-cache-semantics: "^4.2.0"
@@ -234,8 +234,8 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20260918.1
   workerd: 1.20260918.1
-  effect: 4.0.0-rc.116
-  "@effect/platform-browser": 4.0.0-rc.116
+  effect: 4.0.0-rc.117
+  "@effect/platform-browser": 4.0.0-rc.117
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -257,9 +257,9 @@ minimumReleaseAgeExclude:
   - "@effect/sql-pg@4.0.0-rc.116"
   - "@effect/sql-sqlite-do@4.0.0-rc.116"
   - "@effect/vitest@4.0.0-rc.116"
-  - "@foldkit/vite-plugin@0.24.0"
-  - effect@4.0.0-rc.116
-  - foldkit@0.163.0
+  - "@foldkit/vite-plugin@0.25.0"
+  - effect@4.0.0-rc.117
+  - foldkit@0.164.0
   - "@solidjs/start@2.0.4"
   - "@cloudflare/workers-types@5.20260918.1"
   - "@cloudflare/workerd-darwin-64@1.20260918.1"
