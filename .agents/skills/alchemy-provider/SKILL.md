@@ -18,6 +18,14 @@ The live API is the only authority. A resource is done when its test
 passes against the real provider, and every mismatch that test surfaced is
 fixed in distilled rather than worked around in alchemy.
 
+**The target is the whole provider.** "Create a provider for X" means every
+resource in every service the distilled SDK covers is either implemented
+and live-tested, or listed as out of scope with a reason from step 2. A
+handful of foundation resources is the first wave, never the deliverable.
+Cost is not a scoping reason: expensive resources are implemented like any
+other (see step 6 for running their tests). The user narrows scope; the
+agent does not.
+
 `AGENTS.md` owns the doctrines this skill relies on; read these sections
 before writing code and follow them as written:
 
@@ -57,9 +65,11 @@ Store what the user gives you in an Alchemy profile, never in the repo:
 `alchemy profile edit --profile testing --add <Provider>` (use the profile
 name the user asks for). Tests select it with `--profile <name>`. Never
 print a secret, write it to a tracked file, or put it in a PR, commit, or
-log. If the user cannot provide credentials yet, build and type-check the
-code, mark every live test as blocked in your report, and ask again; do not
-claim anything is tested.
+log. If the user has no credentials, give them the exact steps to create
+them (console path or CLI commands, roles to grant), offer to do it in the
+browser if they allow it, and keep working on the catalog and code
+meanwhile. Until credentials arrive, mark every live test as blocked in
+your report; do not claim anything is tested.
 
 ## Step 1 — the distilled SDK
 
@@ -87,19 +97,29 @@ run `pnpm install` so the workspace links the package.
 
 ## Step 2 — catalog and scope
 
-Before writing resources, list what the SDK exposes and decide what
-becomes a resource. Write the catalog to
-`processes/<Provider>/catalog/<service>.md` using the format in **The
-Resource Factory Process**: resources, props with replacement rules,
-attributes, lifecycle-to-operation mapping, bindings, testability, and
-priority.
+Catalog **every** service module in the SDK
+(`ls submodules/distilled/packages/<pkg>/src/services`) before writing
+resources; for a large SDK, fan the catalog out to research agents per
+**The Resource Factory Process**. Each service gets
+`processes/<Provider>/catalog/<service>.md` in that section's format:
+resources, props with replacement rules, attributes,
+lifecycle-to-operation mapping, bindings, testability, and priority.
+`processes/` is gitignored, so the catalog is the local order book; the
+committed record of scope is the overview page below.
 
-Decide scope explicitly and record it in the provider's website overview
-under an "Out of scope" section:
+`processes/<Provider>/catalog/INDEX.md` has one row per resource with a
+status of `missing`, `implemented`, `tested`, `blocked` (with the exact
+error), or `out-of-scope` (with the reason). Build waves from it and repeat
+until no row is `missing` or `implemented`. Every progress report and the
+final report quote its counts per status; "done" while any in-scope row is
+`missing` is a false claim.
+
+Decide scope per resource and record the out-of-scope list in the
+provider's website overview under an "Out of scope" section:
 
 - **In scope:** infrastructure the user configures and owns (databases,
   buckets, queues, networks, keys, functions, DNS).
-- **Out of scope:** end-user data APIs (mail, calendar, documents, videos),
+- **Out of scope** (the only valid reasons): end-user data APIs (mail, calendar, documents, videos),
   APIs that need end-user OAuth scopes, deprecated or retired APIs,
   billing/subscription objects, closed-beta endpoints, and duplicates of
   another service.
@@ -207,6 +227,10 @@ timeout 240 pnpm test test/<Provider>/<Service>/<Resource>.test.ts --profile tes
 
 What a test must prove:
 
+- **Every resource has its own test file**
+  (`test/<Provider>/<Service>/<Resource>.test.ts`). Deploying a resource
+  as a dependency inside another resource's test does not count, because
+  its own update, replace, and delete paths never run.
 - **Lifecycle runs by default.** Create, update, and (where applicable)
   replace against the real API. Slow lifecycles are gated behind one
   provider-wide flag with a realistic timeout; entitlement-bound ones keep
@@ -217,6 +241,13 @@ What a test must prove:
   binding is exercised with the host's identity, not the deployer's.
 - **Assertions can fail.** No always-true checks, no lists of acceptable
   tags, no early `return` that skips the assertions.
+
+**Expensive resources** (dedicated clusters, large VMs or databases,
+reserved capacity, anything billed per hour at a noticeable rate) are
+implemented and get full tests, but you do not run those tests on your own.
+Gate them behind the provider-wide slow flag, mark them `blocked: cost` in
+the index, and list them for the user with an estimate of what one run
+costs. Run them only after the user says so.
 
 Scarce account quotas (networks, clusters, IP addresses) are shared with a
 semaphore in a test helper, or moved to less-used regions. The suite still
@@ -302,7 +333,12 @@ counts, so they can see what was checked without re-reviewing by hand.
 - Open the alchemy PR per **Pull Request Conventions**, linking the
   distilled PRs it depends on.
 
-A provider is done when every in-scope resource has a passing live test,
+A draft PR for an early wave is fine; its description states the index
+counts and that the provider is incomplete.
+
+A provider is done when every SDK service is cataloged, every in-scope
+resource has its own passing live test (or is `blocked: cost` and the user
+has the list),
 bindings follow the AWS/Cloudflare patterns and are least privilege, the
 framework websites deploy, examples deploy, docs are generated, the review
 gate is clean, the test account is clean after a full run, and every SDK
