@@ -556,6 +556,25 @@ test.provider(
           },
         });
 
+        // Bucket configuration reads are eventually consistent. Observe the
+        // injected drift before reconciliation, or a stale AES256 read can
+        // incorrectly make the provider conclude that no repair is needed.
+        const driftedEncryption = yield* s3
+          .getBucketEncryption({ Bucket: bucketName })
+          .pipe(
+            Effect.map(
+              (result) =>
+                result.ServerSideEncryptionConfiguration?.Rules?.[0]
+                  ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+            ),
+            Effect.repeat({
+              until: (algorithm) => algorithm === "aws:kms",
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+        expect(driftedEncryption).toBe("aws:kms");
+
         const secured = yield* makeS3State({
           bucketName,
           prefix: "security-test",
