@@ -3,7 +3,6 @@ import * as Test from "@/Test/Alchemy";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@/Cloudflare/Providers.ts";
 import { waitForMetadata, waitForVectorize } from "./Readiness.ts";
-import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -59,12 +58,7 @@ const postJson = (url: string) =>
   );
 
 /** Drives the client surface using this worker's vector ID prefix. */
-const exercise = (
-  label: string,
-  baseUrl: string,
-  accountId: string,
-  indexName: string,
-) =>
+const exercise = (label: string, baseUrl: string) =>
   Effect.gen(function* () {
     // Gate on /health first to prove the script is resolvable.
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
@@ -79,23 +73,19 @@ const exercise = (
       Effect.timeout("15 seconds"),
     );
 
-    const upsertRes = (yield* postJson(`${baseUrl}/upsert`)) as {
-      mutationId: string;
-    };
+    const upsertRes = yield* postJson(`${baseUrl}/upsert`);
     expect(upsertRes).toMatchObject({ mutationId: expect.any(String) });
 
     const describeRes = yield* getJson(`${baseUrl}/describe`);
     expect(describeRes).toMatchObject({ dimensions: 32 });
 
-    // Observe processing and all read surfaces under one readiness budget.
-    // The fixture is the sole writer, so compare opaque mutation IDs exactly.
+    // Observe all read surfaces under one readiness budget. Both workers
+    // write to the shared index, so readiness is judged by this worker's
+    // own vectors rather than the index-wide processed mutation.
     const { queryBody, getRes, filteredBody } = yield* waitForVectorize({
-      description: `[${label}] mutation ${upsertRes.mutationId} processed and visible to query, ID lookup and metadata filtering`,
+      description: `[${label}] upserted vectors visible to query, ID lookup and metadata filtering`,
       effect: Effect.all(
         {
-          progress: vectorize
-            .getIndexInfo({ accountId, indexName })
-            .pipe(Effect.timeout("10 seconds")),
           queryBody: getJson(`${baseUrl}/query`).pipe(
             Effect.map((body) => body as { count: number; ids: string[] }),
           ),
@@ -111,8 +101,7 @@ const exercise = (
         },
         { concurrency: "unbounded" },
       ),
-      predicate: ({ progress, queryBody, getRes, filteredBody }) =>
-        progress.processedUpToMutation === upsertRes.mutationId &&
+      predicate: ({ queryBody, getRes, filteredBody }) =>
         queryBody.count >= 3 &&
         getRes.ids.length === 2 &&
         filteredBody.ids.length === 1 &&
@@ -123,7 +112,7 @@ const exercise = (
     expect(getRes).toEqual({ ids: [`${label}-a`, `${label}-b`] });
     expect(filteredBody.ids).toEqual([`${label}-b`]);
     expect(filteredBody.kinds).toEqual(["second"]);
-  }).pipe(logLevel, Effect.provide(CloudflareApiLive()));
+  }).pipe(logLevel);
 
 const stack = beforeAll(
   Effect.gen(function* () {
@@ -131,13 +120,9 @@ const stack = beforeAll(
     const deployed = yield* deploy(Stack);
     const { accountId } = yield* yield* CloudflareEnvironment;
     yield* waitForMetadata(accountId, deployed.indexName, [
-      {
-        propertyName: "kind",
-        indexType: "string",
-        mutationId: deployed.metadataMutationId,
-      },
+      { propertyName: "kind", indexType: "string" },
     ]);
-    return { ...deployed, accountId };
+    return deployed;
   }).pipe(Effect.provide(CloudflareApiLive())),
   { timeout: 210_000 },
 );
@@ -146,8 +131,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "effect-worker: SearchIndex(index) exercises the client surface",
   Effect.gen(function* () {
-    const { effectWorkerUrl, accountId, indexName } = yield* stack;
-    yield* exercise("effect", effectWorkerUrl, accountId, indexName);
+    const { effectWorkerUrl } = yield* stack;
+    yield* exercise("effect", effectWorkerUrl);
   }),
   {
     tags: [
@@ -163,8 +148,8 @@ test(
 test(
   "async-worker: env Vectorize binding exercises the client surface",
   Effect.gen(function* () {
-    const { asyncWorkerUrl, accountId, indexName } = yield* stack;
-    yield* exercise("async", asyncWorkerUrl, accountId, indexName);
+    const { asyncWorkerUrl } = yield* stack;
+    yield* exercise("async", asyncWorkerUrl);
   }),
   {
     tags: [

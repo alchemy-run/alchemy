@@ -33,13 +33,12 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const index = yield* TestIndex;
-    const metadata = yield* ensureMetaIndex(index);
+    yield* ensureMetaIndex(index);
     const asyncWorker = yield* AsyncWorker;
     const effectWorker = yield* VectorizeEffectWorker;
 
     return {
       indexName: index.indexName,
-      metadataMutationId: metadata.mutationId,
       asyncWorkerUrl: asyncWorker.url.as<string>(),
       effectWorkerUrl: effectWorker.url.as<string>(),
     };

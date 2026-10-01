@@ -49,22 +49,14 @@ export const waitForVectorize = <A, E, R>(input: {
 export const waitForMetadata = (
   accountId: string,
   indexName: string,
-  expected: ReadonlyArray<{
-    propertyName: string;
-    indexType: string;
-    mutationId?: string;
-  }>,
+  expected: ReadonlyArray<{ propertyName: string; indexType: string }>,
 ) =>
   waitForVectorize({
     description: `Metadata ready on ${indexName}: ${JSON.stringify(expected)}`,
-    effect: Effect.all(
-      {
-        metadata: vectorize.listIndexMetadataIndexes({ accountId, indexName }),
-        progress: vectorize.getIndexInfo({ accountId, indexName }),
-      },
-      { concurrency: 2 },
-    ).pipe(Effect.timeout("10 seconds")),
-    predicate: ({ metadata }) =>
+    effect: vectorize
+      .listIndexMetadataIndexes({ accountId, indexName })
+      .pipe(Effect.timeout("10 seconds")),
+    predicate: (metadata) =>
       expected.every(
         (field) =>
           metadata.metadataIndexes?.some(
@@ -73,4 +65,4 @@ export const waitForMetadata = (
               entry.indexType?.toLowerCase() === field.indexType,
           ) === true,
       ),
-  }).pipe(Effect.map(({ metadata }) => metadata.metadataIndexes!));
+  }).pipe(Effect.map((metadata) => metadata.metadataIndexes!));
