@@ -109,6 +109,6 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:authorization", "live"],
-    timeout: 300_000,
+    timeout: 600_000,
   },
 );

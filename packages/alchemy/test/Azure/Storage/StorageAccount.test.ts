@@ -160,6 +160,6 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:storage", "live"],
-    timeout: 420_000,
+    timeout: 600_000,
   },
 );
