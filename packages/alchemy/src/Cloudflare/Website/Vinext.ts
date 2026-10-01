@@ -193,19 +193,9 @@ export const Vinext: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
-  id?: string,
-  propsEff?:
-    | InputProps<VinextProps<Bindings>>
-    | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
-) =>
+} = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (
-        id: string,
-        propsEff?:
-          | InputProps<VinextProps<Bindings>>
-          | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
-      ) => effectClass(Vinext(id, propsEff))
+    ? (id: string, propsEff: any) => effectClass(Vinext(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {

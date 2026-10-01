@@ -302,19 +302,9 @@ export const Nuxt: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
-  id?: string,
-  propsEff?:
-    | InputProps<NuxtProps<Bindings>>
-    | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
-) =>
+} = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (
-        id: string,
-        propsEff?:
-          | InputProps<NuxtProps<Bindings>>
-          | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
-      ) => effectClass(Nuxt(id, propsEff))
+    ? (id: string, propsEff: any) => effectClass(Nuxt(id, propsEff))
     : Worker(
         id,
         Effect.map(
@@ -330,7 +320,7 @@ export const Nuxt: {
             main: undefined!,
             source: {
               provider: NUXT_SOURCE_PROVIDER,
-              devMode: "server" as const,
+              devMode: "server",
               rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,

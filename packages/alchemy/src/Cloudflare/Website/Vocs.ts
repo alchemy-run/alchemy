@@ -161,19 +161,9 @@ export const Vocs: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
-  id?: string,
-  propsEff?:
-    | InputProps<VocsProps<Bindings>>
-    | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
-) =>
+} = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (
-        id: string,
-        propsEff?:
-          | InputProps<VocsProps<Bindings>>
-          | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
-      ) => effectClass(Vocs(id, propsEff))
+    ? (id: string, propsEff: any) => effectClass(Vocs(id, propsEff))
     : Worker(
         id,
         Effect.map(
@@ -189,7 +179,7 @@ export const Vocs: {
             main: undefined!,
             source: {
               provider: VOCS_SOURCE_PROVIDER,
-              devMode: "server" as const,
+              devMode: "server",
               options: {
                 rootDir: props?.rootDir,
                 outDir: props?.outDir,

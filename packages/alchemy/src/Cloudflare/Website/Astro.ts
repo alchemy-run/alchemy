@@ -272,19 +272,9 @@ export const Astro: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
-  id?: string,
-  propsEff?:
-    | InputProps<AstroProps<Bindings>>
-    | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
-) =>
+} = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (
-        id: string,
-        propsEff?:
-          | InputProps<AstroProps<Bindings>>
-          | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
-      ) => effectClass(Astro(id, propsEff))
+    ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {

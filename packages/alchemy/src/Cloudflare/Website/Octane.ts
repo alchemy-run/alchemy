@@ -218,19 +218,9 @@ export const Octane: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
-  id?: string,
-  propsEff?:
-    | InputProps<OctaneProps<Bindings>>
-    | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
-) =>
+} = ((id?: any, propsEff?: any) =>
   id === undefined
-    ? (
-        id: string,
-        propsEff?:
-          | InputProps<OctaneProps<Bindings>>
-          | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
-      ) => effectClass(Octane(id, propsEff))
+    ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
     : Worker(
         id,
         Effect.map(
@@ -243,7 +233,7 @@ export const Octane: {
             main: undefined!,
             source: {
               provider: OCTANE_SOURCE_PROVIDER,
-              devMode: "server" as const,
+              devMode: "server",
               rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
