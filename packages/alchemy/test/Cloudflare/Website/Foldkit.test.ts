@@ -63,10 +63,8 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 describe.concurrent("Foldkit", () => {
-  // A client-only build writes no `foldkit.build.json`, and that absence is
-  // what gives it the single-page-application fallback: a deep link serves
-  // the template and the app's router resolves it. A server-rendered build
-  // records itself and gets the opposite — see FoldkitBuild.ts.
+  // Client-only builds have no Foldkit SSR build plugin and receive SPA
+  // fallback; server-rendered builds expose metadata instead.
   test.provider(
     "Foldkit: a client-only app gets the single-page-application fallback",
     (stack) =>

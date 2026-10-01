@@ -137,9 +137,8 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
- * additionally reads the build's own `foldkit.build.json` to settle asset
- * routing for a server-rendered or prerendered app, and wires the rebuild
- * scope for you.
+ * derives asset routing from Foldkit's completed build metadata. It also
+ * supplies SPA fallback for client-only apps.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
