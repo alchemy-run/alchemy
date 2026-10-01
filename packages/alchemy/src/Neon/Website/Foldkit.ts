@@ -3,10 +3,10 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 import type { ViteProps } from "./Vite.ts";
 
 /** Configuration for a Foldkit website. */
-export interface FoldkitProps extends FrameworkSiteProps {
+export type FoldkitProps = FrameworkSiteProps & {
   /** Serializable overrides merged over vite.config.*. */
   vite?: ViteProps["vite"];
-}
+};
 
 /**
  * Deploy a [Foldkit](https://foldkit.dev) application to Neon Functions.

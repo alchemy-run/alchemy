@@ -64,13 +64,13 @@ export default {
         if (found) return serve(found, request);
 ${options.notFoundHandling === "spa" ? '        const fallback = lookup("/index.html");\n        if (fallback) return serve(fallback, request);' : ""}
       }
+${options.notFoundHandling === "404-page" ? '      if (request.method === "GET" || request.method === "HEAD") {\n        const missing = lookup("/404.html");\n        if (missing) return serve(missing, request, 404);\n      }' : ""}
       if (handle) {
         const response = await handle(request);
         if (request.method !== "HEAD" || response.body === null) return response;
         await response.body.cancel();
         return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers });
       }
-${options.notFoundHandling === "404-page" ? '      if (request.method === "GET" || request.method === "HEAD") {\n        const missing = lookup("/404.html");\n        if (missing) return serve(missing, request, 404);\n      }' : ""}
       return new Response(request.method === "HEAD" ? null : "Not Found", { status: 404 });
     } catch (error) {
       console.error("Neon website request failed", error);

@@ -55,6 +55,32 @@ const call = (module: Entry, pathname: string, method = "GET") =>
 const text = (response: Response) => Effect.tryPromise(() => response.text());
 
 describe("Neon Fetch entry", () => {
+  it("applies explicit 404-page routing before SSR, matching the Node host", () =>
+    run(
+      Effect.gen(function* () {
+        const module = yield* entry(
+          {
+            notFoundHandling: "404-page",
+            handler: {
+              kind: "fetch",
+              imports: "",
+              expr: "request => new Response(request.method)",
+            },
+          },
+          { "404.html": "Custom missing page" },
+        );
+        const missing = yield* call(module, "/missing");
+        expect(missing.status).toBe(404);
+        expect(yield* text(missing)).toBe("Custom missing page");
+        const head = yield* call(module, "/missing", "HEAD");
+        expect(head.status).toBe(404);
+        expect(yield* text(head)).toBe("");
+        expect(yield* text(yield* call(module, "/missing", "POST"))).toBe(
+          "POST",
+        );
+      }),
+    ));
+
   it("exports Fetch without binding a listening socket", () => {
     const source = makeNeonServeEntrySource({});
     expect(source).toContain("export default");
