@@ -58,6 +58,8 @@ export interface NodeServeEntryOptions {
    * fallback.
    */
   readonly handler?: NodeServeHandler | undefined;
+  /** Serve a prerendered index.html at / even when a handler exists. @default false */
+  readonly serveRootIndex?: boolean | undefined;
   /**
    * Vocs/Waku: serve `about/index.html` at `/about` (CF
    * `htmlHandling: "drop-trailing-slash"`).
@@ -198,7 +200,7 @@ const safeJoin = (urlPath) => {
 const lookupStatic = (urlPath) => {
   const base = safeJoin(urlPath);
   if (base === undefined) return undefined;
-  const isRoot = ${handler === undefined ? "false" : `(urlPath === "/" || urlPath === "")`};
+  const isRoot = ${handler === undefined || options.serveRootIndex ? "false" : `(urlPath === "/" || urlPath === "")`};
   const direct = existingFile(base, !isRoot);
   if (direct) return direct;
 ${
@@ -447,6 +449,7 @@ export const writeNodeServeEntry = (
         nodeServe: {
           clientDirExpression: options.clientDirExpression,
           handler: options.handler,
+          serveRootIndex: options.serveRootIndex,
           htmlHandling: options.htmlHandling,
           notFoundHandling: options.notFoundHandling,
         },

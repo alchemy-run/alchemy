@@ -5,6 +5,7 @@ import type {
   RuntimeWorker,
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
+import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
 import type { BundleOutput } from "../../Bundle/Bundle.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
@@ -70,6 +71,7 @@ export interface ViteBuildChildConfig {
    */
   env: Record<string, unknown>;
   main: string | undefined;
+  framework?: "foldkit";
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;
@@ -80,6 +82,7 @@ export interface ViteBuildChildConfig {
 /** Result the build child writes to `outputPath` (V8-serialized). */
 export interface ViteBuildChildResult {
   clientDirectory: string | undefined;
+  foldkit: FoldkitBuildMetadata | undefined;
   base: string | undefined;
   serverBundle: BundleOutput | undefined;
   externalWorkspaces: string[];

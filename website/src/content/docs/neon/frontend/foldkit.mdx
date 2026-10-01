@@ -1,13 +1,13 @@
 ---
 title: Foldkit
-description: Package a client-only Foldkit Vite app for Neon Functions with SPA routing.
+description: Deploy Foldkit SPA, SSR, and prerendered applications to Neon Functions with native local development.
 sidebar:
   order: 11
 ---
 
-`Neon.Website.Foldkit` is the client-only Vite composition with SPA routing. It
-packages built assets with a Node 24 Fetch file handler in a Neon Function ZIP,
-not a Foldkit SSR server, container, listening Bun server, or S3 website.
+`Neon.Website.Foldkit` supports browser-only SPAs, server rendering, and
+prerendered pages with request-time fallback. It packages Foldkit's assets and
+optional generated handler as a Node 24 Fetch module in a Neon Function ZIP.
 
 ## Prepare the app
 
@@ -23,8 +23,8 @@ pnpm add -D @alchemy.run/frontend-frameworks @vercel/nft
 ```
 
 Keep the `foldkit()` plugin from `@foldkit/vite-plugin` in `vite.config.*` and
-retain your application's normal entry configuration. The constructor delegates
-to Vite; there is no separate server adapter to configure.
+retain your application's normal entry configuration. No application adapter or
+server wrapper is required.
 
 ## Define the stack
 
@@ -51,8 +51,48 @@ For a multi-page build with a `404.html`, set `assets.notFoundHandling` to
 `"404-page"`. Like Vite, `vite.outDir` and `vite.base` are supported overrides.
 
 `env` values with Vite's `VITE_*` prefix are embedded into the browser build.
-There is no application server here to consume private runtime values; use a
-separate backend for privileged operations.
+Server-rendered apps read private runtime values from `process.env`. Keep secrets
+out of `VITE_*` keys because those values reach the browser.
+
+## Server rendering and prerendering
+
+Use Foldkit 0.164.0 and `@foldkit/vite-plugin` 0.25.0 or newer. Keep rendering
+configuration in your app's `vite.config.ts`:
+
+```typescript
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit({
+    ssr: {
+      serverEntry: "/src/entry.server.ts",
+      build: { prerender: true },
+    },
+  })],
+});
+```
+
+The server entry exports `renderPage` and, when prerendering is enabled,
+`prerenderPaths`. Use `build: true` for SSR without prerendering. See
+[Foldkit's server rendering guide](https://foldkit.dev/core/server-rendering)
+for the application contract.
+
+The same Website declaration detects the generated handler automatically.
+GET and HEAD requests serve assets and prerendered pages first, including `/`
+when it was prerendered. Remaining requests go to Foldkit's handler; POST
+requests bypass static assets. SSG deployments retain the generated handler
+for paths that were not prerendered, matching the SvelteKit/TanStack Start path.
+
+Browser-only builds keep SPA fallback. An explicit `assets.notFoundHandling`
+override takes precedence. Avoid SPA fallback on SSR apps unless intentional:
+a prerendered `index.html` would then answer unmatched page requests.
+
+Server code reads private runtime values from `process.env`; `VITE_*` values
+remain public build-time browser configuration. Custom Foldkit client/server
+output directories are read from the completed build metadata and packaged
+together. `vite.outDir`, when supplied, places SSR outputs under `client/` and
+`server/` in that directory.
 
 ## Develop and deploy
 
@@ -62,7 +102,7 @@ pnpm exec alchemy deploy
 pnpm exec alchemy destroy
 ```
 
-Run separately, destroying when finished. Dev uses Vite's native server and HMR,
+Run separately, destroying when finished. Dev uses Vite's native server with Foldkit live reload,
 returns a local URL, and creates no implicit Neon resources. Append
 `.pipe(Alchemy.remote())` to the Website Effect to use live deployment during dev.
 

@@ -1,3 +1,5 @@
+import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
@@ -34,9 +36,10 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   const config = yield* readConfig;
   const fs = yield* FileSystem.FileSystem;
-  const { clientDirectory, base, serverBundle, externalWorkspaces } =
+  const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } =
     yield* viteBuildInProcess(config.rootDir, config.env, {
       main: config.main,
+      framework: config.framework,
       compatibilityDate: config.compatibilityDate,
       compatibilityFlags: config.compatibilityFlags,
       viteEnvironments: config.viteEnvironments,
@@ -47,6 +50,7 @@ const program = Effect.gen(function* () {
   ]);
   const result: ViteBuildChildResult = {
     clientDirectory,
+    foldkit,
     base,
     serverBundle: bundle,
     externalWorkspaces: Array.from(workspaces),
@@ -57,6 +61,14 @@ const program = Effect.gen(function* () {
 // The parent streams this child's output and turns its exit code into the
 // resource-scoped build error. Do not print a second Effect failure report
 // (the extra `✖` block) from the child itself.
-runMain(program.pipe(Effect.provide(PlatformServices)), {
-  disableErrorReporting: true,
-});
+runMain(
+  program.pipe(
+    // Vite can reject without logging the underlying plugin error. Preserve
+    // it in the stderr tail that the parent includes in BundleError.
+    Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
+    Effect.provide(PlatformServices),
+  ),
+  {
+    disableErrorReporting: true,
+  },
+);

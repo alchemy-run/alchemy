@@ -11,13 +11,16 @@
     "test": "bun test test/integ.test.ts"
   },
   "dependencies": {
+    "@foldkit/ui": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },
   "devDependencies": {
     "@foldkit/vite-plugin": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
     "alchemy": "workspace:*",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },

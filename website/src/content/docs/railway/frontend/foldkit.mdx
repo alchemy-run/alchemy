@@ -1,6 +1,6 @@
 ---
 title: Foldkit
-description: Deploy a Foldkit app to Railway with Railway.Website.Foldkit — a client-only Vite SPA on a container Service, and Vite's own dev server under alchemy dev.
+description: Deploy Foldkit SPA, SSR, and prerendered applications to Railway with native local development.
 sidebar:
   order: 8
 ---
@@ -9,24 +9,16 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
-[Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. Its apps are client-only Vite projects —
-the Foldkit Vite plugin only adds HMR and devtools wiring — so
-`Railway.Website.Foldkit` is
-[`Railway.Website.Vite`](/railway/frontend/vite) with SPA fallback
-to `index.html`. Deep links boot the app and the Foldkit router
-takes over.
-
-Deploy creates a [`Railway.Project`](/railway/compute/projects)
-(unless you pass `project`) and a
-[`Railway.Service`](/railway/compute/services) from a container
-image. The URL is `https://{name}.up.railway.app`.
+[Foldkit](https://foldkit.dev) is an Elm-architecture frontend framework
+built on Effect. This integration supports browser-only SPAs, server rendering,
+and prerendered pages with request-time fallback. Foldkit's Vite plugin generates
+the handler and assets; Alchemy packages them for Railway.
 
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/frontend-frameworks`; the resource loads its `/vite`
-and `/vite/node` exports from your project at deploy time. It is only
+`@alchemy.run/frontend-frameworks`; the resource loads its `/foldkit`
+and `/foldkit/node` exports from your project at deploy time. It is only
 used at build time, so a dev dependency is enough:
 
 <Tabs syncKey="pkgManager">
@@ -153,12 +145,12 @@ const apiUrl = import.meta.env.VITE_API_URL;
 
 ## Deep links
 
-A Foldkit app that uses URL routing (`Runtime.makeApplication` with
+A browser-only Foldkit app that uses URL routing (`Runtime.makeApplication` with
 `route`, `onUrlRequest`, and `onUrlChange`) resolves routes on the
 client, so a deep link like `/counter/42` arrives as a request for a
 file that doesn't exist.
 
-`Foldkit` defaults `assets.notFoundHandling` to
+For browser-only builds, `Foldkit` defaults `assets.notFoundHandling` to
 `"single-page-application"`, which returns `index.html` (200) for
 unmatched paths so the Foldkit runtime can resolve the route. Use
 `"404-page"` to serve a real 404 instead:
@@ -169,10 +161,50 @@ export const Website = Railway.Website.Foldkit("Website", {
 });
 ```
 
+## Server rendering and prerendering
+
+Use Foldkit 0.164.0 and `@foldkit/vite-plugin` 0.25.0 or newer. Keep rendering
+configuration in your app's `vite.config.ts`:
+
+```typescript
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit({
+    ssr: {
+      serverEntry: "/src/entry.server.ts",
+      build: { prerender: true },
+    },
+  })],
+});
+```
+
+The server entry exports `renderPage` and, when prerendering is enabled,
+`prerenderPaths`. Use `build: true` for SSR without prerendering. See
+[Foldkit's server rendering guide](https://foldkit.dev/core/server-rendering)
+for the application contract.
+
+The same Website declaration detects the generated handler automatically.
+GET and HEAD requests serve assets and prerendered pages first, including `/`
+when it was prerendered. Remaining requests go to Foldkit's handler; POST
+requests bypass static assets. SSG deployments retain the generated handler
+for paths that were not prerendered, matching the SvelteKit/TanStack Start path.
+
+Browser-only builds keep SPA fallback. An explicit `assets.notFoundHandling`
+override takes precedence. Avoid SPA fallback on SSR apps unless intentional:
+a prerendered `index.html` would then answer unmatched page requests.
+
+Server code reads private runtime values from `process.env`; `VITE_*` values
+remain public build-time browser configuration. Custom Foldkit client/server
+output directories are read from the completed build metadata and packaged
+together. `vite.outDir`, when supplied, places SSR outputs under `client/` and
+`server/` in that directory.
+
 ## Local dev
 
-`alchemy dev` runs Vite's own dev server (native HMR, Foldkit
-devtools) instead of deploying; `site.url` is the local address and
+`alchemy dev` runs Vite's own dev server (Foldkit's live reload
+and devtools) instead of deploying; `site.url` is the local address and
 no Project or Service is created. Wrap the
 site in `Alchemy.remote()` to deploy the live Service even during
 dev.

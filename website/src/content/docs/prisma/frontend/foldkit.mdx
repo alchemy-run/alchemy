@@ -1,6 +1,6 @@
 ---
 title: Foldkit
-description: Deploy Foldkit to Prisma Compute with Prisma.Website.Foldkit — a Vite SPA served on Bun, deep-link fallback, and native HMR locally.
+description: Deploy Foldkit SPA, SSR, and prerendered applications to Prisma Compute with native local development.
 sidebar:
   order: 8
 ---
@@ -10,19 +10,14 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const devDeps = "@alchemy.run/frontend-frameworks @vercel/nft";
 
 [Foldkit](https://foldkit.dev) is an Elm-architecture frontend framework
-built on Effect. Its apps are client-only Vite projects, so
-`Prisma.Website.Foldkit` is [Vite](/prisma/frontend/vite) with SPA
-fallback to `index.html`. Deep links boot the app and its router takes over.
-
-The client build and generated server are uploaded as `tar.gz` and
-served on **Bun in Prisma Compute**. There is no Foldkit SSR handler,
-but the deployment still runs a Compute static-file server; no Docker
-image or registry is needed.
+built on Effect. This integration supports browser-only SPAs, server rendering,
+and prerendered pages with request-time fallback. Foldkit's Vite plugin generates
+the handler and assets; Alchemy packages them for Prisma Compute.
 
 ## Install
 
-Install the build-time integration; the resource loads `/vite` and
-`/vite/node` from your frontend project:
+Install the build-time integration; the resource loads `/foldkit` and
+`/foldkit/node` from your frontend project:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun"><Code code={`bun add -d ${devDeps}`} lang="sh" /></TabItem>
@@ -123,7 +118,7 @@ Vite replaces the lookup with the build-time value.
 
 ## Deep links
 
-`assets.notFoundHandling` defaults to `"single-page-application"`.
+For browser-only builds, `assets.notFoundHandling` defaults to `"single-page-application"`.
 A path like `/counter/42` returns `index.html` with status 200, letting
 Foldkit's client router resolve it. For real 404 responses instead:
 
@@ -133,9 +128,49 @@ export const Website = Prisma.Website.Foldkit("Website", {
 });
 ```
 
+## Server rendering and prerendering
+
+Use Foldkit 0.164.0 and `@foldkit/vite-plugin` 0.25.0 or newer. Keep rendering
+configuration in your app's `vite.config.ts`:
+
+```typescript
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit({
+    ssr: {
+      serverEntry: "/src/entry.server.ts",
+      build: { prerender: true },
+    },
+  })],
+});
+```
+
+The server entry exports `renderPage` and, when prerendering is enabled,
+`prerenderPaths`. Use `build: true` for SSR without prerendering. See
+[Foldkit's server rendering guide](https://foldkit.dev/core/server-rendering)
+for the application contract.
+
+The same Website declaration detects the generated handler automatically.
+GET and HEAD requests serve assets and prerendered pages first, including `/`
+when it was prerendered. Remaining requests go to Foldkit's handler; POST
+requests bypass static assets. SSG deployments retain the generated handler
+for paths that were not prerendered, matching the SvelteKit/TanStack Start path.
+
+Browser-only builds keep SPA fallback. An explicit `assets.notFoundHandling`
+override takes precedence. Avoid SPA fallback on SSR apps unless intentional:
+a prerendered `index.html` would then answer unmatched page requests.
+
+Server code reads private runtime values from `process.env`; `VITE_*` values
+remain public build-time browser configuration. Custom Foldkit client/server
+output directories are read from the completed build metadata and packaged
+together. `vite.outDir`, when supplied, places SSR outputs under `client/` and
+`server/` in that directory.
+
 ## Local dev
 
-`bun alchemy dev` runs Vite with Foldkit HMR and devtools. The Website
+`bun alchemy dev` runs Vite with Foldkit live reload and devtools. The Website
 creates no Prisma resources. `.pipe(Alchemy.remote())` selects the live
 path during dev. Pin the local address when running several apps:
 

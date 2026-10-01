@@ -1,26 +1,38 @@
-import { Vite, type ViteProps } from "./Vite.ts";
+import * as Namespace from "../../Namespace.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import type { ViteProps } from "./Vite.ts";
 
-/** Configuration for a client-only Foldkit website. */
-export interface FoldkitProps extends ViteProps {}
+/** Configuration for a Foldkit website. */
+export interface FoldkitProps extends FrameworkSiteProps {
+  /** Serializable overrides merged over vite.config.*. */
+  vite?: ViteProps["vite"];
+}
 
 /**
- * Deploy a Foldkit Vite application to Prisma Compute with SPA routing.
- * The project's Foldkit Vite plugin drives the build; native Vite HMR runs
- * during development without creating cloud resources.
+ * Deploy a [Foldkit](https://foldkit.dev) application to Prisma Compute.
+ * Browser-only apps use SPA routing. With `ssr.build` enabled in the
+ * Foldkit Vite plugin, prerendered pages and assets are served first,
+ * followed by Foldkit's generated request handler for SSR and hybrid routes.
+ *
+ * The build uses `@alchemy.run/frontend-frameworks/foldkit` and the
+ * project's Vite configuration. No application adapter is required.
+ * Native Foldkit development and live reload run without cloud resources;
+ * `Alchemy.remote()` opts into a live deployment during development.
  *
  * ### Creating a Website
- * **Example:** Foldkit application
+ * **Example:** SPA, SSR, or prerendered Foldkit application
  * ```typescript
  * const site = yield* Prisma.Website.Foldkit("Web", {
  *   rootDir: "./app",
  * });
  * ```
  *
- * ### Multi-Page Routing
- * **Example:** Override the default SPA fallback
+ * ### Server Configuration
+ * **Example:** Runtime environment for server-rendered pages
  * ```typescript
  * const site = yield* Prisma.Website.Foldkit("Web", {
- *   assets: { notFoundHandling: "404-page" },
+ *   rootDir: "./app",
+ *   env: { API_BASE: "https://api.example.com" },
  * });
  * ```
  *
@@ -28,7 +40,8 @@ export interface FoldkitProps extends ViteProps {}
  * @product Website
  */
 export const Foldkit = (id: string, props: FoldkitProps = {}) =>
-  Vite(id, {
-    ...props,
-    assets: { notFoundHandling: "single-page-application", ...props.assets },
-  });
+  makeFrameworkSite(id, props, {
+    framework: "@alchemy.run/frontend-frameworks/foldkit",
+    target: "@alchemy.run/frontend-frameworks/foldkit/node",
+    options: { vite: props.vite },
+  }).pipe(Namespace.push(id));

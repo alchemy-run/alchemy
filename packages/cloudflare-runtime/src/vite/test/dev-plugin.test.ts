@@ -117,6 +117,21 @@ describe("dev plugin", () => {
     }
   });
 
+  it("leaves the environment runnable when there is no Worker entry", async () => {
+    // An assets-only dev run boots workerd for the asset layer but evaluates
+    // no modules, so the `ssr` environment stays Vite's own: a framework
+    // plugin that renders through `ssrLoadModule` in dev keeps working.
+    const server = await createDevServer(cloudflareVitePlugin({}));
+    try {
+      const environment = server.environments["ssr"];
+      expect(environment).toBeDefined();
+      expect(environment).not.toBeInstanceOf(DistilledDevEnvironment);
+      expect(vite.isRunnableDevEnvironment(environment!)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("creates the Distilled environment when configureServer is intact", async () => {
     const server = await createDevServer(
       cloudflareVitePlugin({ main: "./worker-entry.ts" }),

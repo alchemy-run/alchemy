@@ -24,7 +24,9 @@ import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
-import type { ViteOptions } from "../Worker.ts";
+import type { FoldkitBuildMetadata } from "../../Website/FoldkitBuild.ts";
+import { isSelfUrl, type ViteOptions } from "../Worker.ts";
+import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
@@ -152,6 +154,13 @@ export const viteDev = (
     );
   });
 
+type ViteBuildOptions = CloudflareVitePluginOptions &
+  Pick<ViteOptions, "framework">;
+
+type ViteWorkerBuildOutput = ViteBuildOutput & {
+  foldkit: FoldkitBuildMetadata | undefined;
+};
+
 /**
  * Run a production Vite build in a child process rooted at the project
  * directory and adapt the result to the in-process {@link ViteBuildOutput}
@@ -166,7 +175,7 @@ export const viteDev = (
 export const viteBuild = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
-  pluginOptions: CloudflareVitePluginOptions,
+  pluginOptions: ViteBuildOptions,
   fqn: string,
 ) =>
   Effect.gen(function* () {
@@ -182,6 +191,7 @@ export const viteBuild = (
           Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
         ),
         main: pluginOptions.main,
+        framework: pluginOptions.framework,
         compatibilityDate: pluginOptions.compatibilityDate,
         compatibilityFlags: pluginOptions.compatibilityFlags,
         viteEnvironments: pluginOptions.viteEnvironments,
@@ -190,10 +200,11 @@ export const viteBuild = (
     );
     return {
       clientDirectory: result.clientDirectory,
+      foldkit: result.foldkit,
       base: result.base,
       serverBundle: Effect.succeed(result.serverBundle),
       externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
-    } satisfies ViteBuildOutput;
+    } satisfies ViteWorkerBuildOutput;
   });
 
 /**
@@ -205,14 +216,14 @@ export const viteBuild = (
 export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
-  pluginOptions: CloudflareVitePluginOptions,
+  pluginOptions: ViteBuildOptions,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     const console = yield* ConsoleService.Console;
-    yield* Effect.promise(async () => {
+    const foldkit = yield* Effect.promise(async () => {
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
@@ -234,9 +245,19 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
+      const readFoldkitMetadata =
+        pluginOptions.framework === "foldkit"
+          ? (
+              await import("../../Website/FoldkitBuild.ts")
+            ).foldkitBuildMetadataReader(
+              builder.config.plugins,
+              pluginOptions.main,
+            )
+          : undefined;
       await builder.buildApp();
+      return readFoldkitMetadata?.();
     });
-    return yield* outputPlugin.output;
+    return { ...(yield* outputPlugin.output), foldkit };
   });
 
 // Emulate `vite build` env semantics for `props.env`: only
@@ -279,7 +300,10 @@ async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
  * are unwrapped, env-bound Effects are evaluated, and `WorkerLoader`s
  * (bindings that happen to be Effects) are skipped.
  */
-const resolveViteEnv = (env: Record<string, unknown>) =>
+const resolveViteEnv = (
+  env: Record<string, unknown>,
+  selfUrl: string | undefined,
+) =>
   Effect.gen(function* () {
     return Object.fromEntries(
       (yield* Effect.all(
@@ -292,15 +316,27 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
                 : Redacted.isRedacted(value) &&
                     typeof Redacted.value(value) === "string"
                   ? Redacted.value(value)
-                  : // A `WorkerLoader` is a real Effect that also carries
-                    // the `~alchemy/Kind` marker — it is a binding, not a
-                    // runnable env value. Check it before `Effect.isEffect`
-                    // so we don't execute it as an inlined env entry.
-                    isWorkerLoader(value)
-                    ? undefined
-                    : Effect.isEffect(value)
-                      ? yield* value as any as Effect.Effect<any>
-                      : undefined,
+                  : // `Worker.URL` (bare tag or called) — resolved to this
+                    // Worker's own URL. The bare tag is Effect-shaped, so
+                    // check before `Effect.isEffect`.
+                    isSelfUrl(value)
+                    ? selfUrl
+                    : // A `WorkerLoader` is a real Effect that also carries
+                      // the `~alchemy/Kind` marker — it is a binding, not a
+                      // runnable env value. Check it before `Effect.isEffect`
+                      // so we don't execute it as an inlined env entry.
+                      isWorkerLoader(value)
+                      ? undefined
+                      : // A `Cloudflare.Container` declaration is likewise
+                        // Effect-shaped but is a binding (DO namespace +
+                        // ContainerApplication) — yielding it would resolve
+                        // the started-instance tag, which only exists inside
+                        // a Durable Object (#997).
+                        isContainerDecl(value)
+                        ? undefined
+                        : Effect.isEffect(value)
+                          ? yield* value as any as Effect.Effect<any>
+                          : undefined,
             ];
           }),
         ),
@@ -382,33 +418,60 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
-    const env = yield* resolveViteEnv(ctx.env ?? {});
-    const { clientDirectory, serverBundle, externalWorkspaces } =
+    const env = yield* resolveViteEnv(ctx.env ?? {}, ctx.selfUrl);
+    const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } =
       yield* viteBuild(
         vite.rootDir,
         env,
         {
-          main: vite.main,
+          // A relative `vite.main` is documented to resolve from the Vite
+          // root. The rolldown plugin resolves the worker entry with no
+          // importer (i.e. against `process.cwd()`), which breaks when the
+          // deploy runs from a different directory (e.g. a monorepo infra
+          // package) — absolutize before handing it over (#796).
+          main: vite.main
+            ? path.resolve(initialCwd, vite.rootDir ?? ".", vite.main)
+            : undefined,
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           viteEnvironments: vite.viteEnvironments,
+          framework: vite.framework,
         },
         ctx.fqn,
       );
+    const declaredAssets =
+      ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined;
+    // What the build itself says about its assets, filled in under what
+    // the resource declared: a framework that records which pages it
+    // prerendered knows the routing better than a default would, and the
+    // resource's own `assets` still has the last word.
+    const derivedAssets =
+      clientDirectory && vite.framework === "foldkit"
+        ? yield* Effect.promise(
+            () => import("../../Website/FoldkitBuild.ts"),
+          ).pipe(
+            Effect.map(({ foldkitAssetsFromManifest }) =>
+              foldkitAssetsFromManifest(foldkit?.manifest),
+            ),
+          )
+        : undefined;
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
           ? readAssets({
-              ...(ctx.assets && typeof ctx.assets !== "string"
-                ? ctx.assets
-                : undefined),
+              ...derivedAssets,
+              ...declaredAssets,
               // `clientDirectory` from the build child is absolute; the
-              // base only matters for the in-process legacy shape.
+              // rootDir only matters as a legacy fallback.
               directory: path.resolve(
                 initialCwd,
                 vite.rootDir ?? ".",
                 clientDirectory,
               ),
+              // The resolved Vite `base` is what rewrote the URLs in the
+              // emitted HTML, so it is the only prefix the manifest can
+              // agree with.
+              base,
             })
           : Effect.undefined,
         serverBundle,
