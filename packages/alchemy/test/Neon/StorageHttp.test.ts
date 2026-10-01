@@ -9,7 +9,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { StorageBucket } from "./fixtures/StorageResources.ts";
 import StorageHttpWorker from "./fixtures/StorageHttpWorker.ts";
 import StorageHttpLambda from "./fixtures/StorageHttpLambda.ts";
@@ -85,7 +85,19 @@ workerTest.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 lambdaTest.provider(
@@ -113,5 +125,17 @@ lambdaTest.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

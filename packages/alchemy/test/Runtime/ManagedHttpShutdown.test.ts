@@ -9,9 +9,9 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { createHash } from "node:crypto";
 
 const services = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
@@ -137,7 +137,7 @@ const assertWorkerOrder = (output: string, name: string) => {
   expect(output).not.toContain("already closed");
 };
 
-describe.sequential("managed Fly HTTP shutdown", () => {
+describe.sequential("managed Fly HTTP shutdown", { tags: ["local"] }, () => {
   it.live(
     "R03 SIGTERM stops acceptance and drains a slow response before instance finalizers",
     () =>

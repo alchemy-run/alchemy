@@ -1,11 +1,11 @@
 import type * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
-import type * as Rpc from "effect/unstable/rpc/Rpc";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as Socket from "effect/unstable/socket/Socket";
+import type * as Rpc from "effect/rpc/Rpc";
+import * as RpcClient from "effect/rpc/RpcClient";
+import type { RpcClientError } from "effect/rpc/RpcClientError";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Socket from "effect/socket/Socket";
 
 export interface LayerOptions {
   /** Options passed to Effect's WebSocket transport. */
@@ -43,9 +43,9 @@ export interface LayerOptions {
  * ```typescript
  * import * as RpcWebSocketClient from "alchemy/Cloudflare/RpcWebSocketClient";
  * import { Context, Effect, Layer } from "effect";
- * import type * as RpcClient from "effect/unstable/rpc/RpcClient";
- * import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
- * import * as Socket from "effect/unstable/socket/Socket";
+ * import type * as RpcClient from "effect/rpc/RpcClient";
+ * import type { RpcClientError } from "effect/rpc/RpcClientError";
+ * import * as Socket from "effect/socket/Socket";
  * import { CounterRpcs } from "./rpcs.ts";
  *
  * class CounterClient extends Context.Service<

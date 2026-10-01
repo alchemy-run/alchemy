@@ -60,22 +60,15 @@ manager — Alchemy imposes no Effect version on your frontend.
 
 ### Server-rendered and prerendered
 
-A deployment that renders outside the browser declares its server
-entry in this file, exactly as `create-foldkit-app`'s SSR and SSG
-scaffolds generate it:
+Use `@foldkit/vite-plugin` 0.25.0 or newer with a compatible Foldkit
+version (0.164.0 or newer). Declare the server entry in Vite:
 
 ```diff lang="typescript"
 // vite.config.ts
-+import { randomUUID } from "node:crypto";
-
-+process.env.FOLDKIT_BUILD_ID ||= randomUUID();
-+const buildId = process.env.FOLDKIT_BUILD_ID;
-
 export default defineConfig({
 -  plugins: [foldkit()],
 +  plugins: [
 +    foldkit({
-+      buildId,
 +      ssr: {
 +        serverEntry: "/src/entry.server.ts",
 +        build: true,
@@ -108,13 +101,11 @@ are served as files, and any route the entry did not list renders on
 request. Prerender every route for a fully static site, some of them
 for a hybrid one.
 
-`buildId` is compiled into both bundles as
-`import.meta.env.FOLDKIT_BUILD_ID`. Give CI a real per-deployment
-value — a commit SHA or a release tag — and store the fallback on
-`process.env` rather than computing it inline, so the client bundle
-and the server bundle see the same id. See Foldkit's
-[server rendering](https://foldkit.dev/core/server-rendering) docs
-for the hydration contract.
+Foldkit automatically generates a shared build identity for the client
+and server. `Server.renderToString` and `Runtime.hydrate` use it by
+default; no manual build ID or custom `vite-env.d.ts` declaration is
+needed. See Foldkit's [server rendering](https://foldkit.dev/core/server-rendering)
+docs for the hydration contract.
 
 ## Declare the Website
 
@@ -145,7 +136,7 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
 
 ## Add it to the Stack
 
-Yield the class from your Stack and return its URL — see
+Yield the Website Effect from your Stack and return its URL — see
 [examples/cloudflare-foldkit](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit)
 for the client-only shape and
 [examples/cloudflare-foldkit-ssr](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit-ssr)
@@ -180,9 +171,10 @@ ever renders. Getting it wrong fails quietly: the site serves 200s
 that carry an empty document. `Foldkit` derives it from the build, so
 nothing needs declaring.
 
-A server-rendered or prerendered build writes
-`dist/server/foldkit.build.json` beside the handler, recording which
-paths it prerendered, and `Foldkit` reads it:
+After the build completes, Alchemy reads the Foldkit plugin's
+`getBuildMetadata()` result, which includes the prerendered paths.
+Foldkit also writes `foldkit.build.json` beside the handler, but
+Alchemy does not read that file:
 
 - A prerendered route is a file, and the default `htmlHandling`
   serves `/about` from `about/index.html`.
@@ -192,8 +184,8 @@ paths it prerendered, and `Foldkit` reads it:
   `/` is a file only when the build prerendered it; otherwise the
   front page reaches the handler like any other route.
 
-A client-only build writes no manifest, and that is its signature:
-nothing renders outside the browser, so a deep link like
+Without the Foldkit SSR build plugin, Alchemy applies the client-only
+default. Nothing renders outside the browser, so a deep link like
 `/counter/42` is a request for a file that doesn't exist. It gets
 `notFoundHandling: "single-page-application"` — the template is
 served and the app's router resolves the path once it boots — the
@@ -340,7 +332,7 @@ export const Website = Cloudflare.Website.Foldkit("Foldkit", {
   [examples/cloudflare-foldkit-ssr](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-foldkit-ssr)
   — the checked-in client-only and server-rendered shapes.
 - [Foldkit server rendering](https://foldkit.dev/core/server-rendering)
-  — the hydration contract, `buildId`, `ssr.build`, and
+  — the hydration contract, automatic build identity, `ssr.build`, and
   `foldkit.build.json`.
 - [Frontend overview](/cloudflare/frontend/frontends) — the rest of
   the Cloudflare frontend family.

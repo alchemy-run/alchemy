@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 // Use the published bin layout but replace the entry with a real progress
@@ -116,17 +116,21 @@ const runPublishedLauncher = (
     );
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe.sequential("published Bun launcher", () => {
-  it.live.skipIf(!nodeSupportsDevMode)(
-    "renders production progress through the Node shebang handoff",
-    () => runPublishedLauncher("development", "preserve", nodePath!),
-  );
-  for (const nodeEnv of [undefined, "development", "production"]) {
-    for (const jsx of [undefined, "react-jsx", "react-jsxdev", "preserve"]) {
-      it.live(
-        `renders production progress with NODE_ENV=${nodeEnv} and jsx=${jsx}`,
-        () => runPublishedLauncher(nodeEnv, jsx),
-      );
+describe.sequential(
+  "published Bun launcher",
+  { tags: ["unit", "local"] },
+  () => {
+    it.live.skipIf(!nodeSupportsDevMode)(
+      "renders production progress through the Node shebang handoff",
+      () => runPublishedLauncher("development", "preserve", nodePath!),
+    );
+    for (const nodeEnv of [undefined, "development", "production"]) {
+      for (const jsx of [undefined, "react-jsx", "react-jsxdev", "preserve"]) {
+        it.live(
+          `renders production progress with NODE_ENV=${nodeEnv} and jsx=${jsx}`,
+          () => runPublishedLauncher(nodeEnv, jsx),
+        );
+      }
     }
-  }
-});
+  },
+);

@@ -5,8 +5,9 @@ export type FoldkitProps = ViteProps & {};
 
 /**
  * Deploy a Foldkit Vite application to Neon Functions with SPA routing.
- * The project's Foldkit Vite plugin drives the build; native Vite HMR runs
- * during development without creating cloud resources.
+ * This integration serves the client build; it does not run Foldkit SSR.
+ * The project's Foldkit Vite plugin drives the build and provides live
+ * reload during development without creating cloud resources.
  *
  * ### Creating a Website
  * **Example:** Foldkit application

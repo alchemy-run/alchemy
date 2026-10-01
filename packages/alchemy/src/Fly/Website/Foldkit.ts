@@ -3,8 +3,8 @@ import { Vite, type ViteProps } from "./Vite.ts";
 export interface FoldkitProps extends ViteProps {}
 
 /**
- * Deploy a [Foldkit](https://foldkit.dev) app to Fly. Foldkit apps are
- * client-only Vite projects, so this is {@link Vite} with SPA fallback
+ * Deploy a client-only [Foldkit](https://foldkit.dev) app to Fly.
+ * This is {@link Vite} with SPA fallback
  * to `index.html` so deep links boot the app.
  *
  *

@@ -5,7 +5,7 @@ import type { ScratchStack } from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 export const checks = {
   ready: {
@@ -20,7 +20,7 @@ export const checks = {
 export const deployWorker = (
   stack: ScratchStack,
   version: string,
-  props: Partial<Omit<MachineProps, "app">> = {},
+  props: Partial<Omit<Extract<MachineProps, { image: string }>, "app">> = {},
 ) =>
   stack.deploy(
     Effect.gen(function* () {

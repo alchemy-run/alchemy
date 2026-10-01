@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64, Base64Url } from "effect/encoding";
 import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
@@ -284,7 +284,7 @@ const callbackFailure = async <E>(
           : typeof error === "string"
             ? error
             : "Workflow application failure";
-      const body = `${Encoding.encodeBase64Url(
+      const body = `${Base64Url.encode(
         JSON.stringify({
           workflow: identity?.workflow ?? null,
           instanceId: identity?.instanceId ?? null,
@@ -313,7 +313,7 @@ const callbackFailure = async <E>(
 };
 
 const failureDigest = async (body: string): Promise<string> =>
-  Encoding.encodeBase64Url(
+  Base64Url.encode(
     new Uint8Array(
       await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body)),
     ),
@@ -343,7 +343,7 @@ const decodeApplicationFailure = async <E>(
       throw new TypeError("invalid failure checksum");
     const end = body.indexOf("\n");
     if (end < 1) throw new TypeError("invalid failure framing");
-    const json = Encoding.decodeBase64UrlString(body.slice(0, end));
+    const json = Base64Url.decodeString(body.slice(0, end));
     if (Result.isFailure(json)) throw new TypeError("invalid failure encoding");
     const envelope: unknown = JSON.parse(json.success);
     if (
@@ -431,10 +431,9 @@ const encodeFailureValue = (
         throw new TypeError("custom properties on serialized built-in values");
       if (value instanceof Date)
         return ["date", encode(Date.prototype.getTime.call(value))];
-      if (value instanceof Uint8Array)
-        return ["bytes", Encoding.encodeBase64(value)];
+      if (value instanceof Uint8Array) return ["bytes", Base64.encode(value)];
       if (value instanceof ArrayBuffer)
-        return ["buffer", Encoding.encodeBase64(new Uint8Array(value))];
+        return ["buffer", Base64.encode(new Uint8Array(value))];
       if (value instanceof Map)
         return [
           "map",
@@ -569,11 +568,8 @@ const decodeFailureValue = (value: unknown, depth = 0): unknown => {
     if (typeof timestamp === "number") return new Date(timestamp);
   }
   if ((tag === "bytes" || tag === "buffer") && typeof data === "string") {
-    const bytes = Encoding.decodeBase64(data);
-    if (
-      Result.isSuccess(bytes) &&
-      Encoding.encodeBase64(bytes.success) === data
-    )
+    const bytes = Base64.decode(data);
+    if (Result.isSuccess(bytes) && Base64.encode(bytes.success) === data)
       return tag === "bytes" ? bytes.success : bytes.success.buffer;
   }
   if (Array.isArray(data)) {

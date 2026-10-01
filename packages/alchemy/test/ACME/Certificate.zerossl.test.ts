@@ -7,7 +7,7 @@ import * as ZeroSsl from "@distilled.cloud/zerossl";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 /**
  * ZeroSSL has no staging environment, so this runs against production
@@ -80,5 +80,16 @@ test.provider.skipIf(!enabled)(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:zone",
+      "provider:zerossl",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

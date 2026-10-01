@@ -148,7 +148,14 @@ test.provider(
       const deactivated = yield* waitUntilDeactivated(created.id);
       expect(deactivated).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:stripe",
+      "provider:stripe:billingportalconfiguration",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -186,5 +193,12 @@ test.provider(
       const deactivated = yield* waitUntilDeactivated(deployed.id);
       expect(deactivated).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:stripe",
+      "provider:stripe:billingportalconfiguration",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

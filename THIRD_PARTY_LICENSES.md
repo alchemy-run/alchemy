@@ -126,6 +126,7 @@ been dedicated to the public domain. See <https://www.sqlite.org/copyright.html>
 - SvelteKit: [`f36b3a4cd307bd8c89e03fa191becc175e7b3077`](https://github.com/sveltejs/kit/tree/f36b3a4cd307bd8c89e03fa191becc175e7b3077)
 - Waku: [`39e868f2638c27de9635c68ebf965e14a4112e9b`](https://github.com/wakujs/waku/tree/39e868f2638c27de9635c68ebf965e14a4112e9b)
 - Cloudflare Workers SDK: [`f9e7727dbef58e71c6b297dc688d3c544cef87cb`](https://github.com/cloudflare/workers-sdk/tree/f9e7727dbef58e71c6b297dc688d3c544cef87cb)
+- Cloudflare Workers SDK (local R2 S3 endpoint, `R2BucketS3.worker.ts`): [`cd7508cccf2de1ea010320d6f3e70ec80e6e5e2e`](https://github.com/cloudflare/workers-sdk/tree/cd7508cccf2de1ea010320d6f3e70ec80e6e5e2e)
 - OpenNext for Cloudflare: [`da4b7fc8c89441a6f96205635fa70e329d1f0df7`](https://github.com/opennextjs/opennextjs-cloudflare/tree/da4b7fc8c89441a6f96205635fa70e329d1f0df7)
 - SST: <https://github.com/sst/sst>
 - node-sanitize-filename: <https://github.com/parshap/node-sanitize-filename>

@@ -4,14 +4,14 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
-import type { ResourceClassLike } from "../../Resource.ts";
+import type { ResourceClass, ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass } from "../../Util/effect.ts";
@@ -643,23 +643,24 @@ export type Container<Id extends string = string> = Named<Id> & {
  * @product Containers
  * @category Workers & Compute
  */
-export const Container: ResourceClassLike<ContainerApplication> & {
-  <DOShape = unknown, const Id extends string = string, PropsReq = never>(
-    id: Id,
-    props: ImageContainerProps<PropsReq>,
-  ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
-  <Self>(): {
-    <const Id extends string, PropsReq = never>(
+export const Container: ResourceClassLike<ContainerApplication> &
+  Pick<ResourceClass<ContainerApplication>, "ref"> & {
+    <DOShape = unknown, const Id extends string = string, PropsReq = never>(
       id: Id,
       props: ImageContainerProps<PropsReq>,
-    ): Container.Decl<Self, {}, Id, PropsReq>;
-  };
-  <Self, Shape>(): {
-    <const Id extends string>(
-      id: Id,
-    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
-  };
-} = Object.assign(
+    ): Container.Decl<Container<Id>, {}, Id, PropsReq, DOShape>;
+    <Self>(): {
+      <const Id extends string, PropsReq = never>(
+        id: Id,
+        props: ImageContainerProps<PropsReq>,
+      ): Container.Decl<Self, {}, Id, PropsReq>;
+    };
+    <Self, Shape>(): {
+      <const Id extends string>(
+        id: Id,
+      ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
+    };
+  } = Object.assign(
   (...args: any[]) => {
     if (args.length === 0) {
       return (...args: any[]) => {
@@ -713,6 +714,15 @@ export const Container: ResourceClassLike<ContainerApplication> & {
   },
   {
     Type: ContainerTypeId,
+    // Read `ContainerPlatform` lazily: this module and ContainerPlatform.ts
+    // import each other, so it may not be initialized at module load.
+    ref: (id: string, options?: { stage?: string; stack?: string }) =>
+      (
+        ContainerPlatform as unknown as Pick<
+          ResourceClass<ContainerApplication>,
+          "ref"
+        >
+      ).ref(id, options),
   },
 ) as any;
 

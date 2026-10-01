@@ -6,8 +6,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import UpgradeWorker from "./fixtures/sql-migrations-upgrade/worker.ts";
 
 type State = { id: string; count: number; rows: { value: string }[] };
@@ -15,6 +15,7 @@ type State = { id: string; count: number; rows: { value: string }[] };
 for (const dev of [true, false]) {
   describe(
     dev ? "local SQL migration updates" : "live SQL migration updates",
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker"] },
     () => {
       const { test } = Test.make({
         providers: Cloudflare.providers(),
@@ -107,7 +108,7 @@ for (const dev of [true, false]) {
             expect(yield* read(third.url)).toEqual(upgraded);
             yield* stack.destroy();
           }),
-        { timeout: 120_000 },
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
       );
     },
   );

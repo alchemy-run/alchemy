@@ -5,7 +5,7 @@ import { resolveSource } from "../../../../src/Cloudflare/Workers/Source.ts";
 import { Assets } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 const mode = process.argv[2];
 const program = Effect.gen(function* () {

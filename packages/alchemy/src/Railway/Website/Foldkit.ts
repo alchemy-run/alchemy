@@ -7,8 +7,8 @@ export interface FoldkitProps extends ViteProps {}
  * unmatched paths falling back to `index.html` so deep links boot the
  * Foldkit router. Same Node static-file Service as {@link Vite}.
  *
- * Foldkit apps are client-only Vite projects — the Foldkit Vite plugin in
- * the app's `vite.config.ts` composes with the project's own Vite build.
+ * This integration supports client-only Foldkit apps. The Foldkit plugin
+ * in the app's `vite.config.ts` drives the project's own Vite build.
  *
  * During `alchemy dev` the site is Vite's own dev server and no cloud
  * resources are created. `Alchemy.remote()` opts back into the live

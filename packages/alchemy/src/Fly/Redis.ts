@@ -163,7 +163,7 @@ export type Redis = Resource<
  *
  * **Example:** Read and write
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * const Cache = Fly.Redis("Cache");
  *
@@ -221,6 +221,7 @@ export type Redis = Resource<
  * :::
  *
  * @resource
+ * @product Redis
  */
 export const Redis = Resource<Redis>("Fly.Redis");
 

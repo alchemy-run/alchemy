@@ -30,87 +30,90 @@ const { test } = Test.make({ providers: AWS.providers() });
 // so `createService` returns immediately without waiting for Fargate task
 // placement. Networking is a stack-owned subnet in the standing default VPC
 // (no NAT/IGW needed since no task is ever launched).
-test.provider("list enumerates the deployed service", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    // Reclaim any revisions a previously-killed run left behind, and
-    // guarantee full deletion (deregister + delete) on success, failure,
-    // and interruption.
-    const family = "alchemy-test-ecs-service-list";
-    yield* reclaimTaskDefinitionFamily(family);
-    yield* Effect.addFinalizer(() =>
-      reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
-    );
-
-    // Register a minimal Fargate task definition pointing at a public image.
-    const registered = yield* ecs.registerTaskDefinition({
-      family,
-      networkMode: "awsvpc",
-      requiresCompatibilities: ["FARGATE"],
-      cpu: "256",
-      memory: "512",
-      containerDefinitions: [
-        {
-          name: "app",
-          image: "public.ecr.aws/nginx/nginx:stable",
-          essential: true,
-          portMappings: [{ containerPort: 80, protocol: "tcp" }],
-        },
-      ],
-    });
-    const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn;
-    if (!taskDefinitionArn) {
-      return yield* Effect.die(
-        new Error("registerTaskDefinition returned no task definition ARN"),
+      // Reclaim any revisions a previously-killed run left behind, and
+      // guarantee full deletion (deregister + delete) on success, failure,
+      // and interruption.
+      const family = "alchemy-test-ecs-service-list";
+      yield* reclaimTaskDefinitionFamily(family);
+      yield* Effect.addFinalizer(() =>
+        reclaimTaskDefinitionFamily(family).pipe(Effect.ignore),
       );
-    }
-    const defaultVpc = yield* getDefaultVpc;
 
-    const service = yield* stack.deploy(
-      Effect.gen(function* () {
-        const subnet = yield* Subnet("ListServiceSubnet", {
-          vpcId: defaultVpc.vpcId,
-          cidrBlock: defaultVpc.subnetCidrBlock(234),
-        });
-        const cluster = yield* Cluster("ListServiceCluster", {
-          clusterName: "alchemy-test-ecs-service-list",
-        });
-        return yield* Service("ListService", {
-          cluster,
-          task: {
-            taskDefinitionArn,
-            containerName: "app",
-            port: 80,
+      // Register a minimal Fargate task definition pointing at a public image.
+      const registered = yield* ecs.registerTaskDefinition({
+        family,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        containerDefinitions: [
+          {
+            name: "app",
+            image: "public.ecr.aws/nginx/nginx:stable",
+            essential: true,
+            portMappings: [{ containerPort: 80, protocol: "tcp" }],
           },
-          desiredCount: 0,
-          vpcId: defaultVpc.vpcId,
-          subnets: [subnet.subnetId],
-        });
-      }),
-    );
+        ],
+      });
+      const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn;
+      if (!taskDefinitionArn) {
+        return yield* Effect.die(
+          new Error("registerTaskDefinition returned no task definition ARN"),
+        );
+      }
+      const defaultVpc = yield* getDefaultVpc;
 
-    const provider = yield* Provider.findProvider(Service);
-    const all = yield* provider.list();
+      const service = yield* stack.deploy(
+        Effect.gen(function* () {
+          const subnet = yield* Subnet("ListServiceSubnet", {
+            vpcId: defaultVpc.vpcId,
+            cidrBlock: defaultVpc.subnetCidrBlock(234),
+          });
+          const cluster = yield* Cluster("ListServiceCluster", {
+            clusterName: "alchemy-test-ecs-service-list",
+          });
+          return yield* Service("ListService", {
+            cluster,
+            task: {
+              taskDefinitionArn,
+              containerName: "app",
+              port: 80,
+            },
+            desiredCount: 0,
+            vpcId: defaultVpc.vpcId,
+            subnets: [subnet.subnetId],
+          });
+        }),
+      );
 
-    expect(all.some((s) => s.serviceArn === service.serviceArn)).toBe(true);
-    const found = all.find((s) => s.serviceArn === service.serviceArn);
-    expect(found?.serviceName).toEqual(service.serviceName);
-    expect(found?.clusterArn).toEqual(service.clusterArn);
+      const provider = yield* Provider.findProvider(Service);
+      const all = yield* provider.list();
 
-    yield* stack.destroy();
+      expect(all.some((s) => s.serviceArn === service.serviceArn)).toBe(true);
+      const found = all.find((s) => s.serviceArn === service.serviceArn);
+      expect(found?.serviceName).toEqual(service.serviceName);
+      expect(found?.clusterArn).toEqual(service.clusterArn);
 
-    yield* reclaimTaskDefinitionFamily(family);
+      yield* stack.destroy();
 
-    // Out-of-band gone-proof: the cluster (deleted after its service) is
-    // INACTIVE or absent, so nothing this test created is left ACTIVE.
-    const after = yield* ecs.describeClusters({
-      clusters: ["alchemy-test-ecs-service-list"],
-    });
-    expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
-      false,
-    );
-  }),
+      yield* reclaimTaskDefinitionFamily(family);
+
+      // Out-of-band gone-proof: the cluster (deleted after its service) is
+      // INACTIVE or absent, so nothing this test created is left ACTIVE.
+      const after = yield* ecs.describeClusters({
+        clusters: ["alchemy-test-ecs-service-list"],
+      });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(
+        false,
+      );
+    }),
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"] },
 );
 
 // In-place reconcile coverage: create a service at desiredCount 0 (so
@@ -243,7 +246,10 @@ test.provider(
         false,
       );
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -431,7 +437,10 @@ test.provider(
         false,
       );
     }),
-  { timeout: 900_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 900_000,
+  },
 );
 
 // Manual (user-supplied) load balancer: create an ALB + target group OUT OF
@@ -666,7 +675,10 @@ test.provider(
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 240_000,
+  },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -783,7 +795,10 @@ test.provider(
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"],
+    timeout: 240_000,
+  },
 );
 
 // Regression: the image-owning `ServiceProps` form inherits
@@ -851,5 +866,8 @@ test.provider(
       );
       expect(roleGone).toBe(true);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"],
+    timeout: 240_000,
+  },
 );

@@ -8,7 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
@@ -90,7 +90,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:fly", "provider:fly:postgres", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -157,7 +157,16 @@ test.provider(
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:machine",
+      "provider:fly:postgres",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -306,5 +315,16 @@ test.provider(
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:postgres",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

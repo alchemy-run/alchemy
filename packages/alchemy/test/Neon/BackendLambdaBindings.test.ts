@@ -6,7 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import BackendHttpLambda from "./fixtures/backend-http-lambda.ts";
 import { backendBranch } from "./fixtures/backend-resources.ts";
 
@@ -58,5 +58,18 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:neon",
+      "provider:neon:aigateway",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

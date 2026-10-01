@@ -2,12 +2,12 @@ import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Command from "effect/unstable/cli/Command";
-import * as CliConfig from "effect/unstable/cli/CliConfig";
-import * as CliError from "effect/unstable/cli/CliError";
-import * as Flag from "effect/unstable/cli/Flag";
-import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Command from "effect/cli/Command";
+import * as CliConfig from "effect/cli/CliConfig";
+import * as CliError from "effect/cli/CliError";
+import * as Flag from "effect/cli/Flag";
+import * as GlobalFlag from "effect/cli/GlobalFlag";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";

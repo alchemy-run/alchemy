@@ -96,5 +96,14 @@ test.skipIf(!enabled)(
     });
     expect(me.email).toBe(email);
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:lambda",
+      "provider:aws:rds",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

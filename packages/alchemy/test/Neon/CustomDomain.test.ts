@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(providers(), Cloudflare.providers()),
@@ -160,5 +160,17 @@ test.provider(
         "Custom domain, DNS record, and project independently absent",
       );
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "provider:neon",
+      "provider:neon:customdomain",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

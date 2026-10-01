@@ -64,6 +64,7 @@ export interface AuthOAuthProvider extends Resource<
  * ```
  *
  * @resource
+ * @product Auth
  */
 export const AuthOAuthProvider = Resource<AuthOAuthProvider>(
   "Neon.AuthOAuthProvider",

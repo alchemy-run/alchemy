@@ -5,7 +5,7 @@ export interface FoldkitProps extends ViteProps {}
 /**
  * Deploy a [Foldkit](https://foldkit.dev) app to a Hetzner Cloud Server.
  *
- * Foldkit apps are client-only Vite projects, so this composite is the
+ * This integration supports client-only Foldkit apps through the
  * Vite site with SPA fallback to `index.html` (deep links boot the app
  * and the Foldkit router takes over).
  *

@@ -50,6 +50,7 @@ test.provider.skipIf(canUpload)(
           ),
       ),
     ),
+  { tags: ["provider:cloudflare", "provider:cloudflare:images", "live"] },
 );
 
 // Uploads require Images entitlement; the testing account returns ImagesAccessNotEnabled (5403).
@@ -199,5 +200,14 @@ test.provider.skipIf(!canUpload)(
           ),
       ),
     ),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:images",
+      "provider:cloudflare:queue",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

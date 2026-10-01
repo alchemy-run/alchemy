@@ -5,7 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { bodyContaining, copyViteFixture } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
@@ -75,5 +75,8 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         ),
       ).toBe(true);
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "live"],
+    timeout: 120_000,
+  },
 );

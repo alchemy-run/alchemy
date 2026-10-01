@@ -8,7 +8,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -32,7 +32,11 @@ test.provider(
       yield* stack.destroy();
       yield* ai.getModelSchema({ accountId, model: updated.modelName });
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -80,7 +84,17 @@ test.provider(
       );
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -178,5 +192,15 @@ test.provider(
       yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

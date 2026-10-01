@@ -13,8 +13,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as HttpClient from "effect/http/HttpClient";
 import RuntimeFunction from "./fixtures/function-effect.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -122,7 +122,15 @@ test(
       ]),
     });
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -148,7 +156,15 @@ test(
       ]),
     });
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Waits up to two minutes for durable finalizer evidence; skip under --fast.
@@ -218,7 +234,15 @@ test.provider.skipIf(!!process.env.FAST)(
         finalized: expect.arrayContaining(["websocket"]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 // Waits up to two minutes for durable finalizer evidence; skip under --fast.
@@ -294,7 +318,15 @@ test.provider.skipIf(!!process.env.FAST)(
         ]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -306,5 +338,13 @@ test(
     expect(response.status).toBe(500);
     expect(yield* response.text).not.toContain("intentional");
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

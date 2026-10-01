@@ -37,109 +37,119 @@ const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
 
 // Tests are independent (per-test scratch stacks, private fixture clones),
 // so run them concurrently; suites are sequential by default.
-describe.concurrent("Foldkit dev", () => {
-  // A server-rendered app names no Worker entry of its own, so workerd
-  // serves assets alone in dev and Vite's `ssr` environment stays runnable:
-  // the Foldkit plugin renders through it exactly as under the app's own
-  // `vite dev`. Each page stamps the `count` query into its markup, which
-  // is what tells a render from a served template.
-  test.provider(
-    "Foldkit dev: a server-rendered app renders through the local dev server",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+describe.concurrent(
+  "Foldkit dev",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:website",
+      "provider:cloudflare:worker",
+    ],
+  },
+  () => {
+    // A server-rendered app names no Worker entry of its own, so workerd
+    // serves assets alone in dev and Vite's `ssr` environment stays runnable:
+    // the Foldkit plugin renders through it exactly as under the app's own
+    // `vite dev`. Each page stamps the `count` query into its markup, which
+    // is what tells a render from a served template.
+    test.provider(
+      "Foldkit dev: a server-rendered app renders through the local dev server",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
 
-        const rootDir = yield* cloneFixture(ssrFixtureDir, {
-          prefix: "alchemy-foldkit-dev-ssr-",
-          tempRoot,
-          entries: fixtureEntries,
-        });
+          const rootDir = yield* cloneFixture(ssrFixtureDir, {
+            prefix: "alchemy-foldkit-dev-ssr-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
 
-        const site = yield* stack.deploy(
-          Cloudflare.Website.Foldkit("FoldkitSsrLocal", {
-            rootDir,
-            dev: { port: 0 },
-            memo: { include: memoInclude },
-          }),
-        );
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Foldkit("FoldkitSsrLocal", {
+              rootDir,
+              dev: { port: 0 },
+              memo: { include: memoInclude },
+            }),
+          );
 
-        // Local identity: the url points at the alchemy dev proxy — no
-        // cloud Worker exists.
-        expect(site.url).toBeDefined();
-        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+          // Local identity: the url points at the alchemy dev proxy — no
+          // cloud Worker exists.
+          expect(site.url).toBeDefined();
+          expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
 
-        // The front page renders on request — a served template would
-        // carry an empty `<div id="root">` and no count at all.
-        yield* expectUrlContains(`${site.url!}/?count=7`, ">7<", {
-          timeout: "120 seconds",
-          label: "foldkit dev ssr front page",
-        });
-        // A deep link is rendered too; nothing is prerendered in dev.
-        yield* expectUrlContains(`${site.url!}/counter/42?count=3`, ">3<", {
-          timeout: "60 seconds",
-          label: "foldkit dev ssr deep link",
-        });
+          // The front page renders on request — a served template would
+          // carry an empty `<div id="root">` and no count at all.
+          yield* expectUrlContains(`${site.url!}/?count=7`, ">7<", {
+            timeout: "30 seconds",
+            label: "foldkit dev ssr front page",
+          });
+          // A deep link is rendered too; nothing is prerendered in dev.
+          yield* expectUrlContains(`${site.url!}/counter/42?count=3`, ">3<", {
+            timeout: "15 seconds",
+            label: "foldkit dev ssr deep link",
+          });
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
-    { timeout: 300_000 },
-  );
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["local"], timeout: 120_000 },
+    );
 
-  /**
-   * `Alchemy.remote()` opts the whole site OUT of local emulation: even under
-   * `alchemy dev` the build runs, the fetch handler it emits deploys to real
-   * Cloudflare, and destroy deletes the cloud Worker (the state row is
-   * stamped live).
-   */
-  test.provider(
-    "Foldkit dev: Alchemy.remote() deploys the real Worker and destroy removes it",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    /**
+     * `Alchemy.remote()` opts the whole site OUT of local emulation: even under
+     * `alchemy dev` the build runs, the fetch handler it emits deploys to real
+     * Cloudflare, and destroy deletes the cloud Worker (the state row is
+     * stamped live).
+     */
+    test.provider(
+      "Foldkit dev: Alchemy.remote() deploys the real Worker and destroy removes it",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        const rootDir = yield* cloneFixture(ssrFixtureDir, {
-          prefix: "alchemy-foldkit-dev-remote-",
-          tempRoot,
-          entries: fixtureEntries,
-        });
+          const rootDir = yield* cloneFixture(ssrFixtureDir, {
+            prefix: "alchemy-foldkit-dev-remote-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
 
-        const site = yield* stack.deploy(
-          Cloudflare.Website.Foldkit("FoldkitRemoteSite", {
-            rootDir,
-            workersDev: true,
-            compatibility: {
-              date: "2024-09-23",
-              flags: ["nodejs_compat"],
-            },
-            memo: { include: memoInclude },
-          }).pipe(Alchemy.remote()),
-        );
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Foldkit("FoldkitRemoteSite", {
+              rootDir,
+              workersDev: true,
+              compatibility: {
+                date: "2024-09-23",
+                flags: ["nodejs_compat"],
+              },
+              memo: { include: memoInclude },
+            }).pipe(Alchemy.remote()),
+          );
 
-        // Real identity: a non-local URL and a Worker that exists on
-        // Cloudflare.
-        expect(site.url).toBeDefined();
-        expect(site.url).not.toMatch(/^http:\/\/localhost/);
-        yield* expectWorkerExists(site.workerName, accountId);
+          // Real identity: a non-local URL and a Worker that exists on
+          // Cloudflare.
+          expect(site.url).toBeDefined();
+          expect(site.url).not.toMatch(/^http:\/\/localhost/);
+          yield* expectWorkerExists(site.workerName, accountId);
 
-        // The deployed handler renders the front page on request.
-        yield* expectUrlContains(`${site.url!}/?count=7`, ">7<", {
-          timeout: "120 seconds",
-          label: "remote() foldkit ssr front page in dev mode",
-        });
-        // The route the fixture prerenders is a file: the query never
-        // reaches a render.
-        yield* expectUrlContains(`${site.url!}/about/?count=7`, ">0<", {
-          timeout: "60 seconds",
-          label: "remote() foldkit prerendered page in dev mode",
-        });
+          // The deployed handler renders the front page on request.
+          yield* expectUrlContains(`${site.url!}/?count=7`, ">7<", {
+            timeout: "30 seconds",
+            label: "remote() foldkit ssr front page in dev mode",
+          });
+          // The route the fixture prerenders is a file: the query never
+          // reaches a render.
+          yield* expectUrlContains(`${site.url!}/about/?count=7`, ">0<", {
+            timeout: "15 seconds",
+            label: "remote() foldkit prerendered page in dev mode",
+          });
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        // The stamped-live row deletes the real Worker even in a dev run.
-        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
-});
+          // The stamped-live row deletes the real Worker even in a dev run.
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+  },
+);

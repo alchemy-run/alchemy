@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
 
@@ -131,5 +131,8 @@ test.provider(
         yield* assertAppGone(target.appName);
       }
     }).pipe(sanitizeExecFailure),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:fly", "provider:fly:app", "provider:fly:machine", "live"],
+    timeout: 240_000,
+  },
 );

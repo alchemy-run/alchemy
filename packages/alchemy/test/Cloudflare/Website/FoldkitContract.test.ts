@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const fixture = (name: string) =>
@@ -113,7 +113,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           foldkitAssetsFromManifest(output.foldkit?.manifest),
         ).toBeUndefined();
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "local",
+        "provider:cloudflare",
+        "provider:cloudflare:website",
+        "provider:cloudflare:worker",
+      ],
+      timeout: 120_000,
+    },
   );
 
   for (const entryName of ["worker", "fetch"]) {
@@ -158,7 +166,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             );
           }
         }).pipe(Effect.scoped),
-      { timeout: 120_000 },
+      {
+        tags: [
+          "local",
+          "provider:cloudflare",
+          "provider:cloudflare:website",
+          "provider:cloudflare:worker",
+        ],
+        timeout: 120_000,
+      },
     );
   }
 
@@ -221,7 +237,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           yield* fs.exists(path.join(output.clientDirectory!, "index.html")),
         ).toBe(false);
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "local",
+        "provider:cloudflare",
+        "provider:cloudflare:website",
+        "provider:cloudflare:worker",
+      ],
+      timeout: 120_000,
+    },
   );
 
   for (const framework of [undefined, "foldkit"] as const) {
@@ -296,7 +320,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             output.bundle?.files.map((file) => String(file.content)).join("\n"),
           ).toContain("https://contract.example.test");
         }).pipe(Effect.scoped),
-      { timeout: 120_000 },
+      {
+        tags: [
+          "local",
+          "provider:cloudflare",
+          "provider:cloudflare:website",
+          "provider:cloudflare:worker",
+        ],
+        timeout: 120_000,
+      },
     );
   }
 
@@ -331,7 +363,15 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           }).toEqual({ exitCode: 0, failure: "" });
           expect(stdout).toContain("foldkit-dev-ok");
         }).pipe(Effect.scoped),
-      { timeout: 120_000 },
+      {
+        tags: [
+          "local",
+          "provider:cloudflare",
+          "provider:cloudflare:website",
+          "provider:cloudflare:worker",
+        ],
+        timeout: 120_000,
+      },
     );
   }
 
@@ -347,6 +387,14 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           notFoundHandling: "single-page-application",
         });
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "local",
+        "provider:cloudflare",
+        "provider:cloudflare:website",
+        "provider:cloudflare:worker",
+      ],
+      timeout: 120_000,
+    },
   );
 });

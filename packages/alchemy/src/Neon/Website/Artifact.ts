@@ -1,4 +1,3 @@
-import { makeNeonServeEntrySource } from "@alchemy.run/frontend-frameworks/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,8 +7,8 @@ import type { PlatformError } from "effect/PlatformError";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -25,6 +24,7 @@ import {
   nativeArtifactError,
   neonRuntimeTarget as runtimeTarget,
 } from "../NativeArtifact.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Build output staged after Website.Server finishes. */
 export interface WebsiteArtifactProps {
@@ -599,6 +599,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
           );
   }
   if (props.static) {
+    const { makeNeonServeEntrySource } = yield* loadFrontendCore;
     let source = makeNeonServeEntrySource({
       ...props.static,
       clientDirExpression: `fileURLToPath(new URL(${JSON.stringify(`./${relative(dist)}/`)}, import.meta.url))`,

@@ -187,7 +187,15 @@ test.provider(
       yield* assertRemoved(fixtureNames[1]!, username);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:collaborator",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -252,7 +260,15 @@ test.provider(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:collaborator",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 const mockCredentials = (calls: string[], access: Map<string, string>) =>
@@ -314,7 +330,9 @@ const unitTest = (
       mockCredentials(calls, access),
     ).pipe(Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" }))),
   });
-  test.provider(name, (stack) => body(stack, calls, access));
+  test.provider(name, (stack) => body(stack, calls, access), {
+    tags: ["provider:github", "provider:github:collaborator", "live"],
+  });
 };
 
 unitTest(
@@ -384,4 +402,7 @@ test(
       );
     }
   }),
+  {
+    tags: ["unit", "provider:github", "provider:github:collaborator", "local"],
+  },
 );

@@ -35,7 +35,10 @@ test.provider(
       yield* bodyContaining(`${site.url}/main.ts`, "second revision");
       yield* stack.destroy();
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "local"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
@@ -75,5 +78,8 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         ),
       ).toBe(true);
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "live"],
+    timeout: 120_000,
+  },
 );

@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { signStorageRead } from "./fixtures/StorageNative.ts";
 
 const { test } = Test.make({ providers: providers() });
@@ -89,7 +89,17 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:neon",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Neon's docs state storage:write includes all read operations, but the data
@@ -184,5 +194,16 @@ test.provider(
         DeleteObject: "ok",
       });
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:credential",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

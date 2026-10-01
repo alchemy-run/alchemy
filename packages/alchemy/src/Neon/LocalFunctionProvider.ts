@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
@@ -54,10 +54,14 @@ export const LocalFunctionProvider = () =>
             .pipe(
               Effect.timeout("5 seconds"),
               Effect.mapError(
-                () =>
+                (cause) =>
                   new FunctionConfigurationError({
                     message:
-                      "Install Neon CLI >=2.45.0 and Node 24 to run local Functions",
+                      cause._tag === "PlatformError" &&
+                      cause.reason._tag === "NotFound"
+                        ? `Neon CLI executable '${command}' was not found. Install Neon CLI >=2.45.0: https://neon.com/cli . Ensure '${command}' is on PATH, or set Function.dev.command to its executable path. Local Functions also require Node 24.`
+                        : `Could not run '${command} --version': ${cause.message}`,
+                    cause,
                   }),
               ),
             );

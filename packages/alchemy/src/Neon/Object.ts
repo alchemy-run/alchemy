@@ -120,6 +120,7 @@ type ObjectConstructor = Pick<
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Object = ObjectResource as ObjectConstructor;
 

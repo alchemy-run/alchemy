@@ -4,7 +4,7 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/wait-until/stack.ts";
@@ -46,6 +46,7 @@ const getText = Effect.fn(function* (url: string) {
 
 describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
   () => {
     test(
       "concurrent background journal writes retain every entry",

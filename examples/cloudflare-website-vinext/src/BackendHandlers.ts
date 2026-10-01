@@ -1,6 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { BackendApi, Note, NotesList } from "./BackendApi";
 import { DB } from "./Bindings";
 

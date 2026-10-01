@@ -257,7 +257,16 @@ test.provider(
         { concurrency: 3 },
       );
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:s3",
+      "provider:aws:sqs",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -504,7 +513,17 @@ test.provider(
         { concurrency: 4 },
       );
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "provider:aws:sns",
+      "provider:aws:sqs",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -547,7 +566,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -617,7 +636,10 @@ test.provider(
         { concurrency: 2 },
       );
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:sqs", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -787,7 +809,10 @@ test.provider(
       );
       expect(gone).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -847,7 +872,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -914,5 +939,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
 );

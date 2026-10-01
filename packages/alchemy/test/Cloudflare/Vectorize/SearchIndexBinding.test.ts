@@ -5,8 +5,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { HttpClientResponse } from "effect/unstable/http";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { HttpClientResponse } from "effect/http";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "./fixtures/stack.ts";
 
 /**
@@ -129,7 +129,15 @@ test(
     const { effectWorkerUrl } = yield* stack;
     yield* exercise("effect", effectWorkerUrl);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:vectorize",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -138,5 +146,13 @@ test(
     const { asyncWorkerUrl } = yield* stack;
     yield* exercise("async", asyncWorkerUrl);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:vectorize",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

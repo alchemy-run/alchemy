@@ -7,9 +7,9 @@ import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import Constructor from "./fixtures/function-constructor.ts";
 import LayerLive, { LayerFunction } from "./fixtures/function-layer.ts";
 import { project } from "./fixtures/function-form-resources.ts";
@@ -56,7 +56,15 @@ test(
       "layer:constructor",
     );
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -74,7 +82,15 @@ test(
     );
     expect(yield* authorized.text).toBe("authorized");
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -259,5 +275,13 @@ test.provider(
         false,
       );
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

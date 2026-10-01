@@ -6,7 +6,7 @@ import * as Test from "@/Test/Alchemy";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const { test } = Test.make({ providers: providers(), dev: true });
 test.provider(
@@ -42,7 +42,10 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:function", "local"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -82,5 +85,13 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

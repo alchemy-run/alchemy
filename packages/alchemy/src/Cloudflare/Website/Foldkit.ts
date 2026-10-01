@@ -192,14 +192,14 @@ export const Foldkit: {
     never,
     Req | Providers
   >;
-} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
   id?: string,
   propsEff?:
     | InputProps<FoldkitProps<Bindings>>
     | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
 ) =>
   id === undefined
-    ? (
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
         id: string,
         propsEff?:
           | InputProps<FoldkitProps<Bindings>>

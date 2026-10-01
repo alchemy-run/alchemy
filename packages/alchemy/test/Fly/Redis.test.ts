@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import RedisApi, {
   Cache,
   REDIS_VALUE,
@@ -61,7 +61,7 @@ test.provider(
       expect(cheapest?.id).toEqual(expect.any(String));
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 90_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 90_000 },
 );
 
 test.provider(
@@ -124,7 +124,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(created.redisId, created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -167,7 +167,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(replaced.redisId, replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -208,7 +208,7 @@ test.provider(
       const gone = yield* waitUntilRedisGone(replaced.redisId, replaced.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -300,7 +300,18 @@ test.provider(
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:redis",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -328,5 +339,5 @@ test.provider(
       const gone = yield* waitUntilRedisGone(created.redisId, created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:fly", "provider:fly:redis", "live"], timeout: 120_000 },
 );

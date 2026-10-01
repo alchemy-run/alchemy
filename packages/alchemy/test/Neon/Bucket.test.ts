@@ -14,7 +14,7 @@ import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -43,6 +43,7 @@ test.provider(
       }
       yield* stack.destroy();
     }),
+  { tags: ["provider:neon", "provider:neon:bucket", "live"] },
 );
 
 test.provider(
@@ -111,7 +112,15 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -211,7 +220,15 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -259,7 +276,15 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -410,7 +435,17 @@ test.provider(
       yield* stack.destroy();
       if (Result.isFailure(outcome)) return yield* Effect.fail(outcome.failure);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -498,7 +533,18 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:credential",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -529,5 +575,13 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

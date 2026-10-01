@@ -134,5 +134,13 @@ test.provider(
       );
     }).pipe(logLevel),
   // Two build-command/image deployments, proxy overlap, and final cloud census.
-  { timeout: 720_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:machine",
+      "provider:fly:website",
+      "live",
+    ],
+    timeout: 720_000,
+  },
 );

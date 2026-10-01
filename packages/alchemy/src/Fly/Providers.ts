@@ -1,9 +1,10 @@
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
+import { Random, RandomProvider } from "../Random.ts";
 import { App, AppProvider } from "./App.ts";
 import { FlyAuth } from "./AuthProvider.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
@@ -92,6 +93,7 @@ export const providers = () =>
       IpAssignment,
       Machine,
       Postgres,
+      Random,
       Redis,
       Secret,
       SecretKey,
@@ -110,6 +112,7 @@ export const providers = () =>
         IpAssignmentProvider(),
         MachineProvider(),
         PostgresProvider(),
+        RandomProvider(),
         RedisProvider(),
         SecretProvider(),
         SecretKeyProvider(),

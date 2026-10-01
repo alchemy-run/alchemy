@@ -62,7 +62,7 @@ pnpm exec alchemy deploy
 pnpm exec alchemy destroy
 ```
 
-Run separately, destroying when finished. Dev uses Vite's native server and HMR,
+Run separately, destroying when finished. Dev uses Vite's native server with Foldkit live reload,
 returns a local URL, and creates no implicit Neon resources. Append
 `.pipe(Alchemy.remote())` to the Website Effect to use live deployment during dev.
 

@@ -142,9 +142,7 @@ export const cached =
       const cached = yield* artifacts.get<A | Effect.Effect<A>>(id);
       if (cached) {
         if (Effect.isEffect(cached)) {
-          // This slot contains the deferred await stored below, which
-          // needs no services and resolves to the artifact value.
-          return yield* cached as Effect.Effect<A>;
+          return yield* cached;
         }
         return cached;
       }

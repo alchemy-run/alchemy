@@ -227,6 +227,7 @@ type ProjectAttributes = Project["Attributes"];
  * @see https://neon.tech/docs/manage/projects/
  *
  * @resource
+ * @product Project
  */
 export const Project = Resource<Project>("Neon.Project");
 
@@ -309,7 +310,7 @@ export const ProjectProvider = () =>
         );
       }
       const name = yield* createProjectName(id, olds?.name);
-      const matches = yield* findProjectByName(name);
+      const matches = yield* findProjectByName(name, olds?.orgId);
       if (matches.length > 1) {
         return yield* new ProjectStateError({
           reason: "Ambiguous project name",
@@ -350,7 +351,7 @@ export const ProjectProvider = () =>
           )
         : undefined;
       if (!observed) {
-        const matches = yield* findProjectByName(name);
+        const matches = yield* findProjectByName(name, news.orgId);
         if (matches.length > 1) {
           return yield* new ProjectStateError({
             reason: "Ambiguous project name",
@@ -377,7 +378,7 @@ export const ProjectProvider = () =>
           },
         }).pipe(
           Effect.catchTag("Conflict", (error) =>
-            findProjectByName(name).pipe(
+            findProjectByName(name, news.orgId).pipe(
               Effect.flatMap(
                 Effect.fn(function* (matches) {
                   if (matches.length !== 1) return yield* Effect.fail(error);
@@ -588,13 +589,14 @@ export const waitForOperations = (
     { concurrency: 10, discard: true },
   ).pipe(Effect.timeout("55 seconds"));
 
-const findProjectByName = (name: string) =>
+const findProjectByName = (name: string, orgId?: string) =>
   Effect.gen(function* () {
     const matches: ListProjectsResponse["projects"][number][] = [];
     let cursor: string | undefined;
     while (true) {
       const page = yield* listProjects({
         search: name,
+        ...(orgId !== undefined ? { org_id: orgId } : {}),
         ...(cursor !== undefined ? { cursor } : {}),
       });
       for (const p of page.projects) {

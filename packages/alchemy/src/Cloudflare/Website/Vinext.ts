@@ -85,6 +85,13 @@ export interface VinextProps<
   assets?: AssetsConfig;
 }
 
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type VinextInput<Bindings extends WorkerBindingProps> = InputProps<
+  VinextProps<Bindings>,
+  "env" | "cache" | "compatibility" | "assets"
+>;
+
 /**
  * A Cloudflare Worker deployed from a [vinext](https://vinext.dev) app.
  *
@@ -169,8 +176,8 @@ export const Vinext: {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
-        | InputProps<VinextProps<Bindings>>
-        | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
+        | VinextInput<Bindings>
+        | Effect.Effect<VinextInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
         [
@@ -182,8 +189,8 @@ export const Vinext: {
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
-      | InputProps<VinextProps<Bindings>>
-      | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
+      | VinextInput<Bindings>
+      | Effect.Effect<VinextInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
       [
@@ -193,13 +200,23 @@ export const Vinext: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | VinextInput<Bindings>
+    | Effect.Effect<VinextInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vinext(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | VinextInput<Bindings>
+          | Effect.Effect<VinextInput<Bindings>, never, Req>,
+      ) => effectClass(Vinext(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {
-          const props: any =
+          const props =
             (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
@@ -228,8 +245,8 @@ export const Vinext: {
               ),
             },
             assets: {
-              htmlHandling: "none",
-              notFoundHandling: "none",
+              htmlHandling: "none" as const,
+              notFoundHandling: "none" as const,
               ...props?.assets,
             },
             source: {

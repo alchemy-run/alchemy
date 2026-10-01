@@ -34,6 +34,7 @@ export interface WriteObjectClient<T> {
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface WriteObject extends Binding.Service<
   WriteObject,

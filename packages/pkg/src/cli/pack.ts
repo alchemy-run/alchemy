@@ -8,7 +8,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { exec } from "alchemy/Util/exec";
 import { sha256 } from "alchemy/Util/sha256";
 import { packTar, unpackTar, type TarHeader } from "modern-tar";

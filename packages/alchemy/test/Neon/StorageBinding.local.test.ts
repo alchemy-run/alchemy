@@ -4,7 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import StorageFunction from "./fixtures/StorageFunction.ts";
 import { StorageBucket, StorageSettings } from "./fixtures/StorageResources.ts";
 
@@ -57,5 +57,16 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

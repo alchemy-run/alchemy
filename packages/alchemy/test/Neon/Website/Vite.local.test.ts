@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { bodyContaining, exampleRoot } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers(), dev: true });
@@ -37,7 +37,11 @@ test.provider(
       yield* bodyContaining(`${restarted.url}/src/App.tsx`, "second");
       yield* stack.destroy();
     }).pipe(Effect.scoped),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:neon", "provider:neon:website", "local"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -88,5 +92,9 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:neon", "provider:neon:website", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

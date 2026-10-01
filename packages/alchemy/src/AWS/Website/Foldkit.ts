@@ -18,9 +18,9 @@ export interface FoldkitProps extends ViteProps {}
 /**
  * Deploy a [Foldkit](https://foldkit.dev) app to AWS: the client build in
  * S3 behind a CloudFront distribution. Foldkit is an Elm-architecture
- * frontend framework built on Effect, and its apps are client-only Vite
- * projects — so the deployment is assets-only and never creates a server
- * function.
+ * frontend framework built on Effect. This integration supports its
+ * client-only Vite apps: the deployment is assets-only and never creates
+ * a server function.
  *
  * The Foldkit Vite plugin lives in your project's own `vite.config.*`,
  * which loads natively. The build runs through
@@ -114,9 +114,8 @@ export const Foldkit = (id: string, props: InputProps<FoldkitProps> = {}) => {
     framework: VITE_FRAMEWORK_SPECIFIER,
     target: VITE_AWS_TARGET_SPECIFIER,
     options: viteFrameworkOptions(p),
-    // Foldkit is client-only: the whole deployable output is the client
-    // build, so the deploy never creates a server function. Foldkit routes
-    // on the client, so `spa` defaults on — but yields to an explicit
+    // This integration deploys the client build without a server function.
+    // Client-side routing defaults to `spa`, but yields to an explicit
     // `errorPage` (the two are mutually exclusive downstream).
     static: {
       spa: p.spa ?? (p.errorPage === undefined ? true : undefined),

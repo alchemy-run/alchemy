@@ -4,9 +4,9 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { isHttpClientError } from "effect/unstable/http/HttpClientError";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import { isHttpClientError } from "effect/http/HttpClientError";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import Stack from "./fixtures/do-abort/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -81,6 +81,7 @@ const getJson = <T>(
 
 describe.skipIf(!!process.env.FAST)(
   "DurableObjectState.abort resets the isolate",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
   () => {
     test(
       "abort resets the Durable Object so the constructor re-runs",

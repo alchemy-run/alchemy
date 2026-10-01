@@ -8,8 +8,8 @@ import { FileSystem } from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { randomBytes } from "node:crypto";
 import { Ledger, ledgerLayer } from "./bluegreen-worker-ledger.ts";
 import {

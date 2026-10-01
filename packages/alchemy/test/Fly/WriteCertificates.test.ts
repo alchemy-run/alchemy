@@ -13,8 +13,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import CertificatesApi, {
   CertIp,
   CertSite,
@@ -160,5 +160,22 @@ test(
     // Removing again is a no-op.
     expect((yield* call(`/remove?hostname=${UPLOAD_HOST}`)).ok).toBe(true);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:acme:certificate",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:zone",
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:certificate",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

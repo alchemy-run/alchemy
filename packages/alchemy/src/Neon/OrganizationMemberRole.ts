@@ -84,6 +84,7 @@ export interface OrganizationMemberRole extends Resource<
  * ```
  *
  * @resource
+ * @product Organization
  */
 export const OrganizationMemberRole = Resource<OrganizationMemberRole>(
   "Neon.OrganizationMemberRole",

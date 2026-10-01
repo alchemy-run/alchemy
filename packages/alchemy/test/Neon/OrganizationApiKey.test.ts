@@ -67,6 +67,7 @@ const metadata = {
 test(
   "key types exclude branch scope and secret inputs and require a redacted output",
   Effect.sync(() => expect(typeAssertions.every(Boolean)).toBe(true)),
+  { tags: ["provider:neon", "provider:neon:organizationapikey", "live"] },
 );
 
 test(
@@ -84,6 +85,14 @@ test(
     expect(renamed.name).toBe("observed-label");
     expect(JSON.stringify(recovered)).not.toContain(Redacted.value(cached.key));
   }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationapikey",
+      "local",
+    ],
+  },
 );
 
 test(
@@ -139,6 +148,14 @@ test(
       }
     }
   }),
+  {
+    tags: [
+      "unit",
+      "provider:neon",
+      "provider:neon:organizationapikey",
+      "local",
+    ],
+  },
 );
 
 test.provider(
@@ -180,6 +197,7 @@ test.provider(
         }),
       ).toMatchObject({ action: "replace", deleteFirst: true });
     }),
+  { tags: ["provider:neon", "provider:neon:organizationapikey", "live"] },
 );
 
 test.provider(
@@ -222,6 +240,7 @@ test.provider(
           ),
       ).toBe(true);
     }),
+  { tags: ["provider:neon", "provider:neon:organizationapikey", "live"] },
 );
 
 test.provider(
@@ -267,6 +286,7 @@ test.provider(
         ).toBeUndefined();
       }
     }),
+  { tags: ["provider:neon", "provider:neon:organizationapikey", "live"] },
 );
 
 const orgId = process.env.NEON_GOVERNANCE_TEST_ORG_ID;
@@ -387,5 +407,13 @@ test.provider.skipIf(!orgId)(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:organizationapikey",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

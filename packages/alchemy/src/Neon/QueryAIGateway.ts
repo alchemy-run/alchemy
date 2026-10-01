@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Option from "effect/Option";
-import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
+import type { LanguageModel } from "effect/ai/LanguageModel";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
 import { defaultProviderMode } from "../ProviderMode.ts";

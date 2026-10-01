@@ -32,7 +32,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { dockerAvailable } from "../Local/fixtures/raw.ts";
 import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 import DevProbeFunctionLive, {
@@ -181,5 +181,8 @@ test.provider.skipIf(!dockerAvailable)(
         );
       expect(gone).toBe(true);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "local"],
+    timeout: 600_000,
+  },
 );

@@ -11,8 +11,8 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as EffectHttp from "effect/http/HttpEffect";
 import {
   makeEntrypointLayer,
   reifyBoundConfigProvider,

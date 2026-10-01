@@ -2,7 +2,7 @@
 
 Deploys a [Foldkit](https://foldkit.dev) app to Cloudflare Workers with
 `Cloudflare.Website.Foldkit` — no `main` entry, build command, or
-Wrangler configuration. Foldkit apps are client-only Vite projects:
+Wrangler configuration. This example is a client-only Foldkit app:
 Alchemy runs Vite with the project's own `vite.config.ts` and serves
 the client build as static assets — no Worker code runs at request
 time.

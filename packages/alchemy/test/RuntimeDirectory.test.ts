@@ -57,31 +57,35 @@ layer(PlatformServices)("runtime directory", (it) => {
           isPathWithin("/runtime", "/runtime/worker.js", "/workspace/app"),
         ).toBe(true);
       }),
+    { tags: ["unit", "local"] },
   );
 
-  it.effect("preserves the relative fallback and configured roots", () =>
-    Effect.gen(function* () {
-      expect(yield* dotAlchemyDirectory).toBe(".alchemy");
-      expect(
-        yield* dotAlchemyDirectory.pipe(
-          Effect.provideService(AlchemyContext, {
-            dotAlchemy: "node_modules/.cache/runtime",
-            dev: false,
-            adopt: false,
-          }),
-        ),
-      ).toBe("node_modules/.cache/runtime");
-      expect(
-        isPathWithin(
-          "/tmp/runtime",
-          "/tmp/runtime-sibling/file",
-          process.cwd(),
-        ),
-      ).toBe(false);
-      expect(
-        isPathWithin("/tmp/runtime", "/tmp/runtime/file", process.cwd()),
-      ).toBe(true);
-    }),
+  it.effect(
+    "preserves the relative fallback and configured roots",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* dotAlchemyDirectory).toBe(".alchemy");
+        expect(
+          yield* dotAlchemyDirectory.pipe(
+            Effect.provideService(AlchemyContext, {
+              dotAlchemy: "node_modules/.cache/runtime",
+              dev: false,
+              adopt: false,
+            }),
+          ),
+        ).toBe("node_modules/.cache/runtime");
+        expect(
+          isPathWithin(
+            "/tmp/runtime",
+            "/tmp/runtime-sibling/file",
+            process.cwd(),
+          ),
+        ).toBe(false);
+        expect(
+          isPathWithin("/tmp/runtime", "/tmp/runtime/file", process.cwd()),
+        ).toBe(true);
+      }),
+    { tags: ["unit", "local"] },
   );
 
   it.effect(
@@ -126,6 +130,14 @@ layer(PlatformServices)("runtime directory", (it) => {
           expect(events.map((event) => event._tag)).toEqual(expected);
         }
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -166,6 +178,14 @@ layer(PlatformServices)("runtime directory", (it) => {
         }
         expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -206,6 +226,14 @@ layer(PlatformServices)("runtime directory", (it) => {
           ).toBeGreaterThan(0);
         }
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -249,6 +277,7 @@ layer(PlatformServices)("runtime directory", (it) => {
           Effect.provideService(Stage, "dev"),
         );
       }),
+    { tags: ["unit", "local"] },
   );
 
   it.effect(
@@ -277,6 +306,7 @@ layer(PlatformServices)("runtime directory", (it) => {
         ).toEqual({ value: 42 });
         expect(yield* fs.exists(path.join(root, "state"))).toBe(true);
       }),
+    { tags: ["unit", "local"] },
   );
 
   it.effect(
@@ -336,6 +366,7 @@ layer(PlatformServices)("runtime directory", (it) => {
           }),
         );
       }),
+    { tags: ["unit", "provider:prisma", "provider:prisma:compute", "local"] },
   );
   it.effect(
     "reads Python dependency caches from the configured root without including them as source",
@@ -385,6 +416,14 @@ layer(PlatformServices)("runtime directory", (it) => {
         ).toBe(false);
         expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
       }),
+    {
+      tags: [
+        "unit",
+        "provider:cloudflare",
+        "provider:cloudflare:worker",
+        "local",
+      ],
+    },
   );
 
   it.effect(
@@ -416,5 +455,6 @@ layer(PlatformServices)("runtime directory", (it) => {
         );
         expect(yield* provider.hash(context, undefined)).not.toEqual(before);
       }),
+    { tags: ["unit", "local"] },
   );
 });

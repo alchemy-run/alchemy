@@ -72,6 +72,7 @@ export interface ConnectClient {
  * applications the names used by `connectEnv` for cross-host connections.
  *
  * @binding
+ * @product Branch
  */
 export interface Connect extends Binding.Service<
   Connect,

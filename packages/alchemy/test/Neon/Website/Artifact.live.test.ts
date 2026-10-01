@@ -8,7 +8,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import {
   bodyContaining,
   buildPortableExample,
@@ -110,5 +110,14 @@ for (const slug of ["nextjs", "vocs"] as const)
           ),
         ).toBe(true);
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    {
+      tags: [
+        "provider:neon",
+        "provider:neon:function",
+        "provider:neon:project",
+        "provider:neon:website",
+        "live",
+      ],
+      timeout: 120_000,
+    },
   );

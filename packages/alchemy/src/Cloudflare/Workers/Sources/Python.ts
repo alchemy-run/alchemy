@@ -3,7 +3,7 @@ import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import { convertPathToPattern, glob } from "tinyglobby";
 import path from "pathe";
 import * as Artifacts from "../../../Artifacts.ts";

@@ -103,7 +103,15 @@ test.provider(
       );
       expect(remaining.some((label) => label.name === "bug")).toBe(false);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:label",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -159,7 +167,15 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:label",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -224,7 +240,15 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:label",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -281,7 +305,15 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:label",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -320,5 +352,13 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:github",
+      "provider:github:label",
+      "provider:github:repository",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

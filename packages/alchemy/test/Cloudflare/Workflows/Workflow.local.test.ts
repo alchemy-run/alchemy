@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import ExplicitNameWorkflowWorker, {
   EXPLICIT_WORKFLOW_NAME,
 } from "./fixtures/explicit-name-worker.ts";
@@ -354,7 +354,16 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 // Exercise physical names through real workerd bindings, not just metadata.
@@ -417,7 +426,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -458,7 +475,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -478,7 +503,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -525,7 +558,15 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -600,5 +641,14 @@ test.provider(
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:r2",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
