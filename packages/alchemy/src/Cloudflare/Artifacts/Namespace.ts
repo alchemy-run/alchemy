@@ -6,28 +6,29 @@ type NamespaceTypeId = typeof NamespaceTypeId;
 const NamespaceTypeId = "Cloudflare.Artifacts.Namespace" as const;
 
 /**
- * Cloudflare validation: 3–63 chars, lowercase alphanumeric and hyphens, must
- * start and end with a lowercase alphanumeric character.
+ * Cloudflare validation: 2–63 chars, starting with a letter or digit, followed
+ * by letters, digits, `.`, `_`, or `-`. See
+ * https://developers.cloudflare.com/artifacts/platform/limits/.
  */
-const ARTIFACTS_NAMESPACE_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
+const ARTIFACTS_NAMESPACE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$/;
 
 export class InvalidNamespaceError extends Error {
   readonly _tag = "InvalidNamespaceError" as const;
   constructor(public readonly namespace: string) {
     super(
-      `Invalid artifacts namespace name '${namespace}'. Must be 3-63 characters, start and end with a lowercase alphanumeric character, and contain only lowercase alphanumeric characters and hyphens.`,
+      `Invalid artifacts namespace name '${namespace}'. Must be 2-63 characters, start with a letter or digit, and contain only letters, digits, ".", "_", and "-".`,
     );
   }
 }
 
 export type NamespaceProps = {
   /**
-   * Cloudflare namespace name. Namespaces are implicit on Cloudflare — the
-   * first repo created against this name conjures the namespace.
+   * Cloudflare namespace name. The first repo created against a name that
+   * does not exist yet creates the namespace.
    *
-   * Must be 3–63 lowercase alphanumeric characters or hyphens, and must start
-   * and end with a lowercase alphanumeric character. If omitted, a unique
-   * physical name is generated from the resource's logical id, app, and stage.
+   * Must be 2–63 characters, start with a letter or digit, and contain only
+   * letters, digits, `.`, `_`, or `-`. If omitted, the lowercased logical id
+   * is used.
    */
   namespace?: string;
 };
@@ -59,11 +60,12 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * {@link https://blog.cloudflare.com/artifacts-git-for-agents-beta/ | Artifacts launch post}
  * and {@link https://developers.cloudflare.com/artifacts/concepts/namespaces/ | Namespaces docs}.
  *
- * Namespaces on Cloudflare are **implicit**: there is no `POST /namespaces`
- * endpoint. The namespace is conjured the first time a repo is created against
- * it (either via the REST API or the Worker binding). Because of that, the
- * Alchemy "resource" is a thin binding marker — there is nothing to provision
- * at deploy time. Repos themselves are typically created at runtime through
+ * Cloudflare creates a namespace implicitly the first time a repo is created
+ * against it (through the REST API or the Worker binding), so the Alchemy
+ * "resource" is a thin binding marker with nothing to provision at deploy
+ * time. Cloudflare also offers an explicit `POST /artifacts/namespaces` route,
+ * needed only to pin a data-location `jurisdiction`; this marker does not
+ * call it. Repos themselves are typically created at runtime through
  * the bound `Artifacts` API.
  *
  * Unlike the other Worker-only bindings, an Artifacts namespace does **not**
@@ -76,7 +78,7 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * const Repos = Cloudflare.Artifacts.Namespace("Repos");
  * ```
  *
- * **Example:** Override the namespace name (must be lowercase, 3–63 chars)
+ * **Example:** Override the namespace name (2–63 chars)
  * ```typescript
  * const Repos = Cloudflare.Artifacts.Namespace("Repos", { namespace: "starter-repos" });
  * ```
@@ -109,6 +111,14 @@ export const isNamespace = (value: unknown): value is Namespace =>
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
+ * ```
+ *
+ * **Example:** Effect-style worker reading history (read-only access)
+ * ```typescript
+ * const artifacts = yield* Cloudflare.Artifacts.ReadNamespace(Repos);
+ * const repo = yield* artifacts.get("starter-repo");
+ * const commits = yield* repo.log({ ref: "main", limit: 10 });
+ * const readme = yield* repo.readFile({ ref: "main", path: "README.md" });
  * ```
  *
  * @binding

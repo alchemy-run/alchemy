@@ -308,23 +308,24 @@ export default class Api extends Cloudflare.Worker<Api>()(
             );
           }
           return yield* repos.get(name).pipe(
-            Effect.flatMap((repo) =>
+            Effect.flatMap((repo) => repo.info()),
+            Effect.flatMap((info) =>
               HttpServerResponse.json({
-                id: repo.raw.id,
-                name: repo.raw.name,
-                description: repo.raw.description,
-                defaultBranch: repo.raw.defaultBranch,
-                remote: repo.raw.remote,
-                createdAt: repo.raw.createdAt,
-                updatedAt: repo.raw.updatedAt,
-                lastPushAt: repo.raw.lastPushAt,
-                readOnly: repo.raw.readOnly,
+                id: info.id,
+                name: info.name,
+                description: info.description,
+                defaultBranch: info.defaultBranch,
+                remote: info.remote,
+                createdAt: info.createdAt,
+                updatedAt: info.updatedAt,
+                lastPushAt: info.lastPushAt,
+                readOnly: info.readOnly,
               }),
             ),
             Effect.catchTag("ArtifactsError", (err) =>
               HttpServerResponse.json(
                 { name, error: err.message },
-                { status: 404 },
+                { status: err.code === "NOT_FOUND" ? 404 : 500 },
               ),
             ),
           );
