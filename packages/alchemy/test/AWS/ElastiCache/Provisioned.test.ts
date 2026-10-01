@@ -223,10 +223,10 @@ test.provider(
           Effect.gen(function* () {
             const group = yield* AWS.ElastiCache.SubnetGroup("Subnets", {
               description,
-              subnetIds: net.privateSubnetIds,
+              subnetIds: net.subnetIds,
               tags: { fixture: "elasticache-provisioned" },
             });
-            return { group, subnetIds: net.privateSubnetIds };
+            return { group, subnetIds: net.subnetIds };
           }),
         );
 
@@ -255,7 +255,7 @@ test.provider(
       "provider:aws:elasticache",
       "live",
     ],
-    timeout: 2_700_000,
+    timeout: 180_000,
   },
 );
 

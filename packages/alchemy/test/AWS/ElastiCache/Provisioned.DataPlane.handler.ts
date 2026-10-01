@@ -120,14 +120,14 @@ const ProvisionedCacheDataPlaneLive = ProvisionedCacheDataPlaneFunction.make(
     const valkeyConnection = yield* AWS.ElastiCache.ConnectReplicationGroup(
       valkey,
       {
-        subnetIds: net.privateSubnetIds,
+        subnetIds: net.subnetIds,
         securityGroupIds: [lambdaSecurityGroup.groupId],
       },
     );
     const memcachedConnection = yield* AWS.ElastiCache.ConnectCacheCluster(
       memcached,
       {
-        subnetIds: net.privateSubnetIds,
+        subnetIds: net.subnetIds,
         securityGroupIds: [lambdaSecurityGroup.groupId],
       },
     );
