@@ -272,16 +272,24 @@ export const Astro: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<AstroProps<Bindings>>
+    | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
+    ? (
+        id: string,
+        propsEff?:
+          | InputProps<AstroProps<Bindings>>
+          | Effect.Effect<InputProps<AstroProps<Bindings>>, never, Req>,
+      ) => effectClass(Astro(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {
           const props: any =
-            (Effect.isEffect(propsEff)
-              ? yield* propsEff as Effect.Effect<any, never, any>
-              : propsEff) ?? {};
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           const session = props.sessionKVBindingName;
           const sessionBindingName =
             typeof session === "string" ? session : "SESSION";

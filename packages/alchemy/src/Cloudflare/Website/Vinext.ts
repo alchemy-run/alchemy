@@ -193,16 +193,24 @@ export const Vinext: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<VinextProps<Bindings>>
+    | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vinext(id, propsEff))
+    ? (
+        id: string,
+        propsEff?:
+          | InputProps<VinextProps<Bindings>>
+          | Effect.Effect<InputProps<VinextProps<Bindings>>, never, Req>,
+      ) => effectClass(Vinext(id, propsEff))
     : Worker(
         id,
         Effect.gen(function* () {
           const props: any =
-            (Effect.isEffect(propsEff)
-              ? yield* propsEff as Effect.Effect<any, never, any>
-              : propsEff) ?? {};
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
           // Auto-provision the ISR/TPR data-cache KV. Official vinext
           // leaves a wrangler placeholder; Alchemy owns the namespace.
           // Do not bind VINEXT_KV_CACHE in user `env`.

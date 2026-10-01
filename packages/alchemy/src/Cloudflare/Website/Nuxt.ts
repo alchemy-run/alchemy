@@ -302,15 +302,23 @@ export const Nuxt: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<NuxtProps<Bindings>>
+    | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nuxt(id, propsEff))
+    ? (
+        id: string,
+        propsEff?:
+          | InputProps<NuxtProps<Bindings>>
+          | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+      ) => effectClass(Nuxt(id, propsEff))
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff)
-            ? (propsEff as Effect.Effect<any, never, any>)
-            : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             // The server build uses nitro's hybrid workerd node-compat
@@ -322,7 +330,7 @@ export const Nuxt: {
             main: undefined!,
             source: {
               provider: NUXT_SOURCE_PROVIDER,
-              devMode: "server",
+              devMode: "server" as const,
               rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,

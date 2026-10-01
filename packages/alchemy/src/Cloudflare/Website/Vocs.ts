@@ -161,15 +161,23 @@ export const Vocs: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<VocsProps<Bindings>>
+    | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vocs(id, propsEff))
+    ? (
+        id: string,
+        propsEff?:
+          | InputProps<VocsProps<Bindings>>
+          | Effect.Effect<InputProps<VocsProps<Bindings>>, never, Req>,
+      ) => effectClass(Vocs(id, propsEff))
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff)
-            ? (propsEff as Effect.Effect<any, never, any>)
-            : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             // The Worker compatibility resolver enables Node.js APIs from
@@ -181,7 +189,7 @@ export const Vocs: {
             main: undefined!,
             source: {
               provider: VOCS_SOURCE_PROVIDER,
-              devMode: "server",
+              devMode: "server" as const,
               options: {
                 rootDir: props?.rootDir,
                 outDir: props?.outDir,

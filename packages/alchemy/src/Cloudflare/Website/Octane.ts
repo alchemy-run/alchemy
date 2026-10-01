@@ -218,15 +218,23 @@ export const Octane: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<OctaneProps<Bindings>>
+    | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
+    ? (
+        id: string,
+        propsEff?:
+          | InputProps<OctaneProps<Bindings>>
+          | Effect.Effect<InputProps<OctaneProps<Bindings>>, never, Req>,
+      ) => effectClass(Octane(id, propsEff))
     : Worker(
         id,
         Effect.map(
-          Effect.isEffect(propsEff)
-            ? (propsEff as Effect.Effect<any, never, any>)
-            : Effect.succeed(propsEff),
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
             // Octane's server bundle externalizes `node:` modules for
@@ -235,7 +243,7 @@ export const Octane: {
             main: undefined!,
             source: {
               provider: OCTANE_SOURCE_PROVIDER,
-              devMode: "server",
+              devMode: "server" as const,
               rootDir: props?.rootDir,
               options: {
                 rootDir: props?.rootDir,
