@@ -76,7 +76,7 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
+    "vitest": "catalog:cloudflare-test-compat",
     "ws": "catalog:"
   },
   "peerDependencies": {
