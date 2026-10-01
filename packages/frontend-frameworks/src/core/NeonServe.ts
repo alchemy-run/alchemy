@@ -60,7 +60,7 @@ export default {
       try { pathname = decodeURIComponent(url.pathname); } catch { return new Response("Bad Request", { status: 400 }); }
       if (pathname.includes("\\0") || pathname.includes("\\\\")) return new Response("Bad Request", { status: 400 });
       if (request.method === "GET" || request.method === "HEAD") {
-        const found = lookup(pathname, handle === undefined || pathname !== "/")${options.htmlHandling === "drop-trailing-slash" ? ' ?? (!path.extname(pathname) ? lookup(pathname + ".html") : undefined)' : ""};
+        const found = lookup(pathname, ${options.serveRootIndex ? "true" : 'handle === undefined || pathname !== "/"'})${options.htmlHandling === "drop-trailing-slash" ? ' ?? (!path.extname(pathname) ? lookup(pathname + ".html") : undefined)' : ""};
         if (found) return serve(found, request);
 ${options.notFoundHandling === "spa" ? '        const fallback = lookup("/index.html");\n        if (fallback) return serve(fallback, request);' : ""}
       }

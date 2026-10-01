@@ -19,8 +19,7 @@ describe(
   "Railway.Website.Foldkit local",
   { tags: ["provider:railway", "provider:railway:website", "local"] },
   () => {
-    // foldkit@0.148.2 requires SchemaTransformation.transformOrFail, absent in Effect rc.115.
-    test.provider.skip(
+    test.provider(
       "dev runs the framework server with no cloud resources",
       (stack) =>
         Effect.gen(function* () {

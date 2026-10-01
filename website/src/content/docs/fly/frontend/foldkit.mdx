@@ -1,6 +1,6 @@
 ---
 title: Foldkit
-description: Deploy a Foldkit app to Fly with Fly.Website.Foldkit — a client-only Vite SPA on a Node static-file Service, fly.dev over shared IPv4, and Vite's own dev server under alchemy dev.
+description: Deploy Foldkit SPA, SSR, and prerendered applications to Fly with native local development.
 sidebar:
   order: 8
 ---
@@ -9,30 +9,16 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
-[Foldkit](https://foldkit.dev) is an Elm-architecture frontend
-framework built on Effect. A client-only Foldkit app is a plain
-`vite build`, so `Fly.Website.Foldkit` is
-[`Fly.Website.Vite`](/fly/frontend/vite) with SPA fallback to
-`index.html`. Deep links boot the app and the Foldkit router takes
-over.
-
-Deploy creates a [`Fly.App`](/fly/compute/apps) (unless you pass
-`app`), a [`Fly.Service`](/fly/compute/services) running a static-file
-Node server on port 3000, and a shared IPv4 so
-`https://{app}.fly.dev` answers.
-
-:::note[Server rendering]
-`ssr.build` is how Foldkit emits a server bundle and prerendered
-pages from that same `vite build`. This resource does not run that
-bundle: it is assets-only. For server-rendered and hybrid Foldkit deployments, see the
-[Cloudflare Foldkit](/cloudflare/frontend/foldkit) guide.
-:::
+[Foldkit](https://foldkit.dev) is an Elm-architecture frontend framework
+built on Effect. This integration supports browser-only SPAs, server rendering,
+and prerendered pages with request-time fallback. Foldkit's Vite plugin generates
+the handler and assets; Alchemy packages them for Fly.
 
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/frontend-frameworks`; the resource loads its `/vite`
-and `/vite/node` exports from your project at deploy time. It is only
+`@alchemy.run/frontend-frameworks`; the resource loads its `/foldkit`
+and `/foldkit/node` exports from your project at deploy time. It is only
 used at build time, so a dev dependency is enough:
 
 <Tabs syncKey="pkgManager">
@@ -159,12 +145,12 @@ const apiUrl = import.meta.env.VITE_API_URL;
 
 ## Deep links
 
-A Foldkit app that uses URL routing (`Runtime.makeApplication` with
+A browser-only Foldkit app that uses URL routing (`Runtime.makeApplication` with
 `route`, `onUrlRequest`, and `onUrlChange`) resolves routes on the
 client, so a deep link like `/counter/42` arrives as a request for a
 file that doesn't exist.
 
-`Foldkit` defaults `assets.notFoundHandling` to
+For browser-only builds, `Foldkit` defaults `assets.notFoundHandling` to
 `"single-page-application"`, which returns `index.html` (200) for
 unmatched paths so the Foldkit runtime can resolve the route. Use
 `"404-page"` to serve a real 404 instead:
@@ -174,6 +160,46 @@ export const Website = Fly.Website.Foldkit("Website", {
   assets: { notFoundHandling: "404-page" },
 });
 ```
+
+## Server rendering and prerendering
+
+Use Foldkit 0.164.0 and `@foldkit/vite-plugin` 0.25.0 or newer. Keep rendering
+configuration in your app's `vite.config.ts`:
+
+```typescript
+import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit({
+    ssr: {
+      serverEntry: "/src/entry.server.ts",
+      build: { prerender: true },
+    },
+  })],
+});
+```
+
+The server entry exports `renderPage` and, when prerendering is enabled,
+`prerenderPaths`. Use `build: true` for SSR without prerendering. See
+[Foldkit's server rendering guide](https://foldkit.dev/core/server-rendering)
+for the application contract.
+
+The same Website declaration detects the generated handler automatically.
+GET and HEAD requests serve assets and prerendered pages first, including `/`
+when it was prerendered. Remaining requests go to Foldkit's handler; POST
+requests bypass static assets. SSG deployments retain the generated handler
+for paths that were not prerendered, matching the SvelteKit/TanStack Start path.
+
+Browser-only builds keep SPA fallback. An explicit `assets.notFoundHandling`
+override takes precedence. Avoid SPA fallback on SSR apps unless intentional:
+a prerendered `index.html` would then answer unmatched page requests.
+
+Server code reads private runtime values from `process.env`; `VITE_*` values
+remain public build-time browser configuration. Custom Foldkit client/server
+output directories are read from the completed build metadata and packaged
+together. `vite.outDir`, when supplied, places SSR outputs under `client/` and
+`server/` in that directory.
 
 ## Local dev
 
