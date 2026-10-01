@@ -209,14 +209,17 @@ export const Foldkit: {
         id,
         Effect.map(
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          ({ main, rootDir, memo, ...props } = {}) => ({
-            ...props,
-            vite: {
-              framework: "foldkit" as const,
-              main,
-              rootDir,
-              memo,
-            },
-          }),
+          (props) => {
+            const { main, rootDir, memo, ...workerProps } = props ?? {};
+            return {
+              ...workerProps,
+              vite: {
+                framework: "foldkit" as const,
+                main,
+                rootDir,
+                memo,
+              },
+            };
+          },
         ),
       )) as any;
