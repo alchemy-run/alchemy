@@ -213,6 +213,7 @@ export interface SlideStep {
   eyebrow?: string;
   heading: string;
   subtitle?: string;
+  footer?: string;
   frames: number;
 }
 

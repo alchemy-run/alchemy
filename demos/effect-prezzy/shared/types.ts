@@ -154,6 +154,7 @@ export interface SlideItem {
     eyebrow?: string;
     heading: string;
     subtitle?: string;
+    footer?: string;
     bullets?: string[];
   };
   /** Seconds the slide animates before holding. */

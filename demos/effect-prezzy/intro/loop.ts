@@ -132,6 +132,7 @@ const opening: StepSpec[] = [
     eyebrow: "Alchemy",
     heading: "The tightest feedback loop\nfrom edit to production",
     subtitle: "Cloud programs composed from Layers:\ntype-checked, emulated locally, tested live, deployed per pull request",
+    footer: "alchemy.run",
     notes:
       "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
   },

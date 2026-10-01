@@ -95,7 +95,7 @@ export const Intro = ({ intro }: IntroProps) => {
   const prev2Code = intro.steps[at - 2]?.kind === "code" ? (intro.steps[at - 2] as CodeStep) : undefined;
 
   if (step.kind === "slide") {
-    return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle }} />;
+    return <Slide layout={step.layout} props={{ eyebrow: step.eyebrow, heading: step.heading, subtitle: step.subtitle, footer: step.footer }} />;
   }
   // The caption stays put across steps that share it.
   // The step's title is the slide's heading; it changes with every step.

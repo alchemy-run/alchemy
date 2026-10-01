@@ -105,6 +105,8 @@ export interface SlideSpec {
   eyebrow?: string;
   heading: string;
   subtitle?: string;
+  /** Small text pinned to the bottom of a title slide, e.g. a URL. */
+  footer?: string;
   frames?: number;
 }
 

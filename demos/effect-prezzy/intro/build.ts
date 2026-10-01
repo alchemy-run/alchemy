@@ -352,6 +352,7 @@ for (const spec of steps) {
       eyebrow: spec.eyebrow,
       heading: spec.heading,
       subtitle: spec.subtitle,
+      footer: spec.footer,
       frames: spec.frames ?? 60,
     });
   } else if (spec.kind === "terminal") {

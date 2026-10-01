@@ -97,6 +97,11 @@ const TitleLayout = ({ props }: SlideProps) => (
         </p>
       </Enter>
     ) : null}
+    {props.footer ? (
+      <Enter delay={20} style={{ position: "absolute", left: 180, bottom: 96 }}>
+        <div style={{ fontFamily: mono, fontSize: 34, letterSpacing: 1, color: brand.moss }}>{props.footer}</div>
+      </Enter>
+    ) : null}
   </AbsoluteFill>
 );
 
