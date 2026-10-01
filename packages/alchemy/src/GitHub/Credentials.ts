@@ -114,24 +114,35 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
         options?.baseUrl !== undefined
           ? { baseUrl: yield* normalizeGitHubBaseUrl(options.baseUrl) }
           : undefined;
-      const { profileName, resolve } = yield* resolveProviderConfig<
+      // Building providers must work before GitHub is configured. Capture
+      // the resolver's services now, but read profiles/credentials only when
+      // a GitHub operation actually evaluates these credentials.
+      const resolve = resolveProviderConfig<
         GitHubAuthConfig,
         GitHubResolvedCredentials
-      >(GITHUB_AUTH_PROVIDER_NAME);
-
-      return yield* resolve.pipe(
-        Effect.map((creds) =>
-          make(
-            creds.token,
-            fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl,
+      >(GITHUB_AUTH_PROVIDER_NAME).pipe(
+        Effect.flatMap(({ profileName, resolve }) =>
+          resolve.pipe(
+            Effect.map((creds) =>
+              make(
+                creds.token,
+                fixedBaseUrl !== undefined
+                  ? fixedBaseUrl.baseUrl
+                  : creds.baseUrl,
+              ),
+            ),
+            Effect.mapError(
+              (e) =>
+                new AuthError({
+                  message: `Failed to resolve GitHub credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+                }),
+            ),
           ),
         ),
-        Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: `Failed to resolve GitHub credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
-        ),
+      );
+      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
+      return yield* resolve.pipe(
+        Effect.provideContext(context),
         Effect.orDie,
         Effect.cached,
       );
