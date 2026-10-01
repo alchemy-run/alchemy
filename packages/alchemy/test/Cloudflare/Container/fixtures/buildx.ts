@@ -2,25 +2,31 @@ import { Docker } from "@/Docker/Docker.ts";
 import { Stage } from "@/Stage.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { randomUUID } from "node:crypto";
 
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      // A killed test process cannot release its builder. Give each invocation
-      // a fresh cache without colliding with leftovers or another test process.
-      const name = `${prefix}-${yield* Stage}-${randomUUID()}`;
+      const name = `${prefix}-${yield* Stage}`;
       const docker = yield* Docker;
       return yield* Effect.acquireUseRelease(
-        docker.run([
-          "buildx",
-          "create",
-          "--name",
-          name,
-          "--driver",
-          "docker-container",
-        ]),
+        // A killed run cannot release its builder. Remove any leftover first,
+        // so every invocation starts from an empty cache under the same name.
+        docker
+          .run(["buildx", "rm", "--force", name])
+          .pipe(
+            Effect.ignore,
+            Effect.andThen(
+              docker.run([
+                "buildx",
+                "create",
+                "--name",
+                name,
+                "--driver",
+                "docker-container",
+              ]),
+            ),
+          ),
         () =>
           Effect.acquireUseRelease(
             Effect.sync(() => {
