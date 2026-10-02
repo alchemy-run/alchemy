@@ -218,8 +218,7 @@ export const waitForDeploymentStatus = Effect.fn(function* (
 });
 
 /**
- * Stops a running or provisioning deployment, waits until it is stopped
- * (also when a stop is already in progress), then deletes it.
+ * Stops a running or provisioning deployment (or waits out a stop in progress), then deletes it.
  *
  * Uses the canonical deployment lifecycle routes. Errors include the observed
  * status and exact manual route for cleanup.

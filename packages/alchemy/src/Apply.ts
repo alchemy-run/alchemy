@@ -2033,9 +2033,7 @@ const collectGarbage = Effect.fn(function* (
   const failures: DeleteFailure[] = [];
   const blockedDeletes: BlockedDelete[] = [];
   const unresolved = new Set<string>();
-  // Instance IDs of replaced generations whose delete reported
-  // `DeleteInProgress` this run. Later passes skip past them so older
-  // generations are still reclaimed.
+  // Skipped by later passes so generations older than a draining one are still reclaimed.
   const inProgress = new Set<string>();
 
   const pendingDeletes = { ...plan.deletions };
@@ -2066,8 +2064,6 @@ const collectGarbage = Effect.fn(function* (
           node: Delete | ReplacementResourceState,
         ): node is Delete => "action" in node;
 
-        // For a replacement: the newest old generation whose delete is not
-        // already in progress this run.
         const generation = isDeleteNode(node)
           ? node.state
           : (nextOldGeneration(node, inProgress) ?? node.old);
@@ -2392,8 +2388,7 @@ const collectGarbage = Effect.fn(function* (
             }
 
             if (attr !== undefined && !retainOldGeneration) {
-              // Only a replaced generation of a resource that stays in the
-              // program may finish its delete on a later apply.
+              // A destroy must finish now; only a replacement's old generation can wait for the next apply.
               const canFinishLater =
                 !isDeleteNode(node) && pendingDeletes[fqn] === undefined;
               const deleteInProgress = yield* provider
@@ -2522,8 +2517,7 @@ const collectGarbage = Effect.fn(function* (
         return false;
       }
       if (nextOldGeneration(replaced, inProgress) === undefined) {
-        // Every remaining old generation is still being deleted: it stays in
-        // state for the next apply and blocks deletes that depend on it.
+        // Only draining generations remain: keep them for the next apply and block dependent deletes.
         unresolved.add(replaced.fqn);
         return false;
       }
@@ -2577,11 +2571,7 @@ const nextOldGeneration = (
   return generation;
 };
 
-/**
- * The chain below `generation` with the deleted `target` (a deeper old
- * generation) removed. A wrapper whose old generation was the last one left
- * becomes a plain row again.
- */
+/** The chain below `generation` without `target`; a wrapper left with no old generation becomes a plain row. */
 const withoutGeneration = (
   generation: ReplacementOldResourceState,
   target: ResourceState,

@@ -1638,8 +1638,7 @@ describe(
       () => {
         const calls: Array<[string, string]> = [];
         let status = "running";
-        // The stop wait reads the wall clock; jump it past the wait budget
-        // instead of sleeping for two minutes.
+        // The stop wait reads the wall clock, so jump it instead of sleeping two minutes.
         const realNow = Date.now;
         let skippedMs = 0;
         const client = {

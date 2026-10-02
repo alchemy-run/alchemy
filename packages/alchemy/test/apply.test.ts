@@ -3134,8 +3134,7 @@ describe(
           Effect.provideService(TestResourceHooks, { delete: inProgress }),
         );
 
-        // The v2 generation is newest, so it is attempted first and is
-        // still in progress; the v1 generation behind it is deleted.
+        // v2 is newest and still draining, so v1 behind it must be the one deleted.
         let deletes = 0;
         yield* Effect.gen(function* () {
           yield* TestResource("A", { replaceString: "v3" });
