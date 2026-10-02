@@ -348,9 +348,10 @@ export const Platform = <
 
   // Apply the optional `transformProps` hook to a (possibly Effect-valued)
   // props argument. Returns the props untouched when no hook is installed so
-  // the plain-object fast paths below keep working.
+  // the plain-object fast paths below keep working, and leaves `undefined`
+  // props (a bare-tag forward reference) for `Plan.make` to report.
   const applyTransformProps = (id: string, props: any): any =>
-    hooks.transformProps === undefined
+    hooks.transformProps === undefined || props === undefined
       ? props
       : Effect.flatMap(
           Effect.isEffect(props)
