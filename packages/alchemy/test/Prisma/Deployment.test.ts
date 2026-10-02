@@ -1633,6 +1633,95 @@ describe(
       },
     );
 
+    it.live(
+      "reports a deployment that is still stopping as a delete in progress",
+      () => {
+        const calls: Array<[string, string]> = [];
+        let status = "running";
+        // The stop wait reads the wall clock; jump it past the wait budget
+        // instead of sleeping for two minutes.
+        const realNow = Date.now;
+        let skippedMs = 0;
+        const client = {
+          getDeployment: (id: string) => {
+            calls.push(["getDeployment", id]);
+            if (status === "stopping") skippedMs += 61_000;
+            return Effect.succeed({
+              id,
+              type: "deployment" as const,
+              serviceId: "service-1",
+              url: `https://api.prisma.test/v1/deployments/${id}`,
+              foundryVersionId: "foundry-1",
+              status,
+              previewDomain: null,
+              createdAt: "2026-01-01T00:00:00Z",
+            });
+          },
+          listAppDeployments: () =>
+            Effect.succeed([
+              {
+                id: "version-old",
+                type: "deployment" as const,
+                serviceId: "service-1",
+                url: "https://api.prisma.test/v1/deployments/version-old",
+                foundryVersionId: "foundry-1",
+                createdAt: "2026-01-01T00:00:00Z",
+              },
+            ]),
+          stopDeployment: (id: string) => {
+            calls.push(["stopDeployment", id]);
+            status = "stopping";
+            return Effect.void;
+          },
+          deleteDeployment: (id: string) => {
+            calls.push(["deleteDeployment", id]);
+            return Effect.void;
+          },
+        } as unknown as PrismaManagementClient;
+
+        return Effect.gen(function* () {
+          Date.now = () => realNow() + skippedMs;
+          const provider = yield* PrismaDeployment.Provider;
+          const error = yield* provider
+            .delete({
+              id: "Version",
+              fqn: "Version",
+              instanceId: "00000000000000000000000000000000",
+              olds: { app: "service-1", skipCodeUpload: true },
+              output: {
+                deploymentId: "version-old",
+                appId: "service-1",
+                foundryVersionId: "foundry-1",
+                status: "running",
+                previewDomain: undefined,
+                artifactHash: undefined,
+                triggersHash: undefined,
+                appEndpointDomain: undefined,
+                createdAt: "2026-01-01T00:00:00Z",
+              },
+              session: undefined as never,
+              bindings: [],
+            })
+            .pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(Provider.DeleteInProgress);
+          expect(error.message).toContain("last status: 'stopping'");
+          expect(calls).toContainEqual(["stopDeployment", "version-old"]);
+          expect(calls).not.toContainEqual(["deleteDeployment", "version-old"]);
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              Date.now = realNow;
+            }),
+          ),
+          Effect.provide(deploymentProviderLive()),
+          Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+          Effect.provide(clientBackedApi(client).layer),
+          Effect.provide(PlatformServices),
+        );
+      },
+    );
+
     it.effect("rejects promotion when start is explicitly disabled", () => {
       const client = {} as PrismaManagementClient;
 

@@ -45,6 +45,7 @@ import {
   type Plan,
 } from "./Plan.ts";
 import {
+  type DeleteInProgress,
   findProviderByType,
   missingProviderError,
   tryFindProviderByType,
@@ -2032,6 +2033,10 @@ const collectGarbage = Effect.fn(function* (
   const failures: DeleteFailure[] = [];
   const blockedDeletes: BlockedDelete[] = [];
   const unresolved = new Set<string>();
+  // Instance IDs of replaced generations whose delete reported
+  // `DeleteInProgress` this run. Later passes skip past them so older
+  // generations are still reclaimed.
+  const inProgress = new Set<string>();
 
   const pendingDeletes = { ...plan.deletions };
   // Pending means this generation drained; deferred means it is still live.
@@ -2060,6 +2065,12 @@ const collectGarbage = Effect.fn(function* (
         const isDeleteNode = (
           node: Delete | ReplacementResourceState,
         ): node is Delete => "action" in node;
+
+        // For a replacement: the newest old generation whose delete is not
+        // already in progress this run.
+        const generation = isDeleteNode(node)
+          ? node.state
+          : (nextOldGeneration(node, inProgress) ?? node.old);
 
         const {
           fqn,
@@ -2098,11 +2109,11 @@ const collectGarbage = Effect.fn(function* (
               fqn: node.fqn,
               logicalId: node.logicalId,
               namespace: node.namespace,
-              resourceType: node.old.resourceType,
-              instanceId: node.old.instanceId,
-              downstream: node.old.downstream,
-              props: node.old.props,
-              attr: node.old.attr,
+              resourceType: generation.resourceType,
+              instanceId: generation.instanceId,
+              downstream: generation.downstream,
+              props: generation.props,
+              attr: generation.attr,
               // A missing provider is fatal — plan already dies on zombie
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
@@ -2111,25 +2122,25 @@ const collectGarbage = Effect.fn(function* (
               // unstamped rows are physically live unless their attrs
               // carry the `dev:` identity marker (see stampedMode).
               provider: yield* tryFindProviderByType(
-                node.old.resourceType,
-                stampedMode(node.old),
+                generation.resourceType,
+                stampedMode(generation),
               ).pipe(
                 Effect.flatMap(
                   Option.match({
                     onNone: () =>
                       Effect.die(
-                        missingProviderError(node.old.resourceType, node.fqn),
+                        missingProviderError(generation.resourceType, node.fqn),
                       ),
                     onSome: Effect.succeed,
                   }),
                 ),
               ),
-              providerMode: node.old.providerMode,
+              providerMode: generation.providerMode,
             };
 
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
-          : node.old.adoptionBlocked;
+          : generation.adoptionBlocked;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2381,7 +2392,11 @@ const collectGarbage = Effect.fn(function* (
             }
 
             if (attr !== undefined && !retainOldGeneration) {
-              yield* provider
+              // Only a replaced generation of a resource that stays in the
+              // program may finish its delete on a later apply.
+              const canFinishLater =
+                !isDeleteNode(node) && pendingDeletes[fqn] === undefined;
+              const deleteInProgress = yield* provider
                 .delete({
                   id: logicalId,
                   fqn,
@@ -2399,7 +2414,21 @@ const collectGarbage = Effect.fn(function* (
                     logicalId,
                     instanceId,
                   ),
+                  Effect.as(undefined),
+                  Effect.catchIf(
+                    (error): error is DeleteInProgress =>
+                      canFinishLater &&
+                      Predicate.isTagged(error, "DeleteInProgress"),
+                    (error) => Effect.succeed(error),
+                  ),
                 );
+              if (deleteInProgress !== undefined) {
+                inProgress.add(instanceId);
+                yield* scopedSession.note(
+                  `${deleteInProgress.message} The replaced resource stays in state and its delete is retried on the next apply.`,
+                );
+                return "deferred" as const;
+              }
             }
 
             if (isDeleteNode(node)) {
@@ -2413,7 +2442,13 @@ const collectGarbage = Effect.fn(function* (
               if (!retainOldGeneration) {
                 yield* scopedSession.note("Cleaning up replaced resource...");
               }
-              if (
+              if (generation !== node.old) {
+                yield* commit<ReplacementResourceState>({
+                  ...node,
+                  bindings: excludeDeletedBindings(node.bindings),
+                  old: withoutGeneration(node.old, generation),
+                });
+              } else if (
                 node.old.status === "replacing" ||
                 node.old.status === "replaced"
               ) {
@@ -2478,12 +2513,22 @@ const collectGarbage = Effect.fn(function* (
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    })).filter(
-      (replaced) =>
-        !unresolved.has(replaced.fqn) &&
-        (plan.selectedFqns === undefined ||
-          plan.selectedFqns.has(replaced.fqn)),
-    );
+    })).filter((replaced) => {
+      if (unresolved.has(replaced.fqn)) return false;
+      if (
+        plan.selectedFqns !== undefined &&
+        !plan.selectedFqns.has(replaced.fqn)
+      ) {
+        return false;
+      }
+      if (nextOldGeneration(replaced, inProgress) === undefined) {
+        // Every remaining old generation is still being deleted: it stays in
+        // state for the next apply and blocks deletes that depend on it.
+        unresolved.add(replaced.fqn);
+        return false;
+      }
+      return true;
+    });
     const deletionGraph: Record<
       string,
       Delete | ReplacementResourceState | undefined
@@ -2516,6 +2561,45 @@ const collectGarbage = Effect.fn(function* (
     );
   }
 });
+
+/** The newest old generation of `row` whose instance ID is not in `skip`. */
+const nextOldGeneration = (
+  row: ReplacementResourceState,
+  skip: ReadonlySet<string>,
+): ReplacementOldResourceState | undefined => {
+  let generation = row.old;
+  while (skip.has(generation.instanceId)) {
+    if (generation.status !== "replacing" && generation.status !== "replaced") {
+      return undefined;
+    }
+    generation = generation.old;
+  }
+  return generation;
+};
+
+/**
+ * The chain below `generation` with the deleted `target` (a deeper old
+ * generation) removed. A wrapper whose old generation was the last one left
+ * becomes a plain row again.
+ */
+const withoutGeneration = (
+  generation: ReplacementOldResourceState,
+  target: ResourceState,
+): ReplacementOldResourceState => {
+  if (generation.status !== "replacing" && generation.status !== "replaced") {
+    return generation;
+  }
+  if (generation.old !== target) {
+    return { ...generation, old: withoutGeneration(generation.old, target) };
+  }
+  if (target.status === "replacing" || target.status === "replaced") {
+    return { ...generation, old: target.old };
+  }
+  const { old: _old, deleteFirst: _deleteFirst, ...rest } = generation;
+  return generation.status === "replacing"
+    ? { ...rest, status: "creating" }
+    : { ...rest, status: "created", attr: generation.attr };
+};
 
 const excludeDeletedBindings = (
   bindings: ReadonlyArray<ResourceBinding & { action?: string }>,

@@ -3082,6 +3082,109 @@ describe("from replaced state", { tags: ["unit", "local"] }, () => {
 });
 
 describe(
+  "replaced generation whose delete is in progress",
+  { tags: ["unit", "local"] },
+  () => {
+    const inProgress = () =>
+      Effect.fail(new Provider.DeleteInProgress({ message: "still draining" }));
+
+    test.provider(
+      "does not fail the apply and is deleted on the next apply",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v1" });
+          }).pipe(stack.deploy);
+
+          const output = yield* Effect.gen(function* () {
+            const A = yield* TestResource("A", { replaceString: "v2" });
+            return A.replaceString;
+          }).pipe(
+            stack.deploy,
+            Effect.provideService(TestResourceHooks, { delete: inProgress }),
+          );
+          expect(output).toEqual("v2");
+          const pending = yield* getState<ReplacedResourceState>("A");
+          expect(pending.status).toEqual("replaced");
+          expect(pending.old.attr?.replaceString).toEqual("v1");
+
+          const deleted: string[] = [];
+          yield* Effect.gen(function* () {
+            yield* TestResource("A", { replaceString: "v2" });
+          }).pipe(
+            stack.deploy,
+            Effect.provideService(TestResourceHooks, {
+              delete: (id) => Effect.sync(() => void deleted.push(id)),
+            }),
+          );
+          expect(deleted).toEqual(["A"]);
+          expect((yield* getState("A"))?.status).toEqual("created");
+        }),
+    );
+
+    test.provider("still deletes older generations behind it", (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" });
+        }).pipe(stack.deploy);
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" });
+        }).pipe(
+          stack.deploy,
+          Effect.provideService(TestResourceHooks, { delete: inProgress }),
+        );
+
+        // The v2 generation is newest, so it is attempted first and is
+        // still in progress; the v1 generation behind it is deleted.
+        let deletes = 0;
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v3" });
+        }).pipe(
+          stack.deploy,
+          Effect.provideService(TestResourceHooks, {
+            delete: () => (deletes++ === 0 ? inProgress() : Effect.void),
+          }),
+        );
+        expect(deletes).toEqual(2);
+        const state = yield* getState<ReplacedResourceState>("A");
+        expect(state.status).toEqual("replaced");
+        expect(state.attr.replaceString).toEqual("v3");
+        expect(state.old.status).toEqual("created");
+        expect(state.old.attr?.replaceString).toEqual("v2");
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v3" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+    );
+
+    test.provider("fails destroy and keeps the resource in state", (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" });
+        }).pipe(stack.deploy);
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" });
+        }).pipe(
+          stack.deploy,
+          Effect.provideService(TestResourceHooks, { delete: inProgress }),
+        );
+
+        const error = yield* stack
+          .destroy()
+          .pipe(
+            Effect.provideService(TestResourceHooks, { delete: inProgress }),
+            Effect.flip,
+          );
+        expect(error).toBeInstanceOf(DestroyError);
+        expect((yield* getState("A"))?.status).toEqual("replaced");
+      }),
+    );
+  },
+);
+
+describe(
   "retain removal policy on replace",
   { tags: ["unit", "local"] },
   () => {

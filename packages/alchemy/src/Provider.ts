@@ -340,6 +340,11 @@ export interface ProviderService<
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
+  /**
+   * Deletes the physical resource. Must be idempotent. Fail with
+   * {@link DeleteInProgress} when the delete has started but the cloud
+   * cannot finish it yet.
+   */
   delete(input: {
     id: string;
     /**
@@ -760,6 +765,20 @@ export const missingProviderError = (
     resourceType,
     fqn,
   });
+
+/**
+ * A provider's `delete` started removing the physical resource, but the cloud
+ * cannot finish yet (for example, the resource is still draining connections).
+ * Calling `delete` again later must be safe and must eventually finish.
+ *
+ * When the old generation of a replacement fails with this error, the apply
+ * does not fail: the engine keeps that generation in state, still reclaims
+ * older generations, and retries it on the next apply. Every other delete
+ * (destroy, removing the resource) treats it as an ordinary failure.
+ */
+export class DeleteInProgress extends Data.TaggedError("DeleteInProgress")<{
+  message: string;
+}> {}
 
 /** Resolve a concrete provider, using the current run's mode when omitted. */
 export const tryFindProviderByType = <R extends ResourceLike>(

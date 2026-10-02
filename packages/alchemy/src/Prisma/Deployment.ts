@@ -21,6 +21,7 @@ import {
 import { Retry } from "@distilled.cloud/prisma";
 import {
   destroyDeployment,
+  PrismaDeploymentWaitTimeout,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
 import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
@@ -789,7 +790,18 @@ const ProviderLive = () =>
           );
           if (!deployment) return;
           yield* ensureDeploymentMembership(output.appId, deployment);
-          yield* destroyDeployment(output.deploymentId);
+          yield* destroyDeployment(output.deploymentId).pipe(
+            // The stop was requested; it finishes once open connections close.
+            Effect.catchIf(
+              (error) => error instanceof PrismaDeploymentWaitTimeout,
+              (error) =>
+                Effect.fail(
+                  new Provider.DeleteInProgress({
+                    message: `${error.message}. Prisma Compute drains open connections before it stops a deployment, and only a stopped deployment can be deleted.`,
+                  }),
+                ),
+            ),
+          );
         }),
         tail: ({ output }) =>
           output.deploymentId
