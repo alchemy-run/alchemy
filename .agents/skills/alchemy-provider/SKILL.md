@@ -45,6 +45,19 @@ not enough: [review.md](review.md) turns each of them into a check with a
 command and an expected result. Run that review at every wave boundary and
 before step 10; a provider with unexplained hits is not done.
 
+## Orchestration
+
+Fan-out work (the catalog in step 2, implementation waves, fix rounds in
+step 8, the review gate in step 9) runs as a **workflow** when the harness
+has one (Grok's `workflow` tool, authored per its `create-workflow` skill,
+or the equivalent in other harnesses). A workflow runs the whole wave as one
+script with bounded parallelism, enforces an agent budget, and journals
+every finished agent's result, so a crash costs only the agents still
+running. Use plain subagents only when no workflow tool exists. Either way,
+each agent gets the task contract from **What every agent task prompt must
+include** in `AGENTS.md`, owns one distilled service, and returns the
+structured result the coordinator turns into index statuses.
+
 ## Step 0 — get credentials first
 
 **Always ask the user for credentials for the upstream provider before
@@ -99,8 +112,7 @@ run `pnpm install` so the workspace links the package.
 
 Catalog **every** service module in the SDK
 (`ls submodules/distilled/packages/<pkg>/src/services`) before writing
-resources; for a large SDK, fan the catalog out to research agents per
-**The Resource Factory Process**. Each service gets
+resources; for a large SDK, fan the catalog out as a workflow (see Orchestration). Each service gets
 `processes/<Provider>/catalog/<service>.md` in that section's format:
 resources, props with replacement rules, attributes,
 lifecycle-to-operation mapping, bindings, testability, and priority.
