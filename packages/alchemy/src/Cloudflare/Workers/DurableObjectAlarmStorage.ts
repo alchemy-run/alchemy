@@ -4,7 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
   "UnsupportedAlarmSchemaVersion",
@@ -37,7 +37,7 @@ const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
           .one().version
       : 0;
     if (version === SCHEMA_VERSION) return;
-    if (version !== 0) {
+    if (version !== 0 && version !== 1) {
       throw new UnsupportedAlarmSchemaVersion({
         version,
         supportedVersion: SCHEMA_VERSION,
@@ -45,8 +45,9 @@ const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
     }
 
     storage.transactionSync(() => {
-      // Version 0 is the original, unversioned scheduleEvent schema.
-      storage.sql.exec(`
+      if (version === 0) {
+        // Version 0 is the original, unversioned scheduleEvent schema.
+        storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS alchemy_scheduled_events (
           id TEXT PRIMARY KEY,
           run_at INTEGER NOT NULL,
@@ -71,6 +72,18 @@ const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
         );
         INSERT INTO alchemy_alarm_schema (id, version) VALUES (1, 1)
           ON CONFLICT (id) DO UPDATE SET version = excluded.version;
+      `);
+      }
+      // Keep run_at as the indexed effective wake deadline. Existing rows have
+      // no recoverable original deadline, so their current wake is the baseline.
+      storage.sql.exec(`
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN retry_at INTEGER;
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN parked INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN progress INTEGER NOT NULL DEFAULT -1;
+        UPDATE alchemy_alarm_callbacks SET scheduled_at = run_at;
+        UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1;
       `);
     });
   });

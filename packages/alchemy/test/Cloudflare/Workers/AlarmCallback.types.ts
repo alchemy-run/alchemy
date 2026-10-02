@@ -89,6 +89,15 @@ type _ScheduleIsRuntimeOnly = Assert<
 type _CancelIsRuntimeOnly = Assert<
   Equal<RequirementsOf<ReturnType<Handle["cancel"]>>, Alchemy.RuntimeContext>
 >;
+type _StatusIsRuntimeOnly = Assert<
+  Equal<RequirementsOf<ReturnType<Handle["getStatus"]>>, Alchemy.RuntimeContext>
+>;
+type _StatusErrorIsPortable = Assert<
+  Equal<ErrorOf<ReturnType<Handle["getStatus"]>>, Alchemy.CallbackError>
+>;
+type _ProgressIsOptional = Assert<
+  Equal<Options["progress"], number | undefined>
+>;
 type _ScheduleErrorIsPortable = Assert<
   Equal<ErrorOf<ReturnType<Handle["schedule"]>>, Alchemy.CallbackError>
 >;

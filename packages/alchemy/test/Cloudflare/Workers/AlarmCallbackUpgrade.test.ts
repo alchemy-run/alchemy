@@ -262,8 +262,8 @@ for (const dev of [true, false]) {
             expect(after.tables).toContain("alchemy_scheduled_events");
             expect(after.tables).toContain("alchemy_alarm_callbacks");
             expect(after.tables).toContain("alchemy_alarm_schema");
-            expect(after.schemaVersion).toBe(1);
-            expect(after.schemaRows).toEqual([{ id: 1, version: 1 }]);
+            expect(after.schemaVersion).toBe(2);
+            expect(after.schemaRows).toEqual([{ id: 1, version: 2 }]);
             expect(after.callbacks).toEqual([]);
             if (upgradedDeployment.reader) {
               // Local restarts are atomic; live edges can still run V1 against the V2 object.
@@ -308,14 +308,14 @@ for (const dev of [true, false]) {
             );
             expect(reconstructed.id).toBe(before.id);
             expect(reconstructed.marker).toBe(before.marker);
-            expect(reconstructed.schemaVersion).toBe(1);
-            expect(reconstructed.schemaRows).toEqual([{ id: 1, version: 1 }]);
+            expect(reconstructed.schemaVersion).toBe(2);
+            expect(reconstructed.schemaRows).toEqual([{ id: 1, version: 2 }]);
             expect(reconstructed.schema).toEqual(callbackFirst.schema);
             expect(reconstructed.legacyRows).toEqual(callbackFirst.legacyRows);
             expect(reconstructed.callbacks).toEqual(callbackFirst.callbacks);
             expect(reconstructed.alarm).toBe(callbackFirst.alarm);
             const repeated = yield* request(upgraded.url!);
-            expect(repeated.schemaVersion).toBe(1);
+            expect(repeated.schemaVersion).toBe(2);
             expect(repeated.schemaRows).toEqual(reconstructed.schemaRows);
             expect(repeated.schema).toEqual(reconstructed.schema);
             expect(repeated.legacyRows).toEqual(reconstructed.legacyRows);
@@ -438,13 +438,13 @@ for (const dev of [true, false]) {
             )) as MigrationProbe;
             expect(future.before.id).toBe(futureOriginal.id);
             expect(future.before.legacyRows).toEqual(futureOriginal.legacyRows);
-            expect(future.before.schemaVersion).toBe(2);
-            expect(future.before.schemaRows).toEqual([{ id: 1, version: 2 }]);
+            expect(future.before.schemaVersion).toBe(3);
+            expect(future.before.schemaRows).toEqual([{ id: 1, version: 3 }]);
             expect(future.before.callbacks).toHaveLength(1);
             expect(future.before.alarm).toBe(futureOriginal.alarm);
             expect(future.failure?.tag).toBe("UnsupportedAlarmSchemaVersion");
-            expect(future.failure?.version).toBe(2);
-            expect(future.failure?.supportedVersion).toBe(1);
+            expect(future.failure?.version).toBe(3);
+            expect(future.failure?.supportedVersion).toBe(2);
             expect(future.after).toEqual(future.before);
             expect(future.recovered).toBeNull();
 
@@ -482,9 +482,9 @@ for (const dev of [true, false]) {
             expect(rollback.retryBefore?.legacyRows).toEqual(
               rollbackOriginal.legacyRows,
             );
-            expect(rollback.recovered?.schemaVersion).toBe(1);
+            expect(rollback.recovered?.schemaVersion).toBe(2);
             expect(rollback.recovered?.schemaRows).toEqual([
-              { id: 1, version: 1 },
+              { id: 1, version: 2 },
             ]);
             expect(rollback.recovered?.legacyRows).toEqual(
               rollbackOriginal.legacyRows,

@@ -10,6 +10,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type {
   AlarmObservationResult,
   BatchResult,
+  BoundedSnapshot,
   ExplicitRollbackResult,
   FailedBatchResult,
   RegistrationResult,
@@ -513,6 +514,60 @@ describe.concurrent.each([
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
     );
+
+    for (const mode of ["failure", "self-rearm"] as const) {
+      test(
+        `parks ${mode} callbacks across reconstruction and supports explicit recovery`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const base = `${url}/bounded-${mode}`;
+          const initial = yield* json<BoundedSnapshot>(
+            `${base}/bounded?mode=${mode}`,
+            "POST",
+          );
+          expect(initial.status?.attempts).toBe(0);
+          const parked = yield* poll<BoundedSnapshot>(
+            `${base}/bounded?mode=${mode}`,
+            (value) => value.status?.parked === true,
+          );
+          expect(parked.status?.attempts).toBe(2);
+          expect(parked.snapshot.alarm).toBe(parked.status?.retryAt);
+          expect(parked.status!.retryAt! - Date.now()).toBeGreaterThan(
+            3_500_000,
+          );
+          if (mode === "failure")
+            expect(parked.status?.scheduledAt).toBe(
+              initial.status?.scheduledAt,
+            );
+          expect(
+            (yield* json<{ aborted: boolean }>(`${base}/abort`, "POST"))
+              .aborted,
+          ).toBe(true);
+          const restored = yield* json<BoundedSnapshot>(
+            `${base}/bounded?mode=${mode}`,
+          );
+          expect(restored.snapshot.boots).toBeGreaterThan(
+            parked.snapshot.boots,
+          );
+          expect(restored.status).toEqual(parked.status);
+          expect(restored.snapshot.alarm).toBe(parked.snapshot.alarm);
+          const resumed = yield* json<BoundedSnapshot>(
+            `${base}/bounded-resume?mode=${mode}`,
+            "POST",
+          );
+          expect(resumed.status?.attempts).toBe(0);
+          expect(resumed.status?.parked).toBe(false);
+          expect(resumed.status?.retryAt).toBeUndefined();
+          const cancelled = yield* json<BoundedSnapshot>(
+            `${base}/bounded-cancel?mode=${mode}`,
+            "POST",
+          );
+          expect(cancelled.status).toBeNull();
+          expect(cancelled.snapshot.alarm).toBeNull();
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
+    }
 
     test(
       "acknowledging a callback does not delete its same-ID replacement",
