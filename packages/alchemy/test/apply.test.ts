@@ -1879,6 +1879,42 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
 });
 
 describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
+  test.provider(
+    "downstream outside a cycle waits for precreated upstream reconciliation",
+    (stack) =>
+      Effect.gen(function* () {
+        let reconciled = false;
+        const observations: boolean[] = [];
+        yield* Effect.gen(function* () {
+          const worker = yield* PhasedTarget("Worker", {
+            desired: "queue-handler",
+            replaceKey: "v1",
+          });
+          const binding = yield* TestResource("Binding", {
+            string: worker.stableId,
+          });
+          yield* worker.bind("Feedback", { env: { B: binding.string } });
+          // Like a Queue Consumer: the script name is available from the
+          // stub, but attaching requires the real Worker upload to finish.
+          return yield* TestResource("Consumer", { string: worker.stableId });
+        }).pipe(
+          stack.deploy,
+          hook({
+            create: (id) =>
+              Effect.gen(function* () {
+                if (id === "Worker") {
+                  yield* Effect.sleep("50 millis");
+                  reconciled = true;
+                } else if (id === "Consumer") {
+                  observations.push(reconciled);
+                }
+              }),
+          }),
+        );
+        expect(observations).toEqual([true]);
+      }),
+  );
+
   const phasedCycleStack = (props: {
     desired: string;
     replaceKey?: string;
