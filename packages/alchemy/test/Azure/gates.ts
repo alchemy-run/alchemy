@@ -32,3 +32,16 @@ export const withVcpus =
   (count: number) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     vcpus.withPermits(count)(self);
+
+/**
+ * The trial allows 3 public IP addresses per region. Tests that create
+ * public IPs (directly, or via load balancers, NAT gateways, bastions,
+ * gateways) hold one slot per IP for their whole body.
+ */
+const publicIps = Semaphore.makeUnsafe(3);
+
+/** Run a test body while holding `count` regional public IP addresses. */
+export const withPublicIps =
+  (count: number) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    publicIps.withPermits(count)(self);

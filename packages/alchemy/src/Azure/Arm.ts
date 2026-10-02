@@ -16,7 +16,7 @@ import {
 /**
  * Typed tags distilled Azure returns for a missing resource: ARM's
  * `ResourceNotFound` / `ResourceGroupNotFound`, resource-provider codes
- * (`RoleAssignmentNotFound`, `ContainerNotFound`), and the HTTP 404
+ * (`RoleAssignmentNotFound`, `ContainerNotFound`, `ShareNotFound`, ...), and the HTTP 404
  * fallback for provider codes the SDK does not map yet. A 403 is never
  * "gone".
  */
@@ -25,6 +25,10 @@ export const NOT_FOUND_TAGS = [
   "ResourceGroupNotFound",
   "RoleAssignmentNotFound",
   "ContainerNotFound",
+  "ShareNotFound",
+  "QueueNotFound",
+  "ManagementPolicyNotFound",
+  "ApiManagementServiceNotFound",
   "NotFound",
 ] as const;
 
@@ -35,8 +39,8 @@ export const NOT_FOUND_TAGS = [
  * registered a resource provider namespace cannot hold resources of it
  * (Azure refuses to unregister a namespace that still has resources).
  */
-export const orUndefinedIfNotFound = <A, R>(
-  effect: Effect.Effect<A, AzureOpError, R>,
+export const orUndefinedIfNotFound = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E | AzureOpError, R>,
 ) =>
   Effect.catchTag(effect, [...NOT_FOUND_TAGS, "MissingRegistration"], () =>
     Effect.succeed(undefined),
@@ -88,8 +92,8 @@ export const ensureRegistered = (subscriptionId: string, namespace: string) =>
   });
 
 /** Ignore a not-found failure of an Azure operation (idempotent deletes). */
-export const ignoreNotFound = <A, R>(
-  effect: Effect.Effect<A, AzureOpError, R>,
+export const ignoreNotFound = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E | AzureOpError, R>,
 ) => Effect.asVoid(orUndefinedIfNotFound(effect));
 
 export class ProvisioningFailed extends Data.TaggedError(
