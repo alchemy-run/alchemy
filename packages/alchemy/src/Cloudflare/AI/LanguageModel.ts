@@ -2,6 +2,8 @@
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
   AiError,
@@ -414,6 +416,39 @@ const mapFinishReason = (raw: unknown): Response.FinishReason => {
   }
 };
 
+const finishMetadata = (
+  raw: Record<string, unknown> | undefined,
+): { readonly metadata?: Response.FinishPartMetadata } => {
+  const neurons = (raw?.usage as Record<string, unknown> | undefined)?.neurons;
+  return typeof neurons === "number" && Number.isFinite(neurons)
+    ? { metadata: { cloudflare: { neurons } } }
+    : {};
+};
+
+/**
+ * The neurons Workers AI billed for a response, read from its finish part.
+ * Workers AI reports this as `usage.neurons`; the adapter carries it on the
+ * finish part as `metadata.cloudflare.neurons`. `undefined` when the model
+ * did not report it.
+ *
+ * @example
+ * ```typescript
+ * const response = yield* LanguageModel.generateText({ prompt });
+ * const finish = response.content.find((part) => part.type === "finish");
+ * const neurons = finish ? Cloudflare.AI.finishNeurons(finish) : undefined;
+ * ```
+ */
+export const finishNeurons = (part: {
+  readonly metadata: Response.FinishPartMetadata;
+}): number | undefined =>
+  Option.getOrUndefined(
+    Option.map(decodeNeurons(part.metadata), (m) => m.cloudflare.neurons),
+  );
+
+const decodeNeurons = Schema.decodeUnknownOption(
+  Schema.Struct({ cloudflare: Schema.Struct({ neurons: Schema.Number }) }),
+);
+
 const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   const usage = (raw?.usage as Record<string, unknown> | undefined) ?? {};
   const promptTokens = (usage.prompt_tokens as number | undefined) ?? 0;
@@ -565,6 +600,7 @@ const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
       reason: finish,
       usage: mapUsage(raw),
       response: undefined,
+      ...finishMetadata(raw),
     },
   ] satisfies ReadonlyArray<Response.PartEncoded>;
 });
@@ -1001,6 +1037,7 @@ const finalizeStream = (
     reason,
     usage: mapUsage(s.usage),
     response: undefined,
+    ...finishMetadata(s.usage),
   });
   return parts;
 };

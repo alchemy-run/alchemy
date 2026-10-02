@@ -56,6 +56,7 @@ type StreamPart = {
     inputTokens?: { total?: number };
     outputTokens?: { total?: number };
   };
+  metadata?: { cloudflare?: { neurons?: number } | null };
 };
 
 const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
@@ -88,6 +89,7 @@ test(
         inputTokens: number | undefined;
         outputTokens: number | undefined;
       };
+      neurons: number | undefined;
     };
 
     expect(typeof body.text).toBe("string");
@@ -99,6 +101,7 @@ test(
     // Refactor invariant: a normal completion maps to `stop`, not `unknown` /
     // `other` / `error`.
     expect(body.finishReason).toBe("stop");
+    expect(body.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
     tags: [
@@ -147,6 +150,7 @@ test(
     expect(parts.length).toBeGreaterThan(0);
     expect(text.length).toBeGreaterThan(0);
     expect(finish).toBeDefined();
+    expect(finish?.metadata?.cloudflare?.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
     tags: [

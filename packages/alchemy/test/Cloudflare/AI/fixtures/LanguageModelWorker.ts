@@ -111,6 +111,9 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
               inputTokens: response.usage.inputTokens.total,
               outputTokens: response.usage.outputTokens.total,
             },
+            neurons: response.content
+              .filter((part) => part.type === "finish")
+              .map(Cloudflare.AI.finishNeurons)[0],
           });
         }
 
