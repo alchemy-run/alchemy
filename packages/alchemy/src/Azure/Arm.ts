@@ -290,3 +290,7 @@ export const hasAnyAlchemyTag = (
 export const stackAndStage = Effect.gen(function* () {
   return { stack: (yield* Stack).name, stage: yield* Stage };
 });
+
+/** Resource group name from an ARM resource ID, e.g. for `list` results. */
+export const resourceGroupOf = (armId: string | undefined) =>
+  armId?.match(/\/resourceGroups\/([^/]+)/i)?.[1];

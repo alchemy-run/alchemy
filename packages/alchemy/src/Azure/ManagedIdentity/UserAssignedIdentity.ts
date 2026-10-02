@@ -13,6 +13,7 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   requireSinglePage,
+  resourceGroupOf,
   tagsDiffer,
   userTags,
   waitUntilGone,
@@ -124,9 +125,6 @@ const getIdentity = (
       resourceName,
     }),
   );
-
-const resourceGroupOf = (armId: string | undefined) =>
-  armId?.match(/\/resourceGroups\/([^/]+)/i)?.[1];
 
 const toAttrs = (
   resourceGroup: string,
