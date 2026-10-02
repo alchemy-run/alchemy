@@ -61,16 +61,16 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
 
-    yield* EffectHttp.toHandled(handler, (request, response) =>
-      Deferred.succeed(
+    yield* EffectHttp.toHandled(handler, (request, response) => {
+      const withoutBody = request.method === "HEAD";
+      if (!HttpServerResponse.omitsBody(response, withoutBody)) {
+        response = EffectHttp.scopeTransferToStream(response);
+      }
+      return Deferred.succeed(
         webResponse,
-        // Conversion to web response with options matches `EffectHttp.toWebHandler`'s callback.
-        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-          withoutBody: request.method === "HEAD",
-          context,
-        }),
-      ),
-    );
+        HttpServerResponse.toWeb(response, { withoutBody, context }),
+      );
+    });
     return yield* Deferred.await(webResponse);
   });
 
