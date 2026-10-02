@@ -104,9 +104,7 @@ export const Variable = Resource<Variable>("Azure.Automation.Variable");
 
 /** Serialize a variable value the way Automation stores it. */
 const serialize = (value: unknown) =>
-  value === undefined
-    ? undefined
-    : JSON.stringify(reveal(value));
+  value === undefined ? undefined : JSON.stringify(reveal(value));
 
 const getVariable = (
   subscriptionId: string,
@@ -142,7 +140,12 @@ const toAttrs = (
 
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
-    stables: ["variableName", "variableId", "automationAccount", "resourceGroup"],
+    stables: [
+      "variableName",
+      "variableId",
+      "automationAccount",
+      "resourceGroup",
+    ],
 
     // Variables live inside an account; nuke removes them with it.
     list: Effect.fn(function* () {
@@ -154,7 +157,8 @@ export const VariableProvider = () =>
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.automationAccount, output.automationAccount) ||
-        (news.name !== undefined && !sameName(news.name, output.variableName)) ||
+        (news.name !== undefined &&
+          !sameName(news.name, output.variableName)) ||
         (news.isEncrypted ?? false) !== output.isEncrypted
       ) {
         return { action: "replace" } as const;
@@ -179,7 +183,11 @@ export const VariableProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

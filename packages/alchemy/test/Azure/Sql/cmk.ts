@@ -39,6 +39,8 @@ export const cmkServer = (
       Azure.KeyVault.Key(name, {
         resourceGroup: group.resourceGroupName,
         vault: vault.vaultName,
+        // Server key names are `<vault>_<key>_<version>` (max 128 chars).
+        name: `tde${name.toLowerCase()}`,
         kty: "RSA",
         keySize: 2048,
       }),

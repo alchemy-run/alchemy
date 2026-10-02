@@ -12,7 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { lower, syncSetting } from "./common.ts";
+import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 
 export interface WorkspaceAadAdminProps {
   /** Resource group of the workspace. Changing it replaces the administrator. */
@@ -59,8 +59,9 @@ export interface WorkspaceAadAdmin extends Resource<
  * (dedicated and serverless) — a user, group, or service principal that can
  * create database users for other Entra identities.
  *
- * A workspace has at most one Entra administrator, so Alchemy treats an
- * existing administrator it did not set as unowned.
+ * A workspace has at most one Entra administrator. Azure makes the
+ * identity that created the workspace its initial administrator; this
+ * resource replaces it. Destroying the resource removes the administrator.
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql/active-directory-authentication
  *
@@ -169,8 +170,16 @@ export const WorkspaceAadAdminProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, workspace, observed);
-      // No tags or markers: an administrator we never set is foreign.
-      return output !== undefined ? attrs : Unowned(attrs);
+      // No tags or markers. Azure makes the workspace creator the initial
+      // administrator, so on a workspace this stack owns it is ours to set.
+      return output !== undefined ||
+        (yield* isWorkspaceOwnedByStack(
+          subscriptionId,
+          resourceGroup,
+          workspace,
+        ))
+        ? attrs
+        : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ news }) {

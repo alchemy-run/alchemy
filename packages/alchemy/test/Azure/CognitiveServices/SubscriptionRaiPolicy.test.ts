@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -33,8 +34,11 @@ const program = (props: {
     return { policy };
   });
 
-// Subscription-scoped policy, no account: $0, seconds.
-test.provider(
+// Subscription-scoped policy, no account: $0, seconds. The testing
+// subscription answers the PUT (api-version 2026-07-15-preview) with
+// HTTP 405 and an empty body, so the feature is not enabled for it; run
+// with AZURE_TEST_PAID=1 on a subscription that has it.
+test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete a subscription rai policy",
   (stack) =>
     Effect.gen(function* () {

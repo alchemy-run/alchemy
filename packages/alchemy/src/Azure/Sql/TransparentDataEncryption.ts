@@ -11,13 +11,8 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isServerOwnedByStack, lower } from "./common.ts";
-import {
-  databasePath,
-  type DatabaseScope,
-  retryInProgress,
-  syncSetting,
-} from "./setting.ts";
+import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
+import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
 /** The setting is a singleton named `current`. */
 const SETTING_NAME = "current";
@@ -175,15 +170,21 @@ export const TransparentDataEncryptionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql transparent data encryption on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The setting cannot be removed; re-enable encryption (Azure's default).
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.TransparentDataEncryptionsCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Enabled" }),
+          put: sql.TransparentDataEncryptionsCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             tdeName: SETTING_NAME,
             properties: { state: "Enabled" },
           }),
-        ),
+        }),
       );
     }),
 

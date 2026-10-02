@@ -50,7 +50,15 @@ import {
   IPv6FirewallRule,
   IPv6FirewallRuleProvider,
 } from "./IPv6FirewallRule.ts";
+import { Job, JobProvider } from "./Job.ts";
 import { JobAgent, JobAgentProvider } from "./JobAgent.ts";
+import { JobCredential, JobCredentialProvider } from "./JobCredential.ts";
+import {
+  JobPrivateEndpoint,
+  JobPrivateEndpointProvider,
+} from "./JobPrivateEndpoint.ts";
+import { JobStep, JobStepProvider } from "./JobStep.ts";
+import { JobTargetGroup, JobTargetGroupProvider } from "./JobTargetGroup.ts";
 import {
   LedgerDigestUpload,
   LedgerDigestUploadProvider,
@@ -63,7 +71,76 @@ import {
   MaintenanceWindow,
   MaintenanceWindowProvider,
 } from "./MaintenanceWindow.ts";
+import {
+  ManagedBackupShortTermRetentionPolicy,
+  ManagedBackupShortTermRetentionPolicyProvider,
+} from "./ManagedBackupShortTermRetentionPolicy.ts";
+import { ManagedDatabase, ManagedDatabaseProvider } from "./ManagedDatabase.ts";
+import {
+  ManagedDatabaseAdvancedThreatProtectionSettings,
+  ManagedDatabaseAdvancedThreatProtectionSettingsProvider,
+} from "./ManagedDatabaseAdvancedThreatProtectionSettings.ts";
+import {
+  ManagedDatabaseSecurityAlertPolicy,
+  ManagedDatabaseSecurityAlertPolicyProvider,
+} from "./ManagedDatabaseSecurityAlertPolicy.ts";
+import {
+  ManagedDatabaseVulnerabilityAssessment,
+  ManagedDatabaseVulnerabilityAssessmentProvider,
+} from "./ManagedDatabaseVulnerabilityAssessment.ts";
 import { ManagedInstance, ManagedInstanceProvider } from "./ManagedInstance.ts";
+import {
+  ManagedInstanceAdministrator,
+  ManagedInstanceAdministratorProvider,
+} from "./ManagedInstanceAdministrator.ts";
+import {
+  ManagedInstanceAdvancedThreatProtectionSettings,
+  ManagedInstanceAdvancedThreatProtectionSettingsProvider,
+} from "./ManagedInstanceAdvancedThreatProtectionSettings.ts";
+import {
+  ManagedInstanceAzureADOnlyAuthentication,
+  ManagedInstanceAzureADOnlyAuthenticationProvider,
+} from "./ManagedInstanceAzureADOnlyAuthentication.ts";
+import {
+  ManagedInstanceDtc,
+  ManagedInstanceDtcProvider,
+} from "./ManagedInstanceDtc.ts";
+import {
+  ManagedInstanceEncryptionProtector,
+  ManagedInstanceEncryptionProtectorProvider,
+} from "./ManagedInstanceEncryptionProtector.ts";
+import {
+  ManagedInstanceKey,
+  ManagedInstanceKeyProvider,
+} from "./ManagedInstanceKey.ts";
+import {
+  ManagedInstanceLongTermRetentionPolicy,
+  ManagedInstanceLongTermRetentionPolicyProvider,
+} from "./ManagedInstanceLongTermRetentionPolicy.ts";
+import {
+  ManagedInstancePrivateEndpointConnection,
+  ManagedInstancePrivateEndpointConnectionProvider,
+} from "./ManagedInstancePrivateEndpointConnection.ts";
+import {
+  ManagedInstanceVulnerabilityAssessment,
+  ManagedInstanceVulnerabilityAssessmentProvider,
+} from "./ManagedInstanceVulnerabilityAssessment.ts";
+import {
+  ManagedLedgerDigestUpload,
+  ManagedLedgerDigestUploadProvider,
+} from "./ManagedLedgerDigestUpload.ts";
+import {
+  ManagedServerDnsAlias,
+  ManagedServerDnsAliasProvider,
+} from "./ManagedServerDnsAlias.ts";
+import {
+  ManagedServerSecurityAlertPolicy,
+  ManagedServerSecurityAlertPolicyProvider,
+} from "./ManagedServerSecurityAlertPolicy.ts";
+import {
+  ManagedTransparentDataEncryption,
+  ManagedTransparentDataEncryptionProvider,
+} from "./ManagedTransparentDataEncryption.ts";
 import {
   OutboundFirewallRule,
   OutboundFirewallRuleProvider,
@@ -90,6 +167,10 @@ import {
   ServerBlobAuditingPolicyProvider,
 } from "./ServerBlobAuditingPolicy.ts";
 import {
+  ServerConfigurationOption,
+  ServerConfigurationOptionProvider,
+} from "./ServerConfigurationOption.ts";
+import {
   ServerConnectionPolicy,
   ServerConnectionPolicyProvider,
 } from "./ServerConnectionPolicy.ts";
@@ -112,9 +193,17 @@ import {
   ServerVulnerabilityAssessmentProvider,
 } from "./ServerVulnerabilityAssessment.ts";
 import {
+  SqlAgentConfiguration,
+  SqlAgentConfigurationProvider,
+} from "./SqlAgentConfiguration.ts";
+import {
   SqlVulnerabilityAssessmentSettings,
   SqlVulnerabilityAssessmentSettingsProvider,
 } from "./SqlVulnerabilityAssessmentSettings.ts";
+import {
+  StartStopManagedInstanceSchedule,
+  StartStopManagedInstanceScheduleProvider,
+} from "./StartStopManagedInstanceSchedule.ts";
 import {
   TransparentDataEncryption,
   TransparentDataEncryptionProvider,
@@ -123,6 +212,11 @@ import {
   VirtualNetworkRule,
   VirtualNetworkRuleProvider,
 } from "./VirtualNetworkRule.ts";
+import {
+  WorkloadClassifier,
+  WorkloadClassifierProvider,
+} from "./WorkloadClassifier.ts";
+import { WorkloadGroup, WorkloadGroupProvider } from "./WorkloadGroup.ts";
 
 export const resources = [
   BackupShortTermRetentionPolicy,
@@ -143,11 +237,34 @@ export const resources = [
   InstanceFailoverGroup,
   InstancePool,
   IPv6FirewallRule,
+  Job,
   JobAgent,
+  JobCredential,
+  JobPrivateEndpoint,
+  JobStep,
+  JobTargetGroup,
   LedgerDigestUpload,
   LongTermRetentionPolicy,
   MaintenanceWindow,
+  ManagedBackupShortTermRetentionPolicy,
+  ManagedDatabase,
+  ManagedDatabaseAdvancedThreatProtectionSettings,
+  ManagedDatabaseSecurityAlertPolicy,
+  ManagedDatabaseVulnerabilityAssessment,
   ManagedInstance,
+  ManagedInstanceAdministrator,
+  ManagedInstanceAdvancedThreatProtectionSettings,
+  ManagedInstanceAzureADOnlyAuthentication,
+  ManagedInstanceDtc,
+  ManagedInstanceEncryptionProtector,
+  ManagedInstanceKey,
+  ManagedInstanceLongTermRetentionPolicy,
+  ManagedInstancePrivateEndpointConnection,
+  ManagedInstanceVulnerabilityAssessment,
+  ManagedLedgerDigestUpload,
+  ManagedServerDnsAlias,
+  ManagedServerSecurityAlertPolicy,
+  ManagedTransparentDataEncryption,
   OutboundFirewallRule,
   PrivateEndpointConnection,
   Server,
@@ -155,6 +272,7 @@ export const resources = [
   ServerAzureADAdministrator,
   ServerAzureADOnlyAuthentication,
   ServerBlobAuditingPolicy,
+  ServerConfigurationOption,
   ServerConnectionPolicy,
   ServerDevOpsAuditSettings,
   ServerDnsAlias,
@@ -162,9 +280,13 @@ export const resources = [
   ServerSecurityAlertPolicy,
   ServerTrustGroup,
   ServerVulnerabilityAssessment,
+  SqlAgentConfiguration,
   SqlVulnerabilityAssessmentSettings,
+  StartStopManagedInstanceSchedule,
   TransparentDataEncryption,
   VirtualNetworkRule,
+  WorkloadClassifier,
+  WorkloadGroup,
 ];
 
 export const layers = () =>
@@ -188,11 +310,36 @@ export const layers = () =>
       InstanceFailoverGroupProvider(),
       InstancePoolProvider(),
       IPv6FirewallRuleProvider(),
+      JobProvider(),
       JobAgentProvider(),
+      JobCredentialProvider(),
+      JobPrivateEndpointProvider(),
+      JobStepProvider(),
+      JobTargetGroupProvider(),
       LedgerDigestUploadProvider(),
       LongTermRetentionPolicyProvider(),
       MaintenanceWindowProvider(),
+      ManagedBackupShortTermRetentionPolicyProvider(),
+      ManagedDatabaseProvider(),
+      ManagedDatabaseAdvancedThreatProtectionSettingsProvider(),
+      ManagedDatabaseSecurityAlertPolicyProvider(),
+      ManagedDatabaseVulnerabilityAssessmentProvider(),
       ManagedInstanceProvider(),
+      ManagedInstanceAdministratorProvider(),
+      ManagedInstanceAdvancedThreatProtectionSettingsProvider(),
+      ManagedInstanceAzureADOnlyAuthenticationProvider(),
+      ManagedInstanceDtcProvider(),
+      ManagedInstanceEncryptionProtectorProvider(),
+      ManagedInstanceKeyProvider(),
+      ManagedInstanceLongTermRetentionPolicyProvider(),
+    ),
+    Layer.mergeAll(
+      ManagedInstancePrivateEndpointConnectionProvider(),
+      ManagedInstanceVulnerabilityAssessmentProvider(),
+      ManagedLedgerDigestUploadProvider(),
+      ManagedServerDnsAliasProvider(),
+      ManagedServerSecurityAlertPolicyProvider(),
+      ManagedTransparentDataEncryptionProvider(),
       OutboundFirewallRuleProvider(),
       PrivateEndpointConnectionProvider(),
       ServerProvider(),
@@ -200,6 +347,7 @@ export const layers = () =>
       ServerAzureADAdministratorProvider(),
       ServerAzureADOnlyAuthenticationProvider(),
       ServerBlobAuditingPolicyProvider(),
+      ServerConfigurationOptionProvider(),
       ServerConnectionPolicyProvider(),
       ServerDevOpsAuditSettingsProvider(),
       ServerDnsAliasProvider(),
@@ -207,8 +355,12 @@ export const layers = () =>
       ServerSecurityAlertPolicyProvider(),
       ServerTrustGroupProvider(),
       ServerVulnerabilityAssessmentProvider(),
+      SqlAgentConfigurationProvider(),
       SqlVulnerabilityAssessmentSettingsProvider(),
+      StartStopManagedInstanceScheduleProvider(),
       TransparentDataEncryptionProvider(),
       VirtualNetworkRuleProvider(),
+      WorkloadClassifierProvider(),
+      WorkloadGroupProvider(),
     ),
   );

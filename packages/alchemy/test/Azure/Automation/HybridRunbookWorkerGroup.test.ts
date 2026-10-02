@@ -10,7 +10,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -49,7 +49,7 @@ const getGroup = (
 test.provider(
   "create, update, replace, and delete a hybrid worker group",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -57,7 +57,9 @@ test.provider(
         const get = (name: string) =>
           getGroup(where.resourceGroup, where.automationAccount, name);
         const observed = yield* get(group.hybridRunbookWorkerGroupName);
-        expect(observed.properties?.credential?.name ?? undefined).toBeUndefined();
+        expect(
+          observed.properties?.credential?.name ?? undefined,
+        ).toBeUndefined();
 
         // In-place: attach a Run As credential.
         const updated = yield* stack.deploy(program({ runAs: true }));

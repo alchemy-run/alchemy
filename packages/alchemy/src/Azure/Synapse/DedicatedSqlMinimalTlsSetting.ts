@@ -26,10 +26,12 @@ export interface DedicatedSqlMinimalTlsSettingProps {
   /** Name of the Synapse workspace. Changing it replaces the setting. */
   workspace: string;
   /**
-   * Minimum TLS version accepted by the dedicated SQL endpoint.
+   * Minimum TLS version accepted by the dedicated SQL endpoint. Azure
+   * retired TLS 1.0 and 1.1 for Azure SQL endpoints: it accepts a request
+   * for them but never applies it, so the deploy times out.
    * @default "1.2"
    */
-  minimalTlsVersion?: "1.0" | "1.1" | "1.2";
+  minimalTlsVersion?: string;
 }
 
 export interface DedicatedSqlMinimalTlsSetting extends Resource<
@@ -68,12 +70,11 @@ export interface DedicatedSqlMinimalTlsSetting extends Resource<
  * });
  * ```
  *
- * **Example:** Allow legacy TLS 1.1 clients
+ * **Example:** Pin the default
  * ```typescript
  * yield* Azure.Synapse.DedicatedSqlMinimalTlsSetting("tls", {
  *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
- *   minimalTlsVersion: "1.1",
  * });
  * ```
  *

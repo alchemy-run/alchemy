@@ -72,10 +72,12 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: without a marketplace subscription the create is rejected
-// (hub + project have no hourly charge; ~3-5 minutes).
+// Ungated probe: the free trial is not offered catalog models-as-a-service
+// (non-Microsoft models need an Azure Marketplace subscription), so the
+// create is rejected with the typed error (hub + project have no hourly
+// charge; ~3-5 minutes).
 test.provider(
-  "a serverless endpoint without a marketplace subscription is rejected",
+  "a serverless endpoint for an unavailable model is rejected",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -91,9 +93,7 @@ test.provider(
           properties: { authMode: "Key", modelSettings: { modelId } },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual(
-        "MachineLearningMarketplaceSubscriptionRequired",
-      );
+      expect(error._tag).toEqual("MachineLearningModelNotAvailable");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },

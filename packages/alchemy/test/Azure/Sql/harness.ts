@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as storage from "@distilled.cloud/azure/storage";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -100,3 +101,50 @@ export const awaitObserved = <A, E, R>(
       times,
     }),
   );
+
+/**
+ * A resource group, a SQL server (with Advanced Threat Protection, which
+ * classic vulnerability assessment requires), optionally a Basic
+ * database, and a storage account + blob container for scan results.
+ */
+export const sqlWithStorage = (
+  password: Redacted.Redacted<string>,
+  withDatabase: boolean,
+) =>
+  Effect.gen(function* () {
+    const { group, server } = yield* sqlServer(password);
+    const atp = yield* Azure.Sql.ServerAdvancedThreatProtectionSettings("Atp", {
+      resourceGroup: group.resourceGroupName,
+      server: server.serverName,
+      state: "Enabled",
+    });
+    const database = withDatabase
+      ? yield* Azure.Sql.Database("App", {
+          resourceGroup: group.resourceGroupName,
+          server: server.serverName,
+          sku: { name: "Basic" },
+          requestedBackupStorageRedundancy: "Local",
+        })
+      : undefined;
+    const account = yield* Azure.Storage.StorageAccount("Results", {
+      resourceGroup: group.resourceGroupName,
+      location: group.location,
+    });
+    const container = yield* Azure.Storage.BlobContainer("ResultsContainer", {
+      resourceGroup: group.resourceGroupName,
+      storageAccount: account.storageAccountName,
+      name: "vulnerability-assessment",
+    });
+    return { group, server, atp, database, account, container };
+  });
+
+/** Out-of-band: the first access key of a storage account. */
+export const storageKey = (resourceGroupName: string, accountName: string) =>
+  Effect.gen(function* () {
+    const keys = yield* storage.ListStorageAccountKeys({
+      subscriptionId: yield* subscription,
+      resourceGroupName,
+      accountName,
+    });
+    return Redacted.make(keys.keys?.[0]?.value ?? "");
+  });

@@ -14,7 +14,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -49,7 +49,7 @@ const getCertificate = (
 test.provider(
   "create, update, replace, and delete a certificate",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -69,7 +69,9 @@ test.provider(
         expect(updated.certificate.certificateId).toEqual(
           certificate.certificateId,
         );
-        expect((yield* get(certificate.certificateName)).properties?.description).toEqual("two");
+        expect(
+          (yield* get(certificate.certificateName)).properties?.description,
+        ).toEqual("two");
 
         // Replacement: the name is immutable.
         const replaced = yield* stack.deploy(

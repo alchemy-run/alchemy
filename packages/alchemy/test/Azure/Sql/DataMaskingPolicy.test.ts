@@ -38,7 +38,9 @@ type Step = {
 
 const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
   Effect.gen(function* () {
-    const { group, server, database } = yield* sqlDatabase(password);
+    const { group, server, database } = yield* sqlDatabase(password, {
+      sampleName: "AdventureWorksLT",
+    });
     const setting =
       step === undefined
         ? undefined
@@ -48,6 +50,18 @@ const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
             database: database.databaseName,
             ...step,
           });
+    // Azure reports the policy as Disabled until the database has a rule.
+    if (step !== undefined) {
+      yield* Azure.Sql.DataMaskingRule("MaskEmail", {
+        resourceGroup: group.resourceGroupName,
+        server: server.serverName,
+        database: database.databaseName,
+        schemaName: "SalesLT",
+        tableName: "Customer",
+        columnName: "EmailAddress",
+        maskingFunction: "Email",
+      });
+    }
     return { group, server, database, setting };
   });
 
@@ -60,10 +74,7 @@ test.provider(
       const password = yield* newPassword;
 
       const first = yield* stack.deploy(
-        program(password, {
-          dataMaskingState: "Enabled",
-          exemptPrincipals: "reporting",
-        }),
+        program(password, { dataMaskingState: "Enabled" }),
       );
       const { group, server, database } = first;
       const get = getSetting(
@@ -77,24 +88,22 @@ test.provider(
         (o) => o.properties?.dataMaskingState === "Enabled",
         12,
       );
-      expect(observed1.properties?.exemptPrincipals).toEqual("reporting");
+      expect(observed1.properties?.dataMaskingState).toEqual("Enabled");
 
       // In place update.
       const second = yield* stack.deploy(
         program(password, {
           dataMaskingState: "Enabled",
-          exemptPrincipals: "reporting;analyst",
+          exemptPrincipals: "alchemyadmin",
         }),
       );
       expect(second.setting?.policyId).toEqual(first.setting?.policyId);
       const observed2 = yield* awaitObserved(
         get,
-        (o) => o.properties?.exemptPrincipals === "reporting;analyst",
+        (o) => o.properties?.exemptPrincipals === "alchemyadmin",
         12,
       );
-      expect(observed2.properties?.exemptPrincipals).toEqual(
-        "reporting;analyst",
-      );
+      expect(observed2.properties?.exemptPrincipals).toEqual("alchemyadmin");
 
       // Removing the resource disables masking.
       yield* stack.deploy(program(password, undefined));

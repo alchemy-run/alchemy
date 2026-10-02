@@ -12,12 +12,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
-import {
-  databasePath,
-  type DatabaseScope,
-  retryInProgress,
-  syncSetting,
-} from "./setting.ts";
+import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
 /** The setting is a singleton named `current`. */
 const SETTING_NAME = "current";
@@ -212,15 +207,21 @@ export const MaintenanceWindowProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql maintenance window on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The setting cannot be removed; clear the custom windows.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.MaintenanceWindowsCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            (observed.properties?.timeRanges ?? []).length === 0,
+          put: sql.MaintenanceWindowsCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             maintenanceWindowName: SETTING_NAME,
             properties: { timeRanges: [] },
           }),
-        ),
+        }),
       );
     }),
 

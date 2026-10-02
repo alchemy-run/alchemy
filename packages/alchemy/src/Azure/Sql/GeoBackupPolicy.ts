@@ -11,13 +11,8 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isServerOwnedByStack, lower } from "./common.ts";
-import {
-  databasePath,
-  type DatabaseScope,
-  retryInProgress,
-  syncSetting,
-} from "./setting.ts";
+import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
+import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
 /** The policy is a singleton named `Default`. */
 const SETTING_NAME = "Default";
@@ -30,8 +25,8 @@ export interface GeoBackupPolicyProps {
   /** Name of the database. Changing it replaces the policy. */
   database: string;
   /**
-   * Whether geo-redundant backups of the dedicated SQL pool are taken.
-   * Only data warehouses (dedicated SQL pools, `DW*` SKUs) support it.
+   * Whether geo-redundant backups are taken. Azure only acts on it for
+   * data warehouses (dedicated SQL pools, `DW*` SKUs).
    */
   state: "Enabled" | "Disabled";
 }
@@ -58,8 +53,10 @@ export interface GeoBackupPolicy extends Resource<
 > {}
 
 /**
- * The geo-backup policy of a dedicated SQL pool (data warehouse) on an
- * Azure SQL server — whether a geo-redundant backup is taken every day.
+ * The geo-backup policy of an Azure SQL database — whether a
+ * geo-redundant backup is taken every day. Azure only acts on it for
+ * dedicated SQL pools (data warehouses); other databases report it but
+ * use their backup storage redundancy instead.
  *
  * This is a singleton setting that always exists on a data warehouse.
  * Destroying the resource re-enables geo backups (Azure's default).
@@ -177,15 +174,21 @@ export const GeoBackupPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql geo backup policy on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The policy cannot be removed; re-enable geo backups (Azure's default).
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.GeoBackupPoliciesCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Enabled" }),
+          put: sql.GeoBackupPoliciesCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             geoBackupPolicyName: SETTING_NAME,
             properties: { state: "Enabled" },
           }),
-        ),
+        }),
       );
     }),
 

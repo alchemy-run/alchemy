@@ -12,12 +12,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
-import {
-  databasePath,
-  type DatabaseScope,
-  retryInProgress,
-  syncSetting,
-} from "./setting.ts";
+import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
 /** The policy is a singleton named `Default`. */
 const SETTING_NAME = "Default";
@@ -64,7 +59,9 @@ export interface DataMaskingPolicy extends Resource<
 /**
  * The dynamic data masking policy of an Azure SQL database — turns
  * masking on or off and lists users that always see unmasked data. Add
- * per-column rules with `Azure.Sql.DataMaskingRule`.
+ * per-column rules with `Azure.Sql.DataMaskingRule`; Azure keeps
+ * reporting the policy as `Disabled` until the database has at least one
+ * rule.
  *
  * This is a singleton setting that always exists on a database.
  * Destroying the resource disables masking again.
@@ -169,7 +166,7 @@ export const DataMaskingPolicyProvider = () =>
       };
       const desired = {
         dataMaskingState: news.dataMaskingState,
-        exemptPrincipals: news.exemptPrincipals,
+        exemptPrincipals: news.exemptPrincipals ?? "",
       };
       const fresh = yield* syncSetting({
         label: `sql data masking policy on ${scope.databaseName}`,
@@ -180,21 +177,32 @@ export const DataMaskingPolicyProvider = () =>
           dataMaskingPolicyName: SETTING_NAME,
           properties: desired,
         }),
+        visible: (observed) =>
+          fieldsMatch(observed.properties, desired, ["dataMaskingState"]) &&
+          (lower(observed.properties?.dataMaskingState) ===
+            lower(desired.dataMaskingState) ||
+            desired.dataMaskingState === "Enabled"),
       });
       return toAttrs(scope, fresh);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql data masking policy on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The policy cannot be removed; disable masking.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.DataMaskingPoliciesCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            lower(observed.properties?.dataMaskingState) === "disabled",
+          put: sql.DataMaskingPoliciesCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             dataMaskingPolicyName: SETTING_NAME,
             properties: { dataMaskingState: "Disabled" },
           }),
-        ),
+        }),
       );
     }),
 

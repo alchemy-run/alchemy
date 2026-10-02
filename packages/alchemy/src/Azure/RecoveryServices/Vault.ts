@@ -550,7 +550,9 @@ export const VaultProvider = () =>
           sku: SKU,
           tags,
           identity: news.identity ? toIdentity(news.identity) : undefined,
-          properties: { publicNetworkAccess: news.publicNetworkAccess ?? "Enabled" },
+          properties: {
+            publicNetworkAccess: news.publicNetworkAccess ?? "Enabled",
+          },
         });
       }
       observed = yield* waitReady();
@@ -560,15 +562,17 @@ export const VaultProvider = () =>
       const identityChanged = identityDiffers(observed.identity, news.identity);
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (Object.keys(delta).length > 0 || identityChanged || tagsChanged) {
-        yield* recoveryservices.UpdateVault({
-          ...where,
-          tags: tagsChanged ? tags : undefined,
-          identity:
-            identityChanged && news.identity
-              ? toIdentity(news.identity)
-              : undefined,
-          properties: Object.keys(delta).length > 0 ? delta : undefined,
-        }).pipe(Effect.retry(whileVaultBusy));
+        yield* recoveryservices
+          .UpdateVault({
+            ...where,
+            tags: tagsChanged ? tags : undefined,
+            identity:
+              identityChanged && news.identity
+                ? toIdentity(news.identity)
+                : undefined,
+            properties: Object.keys(delta).length > 0 ? delta : undefined,
+          })
+          .pipe(Effect.retry(whileVaultBusy));
         observed = yield* waitReady();
       }
 
@@ -578,11 +582,13 @@ export const VaultProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        recoveryservices.DeleteVault({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          vaultName: output.vaultName,
-        }).pipe(Effect.retry(whileVaultBusy)),
+        recoveryservices
+          .DeleteVault({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            vaultName: output.vaultName,
+          })
+          .pipe(Effect.retry(whileVaultBusy)),
       );
       yield* waitUntilGone(
         `recovery services vault ${output.vaultName}`,

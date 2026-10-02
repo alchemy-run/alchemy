@@ -145,21 +145,6 @@ export const identityDiffers = (
   return observedIds.join("|") !== desiredIds.join("|");
 };
 
-/** Principal ID of a system-assigned identity, if any. */
-export const principalIdOf = (
-  identity: { principalId?: string } | undefined,
-): string | undefined => identity?.principalId;
-
-/** ARM resource ID of a workspace child collection item. */
-export const workspaceChildId = (
-  subscriptionId: string,
-  resourceGroup: string,
-  workspace: string,
-  collection: string,
-  name: string,
-) =>
-  `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/${workspace}/${collection}/${name}`;
-
 /** Location of a workspace (the default location of its children). */
 export const workspaceLocation = (
   subscriptionId: string,

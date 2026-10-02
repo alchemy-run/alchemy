@@ -128,6 +128,8 @@ export const GraphQLApiResolverProvider = () =>
           };
         }),
       keyOfAttrs: (attrs) => attrs,
+      // A field has one resolver: the old one must go before the new one.
+      deleteFirst: true,
       get: (subscriptionId, key) =>
         apim.GetGraphQLApiResolver({
           subscriptionId,

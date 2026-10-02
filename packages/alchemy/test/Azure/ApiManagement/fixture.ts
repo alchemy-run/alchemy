@@ -147,3 +147,15 @@ export const basicV2Api = Effect.gen(function* () {
   });
   return { group, service, api };
 });
+
+/** Developer service plus one self-hosted gateway (`alchemy-edge`). */
+export const developerGateway = Effect.gen(function* () {
+  const { group, service } = yield* developerService;
+  const gateway = yield* Azure.ApiManagement.Gateway("Edge", {
+    resourceGroup: group.resourceGroupName,
+    serviceName: service.serviceName,
+    name: "alchemy-edge",
+    locationData: { name: "dc1" },
+  });
+  return { group, service, gateway };
+});

@@ -43,9 +43,10 @@ const program = (props: { tags: Record<string, string> }) =>
     return { ...base, compute };
   });
 
-// A Standard_DS11_v2 compute instance (2 vCPUs, ~$0.19/hour) runs for the
-// ~10 minutes of the test (~$0.05); provisioning takes ~5-8 minutes.
-test.provider(
+// A Standard_DS11_v2 compute instance (2 vCPUs, ~$0.19/hour, ~$0.10 per
+// run). Two live runs exceeded the 15-minute budget (instance provisioning
+// plus deletion of the instance and its hub/project), so it is gated.
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete a compute instance",
   (stack) =>
     Effect.gen(function* () {

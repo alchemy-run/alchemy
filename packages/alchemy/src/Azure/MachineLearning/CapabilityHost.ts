@@ -1,16 +1,12 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import * as Effect from "effect/Effect";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
-  desiredTags,
   ensureRegistered,
   ignoreNotFound,
-  isOwned,
   orUndefinedIfNotFound,
-  userTags,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -69,11 +65,6 @@ export interface CapabilityHostProps {
   acaEnvironmentConnections?: string[];
   /** Description of the capability host. Changing it replaces the capability host. */
   description?: string;
-  /**
-   * User tags (stored in the capability host body). Alchemy ownership tags
-   * are merged in automatically. Changing them replaces the capability host.
-   */
-  tags?: Record<string, string>;
 }
 
 export interface CapabilityHost extends Resource<
@@ -90,8 +81,6 @@ export interface CapabilityHost extends Resource<
     resourceGroup: string;
     /** Kind of capability the host provides. */
     capabilityHostKind: string | undefined;
-    /** User tags (Alchemy ownership tags stripped). */
-    tags: Record<string, string>;
   },
   never,
   Providers
@@ -101,7 +90,8 @@ export interface CapabilityHost extends Resource<
  * A capability host of an Azure AI Foundry hub or project workspace — it
  * binds the Agents service to the connections that hold agent threads,
  * files, and vector stores (bring-your-own Cosmos DB, storage, and AI
- * Search). The service rejects updates, so every change replaces it.
+ * Search). The service rejects updates, so every change replaces it, and
+ * it drops tags, so ownership is tracked only in Alchemy state.
  *
  * @see https://learn.microsoft.com/azure/ai-foundry/agents/concepts/capability-hosts
  *
@@ -150,7 +140,6 @@ const toAttrs = (
   workspace,
   resourceGroup,
   capabilityHostKind: host.properties.capabilityHostKind ?? undefined,
-  tags: userTags(host.properties.tags ?? undefined),
 });
 
 const definition = (props: CapabilityHostProps) => ({
@@ -162,7 +151,6 @@ const definition = (props: CapabilityHostProps) => ({
   vectorStoreConnections: props.vectorStoreConnections,
   acaEnvironmentConnections: props.acaEnvironmentConnections,
   description: props.description,
-  tags: props.tags,
 });
 
 export const CapabilityHostProvider = () =>
@@ -214,11 +202,11 @@ export const CapabilityHostProvider = () =>
         workspace,
         name,
       );
-      if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, workspace, name, observed);
-      return (yield* isOwned(id, observed.properties.tags ?? undefined))
-        ? attrs
-        : Unowned(attrs);
+      // No tags are kept: the deterministic name is the only ownership
+      // signal, so an existing host under it is ours.
+      return observed === undefined
+        ? undefined
+        : toAttrs(resourceGroup, workspace, name, observed);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -232,21 +220,20 @@ export const CapabilityHostProvider = () =>
         news.name ??
         output?.capabilityHostName ??
         (yield* createChildName(id, 64));
-      const tags = yield* desiredTags(id, news.tags);
       const get = getHost(subscriptionId, resourceGroup, workspace, name);
 
       // Observe.
       const observed = yield* get;
 
       // Ensure. Updates are rejected by the service (changes replace the
-      // host in diff); an adopted host only has its ownership tags checked.
+      // host in diff).
       if (observed === undefined) {
         yield* ml.CapabilityHostsCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           name,
-          properties: { ...definition(news), tags },
+          properties: definition(news),
         });
       }
 

@@ -15,7 +15,11 @@ import {
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-const getKey = (resourceGroupName: string, serverName: string, keyName: string) =>
+const getKey = (
+  resourceGroupName: string,
+  serverName: string,
+  keyName: string,
+) =>
   Effect.gen(function* () {
     return yield* sql.GetServerKey({
       subscriptionId: yield* subscription,

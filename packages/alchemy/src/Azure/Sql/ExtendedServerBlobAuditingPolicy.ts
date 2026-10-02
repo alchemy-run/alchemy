@@ -19,7 +19,6 @@ import {
   sameSecret,
 } from "./common.ts";
 import {
-  retryInProgress,
   sameList,
   secretsFingerprint,
   serverPath,
@@ -269,15 +268,21 @@ export const ExtendedServerBlobAuditingPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql server extended auditing on ${output.serverName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The policy cannot be removed; disable auditing.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.ExtendedServerBlobAuditingPoliciesCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Disabled" }),
+          put: sql.ExtendedServerBlobAuditingPoliciesCreateOrUpdate({
             ...serverPath(subscriptionId, output),
             blobAuditingPolicyName: SETTING_NAME,
             properties: { state: "Disabled" },
           }),
-        ),
+        }),
       );
     }),
 

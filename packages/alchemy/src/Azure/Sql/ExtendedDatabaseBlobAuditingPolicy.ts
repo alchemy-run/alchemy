@@ -21,7 +21,6 @@ import {
 import {
   databasePath,
   type DatabaseScope,
-  retryInProgress,
   sameList,
   secretsFingerprint,
   syncSetting,
@@ -278,15 +277,21 @@ export const ExtendedDatabaseBlobAuditingPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql database extended auditing on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The policy cannot be removed; disable auditing.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.ExtendedDatabaseBlobAuditingPoliciesCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Disabled" }),
+          put: sql.ExtendedDatabaseBlobAuditingPoliciesCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             blobAuditingPolicyName: SETTING_NAME,
             properties: { state: "Disabled" },
           }),
-        ),
+        }),
       );
     }),
 

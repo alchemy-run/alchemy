@@ -1,5 +1,6 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -40,7 +41,8 @@ export interface SiteProps {
   /** Resource group the site is created in. Changing it replaces the site. */
   resourceGroup: string;
   /**
-   * Name of the site. If omitted, a unique name is generated from the app,
+   * Name of the site: 4-24 letters, digits, `-`, and `_`, starting and
+   * ending with a letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the site.
    */
   name?: string;
@@ -89,7 +91,9 @@ export interface Site extends Resource<
  * be monitored and managed together, and it is the hierarchy level that
  * workload orchestration contexts reference.
  *
- * Sites have no ARM tags; Alchemy records ownership in the site's labels.
+ * Azure allows one site per resource group, so renaming a site deletes
+ * the old one before creating the new one. Sites have no ARM tags; Alchemy
+ * records ownership in the site's labels.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/site-manager/overview
  *
@@ -140,7 +144,7 @@ const toAttrs = (
   provisioningState: site.properties?.provisioningState,
 });
 
-const siteName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const siteName = (id: string) => createPhysicalName({ id, maxLength: 24 });
 
 export const SiteProvider = () =>
   Provider.succeed(Site, {
@@ -154,13 +158,15 @@ export const SiteProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      const sameGroup =
+        news.resourceGroup.toLowerCase() === output.resourceGroup.toLowerCase();
       if (
-        news.resourceGroup.toLowerCase() !==
-          output.resourceGroup.toLowerCase() ||
+        !sameGroup ||
         (news.name !== undefined &&
           news.name.toLowerCase() !== output.siteName.toLowerCase())
       ) {
-        return { action: "replace" } as const;
+        // Azure allows one site per resource group.
+        return { action: "replace", deleteFirst: sameGroup } as const;
       }
       return undefined;
     }),
@@ -199,17 +205,27 @@ export const SiteProvider = () =>
         !sameJson(props?.siteAddress, news.siteAddress) ||
         tagsDiffer(props?.labels, labels)
       ) {
-        yield* edge.SitesCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          siteName: name,
-          properties: {
-            displayName: news.displayName,
-            description: news.description,
-            siteAddress: news.siteAddress,
-            labels,
-          },
-        });
+        yield* edge
+          .SitesCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            siteName: name,
+            properties: {
+              displayName: news.displayName,
+              description: news.description,
+              siteAddress: news.siteAddress,
+              labels,
+            },
+          })
+          .pipe(
+            // The one-site-per-scope check lags a just-deleted site
+            // (e.g. a delete-first replacement).
+            Effect.retry({
+              while: (e) => e._tag === "EdgeSiteScopeTaken",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 24,
+            }),
+          );
       }
 
       const fresh = yield* waitForProvisioned(

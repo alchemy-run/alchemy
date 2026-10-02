@@ -36,6 +36,11 @@ export const syncSetting = <
   label: string;
   get: Effect.Effect<A | undefined, E1, R1>;
   converged: (observed: A) => boolean;
+  /**
+   * What must be observable before the write counts as applied (default:
+   * `converged`). For fields Azure accepts but does not report back yet.
+   */
+  visible?: (observed: A) => boolean;
   put: Effect.Effect<unknown, E2, R2>;
   force?: boolean;
   times?: number;
@@ -52,7 +57,10 @@ export const syncSetting = <
     return yield* waitForProvisioned(
       options.label,
       options.get,
-      (value) => (options.converged(value) ? "Succeeded" : "Updating"),
+      (value) =>
+        (options.visible ?? options.converged)(value)
+          ? "Succeeded"
+          : "Updating",
       { interval: "3 seconds", times: options.times ?? 60 },
     );
   });
@@ -143,3 +151,53 @@ export const serverKeyNameOf = (uri: string) => {
   const match = /^https:\/\/([^.]+)\.[^/]+\/keys\/([^/]+)\/([^/?]+)/i.exec(uri);
   return match === null ? uri : `${match[1]}_${match[2]}_${match[3]}`;
 };
+
+/** Location of an elastic job agent child. */
+export interface JobAgentScope extends ServerScope {
+  jobAgentName: string;
+}
+
+/** Location of an elastic job child (a step). */
+export interface JobScope extends JobAgentScope {
+  jobName: string;
+}
+
+export const jobAgentPath = (subscriptionId: string, s: JobAgentScope) => ({
+  subscriptionId,
+  resourceGroupName: s.resourceGroup,
+  serverName: s.serverName,
+  jobAgentName: s.jobAgentName,
+});
+
+export const jobPath = (subscriptionId: string, s: JobScope) => ({
+  ...jobAgentPath(subscriptionId, s),
+  jobName: s.jobName,
+});
+
+/**
+ * Retry a write while the elastic job agent processes another request
+ * (`ElasticJobAgentIsBusy`).
+ */
+export const retryWhileAgentBusy = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+) =>
+  self.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ElasticJobAgentIsBusy",
+      schedule: Schedule.spaced("15 seconds"),
+      times: 40,
+    }),
+  );
+
+/** Location of a workload classifier. */
+export interface WorkloadGroupScope extends DatabaseScope {
+  workloadGroupName: string;
+}
+
+export const workloadGroupPath = (
+  subscriptionId: string,
+  s: WorkloadGroupScope,
+) => ({
+  ...databasePath(subscriptionId, s),
+  workloadGroupName: s.workloadGroupName,
+});

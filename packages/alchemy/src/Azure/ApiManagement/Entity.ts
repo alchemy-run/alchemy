@@ -62,10 +62,17 @@ export interface EntitySpec<
   replaceOn?: (news: P, olds: P | undefined, output: A) => boolean;
   /** Attributes of the observed entity. */
   toAttrs: (subscriptionId: string, key: K, observed: O) => A;
+  /** Enrich the attributes with data from extra calls (e.g. listSecrets). */
+  finalize?: (subscriptionId: string, key: K, attrs: A) => Op<A>;
   /** Built-in/system entities are never owned. */
   isSystem?: (observed: O) => boolean;
   /** Provisioning state for entities that converge asynchronously (202). */
   stateOf?: (observed: O) => string | undefined;
+  /**
+   * Replace delete-first even when the path changes, for entities whose
+   * old and new instance would conflict (e.g. one resolver per field).
+   */
+  deleteFirst?: boolean;
   /**
    * Delete only resets the entity to its default (singleton settings);
    * skip waiting for it to disappear.
@@ -100,6 +107,10 @@ export const entityLifecycle = <
 ) => {
   const get = (subscriptionId: string, key: K) =>
     orUndefinedIfNotFound(spec.get(subscriptionId, key));
+  const withFinalize = (subscriptionId: string, key: K, attrs: A): Op<A> =>
+    spec.finalize === undefined
+      ? Effect.succeed(attrs)
+      : spec.finalize(subscriptionId, key, attrs);
 
   return {
     // Child entities live inside a service; nuke removes them with it.
@@ -121,7 +132,9 @@ export const entityLifecycle = <
       if (!isResolved<P>(news) || output === undefined) return undefined;
       const key = yield* spec.keyOf(news, id, output);
       if (keysDiffer(key, spec.keyOfAttrs(output))) {
-        return { action: "replace" } as const;
+        return spec.deleteFirst
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       if (spec.replaceOn?.(news, olds, output)) {
         return { action: "replace", deleteFirst: true } as const;
@@ -148,7 +161,11 @@ export const entityLifecycle = <
       if (key === undefined) return undefined;
       const observed = yield* get(subscriptionId, key);
       if (observed === undefined) return undefined;
-      const attrs = spec.toAttrs(subscriptionId, key, observed);
+      const attrs = yield* withFinalize(
+        subscriptionId,
+        key,
+        spec.toAttrs(subscriptionId, key, observed),
+      );
       const owned =
         !(spec.isSystem?.(observed) ?? false) &&
         (yield* isParentOwned(
@@ -187,7 +204,11 @@ export const entityLifecycle = <
         spec.stateOf ?? (() => undefined),
         { interval: "2 seconds", times: 30 },
       );
-      return spec.toAttrs(subscriptionId, key, current);
+      return yield* withFinalize(
+        subscriptionId,
+        key,
+        spec.toAttrs(subscriptionId, key, current),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }: { output: A }) {

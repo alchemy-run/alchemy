@@ -12,7 +12,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
-import { retryInProgress, syncSetting } from "./setting.ts";
+import { syncSetting } from "./setting.ts";
 
 /** The policy is a singleton named `default`. */
 const POLICY_NAME = "default";
@@ -183,16 +183,26 @@ export const ServerConnectionPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      // The policy cannot be removed; reset it to the default.
+      const get = getPolicy(
+        subscriptionId,
+        output.resourceGroup,
+        output.serverName,
+      );
+      if ((yield* get) === undefined) return;
+      // The setting cannot be removed; reset it.
       yield* ignoreNotFound(
-        retryInProgress(
-          putPolicy(
+        syncSetting({
+          label: `sql connection policy on ${output.serverName}`,
+          get,
+          converged: (observed) =>
+            lower(observed.properties?.connectionType) === lower("Default"),
+          put: putPolicy(
             subscriptionId,
             output.resourceGroup,
             output.serverName,
             "Default",
           ),
-        ),
+        }),
       );
     }),
 

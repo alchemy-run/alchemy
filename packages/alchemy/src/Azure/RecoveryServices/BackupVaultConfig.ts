@@ -76,14 +76,23 @@ export interface BackupVaultConfig extends Resource<
  * for those settings (soft delete `Enabled`, 14 days, enhanced security
  * `Enabled`) unless soft delete was set to the irreversible `AlwaysON`.
  *
+ * Vaults created with current API versions start with soft delete
+ * `AlwaysON` set through the vault API; Azure Backup then rejects changes
+ * through this API with the typed `BackupConfigManagedByVaultApi` error.
+ * Manage soft delete on such vaults with {@link Vault}; settings that
+ * already match converge without a write.
+ *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-security-feature-cloud
  *
  * ### Soft Delete
  * **Example:** Disable soft delete on a test vault
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   softDeleteFeatureState: "Disabled",
  * });
  * ```
@@ -92,7 +101,7 @@ export interface BackupVaultConfig extends Resource<
  * ```typescript
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   softDeleteFeatureState: "Enabled",
  *   softDeleteRetentionPeriodInDays: 30,
  * });

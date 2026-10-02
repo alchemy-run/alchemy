@@ -57,7 +57,9 @@ test.provider.skipIf(!runPaidOnly)(
       yield* createVault(rg, VAULT, owner);
       // New vaults start with soft delete AlwaysON (editable until changed).
       const initial = yield* getConfig(rg);
-      expect(initial.properties?.isSoftDeleteFeatureStateEditable).toEqual(true);
+      expect(initial.properties?.isSoftDeleteFeatureStateEditable).toEqual(
+        true,
+      );
 
       // Create: disable soft delete.
       const created = yield* stack.deploy(
@@ -75,7 +77,9 @@ test.provider.skipIf(!runPaidOnly)(
           softDeleteRetentionPeriodInDays: 30,
         }),
       );
-      expect(updated.config.vaultConfigId).toEqual(created.config.vaultConfigId);
+      expect(updated.config.vaultConfigId).toEqual(
+        created.config.vaultConfigId,
+      );
       const reobserved = yield* getConfig(rg);
       expect(reobserved.properties?.softDeleteFeatureState).toEqual("Enabled");
       expect(reobserved.properties?.softDeleteRetentionPeriodInDays).toEqual(

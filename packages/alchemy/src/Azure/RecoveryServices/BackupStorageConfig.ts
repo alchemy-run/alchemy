@@ -75,14 +75,23 @@ export interface BackupStorageConfig extends Resource<
  * restores the default `GeoRedundant` storage type while it is still
  * unlocked; Cross Region Restore cannot be turned off.
  *
+ * Vaults created with current API versions get their redundancy set
+ * through the vault API; Azure Backup then rejects changes through this
+ * API with the typed `BackupConfigManagedByVaultApi` error. Manage
+ * redundancy on such vaults with {@link Vault}; settings that already
+ * match converge without a write.
+ *
  * @see https://learn.microsoft.com/azure/backup/backup-create-recovery-services-vault#set-storage-redundancy
  *
  * ### Storage Redundancy
  * **Example:** Locally redundant backup storage (cheapest)
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * yield* Azure.RecoveryServices.BackupStorageConfig("storage-config", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   storageType: "LocallyRedundant",
  * });
  * ```
@@ -91,7 +100,7 @@ export interface BackupStorageConfig extends Resource<
  * ```typescript
  * yield* Azure.RecoveryServices.BackupStorageConfig("storage-config", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   storageType: "GeoRedundant",
  *   crossRegionRestoreFlag: true,
  * });
@@ -206,9 +215,8 @@ export const BackupStorageConfigProvider = () =>
       };
 
       // Observe. The config always exists alongside its vault.
-      const observed = yield* backup.GetBackupResourceStorageConfigsNonCRR(
-        where,
-      );
+      const observed =
+        yield* backup.GetBackupResourceStorageConfigsNonCRR(where);
 
       // Sync only the settings that differ (PATCH keeps the rest).
       const changed = delta(toAttrs(resourceGroup, vault, observed), news);
@@ -220,30 +228,32 @@ export const BackupStorageConfigProvider = () =>
         properties: changed,
       });
       // The PATCH (204) applies asynchronously.
-      const fresh = yield* backup.GetBackupResourceStorageConfigsNonCRR(where).pipe(
-        Effect.flatMap((config) =>
-          Object.keys(delta(toAttrs(resourceGroup, vault, config), news))
-            .length === 0
-            ? Effect.succeed(config)
-            : Effect.fail("pending" as const),
-        ),
-        Effect.retry({
-          while: (e) => e === "pending",
-          schedule: Schedule.spaced("5 seconds"),
-          times: 24,
-        }),
-        Effect.catchIf(
-          (e): e is "pending" => e === "pending",
-          () =>
-            Effect.fail(
-              new ProvisioningTimedOut({
-                resource: `backup storage config of ${vault}`,
-                state: undefined,
-                message: `backup storage config of vault ${vault} did not converge after 2 minutes`,
-              }),
-            ),
-        ),
-      );
+      const fresh = yield* backup
+        .GetBackupResourceStorageConfigsNonCRR(where)
+        .pipe(
+          Effect.flatMap((config) =>
+            Object.keys(delta(toAttrs(resourceGroup, vault, config), news))
+              .length === 0
+              ? Effect.succeed(config)
+              : Effect.fail("pending" as const),
+          ),
+          Effect.retry({
+            while: (e) => e === "pending",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
+          }),
+          Effect.catchIf(
+            (e): e is "pending" => e === "pending",
+            () =>
+              Effect.fail(
+                new ProvisioningTimedOut({
+                  resource: `backup storage config of ${vault}`,
+                  state: undefined,
+                  message: `backup storage config of vault ${vault} did not converge after 2 minutes`,
+                }),
+              ),
+          ),
+        );
       return toAttrs(resourceGroup, vault, fresh);
     }),
 

@@ -116,7 +116,8 @@ const toAttrs = (
   tags: userTags(diagnostic.tags),
 });
 
-const diagnosticName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const diagnosticName = (id: string) =>
+  createPhysicalName({ id, maxLength: 61 });
 
 export const DiagnosticProvider = () =>
   Provider.succeed(Diagnostic, {
@@ -168,8 +169,13 @@ export const DiagnosticProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name = output?.diagnosticName ?? olds?.name ?? (yield* diagnosticName(id));
-      const observed = yield* getDiagnostic(subscriptionId, resourceGroup, name);
+      const name =
+        output?.diagnosticName ?? olds?.name ?? (yield* diagnosticName(id));
+      const observed = yield* getDiagnostic(
+        subscriptionId,
+        resourceGroup,
+        name,
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
@@ -180,7 +186,8 @@ export const DiagnosticProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Edge");
       const resourceGroup = news.resourceGroup;
-      const name = news.name ?? output?.diagnosticName ?? (yield* diagnosticName(id));
+      const name =
+        news.name ?? output?.diagnosticName ?? (yield* diagnosticName(id));
       const tags = yield* desiredTags(id, news.tags);
       const get = getDiagnostic(subscriptionId, resourceGroup, name);
 
@@ -230,7 +237,11 @@ export const DiagnosticProvider = () =>
       );
       yield* waitUntilGone(
         `edge diagnostic ${output.diagnosticName}`,
-        getDiagnostic(subscriptionId, output.resourceGroup, output.diagnosticName),
+        getDiagnostic(
+          subscriptionId,
+          output.resourceGroup,
+          output.diagnosticName,
+        ),
         EDGE_WAIT,
       );
     }),

@@ -78,8 +78,7 @@ export const sameRecord = (
   const left = Object.entries(a ?? {}).filter(([, v]) => v !== undefined);
   const right = Object.entries(b ?? {}).filter(([, v]) => v !== undefined);
   return (
-    left.length === right.length &&
-    left.every(([k, v]) => (b ?? {})[k] === v)
+    left.length === right.length && left.every(([k, v]) => (b ?? {})[k] === v)
   );
 };
 
@@ -96,5 +95,38 @@ export const reveal = (value: unknown): unknown =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /** Text equality where empty and absent are the same. */
-export const sameText = (a: string | null | undefined, b: string | null | undefined) =>
-  (a || undefined) === (b || undefined);
+export const sameText = (
+  a: string | null | undefined,
+  b: string | null | undefined,
+) => (a || undefined) === (b || undefined);
+
+/** Where Automation downloads a module or package from. */
+export interface AutomationContentLink {
+  /** Download URL, e.g. a PowerShell Gallery or PyPI package URL. */
+  uri: string;
+  /** Version of the content. */
+  version?: string;
+  /** Hash Automation verifies the download against. */
+  contentHash?: {
+    /** Hash algorithm, e.g. `SHA256`. */
+    algorithm: string;
+    /** Hash value (hex). */
+    value: string;
+  };
+}
+
+/**
+ * Whether the content link must be (re-)imported: the observed import
+ * failed or points elsewhere. Automation does not always echo the link back,
+ * so the previous props are the fallback hint.
+ */
+export const contentLinkChanged = (
+  desired: AutomationContentLink,
+  observed: { uri?: string } | null | undefined,
+  previous: AutomationContentLink | undefined,
+  state: string | undefined,
+) => {
+  if (state === "Failed" || state === "Canceled") return true;
+  if (observed?.uri) return observed.uri !== desired.uri;
+  return previous === undefined || previous.uri !== desired.uri;
+};

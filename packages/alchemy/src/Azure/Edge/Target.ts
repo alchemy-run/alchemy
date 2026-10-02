@@ -171,7 +171,7 @@ const toAttrs = (
   tags: userTags(target.tags),
 });
 
-const targetName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const targetName = (id: string) => createPhysicalName({ id, maxLength: 61 });
 
 export const TargetProvider = () =>
   Provider.succeed(Target, {

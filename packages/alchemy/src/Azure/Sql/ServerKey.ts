@@ -78,9 +78,12 @@ export interface ServerKey extends Resource<
  */
 export const ServerKey = Resource<ServerKey>("Azure.Sql.ServerKey");
 
+// A key whose name is not `<vault>_<key>_<version>` cannot exist.
 const getKey = (subscriptionId: string, scope: ServerScope, name: string) =>
   orUndefinedIfNotFound(
     sql.GetServerKey({ ...serverPath(subscriptionId, scope), keyName: name }),
+  ).pipe(
+    Effect.catchTag("SqlServerKeyNameInvalid", () => Effect.succeed(undefined)),
   );
 
 const toAttrs = (
@@ -178,7 +181,7 @@ export const ServerKeyProvider = () =>
           ...serverPath(subscriptionId, output),
           keyName: output.serverKeyName,
         }),
-      );
+      ).pipe(Effect.catchTag("SqlServerKeyNameInvalid", () => Effect.void));
       yield* waitUntilGone(
         `sql server key ${output.serverKeyName}`,
         getKey(subscriptionId, output, output.serverKeyName),

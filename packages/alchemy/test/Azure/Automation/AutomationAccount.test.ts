@@ -10,7 +10,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -53,7 +53,7 @@ const getAccount = (resourceGroupName: string, automationAccountName: string) =>
 test.provider(
   "create, update, replace, and delete an automation account",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -99,7 +99,9 @@ test.provider(
 
         yield* stack.destroy();
         expect(
-          yield* waitGone(getAccount(rg, replaced.account.automationAccountName)),
+          yield* waitGone(
+            getAccount(rg, replaced.account.automationAccountName),
+          ),
         ).toEqual("gone");
       }),
     ).pipe(logLevel),

@@ -718,7 +718,14 @@ export const MongoClusterProvider = () =>
             properties: passwordPending
               ? {
                   ...delta?.properties,
-                  administrator: { password: news.administratorPassword },
+                  // Azure requires the login alongside a new password.
+                  administrator: {
+                    userName:
+                      observed.properties?.administrator?.userName ??
+                      news.administratorUserName ??
+                      DEFAULT_ADMIN,
+                    password: news.administratorPassword,
+                  },
                 }
               : delta?.properties,
           })

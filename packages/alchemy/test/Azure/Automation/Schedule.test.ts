@@ -9,7 +9,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -50,7 +50,7 @@ const getSchedule = (
 test.provider(
   "create, update, replace, and delete a schedule",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
         // Schedules must start at least 5 minutes in the future.
