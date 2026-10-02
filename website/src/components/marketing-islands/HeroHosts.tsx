@@ -273,12 +273,15 @@ export default function HeroHosts() {
             <Line>
               <span style={{ color: GREEN }}>✓ </span>
               deployed
-              {h.url && (
-                <span style={{ color: "var(--alc-code-comment)" }}>
-                  {" → "}
-                  <span style={{ color: GREEN }}>{h.url}</span>
-                </span>
-              )}
+            </Line>
+          )}
+          {/* The URL gets its own line so the fixed-width terminal fits it. */}
+          {done && h.url && (
+            <Line>
+              <span style={{ color: GREEN }}>
+                {"  "}
+                {h.url}
+              </span>
             </Line>
           )}
         </TermChrome>
