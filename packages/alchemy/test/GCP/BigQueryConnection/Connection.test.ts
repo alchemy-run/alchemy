@@ -1,18 +1,15 @@
-import { Action } from "@/Action";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { Action } from "@/Action";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   bigqueryconnection.getProjectsLocationsConnections({ name }).pipe(
@@ -43,8 +40,7 @@ test.provider(
             "Probe",
             Effect.gen(function* () {
               yield* connection.name;
-              const getConnection =
-                yield* GCP.BigQueryConnection.GetConnection(connection);
+              const getConnection = yield* GCP.BigQueryConnection.GetConnection(connection);
               return Effect.fn(function* () {
                 return yield* getConnection();
               });
@@ -68,27 +64,21 @@ test.provider(
       expect(live.name).toEqual(created.name);
       expect(live.cloudResource).toEqual(expect.any(Object));
 
-      const fetched = yield* bigqueryconnection.getProjectsLocationsConnections(
-        {
-          name: created.name,
-        },
-      );
+      const fetched = yield* bigqueryconnection.getProjectsLocationsConnections({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.friendlyName).toEqual("gcs-test");
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("cloud resource connection");
       expect(fetched.cloudResource).toEqual(expect.any(Object));
 
-      const listed = yield* bigqueryconnection.listProjectsLocationsConnections(
-        {
-          parent: `projects/${created.project}/locations/${created.location}`,
-          pageSize: 100,
-        },
-      );
+      const listed = yield* bigqueryconnection.listProjectsLocationsConnections({
+        parent: `projects/${created.project}/locations/${created.location}`,
+        pageSize: 100,
+      });
       expect(
-        (listed.connections ?? []).some(
-          (connection) => connection.name === created.name,
-        ),
+        (listed.connections ?? []).some((connection) => connection.name === created.name),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -110,10 +100,9 @@ test.provider(
       expect(updated.kind).toEqual("cloudResource");
       expect(updated.creationTime).toEqual(created.creationTime);
 
-      const fetchedUpdate =
-        yield* bigqueryconnection.getProjectsLocationsConnections({
-          name: updated.name,
-        });
+      const fetchedUpdate = yield* bigqueryconnection.getProjectsLocationsConnections({
+        name: updated.name,
+      });
       expect(fetchedUpdate.friendlyName).toEqual("gcs-prod");
       expect(fetchedUpdate.description).toContain("updated cloud resource");
 
@@ -137,10 +126,9 @@ test.provider(
       expect(replaced.friendlyName).toEqual("gcs-replaced");
       expect(replaced.kind).toEqual("cloudResource");
 
-      const fetchedReplace =
-        yield* bigqueryconnection.getProjectsLocationsConnections({
-          name: replaced.name,
-        });
+      const fetchedReplace = yield* bigqueryconnection.getProjectsLocationsConnections({
+        name: replaced.name,
+      });
       expect(fetchedReplace.name).toEqual(replaced.name);
       expect(fetchedReplace.friendlyName).toEqual("gcs-replaced");
 

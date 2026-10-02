@@ -1,10 +1,10 @@
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 
 class UnexpectedStatus extends Data.TaggedError("UnexpectedStatus")<{
   message: string;
@@ -14,10 +14,7 @@ class UnexpectedStatus extends Data.TaggedError("UnexpectedStatus")<{
 // take several seconds before R2 accepts the token-derived S3 credentials.
 const retry = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(20)]);
 
-const expectStatus = (
-  request: HttpClientRequest.HttpClientRequest,
-  status: number,
-) =>
+const expectStatus = (request: HttpClientRequest.HttpClientRequest, status: number) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.execute(request);
@@ -35,9 +32,7 @@ const until = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
 
 const json = <T>(url: string) =>
   until(
-    expectStatus(HttpClientRequest.get(url), 200).pipe(
-      Effect.map((body) => JSON.parse(body) as T),
-    ),
+    expectStatus(HttpClientRequest.get(url), 200).pipe(Effect.map((body) => JSON.parse(body) as T)),
   );
 
 /**
@@ -55,9 +50,7 @@ export const presignRoundTrip = (workerUrl: string, key: string) =>
     yield* until(
       expectStatus(
         HttpClientRequest.put(putUrl).pipe(
-          HttpClientRequest.setBody(
-            HttpBody.text("uploaded via presigned url", "text/plain"),
-          ),
+          HttpClientRequest.setBody(HttpBody.text("uploaded via presigned url", "text/plain")),
         ),
         200,
       ),

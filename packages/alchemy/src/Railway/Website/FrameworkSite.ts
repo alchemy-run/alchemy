@@ -15,10 +15,7 @@ import {
   type WebsiteNotFoundHandling,
 } from "../../Website/assets.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
-import {
-  Server as FrameworkServer,
-  type ServerDevProps,
-} from "../../Website/Server.ts";
+import { Server as FrameworkServer, type ServerDevProps } from "../../Website/Server.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import type { ExtraFile } from "../hosted.ts";
 import { Project, type Project as ProjectResource } from "../Project.ts";
@@ -54,9 +51,7 @@ export interface FrameworkSiteProps {
    * (primary environment), a `Railway.Environment`, or `{ environmentId }`.
    * Defaults to the project's primary environment.
    */
-  environment?: Ref<
-    EnvironmentResource | ProjectResource | { readonly environmentId: string }
-  >;
+  environment?: Ref<EnvironmentResource | ProjectResource | { readonly environmentId: string }>;
   /**
    * Project root directory (the directory containing `package.json`).
    * @default "."
@@ -73,10 +68,7 @@ export interface FrameworkSiteProps {
    * `alchemy dev`, the framework dev server). Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Railway
    * CDN caches hashed files by Content-Type regardless of this bag.
@@ -173,9 +165,7 @@ export interface Website {
   project: ProjectResource | undefined;
 }
 
-export class FrameworkServerError extends Data.TaggedError(
-  "Railway.Website.FrameworkServerError",
-)<{
+export class FrameworkServerError extends Data.TaggedError("Railway.Website.FrameworkServerError")<{
   readonly framework: string;
   readonly message: string;
   readonly cause?: unknown;
@@ -183,10 +173,7 @@ export class FrameworkServerError extends Data.TaggedError(
 
 const envRecord = (
   env:
-    | Record<
-        string,
-        string | Redacted.Redacted<string> | Output.Output<string | undefined>
-      >
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
     | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
@@ -281,9 +268,8 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   // must be derived from `buildOut`: the artifacts only exist once the
   // build has run at apply — probing the root here (pre-build) would miss
   // a fresh project's `.next` entirely.
-  const extraFiles = Output.mapEffect(
-    (out: { distDir: string; main: string }) =>
-      packSiteExtraFiles(bake === "next" ? root : out.distDir, bake),
+  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+    packSiteExtraFiles(bake === "next" ? root : out.distDir, bake),
   )(buildOut);
 
   const project = Effect.isEffect(props.project)
@@ -301,8 +287,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
     isExternal: true,
     env: envRecord(props.env),
     extraFiles: extraFiles as unknown as ExtraFile[] | undefined,
-    build:
-      config.install !== undefined ? { install: config.install } : undefined,
+    build: config.install !== undefined ? { install: config.install } : undefined,
   });
   yield* Cdn("Cdn", {
     service,

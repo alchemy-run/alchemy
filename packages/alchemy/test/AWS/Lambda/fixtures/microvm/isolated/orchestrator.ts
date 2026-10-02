@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
 import { IsolatedSandbox } from "./sandbox.ts";
 
 /**
@@ -26,8 +26,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
   Effect.gen(function* () {
     const runMicrovm = yield* AWS.Lambda.RunMicrovm(IsolatedSandbox);
     const getMicrovm = yield* AWS.Lambda.GetMicrovm(IsolatedSandbox);
-    const terminateMicrovm =
-      yield* AWS.Lambda.TerminateMicrovm(IsolatedSandbox);
+    const terminateMicrovm = yield* AWS.Lambda.TerminateMicrovm(IsolatedSandbox);
     const createAuthToken = yield* AWS.Lambda.CreateAuthToken(IsolatedSandbox);
 
     return {
@@ -49,9 +48,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
           return yield* Effect.gen(function* () {
             yield* getMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
               Effect.flatMap((m) =>
-                m.state === "RUNNING"
-                  ? Effect.void
-                  : Effect.fail(new Error(`microvm ${m.state}`)),
+                m.state === "RUNNING" ? Effect.void : Effect.fail(new Error(`microvm ${m.state}`)),
               ),
               Effect.retry({
                 schedule: Schedule.spaced("2 seconds"),
@@ -80,10 +77,9 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
             const client = yield* HttpClient.HttpClient;
             const headers = AWS.Lambda.microvmAuthHeaders(authToken);
             const echoRes = yield* client
-              .get(
-                `https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`,
-                { headers },
-              )
+              .get(`https://${vm.endpoint}/echo?message=${encodeURIComponent(message)}`, {
+                headers,
+              })
               .pipe(
                 Effect.retry({
                   schedule: Schedule.exponential("500 millis"),
@@ -101,9 +97,7 @@ export default class IsolatedOrchestrator extends AWS.Lambda.Function<IsolatedOr
             });
           }).pipe(
             Effect.ensuring(
-              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(
-                Effect.ignore,
-              ),
+              terminateMicrovm({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore),
             ),
             Effect.provide(FetchHttpClient.layer),
           );

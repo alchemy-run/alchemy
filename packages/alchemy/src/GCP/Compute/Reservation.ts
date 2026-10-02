@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,12 +10,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 const MAX_NAME_LENGTH = 63;
@@ -24,19 +20,12 @@ const MAX_NAME_LENGTH = 63;
 export type ReservationInstanceProperties =
   compute.AllocationSpecificSKUAllocationReservedInstanceProperties;
 export type ReservationShareSettings = compute.ShareSettings;
-export type ReservationSharingPolicy =
-  compute.AllocationReservationSharingPolicy;
+export type ReservationSharingPolicy = compute.AllocationReservationSharingPolicy;
 export type ReservationAggregate = compute.AllocationAggregateReservation;
 export type ReservationDuration = compute.Duration;
-export type ReservationDeploymentType =
-  | compute.ReservationDeploymentTypeEnum
-  | (string & {});
-export type ReservationSchedulingType =
-  | compute.ReservationSchedulingTypeEnum
-  | (string & {});
-export type ReservationProtectionTier =
-  | compute.ReservationProtectionTierEnum
-  | (string & {});
+export type ReservationDeploymentType = compute.ReservationDeploymentTypeEnum | (string & {});
+export type ReservationSchedulingType = compute.ReservationSchedulingTypeEnum | (string & {});
+export type ReservationProtectionTier = compute.ReservationProtectionTierEnum | (string & {});
 export type ReservationEarlyAccessMaintenance =
   | compute.ReservationEarlyAccessMaintenanceEnum
   | (string & {});
@@ -237,30 +226,22 @@ export type Reservation = Resource<
  */
 export const Reservation = Resource<Reservation>("GCP.Compute.Reservation");
 
-export class ReservationNotResolved extends Data.TaggedError(
-  "GCP.Compute.ReservationNotResolved",
-)<{
+export class ReservationNotResolved extends Data.TaggedError("GCP.Compute.ReservationNotResolved")<{
   reservationName: string;
   zone: string;
 }> {}
 
-export class ReservationNotReady extends Data.TaggedError(
-  "GCP.Compute.ReservationNotReady",
-)<{
+export class ReservationNotReady extends Data.TaggedError("GCP.Compute.ReservationNotReady")<{
   reservationName: string;
   status: string;
 }> {}
 
-export class ReservationFailed extends Data.TaggedError(
-  "GCP.Compute.ReservationFailed",
-)<{
+export class ReservationFailed extends Data.TaggedError("GCP.Compute.ReservationFailed")<{
   reservationName: string;
   status: string;
 }> {}
 
-export class ReservationStillExists extends Data.TaggedError(
-  "GCP.Compute.ReservationStillExists",
-)<{
+export class ReservationStillExists extends Data.TaggedError("GCP.Compute.ReservationStillExists")<{
   reservationName: string;
   status: string;
 }> {}
@@ -272,8 +253,7 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeZone = (zone: string | undefined) =>
-  lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
+const normalizeZone = (zone: string | undefined) => lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -284,9 +264,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `r${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `r${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -320,9 +298,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const countOf = (value: number | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
@@ -341,8 +317,7 @@ const toBody = (
       ? {
           count: countOf(props.specificReservation.count),
           instanceProperties: props.specificReservation.instanceProperties,
-          sourceInstanceTemplate:
-            props.specificReservation.sourceInstanceTemplate,
+          sourceInstanceTemplate: props.specificReservation.sourceInstanceTemplate,
         }
       : undefined,
   specificReservationRequired: props.specificReservationRequired === true,
@@ -360,10 +335,7 @@ const toBody = (
   reservationSharingPolicy: props.reservationSharingPolicy,
 });
 
-const toAttrs = (
-  reservation: compute.Reservation,
-  project: string,
-): Reservation["Attributes"] => {
+const toAttrs = (reservation: compute.Reservation, project: string): Reservation["Attributes"] => {
   const parsed = parseDescription(reservation.description);
   return {
     reservationName: reservation.name ?? reservation.id ?? "",
@@ -373,8 +345,7 @@ const toAttrs = (
     description: parsed.description,
     status: reservation.status,
     specificReservation: reservation.specificReservation,
-    specificReservationRequired:
-      reservation.specificReservationRequired === true,
+    specificReservationRequired: reservation.specificReservationRequired === true,
     shareSettings: reservation.shareSettings,
     resourcePolicies: tagRecord(reservation.resourcePolicies),
     commitment: reservation.commitment,
@@ -391,11 +362,7 @@ const getByName = (project: string, zone: string, reservation: string) =>
     .getReservations({ project, zone, reservation })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitReservationReady = (
-  project: string,
-  zone: string,
-  reservationName: string,
-) =>
+const waitReservationReady = (project: string, zone: string, reservationName: string) =>
   getByName(project, zone, reservationName).pipe(
     Effect.flatMap((reservation) =>
       reservation?.status === "INVALID"
@@ -423,11 +390,7 @@ const waitReservationReady = (
     }),
   );
 
-const waitReservationGone = (
-  project: string,
-  zone: string,
-  reservationName: string,
-) =>
+const waitReservationGone = (project: string, zone: string, reservationName: string) =>
   getByName(project, zone, reservationName).pipe(
     Effect.flatMap((reservation) =>
       reservation === undefined
@@ -463,25 +426,20 @@ export const ReservationProvider = () =>
       const previousName = olds?.reservationName ?? output?.reservationName;
       const nextName = news.reservationName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousZone = normalizeZone(olds?.zone ?? output?.zone);
       const nextZone = normalizeZone(news.zone ?? output?.zone);
       const zoneChanged = previousZone !== nextZone;
 
       const previousRequired =
-        olds?.specificReservationRequired ??
-        output?.specificReservationRequired ??
-        false;
+        olds?.specificReservationRequired ?? output?.specificReservationRequired ?? false;
       const nextRequired = news.specificReservationRequired === true;
 
       const previousMachine =
         olds?.specificReservation?.instanceProperties?.machineType ??
         output?.specificReservation?.instanceProperties?.machineType;
-      const nextMachine =
-        news.specificReservation?.instanceProperties?.machineType;
+      const nextMachine = news.specificReservation?.instanceProperties?.machineType;
       const machineChanged =
         nextMachine !== undefined &&
         previousMachine !== undefined &&
@@ -498,12 +456,10 @@ export const ReservationProvider = () =>
       const previousIsAggregate = olds?.aggregateReservation !== undefined;
       const nextIsAggregate = news.aggregateReservation !== undefined;
       const previousIsSpecific =
-        (olds?.specificReservation ?? output?.specificReservation) !==
-        undefined;
+        (olds?.specificReservation ?? output?.specificReservation) !== undefined;
       const nextIsSpecific = news.specificReservation !== undefined;
       const kindChanged =
-        (previousIsAggregate && nextIsSpecific) ||
-        (previousIsSpecific && nextIsAggregate);
+        (previousIsAggregate && nextIsSpecific) || (previousIsSpecific && nextIsAggregate);
 
       const deploymentChanged =
         olds?.deploymentType !== undefined &&
@@ -513,8 +469,7 @@ export const ReservationProvider = () =>
       // `reservations.update` accepts a description mask but leaves the
       // stored description unchanged, so a new description replaces.
       const descriptionChanged =
-        olds !== undefined &&
-        (olds.description ?? "") !== (news.description ?? "");
+        olds !== undefined && (olds.description ?? "") !== (news.description ?? "");
 
       if (
         nameChanged ||
@@ -529,9 +484,7 @@ export const ReservationProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            nextName === previousName &&
-            previousZone === nextZone,
+            previousName !== undefined && nextName === previousName && previousZone === nextZone,
         };
       }
       return undefined;
@@ -539,11 +492,7 @@ export const ReservationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationName = yield* toName(
-        id,
-        olds?.reservationName,
-        output?.reservationName,
-      );
+      const reservationName = yield* toName(id, olds?.reservationName, output?.reservationName);
       const zone = normalizeZone(olds?.zone ?? output?.zone);
       const existing = yield* getByName(env.project, zone, reservationName);
       if (existing === undefined) return undefined;
@@ -565,9 +514,7 @@ export const ReservationProvider = () =>
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.reservations ?? [])
-              .filter((reservation) =>
-                hasOwnershipMarker(reservation.description),
-              )
+              .filter((reservation) => hasOwnershipMarker(reservation.description))
               .map((reservation) => toAttrs(reservation, env.project)),
           ),
         );
@@ -575,11 +522,7 @@ export const ReservationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const reservationName = yield* toName(
-        id,
-        news.reservationName,
-        output?.reservationName,
-      );
+      const reservationName = yield* toName(id, news.reservationName, output?.reservationName);
       const zone = normalizeZone(news.zone ?? output?.zone);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(reservationName, news, ownership);
@@ -603,11 +546,7 @@ export const ReservationProvider = () =>
             ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
-        current = yield* waitReservationReady(
-          env.project,
-          zone,
-          reservationName,
-        );
+        current = yield* waitReservationReady(env.project, zone, reservationName);
       }
 
       if (current === undefined) {
@@ -618,11 +557,7 @@ export const ReservationProvider = () =>
       }
 
       if (current.status === "CREATING" || current.status === "UPDATING") {
-        current = yield* waitReservationReady(
-          env.project,
-          zone,
-          reservationName,
-        );
+        current = yield* waitReservationReady(env.project, zone, reservationName);
       }
 
       if (current === undefined) {
@@ -632,8 +567,7 @@ export const ReservationProvider = () =>
         });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (desired.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (desired.description ?? "");
       // Compute echoes a default `{ shareType: "LOCAL" }` when unset.
       const shareChanged =
         desired.shareSettings !== undefined &&
@@ -689,11 +623,7 @@ export const ReservationProvider = () =>
           body: { specificSkuCount: desiredCount },
         });
         yield* waitZoneOperation(env.project, zone, resized);
-        current = yield* waitReservationReady(
-          env.project,
-          zone,
-          reservationName,
-        );
+        current = yield* waitReservationReady(env.project, zone, reservationName);
       }
 
       if (current === undefined) {

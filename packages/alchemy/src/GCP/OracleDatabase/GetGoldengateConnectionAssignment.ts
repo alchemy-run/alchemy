@@ -38,7 +38,6 @@ export interface GetGoldengateConnectionAssignment extends Binding.Service<
   >
 > {}
 
-export const GetGoldengateConnectionAssignment =
-  Binding.Service<GetGoldengateConnectionAssignment>(
-    "GCP.OracleDatabase.GetGoldengateConnectionAssignment",
-  );
+export const GetGoldengateConnectionAssignment = Binding.Service<GetGoldengateConnectionAssignment>(
+  "GCP.OracleDatabase.GetGoldengateConnectionAssignment",
+);

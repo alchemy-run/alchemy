@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -124,15 +119,9 @@ export type ChannelConnection = Resource<
  * @resource
  * @category Eventarc
  */
-export const ChannelConnection = Resource<ChannelConnection>(
-  "GCP.Eventarc.ChannelConnection",
-);
+export const ChannelConnection = Resource<ChannelConnection>("GCP.Eventarc.ChannelConnection");
 
-const toAttrs = (
-  connection: eventarc.ChannelConnection,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (connection: eventarc.ChannelConnection, project: string, region: string) => {
   const name = connection.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -155,28 +144,16 @@ const getByName = (name: string) =>
 
 export const ChannelConnectionProvider = () =>
   Provider.succeed(ChannelConnection, {
-    stables: [
-      "name",
-      "channelConnectionId",
-      "project",
-      "location",
-      "channel",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "channelConnectionId", "project", "location", "channel", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.channelConnectionId ?? output?.channelConnectionId;
+      const previousId = olds?.channelConnectionId ?? output?.channelConnectionId;
       const nextId = news.channelConnectionId
         ? rfc1035(news.channelConnectionId, "channel-connection")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -188,9 +165,7 @@ export const ChannelConnectionProvider = () =>
       const { upsert, removed } = diffLabels(previousLabels, nextLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const identityChanged =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousChannel.length > 0 && previousChannel !== nextChannel);
       if (!identityChanged && !labelsChanged) return undefined;
@@ -213,19 +188,13 @@ export const ChannelConnectionProvider = () =>
         output?.channelConnectionId,
         "channel-connection",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, channelConnectionId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, channelConnectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -251,26 +220,13 @@ export const ChannelConnectionProvider = () =>
         output?.channelConnectionId,
         "channel-connection",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        channelConnectionId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, channelConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const channel = expandResource(
-        news.channel,
-        env.project,
-        location,
-        "channels",
-      );
+      const channel = expandResource(news.channel, env.project, location, "channels");
 
       let current = yield* getByName(name);
 
@@ -320,9 +276,7 @@ export const ChannelConnectionProvider = () =>
       ).pipe(
         Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
-            Effect.flatMap((current) =>
-              current === undefined ? Effect.void : Effect.fail(error),
-            ),
+            Effect.flatMap((current) => (current === undefined ? Effect.void : Effect.fail(error))),
           ),
         ),
       );

@@ -45,9 +45,7 @@ export type MaintenanceWindow = {
   /**
    * Preferred day of week for maintenance.
    */
-  day?:
-    | apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicyMaintenanceWindowDayEnum
-    | (string & {});
+  day?: apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicyMaintenanceWindowDayEnum | (string & {});
   /**
    * UTC start time of the window.
    */
@@ -107,9 +105,7 @@ export type InstanceProps = {
    * `SLASH_16`–`SLASH_20` (default `SLASH_16`); evaluation orgs support
    * only `SLASH_23`. Immutable.
    */
-  peeringCidrRange?:
-    | apigee.GoogleCloudApigeeV1InstancePeeringCidrRangeEnum
-    | (string & {});
+  peeringCidrRange?: apigee.GoogleCloudApigeeV1InstancePeeringCidrRangeEnum | (string & {});
   /**
    * Comma-separated `/22` and/or `/28` CIDR blocks used to create the
    * instance. Immutable. Omit to let Apigee allocate ranges from Service
@@ -238,22 +234,16 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Apigee.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Apigee.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Apigee.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Apigee.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Apigee.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Apigee.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Apigee.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -267,10 +257,7 @@ const locationOf = (location: string | undefined, defaultLocation: string) =>
   (location ?? defaultLocation).toLowerCase();
 
 const accessLoggingOf = (
-  config:
-    | apigee.GoogleCloudApigeeV1AccessLoggingConfig
-    | AccessLoggingConfig
-    | undefined,
+  config: apigee.GoogleCloudApigeeV1AccessLoggingConfig | AccessLoggingConfig | undefined,
 ): AccessLoggingConfig | undefined => {
   if (config === undefined) return undefined;
   return {
@@ -280,10 +267,7 @@ const accessLoggingOf = (
 };
 
 const maintenanceOf = (
-  policy:
-    | apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicy
-    | MaintenanceUpdatePolicy
-    | undefined,
+  policy: apigee.GoogleCloudApigeeV1MaintenanceUpdatePolicy | MaintenanceUpdatePolicy | undefined,
 ): MaintenanceUpdatePolicy | undefined => {
   if (policy === undefined) return undefined;
   return {
@@ -340,11 +324,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstances({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 /** Instance provisioning and deletion take 30–60 minutes. */
 const INSTANCE_BUDGET = "75 minutes";
@@ -352,9 +332,7 @@ const INSTANCE_BUDGET = "75 minutes";
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.InstanceNotResolved",
@@ -366,8 +344,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (instance): instance is apigee.GoogleCloudApigeeV1Instance =>
-        instance !== undefined,
+      (instance): instance is apigee.GoogleCloudApigeeV1Instance => instance !== undefined,
       () => new InstanceNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -390,9 +367,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.InstanceStillExists",
@@ -438,11 +413,9 @@ export const InstanceProvider = () =>
       const previousId = olds?.instanceId ?? output?.instanceId;
       const previousOrg = olds?.organization ?? output?.organization;
       const previousLocation = olds?.location ?? output?.location;
-      const previousPeering =
-        olds?.peeringCidrRange ?? output?.peeringCidrRange;
+      const previousPeering = olds?.peeringCidrRange ?? output?.peeringCidrRange;
       const previousIpRange = olds?.ipRange ?? output?.ipRange;
-      const previousCmek =
-        olds?.diskEncryptionKeyName ?? output?.diskEncryptionKeyName;
+      const previousCmek = olds?.diskEncryptionKeyName ?? output?.diskEncryptionKeyName;
       if (
         (previousId !== undefined &&
           news.instanceId !== undefined &&
@@ -470,8 +443,7 @@ export const InstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const instanceId = yield* toResourceId(
         id,
         olds?.instanceId,
@@ -496,12 +468,8 @@ export const InstanceProvider = () =>
           })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.instances ?? [])),
-            Stream.filter((instance) =>
-              hasOwnershipMarker(instance.description),
-            ),
-            Stream.map((instance) =>
-              toAttrs(instance, env.project, env.region),
-            ),
+            Stream.filter((instance) => hasOwnershipMarker(instance.description)),
+            Stream.map((instance) => toAttrs(instance, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
@@ -512,18 +480,14 @@ export const InstanceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const instanceId = yield* toResourceId(
         id,
         news.instanceId,
         output?.instanceId,
         MAX_NAME_LENGTH,
       );
-      const location = locationOf(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = locationOf(news.location ?? output?.location, env.region);
       const name = resourceName(organization, instanceId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
@@ -562,10 +526,8 @@ export const InstanceProvider = () =>
       const desiredLogging = accessLoggingOf(news.accessLoggingConfig);
       const desiredMaintenance = maintenanceOf(news.maintenanceUpdatePolicy);
       const desiredAccept = news.consumerAcceptList;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const loggingChanged = !sameJson(
         accessLoggingOf(current.accessLoggingConfig),
         desiredLogging,
@@ -575,8 +537,7 @@ export const InstanceProvider = () =>
         desiredMaintenance,
       );
       const acceptChanged =
-        desiredAccept !== undefined &&
-        !sameStringList(current.consumerAcceptList, desiredAccept);
+        desiredAccept !== undefined && !sameStringList(current.consumerAcceptList, desiredAccept);
 
       const updateMask = [
         descriptionChanged ? "description" : undefined,
@@ -601,10 +562,8 @@ export const InstanceProvider = () =>
               : undefined,
             maintenanceUpdatePolicy: news.maintenanceUpdatePolicy
               ? {
-                  maintenanceChannel:
-                    news.maintenanceUpdatePolicy.maintenanceChannel,
-                  maintenanceWindows:
-                    news.maintenanceUpdatePolicy.maintenanceWindows,
+                  maintenanceChannel: news.maintenanceUpdatePolicy.maintenanceChannel,
+                  maintenanceWindows: news.maintenanceUpdatePolicy.maintenanceWindows,
                 }
               : undefined,
             consumerAcceptList: desiredAccept,
@@ -621,9 +580,7 @@ export const InstanceProvider = () =>
       const deleted = yield* apigee
         .deleteOrganizationsInstances({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, {

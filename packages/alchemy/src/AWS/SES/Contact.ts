@@ -117,8 +117,7 @@ export const Contact = Resource<Contact>("AWS.SES.Contact");
 // object is not mistaken for a change.
 const stringifyAttributes = (
   attributes: Record<string, unknown> | undefined,
-): string | undefined =>
-  attributes === undefined ? undefined : JSON.stringify(attributes);
+): string | undefined => (attributes === undefined ? undefined : JSON.stringify(attributes));
 
 const normalizeAttributes = (
   attributes: Record<string, unknown> | string | undefined,
@@ -166,20 +165,13 @@ export const ContactProvider = () =>
   Provider.effect(
     Contact,
     Effect.gen(function* () {
-      const getContact = Effect.fn(function* (
-        contactListName: string,
-        emailAddress: string,
-      ) {
+      const getContact = Effect.fn(function* (contactListName: string, emailAddress: string) {
         return yield* sesv2
           .getContact({
             ContactListName: contactListName,
             EmailAddress: emailAddress,
           })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       return Contact.Provider.of({
@@ -192,53 +184,46 @@ export const ContactProvider = () =>
         // contact list and pages through its contacts. SES allows one contact
         // list per account, so the outer page is at most one entry.
         list: Effect.fn(function* () {
-          const listPages = yield* sesv2.listContactLists
-            .pages({})
-            .pipe(Stream.runCollect);
+          const listPages = yield* sesv2.listContactLists.pages({}).pipe(Stream.runCollect);
           const contactListNames = Array.from(listPages)
             .flatMap((page) => page.ContactLists ?? [])
-            .flatMap((entry) =>
-              entry.ContactListName ? [entry.ContactListName] : [],
-            );
+            .flatMap((entry) => (entry.ContactListName ? [entry.ContactListName] : []));
           const nested = yield* Effect.forEach(
             contactListNames,
             (contactListName) =>
-              sesv2.listContacts
-                .pages({ ContactListName: contactListName })
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((pages) =>
-                    Array.from(pages)
-                      .flatMap((page) => page.Contacts ?? [])
-                      .flatMap((contact) =>
-                        contact.EmailAddress
-                          ? [
-                              {
-                                contactListName,
-                                emailAddress: contact.EmailAddress,
-                              },
-                            ]
-                          : [],
-                      ),
-                  ),
-                  // The list can be deleted between the two calls.
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(
-                      [] as {
-                        contactListName: string;
-                        emailAddress: string;
-                      }[],
+              sesv2.listContacts.pages({ ContactListName: contactListName }).pipe(
+                Stream.runCollect,
+                Effect.map((pages) =>
+                  Array.from(pages)
+                    .flatMap((page) => page.Contacts ?? [])
+                    .flatMap((contact) =>
+                      contact.EmailAddress
+                        ? [
+                            {
+                              contactListName,
+                              emailAddress: contact.EmailAddress,
+                            },
+                          ]
+                        : [],
                     ),
+                ),
+                // The list can be deleted between the two calls.
+                Effect.catchTag("NotFoundException", () =>
+                  Effect.succeed(
+                    [] as {
+                      contactListName: string;
+                      emailAddress: string;
+                    }[],
                   ),
                 ),
+              ),
             { concurrency: 2 },
           );
           return nested.flat();
         }),
 
         read: Effect.fn(function* ({ olds, output }) {
-          const contactListName =
-            output?.contactListName ?? olds?.contactListName;
+          const contactListName = output?.contactListName ?? olds?.contactListName;
           const emailAddress = output?.emailAddress ?? olds?.emailAddress;
           if (contactListName === undefined || emailAddress === undefined) {
             return undefined;
@@ -260,12 +245,9 @@ export const ContactProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output }) {
-          const contactListName =
-            output?.contactListName ?? news.contactListName;
+          const contactListName = output?.contactListName ?? news.contactListName;
           const emailAddress = output?.emailAddress ?? news.emailAddress;
-          const attributesData = yield* Effect.sync(() =>
-            stringifyAttributes(news.attributes),
-          );
+          const attributesData = yield* Effect.sync(() => stringifyAttributes(news.attributes));
 
           // 1. OBSERVE — cloud state is authoritative.
           const observed = yield* getContact(contactListName, emailAddress);
@@ -303,13 +285,9 @@ export const ContactProvider = () =>
 
             const preferencesChanged =
               managesPreferences &&
-              !samePreferences(
-                observed.TopicPreferences,
-                news.topicPreferences,
-              );
+              !samePreferences(observed.TopicPreferences, news.topicPreferences);
             const unsubscribeChanged =
-              managesUnsubscribe &&
-              (observed.UnsubscribeAll ?? false) !== news.unsubscribeAll;
+              managesUnsubscribe && (observed.UnsubscribeAll ?? false) !== news.unsubscribeAll;
             const attributesChanged =
               managesAttributes &&
               (yield* Effect.sync(
@@ -325,12 +303,8 @@ export const ContactProvider = () =>
                 TopicPreferences: managesPreferences
                   ? news.topicPreferences
                   : observed.TopicPreferences,
-                UnsubscribeAll: managesUnsubscribe
-                  ? news.unsubscribeAll
-                  : observed.UnsubscribeAll,
-                AttributesData: managesAttributes
-                  ? attributesData
-                  : observed.AttributesData,
+                UnsubscribeAll: managesUnsubscribe ? news.unsubscribeAll : observed.UnsubscribeAll,
+                AttributesData: managesAttributes ? attributesData : observed.AttributesData,
               });
             }
           }

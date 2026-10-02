@@ -3,12 +3,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 // App Engine location ids (`us-central`, `europe-west`) are not Compute regions, and the app's own locationId wins.
 export const DEFAULT_LOCATION = "us-central";
@@ -43,12 +39,7 @@ export const sameText = (left: string | undefined, right: string | undefined) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -56,10 +47,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -80,10 +68,7 @@ export const encodeOwnership = (
   const trimmed = text?.trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -111,14 +96,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -128,18 +109,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -216,10 +188,7 @@ export const toPriority = (
     return priority === CATCH_ALL_PRIORITY ? priority - 1 : priority;
   });
 
-export const resolveAppsId = (
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveAppsId = (requested: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (requested !== undefined && requested.length > 0) return requested;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -255,8 +224,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -266,8 +234,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -280,14 +247,10 @@ export const listAuthorizedCertificates = (appsId: string) =>
     : appengine.listAppsAuthorizedCertificates
         .pages({ appsId, pageSize: 100, view: "BASIC_CERTIFICATE" })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.certificates ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<appengine.AuthorizedCertificate>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<appengine.AuthorizedCertificate>()),
         );
 
 export const listApplicationsAuthorizedCertificates = (
@@ -306,23 +269,17 @@ export const listApplicationsAuthorizedCertificates = (
           view: "BASIC_CERTIFICATE",
         })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.certificates ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<appengine.AuthorizedCertificate>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<appengine.AuthorizedCertificate>()),
         );
 
 export const listDomainMappings = (appsId: string) =>
   appsId.length === 0
     ? emptyList<appengine.DomainMapping>()
     : appengine.listAppsDomainMappings.pages({ appsId, pageSize: 100 }).pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.domainMappings ?? []),
-        ),
+        Stream.flatMap((page) => Stream.fromIterable(page.domainMappings ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => emptyList<appengine.DomainMapping>()),
@@ -343,31 +300,21 @@ export const listApplicationsDomainMappings = (
           pageSize: 100,
         })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.domainMappings ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.domainMappings ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<appengine.DomainMapping>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<appengine.DomainMapping>()),
         );
 
 export const listFirewallRules = (appsId: string) =>
   appsId.length === 0
     ? emptyList<appengine.FirewallRule>()
-    : appengine.listAppsFirewallIngressRules
-        .pages({ appsId, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.ingressRules ?? []),
-          ),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<appengine.FirewallRule>(),
-          ),
-        );
+    : appengine.listAppsFirewallIngressRules.pages({ appsId, pageSize: 100 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.ingressRules ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => emptyList<appengine.FirewallRule>()),
+      );
 
 export const listServices = (appsId: string) =>
   appsId.length === 0
@@ -409,10 +356,7 @@ export const findOwnedCertificate = (
     return undefined;
   });
 
-export const findOwnedFirewallRule = (
-  id: string,
-  rules: readonly appengine.FirewallRule[],
-) =>
+export const findOwnedFirewallRule = (id: string, rules: readonly appengine.FirewallRule[]) =>
   Effect.gen(function* () {
     for (const rule of rules) {
       if (yield* ownedByAlchemy(id, rule.description)) {
@@ -422,9 +366,7 @@ export const findOwnedFirewallRule = (
     return undefined;
   });
 
-export const envVariablesOf = (
-  env: appengine.StringMap | undefined,
-): Record<string, string> => {
+export const envVariablesOf = (env: appengine.StringMap | undefined): Record<string, string> => {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(env ?? {})) {
     if (key === OWNERSHIP_ENV) continue;
@@ -456,9 +398,7 @@ export const domainIsOwned = (
   return certificateId !== undefined && ownedCertificateIds.has(certificateId);
 };
 
-export const ownedCertificateIds = (
-  certificates: readonly appengine.AuthorizedCertificate[],
-) =>
+export const ownedCertificateIds = (certificates: readonly appengine.AuthorizedCertificate[]) =>
   new Set(
     certificates
       .filter((certificate) => hasOwnershipMarker(certificate.displayName))
@@ -474,9 +414,7 @@ export const parseCertificateName = (name: string) => {
   const applicationsAt = parts.indexOf("applications");
   const certsAt = parts.lastIndexOf("authorizedCertificates");
   const certificateId =
-    certsAt >= 0 && parts[certsAt + 1]
-      ? parts[certsAt + 1]!
-      : lastSegment(name);
+    certsAt >= 0 && parts[certsAt + 1] ? parts[certsAt + 1]! : lastSegment(name);
   const appsId =
     appsAt >= 0 && parts[appsAt + 1]
       ? parts[appsAt + 1]
@@ -499,8 +437,7 @@ export const parseDomainMappingName = (name: string) => {
   const locationsAt = parts.indexOf("locations");
   const applicationsAt = parts.indexOf("applications");
   const mappingsAt = parts.lastIndexOf("domainMappings");
-  const domain =
-    mappingsAt >= 0 ? parts.slice(mappingsAt + 1).join("/") : lastSegment(name);
+  const domain = mappingsAt >= 0 ? parts.slice(mappingsAt + 1).join("/") : lastSegment(name);
   const appsId =
     appsAt >= 0 && parts[appsAt + 1]
       ? parts[appsAt + 1]

@@ -156,17 +156,10 @@ export const Document = Resource<Document>("GCP.ContentWarehouse.Document");
 const resourceName = (project: string, location: string, documentId: string) =>
   `${locationParent(project, location)}/documents/${documentId}`;
 
-const referenceName = (
-  project: string,
-  location: string,
-  referenceId: string,
-) =>
+const referenceName = (project: string, location: string, referenceId: string) =>
   `${locationParent(project, location)}/documents/referenceId/${referenceId}`;
 
-const toAttrs = (
-  item: cw.GoogleCloudContentwarehouseV1Document,
-  project: string,
-) => {
+const toAttrs = (item: cw.GoogleCloudContentwarehouseV1Document, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "documents");
   const id = parsed.id === "referenceId" ? lastSegment(name) : parsed.id;
@@ -199,22 +192,13 @@ const getByName = (name: string) =>
 
 export const DocumentProvider = () =>
   Provider.succeed(Document, {
-    stables: [
-      "name",
-      "documentId",
-      "referenceId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "documentId", "referenceId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const schemaChanged =
-        (olds?.documentSchemaName ?? output?.documentSchemaName) !==
-          undefined &&
-        news.documentSchemaName !==
-          (olds?.documentSchemaName ?? output?.documentSchemaName);
+        (olds?.documentSchemaName ?? output?.documentSchemaName) !== undefined &&
+        news.documentSchemaName !== (olds?.documentSchemaName ?? output?.documentSchemaName);
       return replaceOnIdentity({
         previousId: olds?.referenceId ?? output?.referenceId,
         nextId: news.referenceId,
@@ -238,16 +222,12 @@ export const DocumentProvider = () =>
             : "");
       let existing = yield* getByName(name);
       if (existing === undefined && referenceId) {
-        existing = yield* getByName(
-          referenceName(env.project, location, referenceId),
-        );
+        existing = yield* getByName(referenceName(env.project, location, referenceId));
       }
       if (existing === undefined && output === undefined) {
         // No labels: a document is identified by its reference id.
         const generated = yield* toPhysicalId(id, undefined, undefined, "doc");
-        existing = yield* getByName(
-          referenceName(env.project, location, referenceId ?? generated),
-        );
+        existing = yield* getByName(referenceName(env.project, location, referenceId ?? generated));
         if (existing === undefined) return undefined;
         const attrs = toAttrs(existing, env.project);
         return referenceId === undefined ? attrs : Unowned(attrs);
@@ -261,23 +241,15 @@ export const DocumentProvider = () =>
       const location = normalizeLocation(news.location ?? output?.location);
       const parent = locationParent(env.project, location);
       yield* ensureProject(parent);
-      const referenceId = yield* toPhysicalId(
-        id,
-        news.referenceId,
-        output?.referenceId,
-        "doc",
-      );
+      const referenceId = yield* toPhysicalId(id, news.referenceId, output?.referenceId, "doc");
       const displayName = news.displayName ?? referenceId;
       const title = news.title ?? news.displayName ?? referenceId;
       const textExtractionDisabled = news.textExtractionDisabled ?? true;
-      const lookup =
-        output?.name ?? referenceName(env.project, location, referenceId);
+      const lookup = output?.name ?? referenceName(env.project, location, referenceId);
 
       let current = yield* getByName(lookup);
       if (current === undefined) {
-        current = yield* getByName(
-          referenceName(env.project, location, referenceId),
-        );
+        current = yield* getByName(referenceName(env.project, location, referenceId));
       }
 
       if (current === undefined) {
@@ -322,10 +294,7 @@ export const DocumentProvider = () =>
       const titleChanged = !sameText(current.title, title);
       const textChanged = !sameText(current.plainText, news.plainText ?? title);
       const uriChanged = !sameText(current.displayUri, news.displayUri);
-      const pathChanged = !sameText(
-        current.rawDocumentPath,
-        news.rawDocumentPath,
-      );
+      const pathChanged = !sameText(current.rawDocumentPath, news.rawDocumentPath);
       const propertiesChanged = !sameJson(current.properties, news.properties);
       if (
         displayChanged ||

@@ -128,19 +128,10 @@ export class TraceScopeNotResolved extends Data.TaggedError(
 
 const traceScopeIdOf = (scope: observability.TraceScope, fallback?: string) => {
   const parsed = parseScopeName(scope.name ?? "");
-  return (
-    parsed?.traceScopeId ??
-    fallback ??
-    (scope.name ?? "").split("/").pop() ??
-    ""
-  );
+  return parsed?.traceScopeId ?? fallback ?? (scope.name ?? "").split("/").pop() ?? "";
 };
 
-const toAttrs = (
-  scope: observability.TraceScope,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (scope: observability.TraceScope, project: string, location: string) => {
   const traceScopeId = traceScopeIdOf(scope);
   const parsed = parseDescription(scope.description);
   const parsedName = parseScopeName(scope.name ?? "");
@@ -149,9 +140,7 @@ const toAttrs = (
   return {
     name:
       scope.name ??
-      (traceScopeId
-        ? scopeResourceName(resolvedProject, resolvedLocation, traceScopeId)
-        : ""),
+      (traceScopeId ? scopeResourceName(resolvedProject, resolvedLocation, traceScopeId) : ""),
     traceScopeId,
     project: resolvedProject,
     location: resolvedLocation,
@@ -189,15 +178,9 @@ export const TraceScopeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location =
-        olds?.location ?? output?.location ?? DEFAULT_TRACE_LOCATION;
-      const traceScopeId = yield* toScopeId(
-        id,
-        olds?.traceScopeId,
-        output?.traceScopeId,
-      );
-      const name =
-        output?.name ?? scopeResourceName(env.project, location, traceScopeId);
+      const location = olds?.location ?? output?.location ?? DEFAULT_TRACE_LOCATION;
+      const traceScopeId = yield* toScopeId(id, olds?.traceScopeId, output?.traceScopeId);
+      const name = output?.name ?? scopeResourceName(env.project, location, traceScopeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
@@ -214,37 +197,23 @@ export const TraceScopeProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.traceScopes ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.traceScopes ?? [])),
             Stream.filter((scope) => hasOwnershipMarker(scope.description)),
-            Stream.map((scope) =>
-              toAttrs(scope, env.project, DEFAULT_TRACE_LOCATION),
-            ),
+            Stream.map((scope) => toAttrs(scope, env.project, DEFAULT_TRACE_LOCATION)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location =
-        news.location ?? output?.location ?? DEFAULT_TRACE_LOCATION;
-      const traceScopeId = yield* toScopeId(
-        id,
-        news.traceScopeId,
-        output?.traceScopeId,
-      );
+      const location = news.location ?? output?.location ?? DEFAULT_TRACE_LOCATION;
+      const traceScopeId = yield* toScopeId(id, news.traceScopeId, output?.traceScopeId);
       const name = scopeResourceName(env.project, location, traceScopeId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
-      const desiredResources = expandResourceNames(
-        news.resourceNames,
-        env.project,
-      );
+      const desiredResources = expandResourceNames(news.resourceNames, env.project);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -266,12 +235,8 @@ export const TraceScopeProvider = () =>
         return yield* new TraceScopeNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const resourcesChanged = !sameStringList(
-        current.resourceNames,
-        desiredResources,
-      );
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const resourcesChanged = !sameStringList(current.resourceNames, desiredResources);
       const updateMask = [
         descriptionChanged ? "description" : undefined,
         resourcesChanged ? "resourceNames" : undefined,

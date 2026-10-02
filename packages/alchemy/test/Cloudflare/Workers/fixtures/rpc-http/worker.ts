@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { HttpEffect } from "@/Http";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
+import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import type { HttpEffect } from "@/Http";
 import { DoRpcs, WorkerRpcs } from "./group.ts";
 import RpcHttpTestObject from "./object.ts";
 
@@ -29,10 +29,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
         Effect.provide(
           RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
             Layer.provide(
-              Layer.succeed(
-                HttpClient.HttpClient,
-                Cloudflare.toHttpClient(rpcDO.getByName(id)),
-              ),
+              Layer.succeed(HttpClient.HttpClient, Cloudflare.toHttpClient(rpcDO.getByName(id))),
             ),
             Layer.provide(RpcSerialization.layerNdjson),
           ),
@@ -62,9 +59,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
           onError: (cause) => cause as never,
         }),
       Echo: ({ messages }) =>
-        Stream.fromIterable(
-          messages.map((message, index) => ({ index, message })),
-        ),
+        Stream.fromIterable(messages.map((message, index) => ({ index, message }))),
       PingDO: (payload) =>
         Effect.gen(function* () {
           const client = yield* makeDOClient();
@@ -88,9 +83,7 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
 
     return {
       fetch: RpcServer.toHttpEffect(WorkerRpcs).pipe(
-        Effect.provide(
-          Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
-        ),
+        Effect.provide(Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson)),
       ) as unknown as HttpEffect,
     };
   }),

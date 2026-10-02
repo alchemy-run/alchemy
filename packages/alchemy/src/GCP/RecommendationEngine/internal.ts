@@ -70,8 +70,7 @@ export type FeatureMap = {
   numericalFeatures?: Record<string, { value?: number[] } | undefined>;
 };
 
-export type CatalogItem =
-  recommendationengine.GoogleCloudRecommendationengineV1beta1CatalogItem;
+export type CatalogItem = recommendationengine.GoogleCloudRecommendationengineV1beta1CatalogItem;
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
@@ -100,17 +99,10 @@ export const normalizeCatalog = (catalog: string | undefined) =>
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const catalogName = (
-  project: string,
-  location: string,
-  catalogId: string,
-) => `${locationParent(project, location)}/catalogs/${catalogId}`;
+export const catalogName = (project: string, location: string, catalogId: string) =>
+  `${locationParent(project, location)}/catalogs/${catalogId}`;
 
-export const expandCatalog = (
-  value: string | undefined,
-  project: string,
-  location: string,
-) => {
+export const expandCatalog = (value: string | undefined, project: string, location: string) => {
   const raw = (value ?? DEFAULT_CATALOG).replace(/\/+$/, "");
   if (raw.includes("/")) return raw;
   return catalogName(project, location, raw);
@@ -121,32 +113,18 @@ export const itemName = (catalog: string, catalogItemId: string) =>
 
 export const parseResourceName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
-  const itemsAt = Math.max(
-    parts.lastIndexOf("catalogItems"),
-    parts.lastIndexOf("catalogitems"),
-  );
+  const itemsAt = Math.max(parts.lastIndexOf("catalogItems"), parts.lastIndexOf("catalogitems"));
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const catalogsAt = parts.lastIndexOf("catalogs");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    catalogId:
-      catalogsAt >= 0 && parts[catalogsAt + 1]
-        ? parts[catalogsAt + 1]!
-        : DEFAULT_CATALOG,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    catalogId: catalogsAt >= 0 && parts[catalogsAt + 1] ? parts[catalogsAt + 1]! : DEFAULT_CATALOG,
     catalog:
-      catalogsAt >= 0
-        ? parts.slice(0, catalogsAt + 2).join("/")
-        : parentOf(name, "catalogItems"),
-    id:
-      itemsAt >= 0 && parts[itemsAt + 1]
-        ? parts[itemsAt + 1]!
-        : lastSegment(name),
+      catalogsAt >= 0 ? parts.slice(0, catalogsAt + 2).join("/") : parentOf(name, "catalogItems"),
+    id: itemsAt >= 0 && parts[itemsAt + 1] ? parts[itemsAt + 1]! : lastSegment(name),
     parent:
       itemsAt > 0
         ? parts.slice(0, itemsAt).join("/")
@@ -154,10 +132,7 @@ export const parseResourceName = (name: string) => {
   };
 };
 
-export const catalogItemIdOf = (
-  name: string,
-  maxLength = MAX_ITEM_ID_LENGTH,
-) => {
+export const catalogItemIdOf = (name: string, maxLength = MAX_ITEM_ID_LENGTH) => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "-")
@@ -224,9 +199,7 @@ export const parseOwnership = (
     const before = text.slice(0, verboseAt).trim();
     const parsed = parseOwnershipMarker(text.slice(verboseAt));
     const after = parsed.rest.replace(/^[\s\n]+/, "");
-    const combined = [before, after]
-      .filter((part) => part.length > 0)
-      .join(" ");
+    const combined = [before, after].filter((part) => part.length > 0).join(" ");
     return {
       labels: parsed.labels,
       text: combined.length > 0 ? combined : undefined,
@@ -236,9 +209,7 @@ export const parseOwnership = (
     const before = text.slice(0, compactAt).trim();
     const parsed = parseCompactMarker(text.slice(compactAt));
     const after = parsed.rest.replace(/^[\s\n]+/, "");
-    const combined = [before, after]
-      .filter((part) => part.length > 0)
-      .join(" ");
+    const combined = [before, after].filter((part) => part.length > 0).join(" ");
     return {
       labels: parsed.labels,
       text: combined.length > 0 ? combined : undefined,
@@ -248,9 +219,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -273,18 +242,14 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  fingerprint([...(left ?? [])].sort()) ===
-  fingerprint([...(right ?? [])].sort());
+) => fingerprint([...(left ?? [])].sort()) === fingerprint([...(right ?? [])].sort());
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -337,15 +302,12 @@ export const listCatalogs = (project: string, location: string) =>
   );
 
 export const listProjectCatalogs = (project: string) =>
-  Effect.forEach(
-    LIST_LOCATIONS,
-    (location) => listCatalogs(project, location),
-    { concurrency: 2 },
-  ).pipe(
+  Effect.forEach(LIST_LOCATIONS, (location) => listCatalogs(project, location), {
+    concurrency: 2,
+  }).pipe(
     Effect.map((groups) => {
       const seen = new Set<string>();
-      const catalogs: recommendationengine.GoogleCloudRecommendationengineV1beta1Catalog[] =
-        [];
+      const catalogs: recommendationengine.GoogleCloudRecommendationengineV1beta1Catalog[] = [];
       for (const catalog of groups.flat()) {
         const name = catalog.name ?? "";
         if (name.length === 0 || seen.has(name)) continue;
@@ -368,8 +330,7 @@ export const listCatalogItems = (parent: string) =>
       ).pipe(Effect.catchTag("NotFound", () => emptyList<CatalogItem>()));
 
 export const itemHasOwnership = (item: CatalogItem) =>
-  hasOwnershipMarker(item.description) ||
-  (item.tags ?? []).some((tag) => hasOwnershipMarker(tag));
+  hasOwnershipMarker(item.description) || (item.tags ?? []).some((tag) => hasOwnershipMarker(tag));
 
 export const getCatalogItem = (name: string) =>
   name.length === 0
@@ -379,9 +340,7 @@ export const getCatalogItem = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const userTags = (tags: readonly string[] | undefined) =>
-  (tags ?? []).filter(
-    (tag) => !tag.includes("[alc ") && !tag.includes("[alchemy "),
-  );
+  (tags ?? []).filter((tag) => !tag.includes("[alc ") && !tag.includes("[alchemy "));
 
 export const hierarchiesOf = (
   hierarchies:
@@ -395,9 +354,7 @@ export const hierarchiesOf = (
     }))
     .filter((hierarchy) => (hierarchy.categories?.length ?? 0) > 0);
 
-export const defaultHierarchies = (): CategoryHierarchy[] => [
-  { categories: [DEFAULT_CATEGORY] },
-];
+export const defaultHierarchies = (): CategoryHierarchy[] => [{ categories: [DEFAULT_CATEGORY] }];
 
 export const imagesOf = (
   images:

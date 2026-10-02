@@ -1,10 +1,7 @@
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Layer from "effect/Layer";
 import { makeParameterVersionHttpBinding } from "./BindingHttp.ts";
-import {
-  GetParameterVersion,
-  type GetParameterVersionRequest,
-} from "./GetParameterVersion.ts";
+import { GetParameterVersion, type GetParameterVersionRequest } from "./GetParameterVersion.ts";
 
 /**
  * HTTP implementation of {@link GetParameterVersion}.

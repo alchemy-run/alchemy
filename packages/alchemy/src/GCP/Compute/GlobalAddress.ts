@@ -169,9 +169,7 @@ export type GlobalAddress = Resource<
  * @resource
  * @category Compute
  */
-export const GlobalAddress = Resource<GlobalAddress>(
-  "GCP.Compute.GlobalAddress",
-);
+export const GlobalAddress = Resource<GlobalAddress>("GCP.Compute.GlobalAddress");
 
 export class GlobalAddressNotResolved extends Data.TaggedError(
   "GCP.Compute.GlobalAddressNotResolved",
@@ -179,9 +177,7 @@ export class GlobalAddressNotResolved extends Data.TaggedError(
   addressName: string;
 }> {}
 
-export class GlobalAddressPending extends Data.TaggedError(
-  "GCP.Compute.GlobalAddressPending",
-)<{
+export class GlobalAddressPending extends Data.TaggedError("GCP.Compute.GlobalAddressPending")<{
   addressName: string;
   status: string;
 }> {}
@@ -199,9 +195,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `a${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `a${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const toAttrs = (address: compute.Address, project: string) => ({
@@ -230,8 +224,7 @@ const addressTypeOf = (value: string | undefined) =>
 const ipVersionOf = (value: string | undefined) =>
   value && value !== "UNSPECIFIED_VERSION" ? value : DEFAULT_IP_VERSION;
 
-const networkTierOf = (value: string | undefined) =>
-  value ?? DEFAULT_NETWORK_TIER;
+const networkTierOf = (value: string | undefined) => value ?? DEFAULT_NETWORK_TIER;
 
 const resourceRefOf = (value: string | undefined) => {
   if (!value) return "";
@@ -306,44 +299,29 @@ export const GlobalAddressProvider = () =>
       const previousName = olds.addressName ?? output?.addressName;
       const nextName = news.addressName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousType = addressTypeOf(
-        olds.addressType ?? output?.addressType,
-      );
+      const previousType = addressTypeOf(olds.addressType ?? output?.addressType);
       const previousVersion = ipVersionOf(olds.ipVersion ?? output?.ipVersion);
-      const previousTier = networkTierOf(
-        olds.networkTier ?? output?.networkTier,
-      );
+      const previousTier = networkTierOf(olds.networkTier ?? output?.networkTier);
       const previousNetwork = resourceRefOf(olds.network ?? output?.network);
       const previousPurpose = olds.purpose ?? output?.purpose ?? "";
       const previousDescription = olds.description ?? output?.description ?? "";
       const previousPrefix = olds.prefixLength ?? output?.prefixLength;
-      const previousIpv6 =
-        olds.ipv6EndpointType ?? output?.ipv6EndpointType ?? "";
+      const previousIpv6 = olds.ipv6EndpointType ?? output?.ipv6EndpointType ?? "";
 
       const immutableChanged =
-        (news.description !== undefined &&
-          (news.description ?? "") !== previousDescription) ||
+        (news.description !== undefined && (news.description ?? "") !== previousDescription) ||
         (news.address !== undefined &&
           output?.address !== undefined &&
           news.address !== output.address) ||
-        (news.addressType !== undefined &&
-          addressTypeOf(news.addressType) !== previousType) ||
-        (news.ipVersion !== undefined &&
-          ipVersionOf(news.ipVersion) !== previousVersion) ||
-        (news.prefixLength !== undefined &&
-          news.prefixLength !== previousPrefix) ||
-        (news.purpose !== undefined &&
-          (news.purpose ?? "") !== previousPurpose) ||
-        (news.network !== undefined &&
-          resourceRefOf(news.network) !== previousNetwork) ||
-        (news.networkTier !== undefined &&
-          networkTierOf(news.networkTier) !== previousTier) ||
-        (news.ipv6EndpointType !== undefined &&
-          (news.ipv6EndpointType ?? "") !== previousIpv6);
+        (news.addressType !== undefined && addressTypeOf(news.addressType) !== previousType) ||
+        (news.ipVersion !== undefined && ipVersionOf(news.ipVersion) !== previousVersion) ||
+        (news.prefixLength !== undefined && news.prefixLength !== previousPrefix) ||
+        (news.purpose !== undefined && (news.purpose ?? "") !== previousPurpose) ||
+        (news.network !== undefined && resourceRefOf(news.network) !== previousNetwork) ||
+        (news.networkTier !== undefined && networkTierOf(news.networkTier) !== previousTier) ||
+        (news.ipv6EndpointType !== undefined && (news.ipv6EndpointType ?? "") !== previousIpv6);
 
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -356,17 +334,11 @@ export const GlobalAddressProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const addressName = yield* toName(
-        id,
-        olds?.addressName,
-        output?.addressName,
-      );
+      const addressName = yield* toName(id, olds?.addressName, output?.addressName);
       const existing = yield* getByName(env.project, addressName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -376,9 +348,7 @@ export const GlobalAddressProvider = () =>
           .items({ project: env.project, maxResults: 500 })
           .pipe(
             Stream.filter((address) =>
-              Object.keys(address.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(address.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((address) => toAttrs(address, env.project)),
             Stream.runCollect,
@@ -388,11 +358,7 @@ export const GlobalAddressProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const addressName = yield* toName(
-        id,
-        news.addressName,
-        output?.addressName,
-      );
+      const addressName = yield* toName(id, news.addressName, output?.addressName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -421,13 +387,9 @@ export const GlobalAddressProvider = () =>
             Effect.flatMap((operation) =>
               waitGlobalOperation(env.project, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }).pipe(
-                Effect.flatMap(() => getByName(env.project, addressName)),
-              ),
+              }).pipe(Effect.flatMap(() => getByName(env.project, addressName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, addressName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, addressName)),
           );
         current = created ?? undefined;
       }
@@ -452,11 +414,7 @@ export const GlobalAddressProvider = () =>
               labelFingerprint: current.labelFingerprint,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, addressName)) ?? current;
       }
 

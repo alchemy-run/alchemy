@@ -33,7 +33,6 @@ export interface GetSensitivityInspectionTemplate extends Binding.Service<
     >
   >
 > {}
-export const GetSensitivityInspectionTemplate =
-  Binding.Service<GetSensitivityInspectionTemplate>(
-    "AWS.Macie2.GetSensitivityInspectionTemplate",
-  );
+export const GetSensitivityInspectionTemplate = Binding.Service<GetSensitivityInspectionTemplate>(
+  "AWS.Macie2.GetSensitivityInspectionTemplate",
+);

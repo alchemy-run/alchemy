@@ -36,15 +36,10 @@ export const parseGroupName = (
   const projectsAt = parts.lastIndexOf("projects");
   const groupsAt = parts.lastIndexOf("groups");
   const project =
-    projectsAt >= 0 && parts[projectsAt + 1]
-      ? parts[projectsAt + 1]!
-      : fallbackProject;
+    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject;
   return {
     project,
-    groupId:
-      groupsAt >= 0 && parts[groupsAt + 1]
-        ? parts[groupsAt + 1]!
-        : lastSegment(name),
+    groupId: groupsAt >= 0 && parts[groupsAt + 1] ? parts[groupsAt + 1]! : lastSegment(name),
     parent: project.length > 0 ? projectParent(project) : "",
   };
 };
@@ -72,11 +67,7 @@ export const sanitizeGroupId = (value: string) => {
   return cleaned;
 };
 
-export const toGroupId = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const toGroupId = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const explicit = groupIdOf(requested);
     if (explicit !== undefined) return sanitizeGroupId(explicit);
@@ -113,15 +104,9 @@ export const parseDisplayName = (
 };
 
 export const hasOwnershipMarker = (displayName: string | undefined) =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
-export const toDisplayName = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toDisplayName = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) return explicit;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -135,10 +120,7 @@ export const toDisplayName = (
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const replaceOnIdentity = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
+export const replaceOnIdentity = (previous: string | undefined, next: string | undefined) =>
   previous !== undefined && next !== undefined && previous !== next
     ? ({ action: "replace" as const, deleteFirst: true } as const)
     : undefined;
@@ -163,9 +145,7 @@ export const getGroup = (name: string) =>
 
 export const listGroups = (parent: string) =>
   parent.length === 0
-    ? Effect.succeed(
-        [] as firebaseappdistribution.GoogleFirebaseAppdistroV1Group[],
-      )
+    ? Effect.succeed([] as firebaseappdistribution.GoogleFirebaseAppdistroV1Group[])
     : firebaseappdistribution.listProjectsGroups
         .pages({
           parent,
@@ -176,8 +156,6 @@ export const listGroups = (parent: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () =>
-            Effect.succeed(
-              [] as firebaseappdistribution.GoogleFirebaseAppdistroV1Group[],
-            ),
+            Effect.succeed([] as firebaseappdistribution.GoogleFirebaseAppdistroV1Group[]),
           ),
         );

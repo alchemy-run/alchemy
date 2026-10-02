@@ -104,16 +104,12 @@ export type SslCert = Resource<
  */
 export const SslCert = Resource<SslCert>("GCP.SQL.SslCert");
 
-export class SslCertNotResolved extends Data.TaggedError(
-  "GCP.SQL.SslCertNotResolved",
-)<{
+export class SslCertNotResolved extends Data.TaggedError("GCP.SQL.SslCertNotResolved")<{
   instance: string;
   sha1Fingerprint: string;
 }> {}
 
-export class SslCertStillExists extends Data.TaggedError(
-  "GCP.SQL.SslCertStillExists",
-)<{
+export class SslCertStillExists extends Data.TaggedError("GCP.SQL.SslCertStillExists")<{
   instance: string;
   sha1Fingerprint: string;
 }> {}
@@ -126,16 +122,11 @@ const lastSegment = (value: string) => {
 
 const instanceIdOf = (value: string) => lastSegment(value);
 
-const hasAlchemyInstanceLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyInstanceLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const sanitizeCommonName = (name: string) => {
-  const mapped = name.replace(
-    /[0-9]/g,
-    (digit) => "abcdefghij"[Number(digit)] ?? "a",
-  );
+  const mapped = name.replace(/[0-9]/g, (digit) => "abcdefghij"[Number(digit)] ?? "a");
   let next = mapped.replace(/[^a-zA-Z.\-_ ]/g, "-").replace(/[-\s]+/g, "-");
   next = next.replace(/^[-. ]+|[-. ]+$/g, "");
   if (!/^[a-zA-Z]/.test(next)) next = `c${next}`;
@@ -143,11 +134,7 @@ const sanitizeCommonName = (name: string) => {
   return next.length > 0 ? next : "cert";
 };
 
-const toCommonName = (
-  id: string,
-  commonName: string | undefined,
-  existing?: string,
-) =>
+const toCommonName = (id: string, commonName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (commonName !== undefined) return commonName;
     if (existing !== undefined) return existing;
@@ -185,11 +172,7 @@ const toAttrs = (
   serverCaCert: secrets?.serverCaCert,
 });
 
-const getByFingerprint = (
-  project: string,
-  instance: string,
-  sha1Fingerprint: string,
-) =>
+const getByFingerprint = (project: string, instance: string, sha1Fingerprint: string) =>
   sha1Fingerprint.length === 0
     ? Effect.succeed(undefined)
     : sqladmin.getSslCerts({ project, instance, sha1Fingerprint }).pipe(
@@ -197,17 +180,11 @@ const getByFingerprint = (
         recoverIfInstanceMissing(project, instance, () => undefined),
       );
 
-const findByCommonName = (
-  project: string,
-  instance: string,
-  commonName: string,
-) =>
+const findByCommonName = (project: string, instance: string, commonName: string) =>
   commonName.length === 0
     ? Effect.succeed(undefined)
     : sqladmin.listSslCerts({ project, instance }).pipe(
-        Effect.map((page) =>
-          (page.items ?? []).find((cert) => cert.commonName === commonName),
-        ),
+        Effect.map((page) => (page.items ?? []).find((cert) => cert.commonName === commonName)),
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         recoverIfInstanceMissing(project, instance, () => undefined),
       );
@@ -220,11 +197,7 @@ const observe = (
 ) =>
   Effect.gen(function* () {
     if (sha1Fingerprint !== undefined && sha1Fingerprint.length > 0) {
-      const byFingerprint = yield* getByFingerprint(
-        project,
-        instance,
-        sha1Fingerprint,
-      );
+      const byFingerprint = yield* getByFingerprint(project, instance, sha1Fingerprint);
       if (byFingerprint !== undefined) return byFingerprint;
     }
     return yield* findByCommonName(project, instance, commonName);
@@ -240,11 +213,7 @@ const waitForOperation = (
     notFoundOk: options?.notFoundOk,
   });
 
-const waitUntilExists = (
-  project: string,
-  instance: string,
-  sha1Fingerprint: string,
-) =>
+const waitUntilExists = (project: string, instance: string, sha1Fingerprint: string) =>
   getByFingerprint(project, instance, sha1Fingerprint).pipe(
     Effect.flatMap((cert) =>
       cert
@@ -258,11 +227,7 @@ const waitUntilExists = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  instance: string,
-  sha1Fingerprint: string,
-) =>
+const waitUntilGone = (project: string, instance: string, sha1Fingerprint: string) =>
   getByFingerprint(project, instance, sha1Fingerprint).pipe(
     Effect.flatMap((cert) =>
       cert === undefined
@@ -300,9 +265,7 @@ export const SslCertProvider = () =>
         previousInstance !== undefined &&
         instanceIdOf(previousInstance) !== instanceIdOf(nextInstance);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       if (!instanceChanged && !nameChanged) return undefined;
       return {
         action: "replace" as const,
@@ -314,17 +277,8 @@ export const SslCertProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(olds?.instance ?? output?.instance ?? "");
       if (instance.length === 0) return undefined;
-      const commonName = yield* toCommonName(
-        id,
-        olds?.commonName,
-        output?.commonName,
-      );
-      const existing = yield* observe(
-        env.project,
-        instance,
-        output?.sha1Fingerprint,
-        commonName,
-      );
+      const commonName = yield* toCommonName(id, olds?.commonName, output?.commonName);
+      const existing = yield* observe(env.project, instance, output?.sha1Fingerprint, commonName);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project, instance, {
         privateKey: output?.privateKey,
@@ -342,14 +296,10 @@ export const SslCertProvider = () =>
             filter: "instanceType:CLOUD_SQL_INSTANCE",
           })
           .pipe(
-            Stream.filter((instance) =>
-              hasAlchemyInstanceLabels(instance.settings?.userLabels),
-            ),
+            Stream.filter((instance) => hasAlchemyInstanceLabels(instance.settings?.userLabels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as sqladmin.DatabaseInstance[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as sqladmin.DatabaseInstance[])),
           );
         const pages = yield* Effect.forEach(
           instances,
@@ -365,14 +315,10 @@ export const SslCertProvider = () =>
               })
               .pipe(
                 Effect.map((page) =>
-                  (page.items ?? []).map((cert) =>
-                    toAttrs(cert, env.project, instanceName),
-                  ),
+                  (page.items ?? []).map((cert) => toAttrs(cert, env.project, instanceName)),
                 ),
                 // The instance may be deleted mid-listing.
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as SslCert["Attributes"][]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([] as SslCert["Attributes"][])),
                 recoverIfInstanceMissing(
                   env.project,
                   instanceName,
@@ -388,18 +334,9 @@ export const SslCertProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(news.instance);
-      const commonName = yield* toCommonName(
-        id,
-        news.commonName,
-        output?.commonName,
-      );
+      const commonName = yield* toCommonName(id, news.commonName, output?.commonName);
 
-      let current = yield* observe(
-        env.project,
-        instance,
-        output?.sha1Fingerprint,
-        commonName,
-      );
+      let current = yield* observe(env.project, instance, output?.sha1Fingerprint, commonName);
       let secrets: SslCertSecrets = {
         privateKey: output?.privateKey,
         serverCaCert: output?.serverCaCert,
@@ -414,9 +351,7 @@ export const SslCertProvider = () =>
           })
           .pipe(
             Effect.tap((response) =>
-              response.operation
-                ? waitForOperation(env.project, response.operation)
-                : Effect.void,
+              response.operation ? waitForOperation(env.project, response.operation) : Effect.void,
             ),
             Effect.catchTag("Conflict", (error) =>
               findByCommonName(env.project, instance, commonName).pipe(
@@ -434,12 +369,10 @@ export const SslCertProvider = () =>
 
         if (inserted !== undefined) {
           secrets = {
-            privateKey:
-              inserted.clientCert?.certPrivateKey ?? secrets.privateKey,
+            privateKey: inserted.clientCert?.certPrivateKey ?? secrets.privateKey,
             serverCaCert: inserted.serverCaCert?.cert ?? secrets.serverCaCert,
           };
-          const fingerprint =
-            inserted.clientCert?.certInfo?.sha1Fingerprint ?? "";
+          const fingerprint = inserted.clientCert?.certInfo?.sha1Fingerprint ?? "";
           current =
             inserted.clientCert?.certInfo ??
             (fingerprint.length > 0
@@ -450,10 +383,7 @@ export const SslCertProvider = () =>
         }
       }
 
-      if (
-        current === undefined ||
-        (current.sha1Fingerprint ?? "").length === 0
-      ) {
+      if (current === undefined || (current.sha1Fingerprint ?? "").length === 0) {
         return yield* new SslCertNotResolved({
           instance,
           sha1Fingerprint: current?.sha1Fingerprint ?? "",
@@ -461,11 +391,7 @@ export const SslCertProvider = () =>
       }
 
       if ((current.cert ?? "").length === 0) {
-        current = yield* waitUntilExists(
-          env.project,
-          instance,
-          current.sha1Fingerprint ?? "",
-        );
+        current = yield* waitUntilExists(env.project, instance, current.sha1Fingerprint ?? "");
       }
 
       return toAttrs(current, env.project, instance, secrets);
@@ -491,9 +417,7 @@ export const SslCertProvider = () =>
           sha1Fingerprint,
         })
         .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(project, operation, { notFoundOk: true }),
-          ),
+          Effect.flatMap((operation) => waitForOperation(project, operation, { notFoundOk: true })),
           Effect.catchTag("NotFound", () => Effect.void),
           recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({

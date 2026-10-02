@@ -16,10 +16,7 @@ import {
   type WebsiteNotFoundHandling,
 } from "../../Website/assets.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
-import {
-  Server as FrameworkServer,
-  type ServerDevProps,
-} from "../../Website/Server.ts";
+import { Server as FrameworkServer, type ServerDevProps } from "../../Website/Server.ts";
 import {
   Service,
   type ResourceRequirements,
@@ -215,10 +212,7 @@ export const websiteServiceProps = (
     maxInstanceRequestConcurrency: props.maxInstanceRequestConcurrency,
     scaling: props.scaling,
     serviceAccount: props.serviceAccount,
-    containers:
-      props.resources !== undefined
-        ? [{ resources: props.resources }]
-        : undefined,
+    containers: props.resources !== undefined ? [{ resources: props.resources }] : undefined,
   },
   build:
     program.install !== undefined && program.install.length > 0
@@ -284,12 +278,10 @@ const runFrameworkSite = Effect.fn("GCP.Website.FrameworkSite")(function* (
   const main = Output.map(buildOut, (out) => out.main);
 
   // Always an array: `extraFiles` selects the unbundled Node image mode.
-  const extraFiles = Output.mapEffect(
-    (out: { distDir: string; main: string }) =>
-      packSiteExtraFiles(
-        out.distDir,
-        config.skipClientAssets === true ? "next" : "client",
-      ).pipe(Effect.map((files) => files ?? [])),
+  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+    packSiteExtraFiles(out.distDir, config.skipClientAssets === true ? "next" : "client").pipe(
+      Effect.map((files) => files ?? []),
+    ),
   )(buildOut);
 
   const service = yield* Service(
@@ -326,8 +318,5 @@ export const makeFrameworkSite = (
 ) => runFrameworkSite(id, props, config).pipe(Effect.orDie);
 
 /** Push {@link id} then run {@link makeFrameworkSite}. */
-export const frameworkSite = (
-  id: string,
-  props: FrameworkSiteProps,
-  config: FrameworkSiteConfig,
-) => makeFrameworkSite(id, props, config).pipe(Namespace.push(id));
+export const frameworkSite = (id: string, props: FrameworkSiteProps, config: FrameworkSiteConfig) =>
+  makeFrameworkSite(id, props, config).pipe(Namespace.push(id));

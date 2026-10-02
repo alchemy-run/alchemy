@@ -1,9 +1,9 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
 import type {
   ClusterCredentials,
   GetClusterResponse,
   ManagedCluster,
 } from "@distilled.cloud/fly-io/mpg";
-import * as machines from "@distilled.cloud/fly-io/machines";
 import * as mpg from "@distilled.cloud/fly-io/mpg";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -24,11 +24,7 @@ import {
 import { hashImports } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { resolveOrgSlug } from "./Environment.ts";
-import {
-  createFlyAppName,
-  matchesAlchemyPhysicalName,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import { createFlyAppName, matchesAlchemyPhysicalName, sanitizeFlyAppName } from "./Metadata.ts";
 import { runImports, runPgMigrations } from "./PostgresMigrations.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -39,13 +35,7 @@ export const DEFAULT_VOLUME_GB = 10;
 export const DATABASE_URL_SECRET = "DATABASE_URL";
 export const DIRECT_DATABASE_URL_SECRET = "DIRECT_DATABASE_URL";
 
-export type PostgresPlan =
-  | "basic"
-  | "starter"
-  | "launch"
-  | "scale"
-  | "performance"
-  | (string & {});
+export type PostgresPlan = "basic" | "starter" | "launch" | "scale" | "performance" | (string & {});
 
 export interface PostgresProps {
   /**
@@ -295,29 +285,21 @@ export type Postgres = Resource<
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 
-export class PostgresNotCreated extends Data.TaggedError(
-  "Fly.PostgresNotCreated",
-)<{
+export class PostgresNotCreated extends Data.TaggedError("Fly.PostgresNotCreated")<{
   name: string;
   orgSlug: string;
 }> {}
 
-export class PostgresCreateFailed extends Data.TaggedError(
-  "Fly.PostgresCreateFailed",
-)<{
+export class PostgresCreateFailed extends Data.TaggedError("Fly.PostgresCreateFailed")<{
   clusterId: string;
   status: string;
 }> {}
 
-export class PostgresCredentialsMissing extends Data.TaggedError(
-  "Fly.PostgresCredentialsMissing",
-)<{
+export class PostgresCredentialsMissing extends Data.TaggedError("Fly.PostgresCredentialsMissing")<{
   clusterId: string;
 }> {}
 
-export class PostgresAttachmentFailed extends Data.TaggedError(
-  "Fly.PostgresAttachmentFailed",
-)<{
+export class PostgresAttachmentFailed extends Data.TaggedError("Fly.PostgresAttachmentFailed")<{
   clusterId: string;
   appName: string;
 }> {}
@@ -332,12 +314,8 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-export const isLiveCluster = (
-  cluster: ManagedCluster | undefined,
-): cluster is ManagedCluster =>
-  cluster !== undefined &&
-  (cluster.id ?? "").length > 0 &&
-  cluster.status !== "deleted";
+export const isLiveCluster = (cluster: ManagedCluster | undefined): cluster is ManagedCluster =>
+  cluster !== undefined && (cluster.id ?? "").length > 0 && cluster.status !== "deleted";
 
 export const unwrapSensitive = (
   value: string | Redacted.Redacted<string> | undefined,
@@ -373,10 +351,8 @@ const toAttrs = (
   engine: cluster.engine,
   replicas: cluster.replicas,
   mpgdClusterId: cluster.mpgd_cluster_id,
-  connectionUri:
-    directUri(cluster, credentials) ?? fallback?.connectionUri ?? "",
-  pooledConnectionUri:
-    credentialsUri(credentials) ?? fallback?.pooledConnectionUri ?? "",
+  connectionUri: directUri(cluster, credentials) ?? fallback?.connectionUri ?? "",
+  pooledConnectionUri: credentialsUri(credentials) ?? fallback?.pooledConnectionUri ?? "",
   migrationsDir: fallback?.migrationsDir,
   migrationsTable: fallback?.migrationsTable,
   migrationsHashes: fallback?.migrationsHashes ?? {},
@@ -407,29 +383,18 @@ export const getClusterResponse = (clusterId: string) =>
 const listOrgClusters = (orgSlug: string) =>
   mpg.listClusters({ org_slug: orgSlug }).pipe(
     Effect.map((res) => (res.data ?? []).filter((row) => isLiveCluster(row))),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ManagedCluster[]),
-    ),
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([] as ManagedCluster[])),
   );
 
 const findByName = (orgSlug: string, name: string) =>
-  listOrgClusters(orgSlug).pipe(
-    Effect.map((rows) => rows.find((row) => row.name === name)),
-  );
+  listOrgClusters(orgSlug).pipe(Effect.map((rows) => rows.find((row) => row.name === name)));
 
 const waitUntilReady = (clusterId: string) =>
   getLiveCluster(clusterId).pipe(
     Effect.flatMap(
-      (
-        cluster,
-      ): Effect.Effect<
-        ManagedCluster,
-        PostgresPending | PostgresCreateFailed
-      > => {
+      (cluster): Effect.Effect<ManagedCluster, PostgresPending | PostgresCreateFailed> => {
         if (cluster === undefined) {
-          return Effect.fail(
-            new PostgresPending({ clusterId, status: "missing" }),
-          );
+          return Effect.fail(new PostgresPending({ clusterId, status: "missing" }));
         }
         if (cluster.status === "ready") return Effect.succeed(cluster);
         if (cluster.status === "error") {
@@ -470,16 +435,12 @@ const waitForCredentials = (clusterId: string) =>
       times: 16,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.PostgresCredentialsPending", () =>
-      getClusterResponse(clusterId),
-    ),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () => getClusterResponse(clusterId)),
   );
 
 const waitUntilGone = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
-    Effect.map(
-      (res) => res.data === undefined || res.data.status === "deleted",
-    ),
+    Effect.map((res) => res.data === undefined || res.data.status === "deleted"),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -488,8 +449,7 @@ const waitUntilGone = (clusterId: string) =>
     }),
   );
 
-const desiredPlan = (plan: PostgresPlan | undefined) =>
-  plan ?? DEFAULT_POSTGRES_PLAN;
+const desiredPlan = (plan: PostgresPlan | undefined) => plan ?? DEFAULT_POSTGRES_PLAN;
 
 const desiredDisk = (size: number | undefined) =>
   size === undefined ? DEFAULT_VOLUME_GB : Math.max(1, size);
@@ -497,9 +457,8 @@ const desiredDisk = (size: number | undefined) =>
 const pgMajor = (value: number | string | undefined) =>
   value === undefined ? undefined : String(value);
 
-export const credentialsUri = (
-  credentials: ClusterCredentials | undefined,
-): string | undefined => unwrapSensitive(credentials?.pgbouncer_uri);
+export const credentialsUri = (credentials: ClusterCredentials | undefined): string | undefined =>
+  unwrapSensitive(credentials?.pgbouncer_uri);
 
 export const directUri = (
   _cluster: ManagedCluster | undefined,
@@ -523,9 +482,8 @@ export const directUri = (
   }
 };
 
-const secretVersion = (
-  res: { version?: number; Version?: number } | undefined,
-) => res?.version ?? res?.Version;
+const secretVersion = (res: { version?: number; Version?: number } | undefined) =>
+  res?.version ?? res?.Version;
 
 const putSecret = (appName: string, name: string, value: string) =>
   machines
@@ -546,9 +504,7 @@ const putSecret = (appName: string, name: string, value: string) =>
       ),
     );
 
-class PostgresCredentialsPending extends Data.TaggedError(
-  "Fly.PostgresCredentialsPending",
-)<{
+class PostgresCredentialsPending extends Data.TaggedError("Fly.PostgresCredentialsPending")<{
   clusterId: string;
 }> {}
 
@@ -579,9 +535,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
       times: 10,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.PostgresCredentialsPending", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.succeed(undefined)),
   );
   if (creds === undefined) {
     return yield* new PostgresCredentialsMissing({ clusterId });
@@ -590,11 +544,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
   const pooledVersion = yield* putSecret(appName, variableName, creds.uri);
   if (pooledVersion !== undefined) versions.push(pooledVersion);
   if (creds.direct !== undefined) {
-    const directVersion = yield* putSecret(
-      appName,
-      DIRECT_DATABASE_URL_SECRET,
-      creds.direct,
-    );
+    const directVersion = yield* putSecret(appName, DIRECT_DATABASE_URL_SECRET, creds.direct);
     if (directVersion !== undefined) versions.push(directVersion);
   }
   yield* mpg
@@ -633,12 +583,10 @@ export const PostgresProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
+      const desiredName = news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
       const regionChanged = news.region !== output.region;
-      const orgChanged =
-        news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
+      const orgChanged = news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
       if (nameChanged || regionChanged || orgChanged) {
         return { action: "replace" as const };
       }
@@ -663,14 +611,10 @@ export const PostgresProvider = () =>
         return toAttrs(found.data, output, found.credentials);
       }
       const name = yield* resolveName(id, olds?.name, output?.name);
-      const orgSlug =
-        olds?.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
+      const orgSlug = olds?.orgSlug ?? output?.orgSlug ?? (yield* resolveOrgSlug());
       const byName = yield* findByName(orgSlug, name);
       if (byName === undefined) return undefined;
-      const hydrated =
-        byName.id !== undefined
-          ? yield* getClusterResponse(byName.id)
-          : undefined;
+      const hydrated = byName.id !== undefined ? yield* getClusterResponse(byName.id) : undefined;
       const attrs = toAttrs(
         hydrated?.data ?? byName,
         { ...output, name, orgSlug },
@@ -709,9 +653,7 @@ export const PostgresProvider = () =>
           : undefined;
       if (
         current === undefined &&
-        (output === undefined ||
-          output.name !== name ||
-          output.orgSlug !== orgSlug)
+        (output === undefined || output.name !== name || output.orgSlug !== orgSlug)
       ) {
         current = yield* findByName(orgSlug, name);
       }
@@ -734,9 +676,7 @@ export const PostgresProvider = () =>
             Effect.map((res) => res.data),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        current = isLiveCluster(created)
-          ? created
-          : yield* findByName(orgSlug, name);
+        current = isLiveCluster(created) ? created : yield* findByName(orgSlug, name);
       }
 
       if (current === undefined || current.id === undefined) {
@@ -747,9 +687,7 @@ export const PostgresProvider = () =>
 
       if (current.status !== "ready") {
         current =
-          (yield* waitUntilReady(clusterId)) ??
-          (yield* getLiveCluster(clusterId)) ??
-          current;
+          (yield* waitUntilReady(clusterId)) ?? (yield* getLiveCluster(clusterId)) ?? current;
       }
 
       if (current.status === "error") {
@@ -762,18 +700,13 @@ export const PostgresProvider = () =>
       const observed = yield* waitForCredentials(clusterId);
       const cluster = observed?.data ?? current;
       const credentials = observed?.credentials;
-      const migrationUri =
-        directUri(cluster, credentials) ?? credentialsUri(credentials);
+      const migrationUri = directUri(cluster, credentials) ?? credentialsUri(credentials);
 
       const migrationsInput = migrationsInputOf(props);
-      if (
-        migrationsInput &&
-        (migrationUri === undefined || migrationUri.length === 0)
-      ) {
+      if (migrationsInput && (migrationUri === undefined || migrationUri.length === 0)) {
         return yield* new PostgresCredentialsMissing({ clusterId });
       }
-      const connectionUri =
-        migrationUri !== undefined ? Redacted.make(migrationUri) : undefined;
+      const connectionUri = migrationUri !== undefined ? Redacted.make(migrationUri) : undefined;
       const migrations =
         migrationsInput && connectionUri !== undefined
           ? yield* runPgMigrations({

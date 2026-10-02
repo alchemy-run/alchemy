@@ -71,10 +71,7 @@ export type WebhookGenericWebService = {
   /** Request headers. */
   requestHeaders?: Record<string, string>;
   /** Secret Manager versions used as request headers. */
-  secretVersionsForRequestHeaders?: Record<
-    string,
-    { secretVersion?: string } | undefined
-  >;
+  secretVersionsForRequestHeaders?: Record<string, { secretVersion?: string } | undefined>;
   /** Allowed CA certificates (DER, base64). */
   allowedCaCerts?: string[];
   /** OAuth client-credentials config. */
@@ -207,9 +204,7 @@ export type AgentsWebhook = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsWebhook = Resource<AgentsWebhook>(
-  "GCP.Dialogflow.AgentsWebhook",
-);
+export const AgentsWebhook = Resource<AgentsWebhook>("GCP.Dialogflow.AgentsWebhook");
 
 export class AgentsWebhookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsWebhookNotResolved",
@@ -217,24 +212,19 @@ export class AgentsWebhookNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (agent: string, webhookId: string) =>
-  `${agent}/webhooks/${webhookId}`;
+const resourceName = (agent: string, webhookId: string) => `${agent}/webhooks/${webhookId}`;
 
 const stringMapOf = (
   value: Record<string, string | undefined> | undefined,
 ): Record<string, string> | undefined => {
   if (value === undefined) return undefined;
   return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(value).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 };
 
 const genericOf = (
-  service:
-    | dialogflow.GoogleCloudDialogflowCxV3WebhookGenericWebService
-    | undefined,
+  service: dialogflow.GoogleCloudDialogflowCxV3WebhookGenericWebService | undefined,
 ): WebhookGenericWebService | undefined => {
   if (service === undefined) return undefined;
   return {
@@ -243,19 +233,14 @@ const genericOf = (
     webhookType: service.webhookType,
     requestHeaders: stringMapOf(service.requestHeaders),
     secretVersionsForRequestHeaders: service.secretVersionsForRequestHeaders,
-    allowedCaCerts: service.allowedCaCerts
-      ? [...service.allowedCaCerts]
-      : undefined,
+    allowedCaCerts: service.allowedCaCerts ? [...service.allowedCaCerts] : undefined,
     oauthConfig: service.oauthConfig
       ? {
           tokenEndpoint: service.oauthConfig.tokenEndpoint,
           clientId: service.oauthConfig.clientId,
           clientSecret: service.oauthConfig.clientSecret,
-          secretVersionForClientSecret:
-            service.oauthConfig.secretVersionForClientSecret,
-          scopes: service.oauthConfig.scopes
-            ? [...service.oauthConfig.scopes]
-            : undefined,
+          secretVersionForClientSecret: service.oauthConfig.secretVersionForClientSecret,
+          scopes: service.oauthConfig.scopes ? [...service.oauthConfig.scopes] : undefined,
         }
       : undefined,
     serviceAgentAuth: service.serviceAgentAuth,
@@ -269,9 +254,7 @@ const genericOf = (
 };
 
 const directoryOf = (
-  config:
-    | dialogflow.GoogleCloudDialogflowCxV3WebhookServiceDirectoryConfig
-    | undefined,
+  config: dialogflow.GoogleCloudDialogflowCxV3WebhookServiceDirectoryConfig | undefined,
 ): WebhookServiceDirectoryConfig | undefined => {
   if (config === undefined) return undefined;
   return {
@@ -310,29 +293,23 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsWebhooks
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.webhooks ?? [])),
-      Stream.filter((webhook) => hasOwnershipMarker(webhook.displayName)),
-      Stream.map((webhook) => toAttrs(webhook, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsWebhooks.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.webhooks ?? [])),
+    Stream.filter((webhook) => hasOwnershipMarker(webhook.displayName)),
+    Stream.map((webhook) => toAttrs(webhook, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsWebhooks
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.webhooks ?? [])),
-      Stream.filter((webhook) => webhook.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsWebhooks.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.webhooks ?? [])),
+    Stream.filter((webhook) => webhook.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsWebhookProvider = () =>
   Provider.succeed(AgentsWebhook, {
@@ -366,17 +343,9 @@ export const AgentsWebhookProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
-      const webhookId = yield* toResourceId(
-        id,
-        olds?.webhookId,
-        output?.webhookId,
-      );
-      const name =
-        output?.name ??
-        (agent !== undefined ? resourceName(agent, webhookId) : "");
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
+      const webhookId = yield* toResourceId(id, olds?.webhookId, output?.webhookId);
+      const name = output?.name ?? (agent !== undefined ? resourceName(agent, webhookId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -387,34 +356,24 @@ export const AgentsWebhookProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
-      const webhookId = yield* toResourceId(
-        id,
-        news.webhookId,
-        output?.webhookId,
-      );
+      const webhookId = yield* toResourceId(id, news.webhookId, output?.webhookId);
       const name = output?.name ?? resourceName(agent, webhookId);
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -438,11 +397,7 @@ export const AgentsWebhookProvider = () =>
             parent: agent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -455,11 +410,9 @@ export const AgentsWebhookProvider = () =>
       const timeoutChanged = !sameText(current.timeout, news.timeout);
       const disabledChanged = (current.disabled === true) !== disabled;
       const genericChanged =
-        fingerprint(genericOf(current.genericWebService)) !==
-        fingerprint(news.genericWebService);
+        fingerprint(genericOf(current.genericWebService)) !== fingerprint(news.genericWebService);
       const directoryChanged =
-        fingerprint(directoryOf(current.serviceDirectory)) !==
-        fingerprint(news.serviceDirectory);
+        fingerprint(directoryOf(current.serviceDirectory)) !== fingerprint(news.serviceDirectory);
 
       if (
         displayChanged ||

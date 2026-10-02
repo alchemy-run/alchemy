@@ -128,8 +128,7 @@ export const RepositoriesIssue = Resource<RepositoriesIssue>(
   "GCP.SecureSourceManager.RepositoriesIssue",
 );
 
-const resourceName = (repository: string, issueId: string) =>
-  `${repository}/issues/${issueId}`;
+const resourceName = (repository: string, issueId: string) => `${repository}/issues/${issueId}`;
 
 const toAttrs = (item: ssm.Issue, project: string, region: string) => {
   const name = item.name ?? "";
@@ -170,12 +169,7 @@ const listOnRepository = (repository: string) =>
  * legacy ownership marker for `id`). Recovers an issue whose create
  * succeeded but was never recorded.
  */
-const findMatching = (
-  repository: string,
-  id: string,
-  title: string,
-  body: string | undefined,
-) =>
+const findMatching = (repository: string, id: string, title: string, body: string | undefined) =>
   Effect.gen(function* () {
     if (repository.length === 0) return undefined;
     const items = yield* listOnRepository(repository);
@@ -191,22 +185,13 @@ const findMatching = (
 const listOwned = (project: string, region: string) =>
   forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasOwnershipMarker(item.body)),
-      ),
+      Effect.map((items) => items.filter((item) => hasOwnershipMarker(item.body))),
     ),
   );
 
 export const RepositoriesIssueProvider = () =>
   Provider.succeed(RepositoriesIssue, {
-    stables: [
-      "name",
-      "issueId",
-      "repository",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "issueId", "repository", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -218,27 +203,16 @@ export const RepositoriesIssueProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.issueId ?? output?.issueId,
         nextId: news.issueId ?? olds?.issueId ?? output?.issueId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.repository ?? output?.repository,
-        nextParent: expandName(
-          news.repository,
-          env.project,
-          location,
-          "repositories",
-        ),
+        nextParent: expandName(news.repository, env.project, location, "repositories"),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandName(
         olds?.repository ?? output?.repository ?? "",
         env.project,
@@ -248,9 +222,7 @@ export const RepositoriesIssueProvider = () =>
       const issueId = olds?.issueId ?? output?.issueId;
       const name =
         output?.name ??
-        (issueId !== undefined && repository.length > 0
-          ? resourceName(repository, issueId)
-          : "");
+        (issueId !== undefined && repository.length > 0 ? resourceName(repository, issueId) : "");
       let existing = yield* getByName(name);
       const recorded = existing !== undefined && output !== undefined;
       if (existing === undefined && olds !== undefined) {
@@ -260,38 +232,23 @@ export const RepositoriesIssueProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.body);
       // A matching issue found without a recorded id could be anyone's.
-      return recorded || (yield* hasAlchemyLabels(id, labels))
-        ? attrs
-        : Unowned(attrs);
+      return recorded || (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: ssm.Issue) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: ssm.Issue) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandName(
-        news.repository,
-        env.project,
-        location,
-        "repositories",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandName(news.repository, env.project, location, "repositories");
       const body = news.body;
       const name =
-        output?.name ??
-        (news.issueId !== undefined
-          ? resourceName(repository, news.issueId)
-          : "");
+        output?.name ?? (news.issueId !== undefined ? resourceName(repository, news.issueId) : "");
 
       let current = yield* getByName(name);
       if (current === undefined) {
@@ -312,10 +269,7 @@ export const RepositoriesIssueProvider = () =>
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
           if (createdName !== undefined) {
-            current = yield* waitUntilExists(
-              getByName(createdName),
-              createdName,
-            );
+            current = yield* waitUntilExists(getByName(createdName), createdName);
           }
         }
         if (current === undefined) {

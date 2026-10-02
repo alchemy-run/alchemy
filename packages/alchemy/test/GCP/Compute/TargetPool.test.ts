@@ -1,23 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  targetPoolName: string,
-) =>
+const waitUntilGone = (project: string, region: string, targetPoolName: string) =>
   compute.getTargetPools({ project, region, targetPool: targetPoolName }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -85,11 +78,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.region,
-        created.targetPoolName,
-      );
+      const gone = yield* waitUntilGone(created.project, created.region, created.targetPoolName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },

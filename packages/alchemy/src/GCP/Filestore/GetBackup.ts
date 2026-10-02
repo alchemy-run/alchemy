@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Backup } from "./Backup.ts";
 
-export interface GetBackupRequest extends Omit<
-  file.GetProjectsLocationsBackupsRequest,
-  "name"
-> {}
+export interface GetBackupRequest extends Omit<file.GetProjectsLocationsBackupsRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud Filestore `backups.get`.
@@ -33,11 +30,7 @@ export interface GetBackup extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetBackupRequest,
-    ) => Effect.Effect<
-      file.Backup,
-      file.GetProjectsLocationsBackupsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<file.Backup, file.GetProjectsLocationsBackupsError, RuntimeContext>
   >
 > {}
 

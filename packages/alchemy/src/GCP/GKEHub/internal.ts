@@ -3,23 +3,19 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DEFAULT_LOCATION = "global";
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.GKEHub.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.GKEHub.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.GKEHub.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.GKEHub.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -71,32 +67,19 @@ export const parseName = (name: string, collection: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const membershipsAt = parts.lastIndexOf("memberships");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
         : parts.slice(0, Math.max(0, parts.length - 1)).join("/"),
-    membershipId:
-      membershipsAt >= 0 && parts[membershipsAt + 1]
-        ? parts[membershipsAt + 1]!
-        : "",
+    membershipId: membershipsAt >= 0 && parts[membershipsAt + 1] ? parts[membershipsAt + 1]! : "",
   };
 };
 
-export const membershipName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const membershipName = (value: string, project: string, location: string) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${location}/memberships/${value}`;
 };
@@ -105,9 +88,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -130,13 +112,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -175,11 +154,9 @@ export const replaceOnIdentity = (input: {
  * fleet config across member clusters; a few minutes is typical.
  */
 export const waitForOperation = (operation: gkehub.Operation) =>
-  waitForGcpOperation(
-    operation,
-    (name) => gkehub.getProjectsLocationsOperations({ name }),
-    { budget: "10 minutes" },
-  );
+  waitForGcpOperation(operation, (name) => gkehub.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  });
 
 export const waitUntilExists = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,

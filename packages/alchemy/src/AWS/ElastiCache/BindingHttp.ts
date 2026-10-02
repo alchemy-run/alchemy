@@ -19,8 +19,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
  * data for every snapshot-addressed operation, so snapshot-scoped grants use
  * this wildcard.
  */
-export const SERVERLESS_SNAPSHOT_ARN_WILDCARD =
-  "arn:aws:elasticache:*:*:serverlesscachesnapshot:*";
+export const SERVERLESS_SNAPSHOT_ARN_WILDCARD = "arn:aws:elasticache:*:*:serverlesscachesnapshot:*";
 
 /**
  * Build the impl Effect for an account-level operation (snapshot management,

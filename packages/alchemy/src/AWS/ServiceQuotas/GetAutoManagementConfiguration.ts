@@ -34,7 +34,6 @@ export interface GetAutoManagementConfiguration extends Binding.Service<
     >
   >
 > {}
-export const GetAutoManagementConfiguration =
-  Binding.Service<GetAutoManagementConfiguration>(
-    "AWS.ServiceQuotas.GetAutoManagementConfiguration",
-  );
+export const GetAutoManagementConfiguration = Binding.Service<GetAutoManagementConfiguration>(
+  "AWS.ServiceQuotas.GetAutoManagementConfiguration",
+);

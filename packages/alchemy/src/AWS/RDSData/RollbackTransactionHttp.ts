@@ -1,10 +1,7 @@
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Layer from "effect/Layer";
 import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
-import {
-  RollbackTransaction,
-  type RollbackTransactionRequest,
-} from "./RollbackTransaction.ts";
+import { RollbackTransaction, type RollbackTransactionRequest } from "./RollbackTransaction.ts";
 
 export const RollbackTransactionHttp = Layer.effect(
   RollbackTransaction,

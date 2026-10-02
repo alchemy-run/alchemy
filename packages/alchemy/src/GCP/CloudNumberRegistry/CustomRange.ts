@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -175,13 +170,9 @@ export type CustomRange = Resource<
  * @resource
  * @category CloudNumberRegistry
  */
-export const CustomRange = Resource<CustomRange>(
-  "GCP.CloudNumberRegistry.CustomRange",
-);
+export const CustomRange = Resource<CustomRange>("GCP.CloudNumberRegistry.CustomRange");
 
-const toAttributes = (
-  attributes: readonly cnr.Attribute[] | undefined,
-): CustomRangeAttribute[] =>
+const toAttributes = (attributes: readonly cnr.Attribute[] | undefined): CustomRangeAttribute[] =>
   (attributes ?? []).map((attribute) => ({
     key: attribute.key,
     value: attribute.value,
@@ -249,12 +240,9 @@ export const CustomRangeProvider = () =>
       const nextV6 = news.ipv6CidrRange ?? previousV6;
       return replaceOnIdentity({
         previousId: olds?.customRangeId ?? output?.customRangeId,
-        nextId:
-          news.customRangeId ?? olds?.customRangeId ?? output?.customRangeId,
+        nextId: news.customRangeId ?? olds?.customRangeId ?? output?.customRangeId,
         previousLocation: normalizeLocation(olds?.location ?? output?.location),
-        nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
-        ),
+        nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
         extra:
           (news.realm !== undefined &&
             previousRealm !== undefined &&
@@ -264,12 +252,8 @@ export const CustomRangeProvider = () =>
             !sameRef(previousParent, news.parentRange)) ||
           (news.realm !== undefined && previousParent !== undefined) ||
           (news.parentRange !== undefined && previousRealm !== undefined) ||
-          (previousV4 !== undefined &&
-            nextV4 !== undefined &&
-            previousV4 !== nextV4) ||
-          (previousV6 !== undefined &&
-            nextV6 !== undefined &&
-            previousV6 !== nextV6),
+          (previousV4 !== undefined && nextV4 !== undefined && previousV4 !== nextV4) ||
+          (previousV6 !== undefined && nextV6 !== undefined && previousV6 !== nextV6),
       });
     }),
 
@@ -282,15 +266,11 @@ export const CustomRangeProvider = () =>
         "range",
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, customRangeId);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, customRangeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -309,12 +289,7 @@ export const CustomRangeProvider = () =>
         "range",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        customRangeId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, customRangeId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -363,8 +338,7 @@ export const CustomRangeProvider = () =>
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.description, news.description) && "description",
         attributes !== undefined &&
-          fingerprint(toAttributes(current.attributes)) !==
-            fingerprint(attributes) &&
+          fingerprint(toAttributes(current.attributes)) !== fingerprint(attributes) &&
           "attributes",
       ]);
 
@@ -380,10 +354,7 @@ export const CustomRangeProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

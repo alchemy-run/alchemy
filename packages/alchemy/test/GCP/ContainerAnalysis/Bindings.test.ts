@@ -1,16 +1,13 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { currentProject, TEST_RESOURCE_URI } from "./common.ts";
-import ContainerAnalysisBindingsHost, {
-  Authority,
-  Signed,
-} from "./fixtures/bindings-host.ts";
+import ContainerAnalysisBindingsHost, { Authority, Signed } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -29,9 +26,7 @@ const projectRoles = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -41,12 +36,7 @@ const projectRoles = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable)(
   "ContainerAnalysis Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:containeranalysis",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:containeranalysis", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -80,10 +70,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the note as the host's service account, granted on the note only",
         (_stack) =>
           Effect.gen(function* () {
-            const note = yield* expectProbe<containeranalysis.Note>(
-              baseUrl,
-              "getNote",
-            );
+            const note = yield* expectProbe<containeranalysis.Note>(baseUrl, "getNote");
             const live = yield* containeranalysis.getProjectsNotes({
               name: noteName,
             });
@@ -96,15 +83,13 @@ describe.skipIf(!dockerAvailable)(
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/containeranalysis.notes.viewer"]);
-            expect(
-              (yield* projectRoles).map((grant) => grant.role),
-            ).not.toContain("roles/containeranalysis.notes.viewer");
+            expect((yield* projectRoles).map((grant) => grant.role)).not.toContain(
+              "roles/containeranalysis.notes.viewer",
+            );
           }),
         {
           tags: ["provider:gcp", "provider:gcp:containeranalysis", "live"],

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as agentidentity from "@distilled.cloud/gcp/agentidentity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
 
@@ -22,9 +19,7 @@ const entitled = !!process.env.GCP_TEST_AGENT_IDENTITY;
 
 const waitUntilGone = (name: string) =>
   agentidentity.getProjectsLocationsAuthProviders({ name }).pipe(
-    Effect.map((item) =>
-      item.deleted === true ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((item) => (item.deleted === true ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -136,10 +131,9 @@ test.provider.skipIf(!entitled)(
       expect(updated.description).toEqual("alchemy maps key v2");
       expect(updated.labels).toMatchObject({ env: "prod", role: "maps" });
 
-      const fetchedUpdate =
-        yield* agentidentity.getProjectsLocationsAuthProviders({
-          name: created.name,
-        });
+      const fetchedUpdate = yield* agentidentity.getProjectsLocationsAuthProviders({
+        name: created.name,
+      });
       expect(fetchedUpdate.description).toEqual("alchemy maps key v2");
       expect(fetchedUpdate.labels?.env).toEqual("prod");
       expect(fetchedUpdate.labels?.role).toEqual("maps");

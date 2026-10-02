@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -32,8 +27,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type DataProductAccessGroup =
-  dataplex.GoogleCloudDataplexV1DataProductAccessGroup;
+export type DataProductAccessGroup = dataplex.GoogleCloudDataplexV1DataProductAccessGroup;
 
 export type DataProductAccessApprovalConfig =
   dataplex.GoogleCloudDataplexV1DataProductAccessApprovalConfig;
@@ -104,9 +98,7 @@ export type DataProduct = Resource<
     /** Icon payload. */
     icon: string | undefined;
     /** Access groups. */
-    accessGroups:
-      | Record<string, DataProductAccessGroup | undefined>
-      | undefined;
+    accessGroups: Record<string, DataProductAccessGroup | undefined> | undefined;
     /** Access-approval configuration. */
     accessApprovalConfig: DataProductAccessApprovalConfig | undefined;
     /** Number of attached data assets. */
@@ -147,16 +139,10 @@ export type DataProduct = Resource<
  */
 export const DataProduct = Resource<DataProduct>("GCP.Dataplex.DataProduct");
 
-const resourceName = (
-  project: string,
-  location: string,
-  dataProductId: string,
-) => `projects/${project}/locations/${location}/dataProducts/${dataProductId}`;
+const resourceName = (project: string, location: string, dataProductId: string) =>
+  `projects/${project}/locations/${location}/dataProducts/${dataProductId}`;
 
-const toAttrs = (
-  product: dataplex.GoogleCloudDataplexV1DataProduct,
-  project: string,
-) => {
+const toAttrs = (product: dataplex.GoogleCloudDataplexV1DataProduct, project: string) => {
   const name = product.name ?? "";
   const parsed = parseName(name, "dataProducts");
   return {
@@ -193,9 +179,7 @@ const listProducts = (project: string, region: string) => {
       }),
       (page) => page.dataProducts,
     ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
+      Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
   return listAtLocation(project, region, collect);
@@ -206,26 +190,15 @@ export const listAlchemyDataProducts = (project: string, region: string) =>
 
 export const DataProductProvider = () =>
   Provider.succeed(DataProduct, {
-    stables: [
-      "name",
-      "dataProductId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "dataProductId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataProductId ?? output?.dataProductId,
-        nextId:
-          news.dataProductId ?? olds?.dataProductId ?? output?.dataProductId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.dataProductId ?? olds?.dataProductId ?? output?.dataProductId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -241,18 +214,12 @@ export const DataProductProvider = () =>
         output?.dataProductId,
         "dataproduct",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataProductId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, dataProductId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -270,10 +237,7 @@ export const DataProductProvider = () =>
         output?.dataProductId,
         "dataproduct",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, dataProductId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -311,19 +275,15 @@ export const DataProductProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== news.displayName;
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== news.displayName;
       const ownersChanged =
         fingerprint([...(current.ownerEmails ?? [])].sort()) !==
         fingerprint([...(news.ownerEmails ?? [])].sort());
       const iconChanged = (current.icon ?? "") !== (news.icon ?? "");
-      const groupsChanged =
-        fingerprint(current.accessGroups) !== fingerprint(news.accessGroups);
+      const groupsChanged = fingerprint(current.accessGroups) !== fingerprint(news.accessGroups);
       const approvalChanged =
-        fingerprint(current.accessApprovalConfig) !==
-        fingerprint(news.accessApprovalConfig);
+        fingerprint(current.accessApprovalConfig) !== fingerprint(news.accessApprovalConfig);
 
       if (
         labelsChanged ||
@@ -360,10 +320,7 @@ export const DataProductProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

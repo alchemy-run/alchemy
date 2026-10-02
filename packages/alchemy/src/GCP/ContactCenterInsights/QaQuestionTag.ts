@@ -93,9 +93,7 @@ export type QaQuestionTag = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const QaQuestionTag = Resource<QaQuestionTag>(
-  "GCP.ContactCenterInsights.QaQuestionTag",
-);
+export const QaQuestionTag = Resource<QaQuestionTag>("GCP.ContactCenterInsights.QaQuestionTag");
 
 export class QaQuestionTagNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaQuestionTagNotResolved",
@@ -103,16 +101,10 @@ export class QaQuestionTagNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  qaQuestionTagId: string,
-) => `${locationParent(project, location)}/qaQuestionTags/${qaQuestionTagId}`;
+const resourceName = (project: string, location: string, qaQuestionTagId: string) =>
+  `${locationParent(project, location)}/qaQuestionTags/${qaQuestionTagId}`;
 
-const toAttrs = (
-  tag: cci.GoogleCloudContactcenterinsightsV1QaQuestionTag,
-  project: string,
-) => {
+const toAttrs = (tag: cci.GoogleCloudContactcenterinsightsV1QaQuestionTag, project: string) => {
   const name = tag.name ?? "";
   const parsed = parseOwnership(tag.displayName);
   return {
@@ -147,9 +139,7 @@ const listAt = (parent: string, project: string) =>
 const findByDisplayName = (parent: string, displayName: string) =>
   cci.listProjectsLocationsQaQuestionTags({ parent }).pipe(
     Effect.map((page) =>
-      (page.qaQuestionTags ?? []).find(
-        (tag) => tag.displayName === displayName,
-      ),
+      (page.qaQuestionTags ?? []).find((tag) => tag.displayName === displayName),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -194,11 +184,8 @@ export const QaQuestionTagProvider = () =>
         olds?.qaQuestionTagId,
         output?.qaQuestionTagId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, qaQuestionTagId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, qaQuestionTagId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
@@ -209,25 +196,18 @@ export const QaQuestionTagProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const qaQuestionTagId = yield* toResourceId(
         id,
@@ -251,8 +231,7 @@ export const QaQuestionTagProvider = () =>
             qaQuestionTagId,
             body: {
               displayName,
-              qaQuestionIds:
-                qaQuestionIds.length > 0 ? qaQuestionIds : undefined,
+              qaQuestionIds: qaQuestionIds.length > 0 ? qaQuestionIds : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
@@ -265,10 +244,7 @@ export const QaQuestionTagProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const questionsChanged = !jsonEqual(
-        current.qaQuestionIds ?? [],
-        qaQuestionIds,
-      );
+      const questionsChanged = !jsonEqual(current.qaQuestionIds ?? [], qaQuestionIds);
 
       if (displayChanged || questionsChanged) {
         const operation = yield* cci.patchProjectsLocationsQaQuestionTags({

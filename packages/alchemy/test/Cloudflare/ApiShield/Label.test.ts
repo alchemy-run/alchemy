@@ -1,24 +1,20 @@
+import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test label names (Cloudflare caps them at 24 chars).
 const NAME_DEFAULT = "alch-apishield-default";
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -192,9 +186,9 @@ test.provider(
 
       const label = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.ApiShield.Label("GeneratedNameLabel", {
-            zoneId,
-          }).pipe(adopt(true));
+          return yield* Cloudflare.ApiShield.Label("GeneratedNameLabel", { zoneId }).pipe(
+            adopt(true),
+          );
         }),
       );
 
@@ -247,14 +241,10 @@ test.provider(
       // lags the zone list endpoint. Retry the whole enumeration on either, so
       // the test rides out both instead of asserting on one snapshot.
       const appears = (all: readonly { zoneId: string; name: string }[]) =>
-        all.some(
-          (label) => label.zoneId === zoneId && label.name === deployed.name,
-        );
+        all.some((label) => label.zoneId === zoneId && label.name === deployed.name);
       const all = yield* provider.list().pipe(
         Effect.flatMap((rows) =>
-          appears(rows)
-            ? Effect.succeed(rows)
-            : Effect.fail({ _tag: "LabelNotListed" as const }),
+          appears(rows) ? Effect.succeed(rows) : Effect.fail({ _tag: "LabelNotListed" as const }),
         ),
         Effect.retry({
           while: (e) => e._tag === "Forbidden" || e._tag === "LabelNotListed",

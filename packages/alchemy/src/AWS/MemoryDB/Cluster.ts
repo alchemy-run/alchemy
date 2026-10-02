@@ -215,21 +215,14 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeClusters({ ClusterName: name })
-          .pipe(
-            Effect.catchTag("ClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.Clusters?.[0];
       });
 
       // Bounded readiness wait. MemoryDB cluster provisioning/modification
       // typically completes in 10-15 minutes; budget ~20 min (80 * 15s).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(80),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ARN) {
@@ -237,9 +230,7 @@ export const ClusterProvider = () =>
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `Cluster '${name}' not available (status: ${cluster.Status})`,
-                ),
+                new Error(`Cluster '${name}' not available (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -251,10 +242,7 @@ export const ClusterProvider = () =>
       // Wait for a cluster to leave a transitional state before delete. Ends
       // when the cluster is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(80),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(80)]);
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (
@@ -263,9 +251,7 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(
-                  `Cluster '${name}' still settling (status: ${cluster.Status})`,
-                ),
+                new Error(`Cluster '${name}' still settling (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -276,9 +262,7 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: memorydb.Cluster) {
         if (!cluster.Name || !cluster.ARN) {
-          return yield* Effect.fail(
-            new Error(`Cluster '${cluster.Name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`Cluster '${cluster.Name}' is missing its ARN`));
         }
         return {
           clusterName: cluster.Name,
@@ -337,14 +321,11 @@ export const ClusterProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.clusterName ?? (yield* toName(id, olds ?? { aclName: "" }));
+          const name = output?.clusterName ?? (yield* toName(id, olds ?? { aclName: "" }));
           const cluster = yield* readCluster(name);
           if (!cluster?.ARN) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -353,9 +334,7 @@ export const ClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
           // The wire field is whole days.
-          const snapshotRetentionDays = toWireDays(
-            props.snapshotRetentionLimit,
-          );
+          const snapshotRetentionDays = toWireDays(props.snapshotRetentionLimit);
 
           // 1. Observe — cloud state is authoritative.
           let observed = yield* readCluster(name);
@@ -391,9 +370,7 @@ export const ClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.void));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -404,10 +381,7 @@ export const ClusterProvider = () =>
           // 3. Sync — compute the update delta from OBSERVED state.
           const update: memorydb.UpdateClusterRequest = { ClusterName: name };
           let mutated = false;
-          if (
-            props.description !== undefined &&
-            props.description !== observed.Description
-          ) {
+          if (props.description !== undefined && props.description !== observed.Description) {
             update.Description = props.description;
             mutated = true;
           }
@@ -442,17 +416,11 @@ export const ClusterProvider = () =>
             update.SnapshotWindow = props.snapshotWindow;
             mutated = true;
           }
-          if (
-            props.nodeType !== undefined &&
-            props.nodeType !== observed.NodeType
-          ) {
+          if (props.nodeType !== undefined && props.nodeType !== observed.NodeType) {
             update.NodeType = props.nodeType;
             mutated = true;
           }
-          if (
-            props.engineVersion !== undefined &&
-            props.engineVersion !== observed.EngineVersion
-          ) {
+          if (props.engineVersion !== undefined && props.engineVersion !== observed.EngineVersion) {
             update.EngineVersion = props.engineVersion;
             mutated = true;
           }
@@ -463,24 +431,15 @@ export const ClusterProvider = () =>
             update.ParameterGroupName = props.parameterGroupName;
             mutated = true;
           }
-          if (
-            props.aclName !== undefined &&
-            props.aclName !== observed.ACLName
-          ) {
+          if (props.aclName !== undefined && props.aclName !== observed.ACLName) {
             update.ACLName = props.aclName;
             mutated = true;
           }
-          if (
-            props.ipDiscovery !== undefined &&
-            props.ipDiscovery !== observed.IpDiscovery
-          ) {
+          if (props.ipDiscovery !== undefined && props.ipDiscovery !== observed.IpDiscovery) {
             update.IpDiscovery = props.ipDiscovery;
             mutated = true;
           }
-          if (
-            props.numShards !== undefined &&
-            props.numShards !== observed.NumberOfShards
-          ) {
+          if (props.numShards !== undefined && props.numShards !== observed.NumberOfShards) {
             update.ShardConfiguration = { ShardCount: props.numShards };
             mutated = true;
           }
@@ -520,10 +479,7 @@ export const ClusterProvider = () =>
             Effect.catchTag("ClusterNotFoundFault", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "InvalidClusterStateFault",
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
             }),
             Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
           );
@@ -535,14 +491,11 @@ export const ClusterProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.Clusters ?? []).filter(
-                  (cluster) =>
-                    cluster.Name !== undefined && cluster.ARN !== undefined,
+                  (cluster) => cluster.Name !== undefined && cluster.ARN !== undefined,
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((cluster) => toAttrs(cluster), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((cluster) => toAttrs(cluster), { concurrency: 4 })),
           ),
       };
     }),

@@ -129,10 +129,7 @@ export const RuleSet = Resource<RuleSet>("GCP.ContentWarehouse.RuleSet");
 const resourceName = (project: string, location: string, ruleSetId: string) =>
   `${locationParent(project, location)}/ruleSets/${ruleSetId}`;
 
-const toAttrs = (
-  item: cw.GoogleCloudContentwarehouseV1RuleSet,
-  project: string,
-) => {
+const toAttrs = (item: cw.GoogleCloudContentwarehouseV1RuleSet, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "ruleSets");
   return {
@@ -159,10 +156,7 @@ const listAt = (parent: string) =>
     (page) => page.ruleSets,
   ).pipe(ignoreList([] as cw.GoogleCloudContentwarehouseV1RuleSet[]));
 
-const findOwned = (
-  id: string,
-  items: readonly cw.GoogleCloudContentwarehouseV1RuleSet[],
-) =>
+const findOwned = (id: string, items: readonly cw.GoogleCloudContentwarehouseV1RuleSet[]) =>
   Effect.gen(function* () {
     for (const item of items) {
       if (yield* ownedByAlchemy(id, item.description)) return item;
@@ -171,14 +165,10 @@ const findOwned = (
   });
 
 const listOwned = (project: string) =>
-  Effect.forEach(
-    LIST_LOCATIONS,
-    (location) => listAt(locationParent(project, location)),
-    { concurrency: 2 },
-  ).pipe(
-    Effect.map((groups) =>
-      groups.flat().filter((item) => hasOwnershipMarker(item.description)),
-    ),
+  Effect.forEach(LIST_LOCATIONS, (location) => listAt(locationParent(project, location)), {
+    concurrency: 2,
+  }).pipe(
+    Effect.map((groups) => groups.flat().filter((item) => hasOwnershipMarker(item.description))),
   );
 
 export const RuleSetProvider = () =>
@@ -200,8 +190,7 @@ export const RuleSetProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const ruleSetId = olds?.ruleSetId ?? output?.ruleSetId;
       const name =
-        output?.name ??
-        (ruleSetId ? resourceName(env.project, location, ruleSetId) : "");
+        output?.name ?? (ruleSetId ? resourceName(env.project, location, ruleSetId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined) {
         const listed = yield* listAt(locationParent(env.project, location));
@@ -209,9 +198,7 @@ export const RuleSetProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -226,22 +213,14 @@ export const RuleSetProvider = () =>
       const location = normalizeLocation(news.location ?? output?.location);
       const parent = locationParent(env.project, location);
       yield* ensureProject(parent);
-      const ruleSetId = yield* toPhysicalId(
-        id,
-        news.ruleSetId,
-        output?.ruleSetId,
-        "rules",
-      );
+      const ruleSetId = yield* toPhysicalId(id, news.ruleSetId, output?.ruleSetId, "rules");
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const source = news.source ?? "alchemy";
       const rules = news.rules ?? DEFAULT_RULES;
 
-      const findInParent = listAt(parent).pipe(
-        Effect.flatMap((items) => findOwned(id, items)),
-      );
-      let current =
-        (yield* getByName(output?.name ?? "")) ?? (yield* findInParent);
+      const findInParent = listAt(parent).pipe(Effect.flatMap((items) => findOwned(id, items)));
+      let current = (yield* getByName(output?.name ?? "")) ?? (yield* findInParent);
 
       if (current === undefined) {
         const created = yield* cw
@@ -253,10 +232,7 @@ export const RuleSetProvider = () =>
         current =
           created ??
           (yield* findInParent) ??
-          (yield* waitUntilExists(
-            findInParent,
-            resourceName(env.project, location, ruleSetId),
-          ));
+          (yield* waitUntilExists(findInParent, resourceName(env.project, location, ruleSetId)));
       }
 
       if (current === undefined) {

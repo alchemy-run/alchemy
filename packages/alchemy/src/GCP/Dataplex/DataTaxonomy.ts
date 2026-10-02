@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -135,17 +130,10 @@ export type DataTaxonomy = Resource<
  */
 export const DataTaxonomy = Resource<DataTaxonomy>("GCP.Dataplex.DataTaxonomy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  dataTaxonomyId: string,
-) =>
+const resourceName = (project: string, location: string, dataTaxonomyId: string) =>
   `projects/${project}/locations/${location}/dataTaxonomies/${dataTaxonomyId}`;
 
-const toAttrs = (
-  taxonomy: dataplex.GoogleCloudDataplexV1DataTaxonomy,
-  project: string,
-) => {
+const toAttrs = (taxonomy: dataplex.GoogleCloudDataplexV1DataTaxonomy, project: string) => {
   const name = taxonomy.name ?? "";
   const parsed = parseName(name, "dataTaxonomies");
   return {
@@ -178,11 +166,7 @@ const listTaxonomies = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.dataTaxonomies,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect);
 };
 
@@ -195,12 +179,8 @@ export const DataTaxonomyProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.dataTaxonomyId ?? output?.dataTaxonomyId,
-        nextId:
-          news.dataTaxonomyId ?? olds?.dataTaxonomyId ?? output?.dataTaxonomyId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.dataTaxonomyId ?? olds?.dataTaxonomyId ?? output?.dataTaxonomyId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -216,18 +196,12 @@ export const DataTaxonomyProvider = () =>
         output?.dataTaxonomyId,
         "taxonomy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataTaxonomyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, dataTaxonomyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -245,10 +219,7 @@ export const DataTaxonomyProvider = () =>
         output?.dataTaxonomyId,
         "taxonomy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, dataTaxonomyId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -285,10 +256,8 @@ export const DataTaxonomyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
 
       if (labelsChanged || descriptionChanged || displayNameChanged) {
         const operation = yield* retryQuota(
@@ -311,10 +280,7 @@ export const DataTaxonomyProvider = () =>
           }),
         );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -327,8 +293,7 @@ export const DataTaxonomyProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "TooManyRequests",
+            while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),

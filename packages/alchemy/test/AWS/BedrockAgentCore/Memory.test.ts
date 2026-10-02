@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Memory } from "@/AWS/BedrockAgentCore";
-import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Memory } from "@/AWS/BedrockAgentCore";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,9 +16,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        control.getMemory({
-          memoryId: "alchemy_nonexistent_probe-0000000000",
-        }),
+        control.getMemory({ memoryId: "alchemy_nonexistent_probe-0000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -29,22 +27,13 @@ const assertMemoryGone = (memoryId: string) =>
   Effect.gen(function* () {
     const status = yield* control.getMemory({ memoryId }).pipe(
       Effect.map((r) => r.memory.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`memory still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`memory still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A memory takes ~2.5 minutes to reach ACTIVE — the full lifecycle is gated
@@ -72,32 +61,23 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(memory.status).toBe("ACTIVE");
 
       // out-of-band verification via distilled
-      const observed = yield* control.getMemory({
-        memoryId: memory.memoryId,
-      });
+      const observed = yield* control.getMemory({ memoryId: memory.memoryId });
       expect(observed.memory.status).toBe("ACTIVE");
       expect(observed.memory.eventExpiryDuration).toBe(7);
 
       // tags observed on the resource
-      const tags = yield* control.listTagsForResource({
-        resourceArn: memory.memoryArn,
-      });
+      const tags = yield* control.listTagsForResource({ resourceArn: memory.memoryArn });
       expect(tags.tags?.fixture).toBe("agentcore-memory");
       expect(tags.tags?.["alchemy::id"]).toBe("SessionMemory");
 
       // update in place — same memory id, new expiry
       const { memory: updated } = yield* stack.deploy(deployMemory("14 days"));
       expect(updated.memoryId).toBe(memory.memoryId);
-      const observedUpdated = yield* control.getMemory({
-        memoryId: memory.memoryId,
-      });
+      const observedUpdated = yield* control.getMemory({ memoryId: memory.memoryId });
       expect(observedUpdated.memory.eventExpiryDuration).toBe(14);
 
       yield* stack.destroy();
       yield* assertMemoryGone(memory.memoryId);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:bedrockagentcore", "live"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:bedrockagentcore", "live"], timeout: 600_000 },
 );

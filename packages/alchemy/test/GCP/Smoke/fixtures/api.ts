@@ -1,17 +1,11 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 import SmokeJob from "./job.ts";
-import {
-  Jobs,
-  Store,
-  Uploads,
-  type JobMessage,
-} from "./serverless-resources.ts";
+import { Jobs, Store, Uploads, type JobMessage } from "./serverless-resources.ts";
 
-const notFound = () =>
-  HttpServerResponse.json({ error: "not found" }, { status: 404 });
+const notFound = () => HttpServerResponse.json({ error: "not found" }, { status: 404 });
 
 /**
  * Public API Function. One route per behavior of the serverless story:
@@ -159,8 +153,7 @@ export default class SmokeApi extends GCP.Function<SmokeApi>()(
           const operation = yield* runJob();
           return yield* HttpServerResponse.json({
             operation: operation.name,
-            execution: (operation.metadata as { name?: string } | undefined)
-              ?.name,
+            execution: (operation.metadata as { name?: string } | undefined)?.name,
           });
         }
 

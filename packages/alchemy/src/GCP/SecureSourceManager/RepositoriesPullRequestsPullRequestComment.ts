@@ -198,11 +198,7 @@ const expandPullRequest = (
 const ownershipBodyOf = (item: ssm.PullRequestComment) =>
   item.comment?.body ?? item.review?.body ?? item.code?.body;
 
-const toAttrs = (
-  item: ssm.PullRequestComment,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: ssm.PullRequestComment, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "pullRequestComments", region);
   const commentBody = parseOwnership(item.comment?.body);
@@ -214,8 +210,7 @@ const toAttrs = (
     pullRequest: parsed.parent,
     project: parsed.project || project,
     location: parsed.location,
-    comment:
-      item.comment === undefined ? undefined : { body: commentBody.text ?? "" },
+    comment: item.comment === undefined ? undefined : { body: commentBody.text ?? "" },
     review:
       item.review === undefined
         ? undefined
@@ -270,9 +265,7 @@ const encodeBodies = (
   };
 };
 
-const desiredBody = (
-  news: RepositoriesPullRequestsPullRequestCommentProps,
-): string | undefined =>
+const desiredBody = (news: RepositoriesPullRequestsPullRequestCommentProps): string | undefined =>
   news.review?.body ?? news.code?.body ?? news.comment?.body;
 
 const getByName = (name: string) =>
@@ -315,11 +308,7 @@ const listOnRepository = (repository: string) =>
  * ownership marker for `id`). Recovers a comment whose create succeeded but
  * was never recorded.
  */
-const findMatching = (
-  pullRequest: string,
-  id: string,
-  body: string | undefined,
-) =>
+const findMatching = (pullRequest: string, id: string, body: string | undefined) =>
   Effect.gen(function* () {
     if (pullRequest.length === 0) return undefined;
     const items = yield* listOnPullRequest(pullRequest);
@@ -333,22 +322,13 @@ const findMatching = (
 const listOwned = (project: string, region: string) =>
   forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasOwnershipMarker(ownershipBodyOf(item))),
-      ),
+      Effect.map((items) => items.filter((item) => hasOwnershipMarker(ownershipBodyOf(item)))),
     ),
   );
 
 export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
   Provider.succeed(RepositoriesPullRequestsPullRequestComment, {
-    stables: [
-      "name",
-      "commentId",
-      "pullRequest",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "commentId", "pullRequest", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -358,11 +338,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
         env.region,
       );
       const nextKind =
-        news.review !== undefined
-          ? "review"
-          : news.code !== undefined
-            ? "code"
-            : "comment";
+        news.review !== undefined ? "review" : news.code !== undefined ? "code" : "comment";
       const previousKind =
         olds?.review !== undefined || output?.review !== undefined
           ? "review"
@@ -374,26 +350,15 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.commentId ?? output?.commentId,
         nextId: news.commentId ?? olds?.commentId ?? output?.commentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.pullRequest ?? output?.pullRequest,
-        nextParent: expandPullRequest(
-          news.pullRequest,
-          news.repository,
-          env.project,
-          location,
-        ),
+        nextParent: expandPullRequest(news.pullRequest, news.repository, env.project, location),
         extra:
           previousKind !== nextKind ||
           fingerprint(news.code?.position) !==
             fingerprint(olds?.code?.position ?? output?.code?.position) ||
-          !sameText(
-            news.code?.reply,
-            olds?.code?.reply ?? output?.code?.reply,
-          ) ||
+          !sameText(news.code?.reply, olds?.code?.reply ?? output?.code?.reply) ||
           !sameText(
             news.review?.actionType,
             olds?.review?.actionType ?? output?.review?.actionType,
@@ -403,10 +368,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const pullRequest = expandPullRequest(
         olds?.pullRequest ?? output?.pullRequest ?? "",
         olds?.repository,
@@ -428,26 +390,19 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(ownershipBodyOf(existing));
       // A matching comment found without a recorded id could be anyone's.
-      return recorded || (yield* hasAlchemyLabels(id, labels))
-        ? attrs
-        : Unowned(attrs);
+      return recorded || (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: ssm.PullRequestComment) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: ssm.PullRequestComment) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const pullRequest = expandPullRequest(
         news.pullRequest,
         news.repository,
@@ -457,9 +412,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       const encoded = encodeBodies(news);
       const name =
         output?.name ??
-        (news.commentId !== undefined
-          ? resourceName(pullRequest, news.commentId)
-          : "");
+        (news.commentId !== undefined ? resourceName(pullRequest, news.commentId) : "");
 
       let current = yield* getByName(name);
       if (current === undefined) {
@@ -477,10 +430,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
           if (createdName !== undefined) {
-            current = yield* waitUntilExists(
-              getByName(createdName),
-              createdName,
-            );
+            current = yield* waitUntilExists(getByName(createdName), createdName);
           }
         }
         if (current === undefined) {
@@ -498,13 +448,11 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       // Raw body: also rewrites a legacy ownership marker away.
       if (!sameText(ownershipBodyOf(current), desiredBody(news))) {
         const operation =
-          yield* ssm.patchProjectsLocationsRepositoriesPullRequestsPullRequestComments(
-            {
-              name: currentName,
-              updateMask: "body",
-              body: encoded,
-            },
-          );
+          yield* ssm.patchProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+            name: currentName,
+            updateMask: "body",
+            body: encoded,
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);
       }

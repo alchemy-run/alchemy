@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { ensureDataStore, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 const parentId = "alchds3schx";
@@ -85,10 +82,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/schemas/");
       expect(created.jsonSchema).toContain("sku");
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsDataStoresSchemas({
-          name: created.name,
-        });
+      const fetched = yield* discoveryengine.getProjectsLocationsDataStoresSchemas({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       const updated = yield* stack.deploy(

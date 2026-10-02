@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -129,16 +125,12 @@ export type WireGroup = Resource<
  */
 export const WireGroup = Resource<WireGroup>("GCP.Compute.WireGroup");
 
-export class WireGroupNotResolved extends Data.TaggedError(
-  "GCP.Compute.WireGroupNotResolved",
-)<{
+export class WireGroupNotResolved extends Data.TaggedError("GCP.Compute.WireGroupNotResolved")<{
   wireGroupName: string;
   crossSiteNetwork: string;
 }> {}
 
-export class WireGroupStillExists extends Data.TaggedError(
-  "GCP.Compute.WireGroupStillExists",
-)<{
+export class WireGroupStillExists extends Data.TaggedError("GCP.Compute.WireGroupStillExists")<{
   wireGroupName: string;
 }> {}
 
@@ -158,9 +150,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `w${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `w${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -194,9 +184,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -234,20 +222,12 @@ const toAttrs = (
   };
 };
 
-const getByName = (
-  project: string,
-  crossSiteNetwork: string,
-  wireGroup: string,
-) =>
+const getByName = (project: string, crossSiteNetwork: string, wireGroup: string) =>
   compute
     .getWireGroups({ project, crossSiteNetwork, wireGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitGroupGone = (
-  project: string,
-  crossSiteNetwork: string,
-  wireGroupName: string,
-) =>
+const waitGroupGone = (project: string, crossSiteNetwork: string, wireGroupName: string) =>
   getByName(project, crossSiteNetwork, wireGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -291,18 +271,12 @@ export const WireGroupProvider = () =>
       const previousName = olds?.wireGroupName ?? output?.wireGroupName;
       const nextName = news.wireGroupName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
-      const previousParent = lastSegment(
-        olds?.crossSiteNetwork ?? output?.crossSiteNetwork,
-      );
+      const previousParent = lastSegment(olds?.crossSiteNetwork ?? output?.crossSiteNetwork);
       const nextParent = lastSegment(news.crossSiteNetwork);
       const parentChanged =
-        previousParent.length > 0 &&
-        nextParent.length > 0 &&
-        previousParent !== nextParent;
+        previousParent.length > 0 && nextParent.length > 0 && previousParent !== nextParent;
 
       if (nameChanged || parentChanged) {
         return {
@@ -315,21 +289,11 @@ export const WireGroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const wireGroupName = yield* toName(
-        id,
-        olds?.wireGroupName,
-        output?.wireGroupName,
-      );
-      const preferredParent = lastSegment(
-        olds?.crossSiteNetwork ?? output?.crossSiteNetwork,
-      );
+      const wireGroupName = yield* toName(id, olds?.wireGroupName, output?.wireGroupName);
+      const preferredParent = lastSegment(olds?.crossSiteNetwork ?? output?.crossSiteNetwork);
 
       if (preferredParent.length > 0) {
-        const existing = yield* getByName(
-          env.project,
-          preferredParent,
-          wireGroupName,
-        );
+        const existing = yield* getByName(env.project, preferredParent, wireGroupName);
         if (existing !== undefined) {
           const attrs = toAttrs(existing, env.project, preferredParent);
           const { labels } = parseDescription(existing.description);
@@ -341,11 +305,7 @@ export const WireGroupProvider = () =>
       for (const parent of parents) {
         const parentName = parent.name;
         if (parentName === undefined) continue;
-        const existing = yield* getByName(
-          env.project,
-          parentName,
-          wireGroupName,
-        );
+        const existing = yield* getByName(env.project, parentName, wireGroupName);
         if (existing === undefined) continue;
         const attrs = toAttrs(existing, env.project, parentName);
         const { labels } = parseDescription(existing.description);
@@ -374,9 +334,7 @@ export const WireGroupProvider = () =>
               })
               .pipe(
                 Stream.filter((group) => hasOwnershipMarker(group.description)),
-                Stream.map((group) =>
-                  toAttrs(group, env.project, crossSiteNetwork),
-                ),
+                Stream.map((group) => toAttrs(group, env.project, crossSiteNetwork)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -389,22 +347,12 @@ export const WireGroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const wireGroupName = yield* toName(
-        id,
-        news.wireGroupName,
-        output?.wireGroupName,
-      );
-      const crossSiteNetwork = lastSegment(
-        news.crossSiteNetwork ?? output?.crossSiteNetwork,
-      );
+      const wireGroupName = yield* toName(id, news.wireGroupName, output?.wireGroupName);
+      const crossSiteNetwork = lastSegment(news.crossSiteNetwork ?? output?.crossSiteNetwork);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(wireGroupName, news, ownership);
 
-      let current = yield* getByName(
-        env.project,
-        crossSiteNetwork,
-        wireGroupName,
-      );
+      let current = yield* getByName(env.project, crossSiteNetwork, wireGroupName);
 
       if (current === undefined) {
         const inserted = yield* compute
@@ -419,11 +367,7 @@ export const WireGroupProvider = () =>
             ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
-        current = yield* getByName(
-          env.project,
-          crossSiteNetwork,
-          wireGroupName,
-        ).pipe(
+        current = yield* getByName(env.project, crossSiteNetwork, wireGroupName).pipe(
           Effect.filterOrFail(
             (group): group is compute.WireGroup => group !== undefined,
             () =>
@@ -447,22 +391,12 @@ export const WireGroupProvider = () =>
         });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (desired.description ?? "");
-      const adminChanged =
-        (current.adminEnabled !== false) !== (desired.adminEnabled !== false);
-      const propertiesChanged = !sameJson(
-        current.wireProperties,
-        desired.wireProperties,
-      );
+      const descriptionChanged = (current.description ?? "") !== (desired.description ?? "");
+      const adminChanged = (current.adminEnabled !== false) !== (desired.adminEnabled !== false);
+      const propertiesChanged = !sameJson(current.wireProperties, desired.wireProperties);
       const endpointsChanged = !sameJson(current.endpoints, desired.endpoints);
 
-      if (
-        descriptionChanged ||
-        adminChanged ||
-        propertiesChanged ||
-        endpointsChanged
-      ) {
+      if (descriptionChanged || adminChanged || propertiesChanged || endpointsChanged) {
         const patched = yield* compute.patchWireGroups({
           project: env.project,
           crossSiteNetwork,
@@ -478,9 +412,7 @@ export const WireGroupProvider = () =>
           body: desired,
         });
         yield* waitGlobalOperation(env.project, patched);
-        current =
-          (yield* getByName(env.project, crossSiteNetwork, wireGroupName)) ??
-          current;
+        current = (yield* getByName(env.project, crossSiteNetwork, wireGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project, crossSiteNetwork);

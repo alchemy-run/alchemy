@@ -86,12 +86,7 @@ export type CatalogsBranchesProductProps = {
    * Product type. Immutable.
    * @default "PRIMARY"
    */
-  type?:
-    | "TYPE_UNSPECIFIED"
-    | "PRIMARY"
-    | "VARIANT"
-    | "COLLECTION"
-    | (string & {});
+  type?: "TYPE_UNSPECIFIED" | "PRIMARY" | "VARIANT" | "COLLECTION" | (string & {});
   /**
    * Canonical product URI.
    */
@@ -226,10 +221,7 @@ const priceInfoOf = (
       };
 
 const imagesOf = (
-  images:
-    | readonly retail.GoogleCloudRetailV2Image[]
-    | readonly ProductImage[]
-    | undefined,
+  images: readonly retail.GoogleCloudRetailV2Image[] | readonly ProductImage[] | undefined,
 ): ProductImage[] =>
   (images ?? [])
     .filter((image) => (image.uri ?? "").length > 0)
@@ -239,10 +231,7 @@ const imagesOf = (
       width: image.width,
     }));
 
-const toAttrs = (
-  product: retail.GoogleCloudRetailV2Product,
-  project: string,
-) => {
+const toAttrs = (product: retail.GoogleCloudRetailV2Product, project: string) => {
   const name = product.name ?? "";
   const parsed = parseResourceName(name, "products");
   return {
@@ -301,15 +290,7 @@ const getByName = (name: string) =>
 
 export const CatalogsBranchesProductProvider = () =>
   Provider.succeed(CatalogsBranchesProduct, {
-    stables: [
-      "name",
-      "productId",
-      "catalog",
-      "branchId",
-      "project",
-      "location",
-      "type",
-    ],
+    stables: ["name", "productId", "catalog", "branchId", "project", "location", "type"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -335,9 +316,7 @@ export const CatalogsBranchesProductProvider = () =>
         (previousBranch !== undefined &&
           nextBranch !== undefined &&
           previousBranch !== nextBranch) ||
-        (previousType !== undefined &&
-          nextType !== undefined &&
-          previousType !== nextType)
+        (previousType !== undefined && nextType !== undefined && previousType !== nextType)
       ) {
         return (
           identity ?? {
@@ -364,11 +343,7 @@ export const CatalogsBranchesProductProvider = () =>
         output?.name ??
         (catalog !== undefined
           ? resourceName(
-              expandCatalog(
-                catalog,
-                env.project,
-                normalizeLocation(output?.location),
-              ),
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
               branchId,
               productId,
             )
@@ -426,15 +401,11 @@ export const CatalogsBranchesProductProvider = () =>
           : "categories",
         sameText(current.uri, news.uri) ? undefined : "uri",
         sameStringList(current.brands, news.brands) ? undefined : "brands",
-        sameText(current.languageCode, news.languageCode)
-          ? undefined
-          : "language_code",
+        sameText(current.languageCode, news.languageCode) ? undefined : "language_code",
         sameText(current.availability, news.availability ?? "IN_STOCK")
           ? undefined
           : "availability",
-        sameJson(priceInfoOf(current.priceInfo), news.priceInfo)
-          ? undefined
-          : "price_info",
+        sameJson(priceInfoOf(current.priceInfo), news.priceInfo) ? undefined : "price_info",
         sameJson(imagesOf(current.images), news.images) ? undefined : "images",
         sameStringList(current.tags, tags) ? undefined : "tags",
         sameText(current.gtin, news.gtin) ? undefined : "gtin",

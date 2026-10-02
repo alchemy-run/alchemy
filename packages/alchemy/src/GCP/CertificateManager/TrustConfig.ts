@@ -192,9 +192,7 @@ export type TrustConfig = Resource<
  * @resource
  * @category CertificateManager
  */
-export const TrustConfig = Resource<TrustConfig>(
-  "GCP.CertificateManager.TrustConfig",
-);
+export const TrustConfig = Resource<TrustConfig>("GCP.CertificateManager.TrustConfig");
 
 export class TrustConfigNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.TrustConfigNotResolved",
@@ -228,11 +226,8 @@ const rfc1035 = (name: string): string => {
 const normalizeLocation = (location: string | undefined) =>
   lastSegment(location ?? DEFAULT_LOCATION).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  trustConfigId: string,
-) => `projects/${project}/locations/${location}/trustConfigs/${trustConfigId}`;
+const resourceName = (project: string, location: string, trustConfigId: string) =>
+  `projects/${project}/locations/${location}/trustConfigs/${trustConfigId}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -240,12 +235,9 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     trustConfigId:
       trustConfigsAt >= 0 && parts[trustConfigsAt + 1]
         ? parts[trustConfigsAt + 1]!
@@ -257,11 +249,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  trustConfigId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, trustConfigId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (trustConfigId !== undefined) return trustConfigId;
     if (existing !== undefined) return existing;
@@ -274,8 +262,7 @@ const toId = (
     );
   });
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\s+/g, "");
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\s+/g, "");
 
 const pemEntries = (
   entries: { pemCertificate?: string }[] | undefined,
@@ -292,30 +279,20 @@ const toStore = (
 });
 
 const toStores = (
-  stores:
-    | ReadonlyArray<certificatemanager.TrustStore | TrustConfigTrustStore>
-    | null
-    | undefined,
+  stores: ReadonlyArray<certificatemanager.TrustStore | TrustConfigTrustStore> | null | undefined,
 ): TrustConfigTrustStore[] => (stores ?? []).map((store) => toStore(store));
 
 const toSpiffeStores = (
   stores:
-    | Record<
-        string,
-        certificatemanager.TrustStore | TrustConfigTrustStore | undefined
-      >
+    | Record<string, certificatemanager.TrustStore | TrustConfigTrustStore | undefined>
     | null
     | undefined,
 ): Record<string, TrustConfigTrustStore> =>
   Object.fromEntries(
     Object.entries(stores ?? {})
       .filter(
-        (
-          entry,
-        ): entry is [
-          string,
-          certificatemanager.TrustStore | TrustConfigTrustStore,
-        ] => entry[1] !== undefined,
+        (entry): entry is [string, certificatemanager.TrustStore | TrustConfigTrustStore] =>
+          entry[1] !== undefined,
       )
       .map(([domain, store]) => [domain, toStore(store)]),
   );
@@ -332,9 +309,7 @@ const storeFingerprint = (store: TrustConfigTrustStore) =>
 const storesFingerprint = (stores?: TrustConfigTrustStore[]) =>
   toStores(stores).map(storeFingerprint).sort().join("||");
 
-const spiffeFingerprint = (
-  stores?: Record<string, TrustConfigTrustStore | undefined>,
-) => {
+const spiffeFingerprint = (stores?: Record<string, TrustConfigTrustStore | undefined>) => {
   const normalized = toSpiffeStores(stores);
   return Object.keys(normalized)
     .sort()
@@ -369,13 +344,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config
-        ? Effect.succeed(config)
-        : Effect.fail(new TrustConfigNotResolved({ name })),
+      config ? Effect.succeed(config) : Effect.fail(new TrustConfigNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.TrustConfigNotResolved",
+      while: (error) => error._tag === "GCP.CertificateManager.TrustConfigNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -384,13 +356,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined
-        ? Effect.void
-        : Effect.fail(new TrustConfigStillExists({ name })),
+      config === undefined ? Effect.void : Effect.fail(new TrustConfigStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.CertificateManager.TrustConfigStillExists",
+      while: (error) => error._tag === "GCP.CertificateManager.TrustConfigStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -405,9 +374,7 @@ const listOwnedTrustConfigs = (project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.trustConfigs ?? [])),
       Stream.filter((config) =>
-        Object.keys(config.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(config.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((config) => toAttrs(config, project)),
       Stream.runCollect,
@@ -447,17 +414,11 @@ export const TrustConfigProvider = () =>
 
       const previousId = olds?.trustConfigId ?? output?.trustConfigId;
       const nextId = news.trustConfigId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
 
       if (!replace) return undefined;
@@ -466,20 +427,13 @@ export const TrustConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const trustConfigId = yield* toId(
-        id,
-        olds?.trustConfigId,
-        output?.trustConfigId,
-      );
+      const trustConfigId = yield* toId(id, olds?.trustConfigId, output?.trustConfigId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, trustConfigId);
+      const name = output?.name ?? resourceName(env.project, location, trustConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -490,11 +444,7 @@ export const TrustConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const trustConfigId = yield* toId(
-        id,
-        news.trustConfigId,
-        output?.trustConfigId,
-      );
+      const trustConfigId = yield* toId(id, news.trustConfigId, output?.trustConfigId);
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, trustConfigId);
       const desiredLabels = {
@@ -532,20 +482,16 @@ export const TrustConfigProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const desiredStores = toStores(news.trustStores);
       const storesChanged =
-        storesFingerprint(desiredStores) !==
-        storesFingerprint(current.trustStores);
+        storesFingerprint(desiredStores) !== storesFingerprint(current.trustStores);
       const desiredAllowlisted = pemEntries(news.allowlistedCertificates);
       const allowlistedChanged =
-        pemFingerprint(desiredAllowlisted) !==
-        pemFingerprint(current.allowlistedCertificates);
+        pemFingerprint(desiredAllowlisted) !== pemFingerprint(current.allowlistedCertificates);
       const desiredSpiffe = toSpiffeStores(news.spiffeTrustStores);
       const spiffeChanged =
-        spiffeFingerprint(desiredSpiffe) !==
-        spiffeFingerprint(current.spiffeTrustStores);
+        spiffeFingerprint(desiredSpiffe) !== spiffeFingerprint(current.spiffeTrustStores);
 
       if (
         labelsChanged ||
@@ -562,19 +508,18 @@ export const TrustConfigProvider = () =>
           spiffeChanged ? "spiffeTrustStores" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* certificatemanager.patchProjectsLocationsTrustConfigs({
+        const operation = yield* certificatemanager.patchProjectsLocationsTrustConfigs({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-              trustStores: desiredStores,
-              allowlistedCertificates: desiredAllowlisted,
-              spiffeTrustStores: desiredSpiffe,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            trustStores: desiredStores,
+            allowlistedCertificates: desiredAllowlisted,
+            spiffeTrustStores: desiredSpiffe,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

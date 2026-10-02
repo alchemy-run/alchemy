@@ -115,9 +115,7 @@ export type AgentsFlowsPage = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsFlowsPage = Resource<AgentsFlowsPage>(
-  "GCP.Dialogflow.AgentsFlowsPage",
-);
+export const AgentsFlowsPage = Resource<AgentsFlowsPage>("GCP.Dialogflow.AgentsFlowsPage");
 
 export class AgentsFlowsPageNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsPageNotResolved",
@@ -125,10 +123,7 @@ export class AgentsFlowsPageNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  page: dialogflow.GoogleCloudDialogflowCxV3Page,
-  project: string,
-) => {
+const toAttrs = (page: dialogflow.GoogleCloudDialogflowCxV3Page, project: string) => {
   const name = page.name ?? "";
   const parsed = parseResourceName(name, "pages");
   return {
@@ -194,16 +189,12 @@ export const AgentsFlowsPageProvider = () =>
       const previousId = olds?.pageId ?? output?.pageId;
       if (
         (previousFlow !== undefined && news.flow !== previousFlow) ||
-        (previousId !== undefined &&
-          news.pageId !== undefined &&
-          news.pageId !== previousId)
+        (previousId !== undefined && news.pageId !== undefined && news.pageId !== previousId)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousFlow === news.flow &&
-            previousId !== undefined &&
-            news.pageId === previousId,
+            previousFlow === news.flow && previousId !== undefined && news.pageId === previousId,
         };
       }
       return undefined;
@@ -220,9 +211,7 @@ export const AgentsFlowsPageProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -252,11 +241,7 @@ export const AgentsFlowsPageProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, flow, output?.name),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, flow, output?.name)));
         current = created ?? undefined;
       }
 
@@ -269,10 +254,7 @@ export const AgentsFlowsPageProvider = () =>
       const currentName = current.name ?? output?.name ?? "";
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const fulfillmentChanged = !sameJson(
-        current.entryFulfillment,
-        news.entryFulfillment,
-      );
+      const fulfillmentChanged = !sameJson(current.entryFulfillment, news.entryFulfillment);
 
       if (displayChanged || descriptionChanged || fulfillmentChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlowsPages({

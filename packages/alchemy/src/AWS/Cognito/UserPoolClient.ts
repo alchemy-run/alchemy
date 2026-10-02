@@ -203,18 +203,10 @@ export interface UserPoolClient extends Resource<
  *
  * @resource
  */
-export const UserPoolClient = Resource<UserPoolClient>(
-  "AWS.Cognito.UserPoolClient",
-);
+export const UserPoolClient = Resource<UserPoolClient>("AWS.Cognito.UserPoolClient");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 /** The mutable desired state, in wire shape — used both as the update body
  * and (against the observed client) for drift detection. */
@@ -267,9 +259,7 @@ const hasDrift = (
     },
     ReadAttributes: [...(observed.ReadAttributes ?? [])].sort(),
     WriteAttributes: [...(observed.WriteAttributes ?? [])].sort(),
-    SupportedIdentityProviders: [
-      ...(observed.SupportedIdentityProviders ?? []),
-    ].sort(),
+    SupportedIdentityProviders: [...(observed.SupportedIdentityProviders ?? [])].sort(),
     CallbackURLs: [...(observed.CallbackURLs ?? [])].sort(),
     LogoutURLs: [...(observed.LogoutURLs ?? [])].sort(),
     DefaultRedirectURI: observed.DefaultRedirectURI,
@@ -283,9 +273,7 @@ const hasDrift = (
   for (const [key, desiredValue] of Object.entries(desired)) {
     if (desiredValue === undefined) continue;
     const observedValue = observedSubset[key];
-    const normalizedDesired = Array.isArray(desiredValue)
-      ? [...desiredValue].sort()
-      : desiredValue;
+    const normalizedDesired = Array.isArray(desiredValue) ? [...desiredValue].sort() : desiredValue;
     if (JSON.stringify(normalizedDesired) !== JSON.stringify(observedValue)) {
       return true;
     }
@@ -301,16 +289,10 @@ export const UserPoolClientProvider = () =>
         id: string,
         props: Pick<UserPoolClientProps, "clientName">,
       ) {
-        return (
-          props.clientName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.clientName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const describeClient = Effect.fn(function* (
-        userPoolId: string,
-        clientId: string,
-      ) {
+      const describeClient = Effect.fn(function* (userPoolId: string, clientId: string) {
         return yield* cip
           .describeUserPoolClient({
             UserPoolId: userPoolId,
@@ -318,18 +300,13 @@ export const UserPoolClientProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.UserPoolClient),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
       /** Find a client of the pool by exact name (used when state was lost).
        * The physical name embeds app/stage/id, so a match is ours. */
-      const findClientByName = Effect.fn(function* (
-        userPoolId: string,
-        clientName: string,
-      ) {
+      const findClientByName = Effect.fn(function* (userPoolId: string, clientName: string) {
         const pages = yield* cip.listUserPoolClients
           .pages({ UserPoolId: userPoolId, MaxResults: 60 })
           .pipe(
@@ -349,8 +326,7 @@ export const UserPoolClientProvider = () =>
         const secret = plain(client.ClientSecret);
         return {
           clientId: plain(client.ClientId)!,
-          clientSecret:
-            secret === undefined ? undefined : Redacted.make(secret),
+          clientSecret: secret === undefined ? undefined : Redacted.make(secret),
           clientName: client.ClientName!,
           userPoolId: client.UserPoolId!,
         };
@@ -371,18 +347,13 @@ export const UserPoolClientProvider = () =>
           const observed =
             output?.clientId !== undefined
               ? yield* describeClient(userPoolId, output.clientId)
-              : yield* findClientByName(
-                  userPoolId,
-                  yield* createName(id, olds ?? {}),
-                );
+              : yield* findClientByName(userPoolId, yield* createName(id, olds ?? {}));
           return observed === undefined ? undefined : attributesOf(observed);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (olds?.generateSecret ?? false) !== (news?.generateSecret ?? false)
-          ) {
+          if ((olds?.generateSecret ?? false) !== (news?.generateSecret ?? false)) {
             return { action: "replace" } as const;
           }
           if (olds?.userPoolId !== news?.userPoolId) {
@@ -398,8 +369,7 @@ export const UserPoolClientProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const clientName =
-            output?.clientName ?? (yield* createName(id, news));
+          const clientName = output?.clientName ?? (yield* createName(id, news));
           const userPoolId = news.userPoolId;
 
           // 1. OBSERVE — output.clientId is only a cache.
@@ -446,9 +416,7 @@ export const UserPoolClientProvider = () =>
               UserPoolId: output.userPoolId,
               ClientId: output.clientId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

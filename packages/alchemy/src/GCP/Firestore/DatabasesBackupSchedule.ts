@@ -129,12 +129,8 @@ export class BackupScheduleStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const desiredWeeklyDay = (
-  news: DatabasesBackupScheduleProps,
-): string | undefined =>
-  news.weeklyRecurrence?.day !== undefined
-    ? news.weeklyRecurrence.day.toUpperCase()
-    : undefined;
+const desiredWeeklyDay = (news: DatabasesBackupScheduleProps): string | undefined =>
+  news.weeklyRecurrence?.day !== undefined ? news.weeklyRecurrence.day.toUpperCase() : undefined;
 
 const desiredDaily = (news: DatabasesBackupScheduleProps) =>
   news.weeklyRecurrence === undefined && news.dailyRecurrence !== false;
@@ -190,8 +186,7 @@ const waitUntilGone = (name: string) =>
       () => new BackupScheduleStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Firestore.BackupScheduleStillExists",
+      while: (error) => error._tag === "GCP.Firestore.BackupScheduleStillExists",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -200,14 +195,7 @@ const waitUntilGone = (name: string) =>
 
 export const DatabasesBackupScheduleProvider = () =>
   Provider.succeed(DatabasesBackupSchedule, {
-    stables: [
-      "name",
-      "backupScheduleId",
-      "database",
-      "databaseId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "backupScheduleId", "database", "databaseId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -252,8 +240,7 @@ export const DatabasesBackupScheduleProvider = () =>
       const weeklyDay = desiredWeeklyDay(news);
       const daily = desiredDaily(news);
       const retention = news.retention ?? DEFAULT_RETENTION;
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const existing = yield* listOnDatabase(parent);
@@ -266,10 +253,8 @@ export const DatabasesBackupScheduleProvider = () =>
             parent,
             body: {
               retention,
-              dailyRecurrence:
-                daily && weeklyDay === undefined ? {} : undefined,
-              weeklyRecurrence:
-                weeklyDay !== undefined ? { day: weeklyDay } : undefined,
+              dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
+              weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));

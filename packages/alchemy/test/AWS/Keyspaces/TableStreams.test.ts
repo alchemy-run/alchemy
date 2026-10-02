@@ -1,12 +1,11 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 import KeyspacesStreamsTestFunctionLive, {
   KeyspacesStreamsTestFunction,
 } from "./streams-handler.ts";
@@ -32,10 +31,7 @@ describe(
               streamArn: `arn:aws:cassandra:${region}:${accountId}:/keyspace/alchemy_nonexistent_ks/table/nonexistent_tbl/stream/2024-01-01T00:00:00.000`,
             })
             .pipe(Effect.flip);
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(error._tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
         }),
       { timeout: 60_000 },
     );
@@ -84,15 +80,10 @@ describe(
             Effect.flatMap((response) =>
               response.status === 200
                 ? response.json
-                : Effect.fail(
-                    new Error(`traverse not ready: ${response.status}`),
-                  ),
+                : Effect.fail(new Error(`traverse not ready: ${response.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
             }),
           );
           const traverse = body as {

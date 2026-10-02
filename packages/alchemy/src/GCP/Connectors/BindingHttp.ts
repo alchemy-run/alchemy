@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { ConnectionsEntityTypesEntity } from "./ConnectionsEntityTypesEntity.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import type { ConnectionsEntityTypesEntity } from "./ConnectionsEntityTypesEntity.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -16,11 +16,7 @@ type GcpHttpOp<I, A, E> = Effect.Effect<
  * Shared HTTP scaffolding for Integration Connectors entity bindings.
  * NOT exported from index.ts.
  */
-export const makeEntityHttpBinding = <
-  I extends { name: string },
-  A,
-  E,
->(options: {
+export const makeEntityHttpBinding = <I extends { name: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

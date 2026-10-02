@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -35,8 +30,7 @@ import {
 } from "./internal.ts";
 
 const COLLECTION = "ipamAdminScopes";
-const DEFAULT_PLATFORM: cnr.IpamAdminScopeEnabledAddonPlatformsItemEnum =
-  "COMPUTE_ENGINE";
+const DEFAULT_PLATFORM: cnr.IpamAdminScopeEnabledAddonPlatformsItemEnum = "COMPUTE_ENGINE";
 
 export type IpamAdminScopeProps = {
   /**
@@ -64,9 +58,7 @@ export type IpamAdminScopeProps = {
    * Platforms whose IP addresses Cloud Number Registry discovers.
    * @default ["COMPUTE_ENGINE"]
    */
-  enabledAddonPlatforms?: Array<
-    cnr.IpamAdminScopeEnabledAddonPlatformsItemEnum | (string & {})
-  >;
+  enabledAddonPlatforms?: Array<cnr.IpamAdminScopeEnabledAddonPlatformsItemEnum | (string & {})>;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
@@ -133,14 +125,10 @@ export type IpamAdminScope = Resource<
  * @resource
  * @category CloudNumberRegistry
  */
-export const IpamAdminScope = Resource<IpamAdminScope>(
-  "GCP.CloudNumberRegistry.IpamAdminScope",
-);
+export const IpamAdminScope = Resource<IpamAdminScope>("GCP.CloudNumberRegistry.IpamAdminScope");
 
 const expandScopes = (scopes: readonly string[]) =>
-  scopes.map((scope) =>
-    scope.includes("/") ? scope : `organizations/${scope}`,
-  );
+  scopes.map((scope) => (scope.includes("/") ? scope : `organizations/${scope}`));
 
 const toAttrs = (item: cnr.IpamAdminScope, project: string) => {
   const name = item.name ?? "";
@@ -151,9 +139,7 @@ const toAttrs = (item: cnr.IpamAdminScope, project: string) => {
     project: parsed.project || project,
     location: parsed.location || DEFAULT_LOCATION,
     scopes: item.scopes ?? [],
-    enabledAddonPlatforms: (item.enabledAddonPlatforms ?? []).map((value) =>
-      String(value),
-    ),
+    enabledAddonPlatforms: (item.enabledAddonPlatforms ?? []).map((value) => String(value)),
     labels: userLabels(item.labels),
     state: item.state,
     createTime: item.createTime,
@@ -182,14 +168,7 @@ const listOwned = (project: string) =>
 
 export const IpamAdminScopeProvider = () =>
   Provider.succeed(IpamAdminScope, {
-    stables: [
-      "name",
-      "ipamAdminScopeId",
-      "project",
-      "location",
-      "scopes",
-      "createTime",
-    ],
+    stables: ["name", "ipamAdminScopeId", "project", "location", "scopes", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -197,17 +176,10 @@ export const IpamAdminScopeProvider = () =>
       const nextScopes = expandScopes(news.scopes);
       return replaceOnIdentity({
         previousId: olds?.ipamAdminScopeId ?? output?.ipamAdminScopeId,
-        nextId:
-          news.ipamAdminScopeId ??
-          olds?.ipamAdminScopeId ??
-          output?.ipamAdminScopeId,
+        nextId: news.ipamAdminScopeId ?? olds?.ipamAdminScopeId ?? output?.ipamAdminScopeId,
         previousLocation: normalizeLocation(olds?.location ?? output?.location),
-        nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
-        ),
-        extra:
-          previousScopes !== undefined &&
-          !sameStringList(previousScopes, nextScopes),
+        nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
+        extra: previousScopes !== undefined && !sameStringList(previousScopes, nextScopes),
       });
     }),
 
@@ -221,14 +193,11 @@ export const IpamAdminScopeProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, ipamAdminScopeId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, ipamAdminScopeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -247,20 +216,13 @@ export const IpamAdminScopeProvider = () =>
         "scope",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        ipamAdminScopeId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, ipamAdminScopeId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const scopes = expandScopes(news.scopes);
-      const enabledAddonPlatforms = news.enabledAddonPlatforms ?? [
-        DEFAULT_PLATFORM,
-      ];
+      const enabledAddonPlatforms = news.enabledAddonPlatforms ?? [DEFAULT_PLATFORM];
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -309,10 +271,7 @@ export const IpamAdminScopeProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -325,9 +284,7 @@ export const IpamAdminScopeProvider = () =>
           body: {},
         })
         .pipe(
-          Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.succeed(undefined)),
         );
       if (disable !== undefined) {
         yield* waitForDeleteOperation(disable);

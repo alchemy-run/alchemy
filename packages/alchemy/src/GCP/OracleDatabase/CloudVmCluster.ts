@@ -70,9 +70,7 @@ export type CloudVmClusterPropertiesInput = {
   /** SCAN listener TLS port. */
   scanListenerPortTcpSsl?: number;
   /** Disk redundancy (`HIGH`, `NORMAL`). */
-  diskRedundancy?:
-    | oracle.CloudVmClusterPropertiesDiskRedundancyEnum
-    | (string & {});
+  diskRedundancy?: oracle.CloudVmClusterPropertiesDiskRedundancyEnum | (string & {});
   /** Time zone. */
   timeZone?: TimeZone;
   /** OCI cluster name. */
@@ -234,13 +232,9 @@ export type CloudVmCluster = Resource<
  * @resource
  * @category OracleDatabase
  */
-export const CloudVmCluster = Resource<CloudVmCluster>(
-  "GCP.OracleDatabase.CloudVmCluster",
-);
+export const CloudVmCluster = Resource<CloudVmCluster>("GCP.OracleDatabase.CloudVmCluster");
 
-const mergedProperties = (
-  news: CloudVmClusterProps,
-): CloudVmClusterPropertiesInput => ({
+const mergedProperties = (news: CloudVmClusterProps): CloudVmClusterPropertiesInput => ({
   ...(news.properties ?? {}),
   licenseType: news.licenseType ?? news.properties?.licenseType,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
@@ -256,8 +250,7 @@ const toCreateBody = (
 ): oracle.CloudVmCluster => {
   const props = mergedProperties(news);
   const properties: oracle.CloudVmClusterProperties = {};
-  if (props.licenseType !== undefined)
-    properties.licenseType = props.licenseType;
+  if (props.licenseType !== undefined) properties.licenseType = props.licenseType;
   if (props.cpuCoreCount !== undefined) {
     properties.cpuCoreCount = props.cpuCoreCount;
   }
@@ -292,8 +285,7 @@ const toCreateBody = (
     properties.diskRedundancy = props.diskRedundancy;
   }
   if (props.timeZone !== undefined) properties.timeZone = props.timeZone;
-  if (props.clusterName !== undefined)
-    properties.clusterName = props.clusterName;
+  if (props.clusterName !== undefined) properties.clusterName = props.clusterName;
   if (props.localBackupEnabled !== undefined) {
     properties.localBackupEnabled = props.localBackupEnabled;
   }
@@ -301,8 +293,7 @@ const toCreateBody = (
     properties.sparseDiskgroupEnabled = props.sparseDiskgroupEnabled;
   }
   if (props.diagnosticsDataCollectionOptions !== undefined) {
-    properties.diagnosticsDataCollectionOptions =
-      props.diagnosticsDataCollectionOptions;
+    properties.diagnosticsDataCollectionOptions = props.diagnosticsDataCollectionOptions;
   }
   if (props.dbServerOcids !== undefined) {
     properties.dbServerOcids = props.dbServerOcids;
@@ -372,11 +363,7 @@ const listClusters = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.cloudVmClusters,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -384,20 +371,12 @@ const listClusters = (project: string, region: string) => {
 
 export const CloudVmClusterProvider = () =>
   Provider.succeed(CloudVmCluster, {
-    stables: [
-      "name",
-      "cloudVmClusterId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "cloudVmClusterId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousInfra =
-        olds?.exadataInfrastructure ?? output?.exadataInfrastructure ?? "";
+      const previousInfra = olds?.exadataInfrastructure ?? output?.exadataInfrastructure ?? "";
       const nextInfra = news.exadataInfrastructure ?? previousInfra;
       const previousNetwork = olds?.network ?? output?.network ?? "";
       const nextNetwork = news.network ?? previousNetwork;
@@ -405,20 +384,13 @@ export const CloudVmClusterProvider = () =>
       const nextOdb = news.odbSubnet ?? previousOdb;
       return replaceOnIdentity({
         previousId: olds?.cloudVmClusterId ?? output?.cloudVmClusterId,
-        nextId:
-          news.cloudVmClusterId ??
-          olds?.cloudVmClusterId ??
-          output?.cloudVmClusterId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.cloudVmClusterId ?? olds?.cloudVmClusterId ?? output?.cloudVmClusterId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
-          nextInfra !== previousInfra ||
-          nextNetwork !== previousNetwork ||
-          nextOdb !== previousOdb,
+          nextInfra !== previousInfra || nextNetwork !== previousNetwork || nextOdb !== previousOdb,
       });
     }),
 
@@ -430,18 +402,13 @@ export const CloudVmClusterProvider = () =>
         output?.cloudVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceNameOf(env.project, location, COLLECTION, cloudVmClusterId);
+        output?.name ?? resourceNameOf(env.project, location, COLLECTION, cloudVmClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -459,15 +426,8 @@ export const CloudVmClusterProvider = () =>
         output?.cloudVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        cloudVmClusterId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, cloudVmClusterId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

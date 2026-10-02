@@ -1,18 +1,18 @@
-import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
-import * as Test from "alchemy/Test/Bun";
+import { describe, expect } from "bun:test";
+import { spawnSync } from "node:child_process";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
-import { describe, expect } from "bun:test";
+import * as Alchemy from "alchemy";
+import * as GCP from "alchemy/GCP";
+import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -24,16 +24,11 @@ const { getWhenReady } = Test;
 
 // Out-of-band calls to the Google APIs resolve the same stored credentials
 // the deploy uses, so the test runs against the configured profile.
-const GcpHttp = Layer.mergeAll(
-  GCP.GcpAuth,
-  GCP.fromAuthProvider(),
-  FetchHttpClient.layer,
-);
+const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
 // The service is built from `main`, which needs a local image build.
 const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status ===
-  0;
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
 
 const API_KEY = "integ-test-key";
 
@@ -69,24 +64,20 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
       // Released keys hold no usable key material.
       expect(key.primary?.state).not.toBe("ENABLED");
 
-      const secret = yield* secretmanager
-        .getProjectsSecrets({ name: outputs.secretName })
-        .pipe(
-          Effect.map(() => "present" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-          Effect.orDie,
-          Effect.provide(GcpHttp),
-        );
+      const secret = yield* secretmanager.getProjectsSecrets({ name: outputs.secretName }).pipe(
+        Effect.map(() => "present" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.orDie,
+        Effect.provide(GcpHttp),
+      );
       expect(secret).toBe("gone");
 
-      const service = yield* run
-        .getProjectsLocationsServices({ name: outputs.serviceName })
-        .pipe(
-          Effect.map(() => "present" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-          Effect.orDie,
-          Effect.provide(GcpHttp),
-        );
+      const service = yield* run.getProjectsLocationsServices({ name: outputs.serviceName }).pipe(
+        Effect.map(() => "present" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.orDie,
+        Effect.provide(GcpHttp),
+      );
       expect(service).toBe("gone");
 
       // The image repository the service was built into goes with it. Its
@@ -95,10 +86,7 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
       const repositoryId = `${serviceId}-src`.slice(0, 49).replace(/-+$/, "");
       const repository = yield* artifactregistry
         .getProjectsLocationsRepositories({
-          name: outputs.serviceName.replace(
-            /services\/.*$/,
-            `repositories/${repositoryId}`,
-          ),
+          name: outputs.serviceName.replace(/services\/.*$/, `repositories/${repositoryId}`),
         })
         .pipe(
           Effect.map(() => "present" as const),
@@ -120,9 +108,7 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
   const post = (url: string, body: unknown, key: string | null = API_KEY) =>
     HttpClient.execute(
       HttpClientRequest.post(url).pipe(
-        key === null
-          ? (request) => request
-          : HttpClientRequest.setHeader("x-api-key", key),
+        key === null ? (request) => request : HttpClientRequest.setHeader("x-api-key", key),
         HttpClientRequest.bodyJsonUnsafe(body),
       ),
     );
@@ -135,18 +121,10 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
       const baseUrl = baseUrlOf(url);
       yield* getWhenReady(`${baseUrl}/`);
 
-      const missing = yield* post(
-        `${baseUrl}/encrypt`,
-        { plaintext: "hi" },
-        null,
-      );
+      const missing = yield* post(`${baseUrl}/encrypt`, { plaintext: "hi" }, null);
       expect(missing.status).toBe(401);
 
-      const wrong = yield* post(
-        `${baseUrl}/encrypt`,
-        { plaintext: "hi" },
-        "no",
-      );
+      const wrong = yield* post(`${baseUrl}/encrypt`, { plaintext: "hi" }, "no");
       expect(wrong.status).toBe(401);
 
       const wrongDecrypt = yield* post(
@@ -203,9 +181,7 @@ describe.skipIf(!dockerAvailable)("gcp-secrets-kms", () => {
           body: { ciphertext },
         })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
-      expect(
-        Buffer.from(direct.plaintext ?? "", "base64").toString("utf8"),
-      ).toEqual(plaintext);
+      expect(Buffer.from(direct.plaintext ?? "", "base64").toString("utf8")).toEqual(plaintext);
 
       // Garbage ciphertext is the caller's error, not a server failure.
       const garbage = yield* post(`${baseUrl}/decrypt`, {

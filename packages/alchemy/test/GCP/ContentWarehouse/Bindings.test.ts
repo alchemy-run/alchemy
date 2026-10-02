@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import ContentWarehouseBindingsHost, {
   Checks,
@@ -22,8 +22,7 @@ const sharedStack = Core.scratchStack(testOptions, "ContentWarehouseBindings");
 // ServiceDisabled "Document AI Warehouse API has not been used in project ...
 // before or it is disabled" (the service also needs per-project
 // provisioning). Set GCP_TEST_CONTENTWAREHOUSE=1 on a provisioned project.
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_CONTENTWAREHOUSE;
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_CONTENTWAREHOUSE;
 
 let baseUrl: string;
 let hostAccount: string;
@@ -45,9 +44,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
   expect(roles).toEqual([
@@ -60,12 +57,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "ContentWarehouse Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:contentwarehouse",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:contentwarehouse", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -105,11 +97,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the schema as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const schema =
-              yield* expectProbe<cw.GoogleCloudContentwarehouseV1DocumentSchema>(
-                baseUrl,
-                "getDocumentSchema",
-              );
+            const schema = yield* expectProbe<cw.GoogleCloudContentwarehouseV1DocumentSchema>(
+              baseUrl,
+              "getDocumentSchema",
+            );
             const live = yield* cw.getProjectsLocationsDocumentSchemas({
               name: schemaName,
             });
@@ -130,11 +121,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the document as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const document =
-              yield* expectProbe<cw.GoogleCloudContentwarehouseV1Document>(
-                baseUrl,
-                "getDocument",
-              );
+            const document = yield* expectProbe<cw.GoogleCloudContentwarehouseV1Document>(
+              baseUrl,
+              "getDocument",
+            );
             expect(document.name).toEqual(documentName);
             expect(document.displayName).toEqual("binding-welcome");
             expect(document.plainText).toEqual("hello binding");
@@ -152,11 +142,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the rule set as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const rules =
-              yield* expectProbe<cw.GoogleCloudContentwarehouseV1RuleSet>(
-                baseUrl,
-                "getRuleSet",
-              );
+            const rules = yield* expectProbe<cw.GoogleCloudContentwarehouseV1RuleSet>(
+              baseUrl,
+              "getRuleSet",
+            );
             const live = yield* cw.getProjectsLocationsRuleSets({
               name: ruleSetName,
             });
@@ -177,17 +166,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the synonym set as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const synonyms =
-              yield* expectProbe<cw.GoogleCloudContentwarehouseV1SynonymSet>(
-                baseUrl,
-                "getSynonymSet",
-              );
+            const synonyms = yield* expectProbe<cw.GoogleCloudContentwarehouseV1SynonymSet>(
+              baseUrl,
+              "getSynonymSet",
+            );
             expect(synonyms.name).toEqual(synonymSetName);
-            expect(synonyms.synonyms?.[0]?.words).toEqual([
-              "sale",
-              "invoice",
-              "bill",
-            ]);
+            expect(synonyms.synonyms?.[0]?.words).toEqual(["sale", "invoice", "bill"]);
             yield* expectProjectGrants;
           }),
         {

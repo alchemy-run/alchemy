@@ -1,7 +1,7 @@
+import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import type { TerminalProgressState } from "@alchemy.run/sigil/ansi";
 import type { NonInteractiveTerminal } from "../../Interaction.ts";
 import type {
   ConfirmOptions,
@@ -32,49 +32,30 @@ export class CliKit extends Context.Service<
 
     /** Terminal-emulator progress displayed outside the rendered TUI. */
     readonly nativeProgress: {
-      readonly set: (
-        state: TerminalProgressState,
-        value?: number,
-      ) => Effect.Effect<void>;
+      readonly set: (state: TerminalProgressState, value?: number) => Effect.Effect<void>;
     };
 
     readonly output: {
       /** Append a completed layout to terminal scrollback/output. */
-      readonly print: (
-        view: View,
-        options?: RenderOptions,
-      ) => Effect.Effect<void>;
+      readonly print: (view: View, options?: RenderOptions) => Effect.Effect<void>;
 
       /** Render a layout without writing it. Useful for help, logs and snapshots. */
       readonly format: (view: View, options?: RenderOptions) => string;
 
       /** Effect form of `format`, useful when composing CLI programs. */
-      readonly render: (
-        view: View,
-        options?: RenderOptions,
-      ) => Effect.Effect<string>;
+      readonly render: (view: View, options?: RenderOptions) => Effect.Effect<string>;
 
       /** Append an arbitrary visual layout. Prefer the semantic methods for logs. */
       readonly info: (message: string | MessageOptions) => Effect.Effect<void>;
-      readonly success: (
-        message: string | MessageOptions,
-      ) => Effect.Effect<void>;
-      readonly warning: (
-        message: string | MessageOptions,
-      ) => Effect.Effect<void>;
+      readonly success: (message: string | MessageOptions) => Effect.Effect<void>;
+      readonly warning: (message: string | MessageOptions) => Effect.Effect<void>;
       readonly error: (message: string | MessageOptions) => Effect.Effect<void>;
     };
 
     readonly prompt: {
-      readonly text: (
-        options: TextInputOptions,
-      ) => Effect.Effect<string, InteractionError>;
-      readonly password: (
-        options: PasswordInputOptions,
-      ) => Effect.Effect<string, InteractionError>;
-      readonly confirm: (
-        options: ConfirmOptions,
-      ) => Effect.Effect<boolean, InteractionError>;
+      readonly text: (options: TextInputOptions) => Effect.Effect<string, InteractionError>;
+      readonly password: (options: PasswordInputOptions) => Effect.Effect<string, InteractionError>;
+      readonly confirm: (options: ConfirmOptions) => Effect.Effect<boolean, InteractionError>;
       readonly select: <Value>(
         options: SelectOptions<Value>,
       ) => Effect.Effect<Value, InteractionError>;
@@ -93,14 +74,10 @@ export class CliKit extends Context.Service<
        * flow, so looping back to a menu clears any prompts shown since the last
        * selection.
        */
-      readonly menu: <Value>(
-        options: MenuOptions<Value>,
-      ) => Effect.Effect<Value, InteractionError>;
+      readonly menu: <Value>(options: MenuOptions<Value>) => Effect.Effect<Value, InteractionError>;
 
       /** Run an arbitrary interactive screen in the service's single live region. */
-      readonly custom: <Value>(
-        screen: Screen<Value>,
-      ) => Effect.Effect<Value, InteractionError>;
+      readonly custom: <Value>(screen: Screen<Value>) => Effect.Effect<Value, InteractionError>;
     };
 
     /** Run a sequence of prompts as one owned interaction. */
@@ -170,14 +147,13 @@ export const accessors = {
   },
 };
 
-export const ApplicationPresentation = Context.Reference<
-  "inline" | "alternate"
->("Alchemy::CliKit/ApplicationPresentation", { defaultValue: () => "inline" });
+export const ApplicationPresentation = Context.Reference<"inline" | "alternate">(
+  "Alchemy::CliKit/ApplicationPresentation",
+  { defaultValue: () => "inline" },
+);
 
 /** Pipeable presentation modifiers for {@link CliKit.application}. */
 export const Application = {
   alternate: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provideService(ApplicationPresentation, "alternate" as const),
-    ),
+    effect.pipe(Effect.provideService(ApplicationPresentation, "alternate" as const)),
 };

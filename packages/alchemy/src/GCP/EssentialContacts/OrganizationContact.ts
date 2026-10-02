@@ -176,15 +176,7 @@ const toAttrs = (
 
 export const OrganizationContactProvider = () =>
   Provider.succeed(OrganizationContact, {
-    stables: [
-      "name",
-      "contactId",
-      "parent",
-      "organization",
-      "organizationId",
-      "project",
-      "email",
-    ],
+    stables: ["name", "contactId", "parent", "organization", "organizationId", "project", "email"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -200,8 +192,7 @@ export const OrganizationContactProvider = () =>
       if (
         news.organization !== undefined &&
         previousOrg !== undefined &&
-        organizationParent(news.organization) !==
-          organizationParent(previousOrg)
+        organizationParent(news.organization) !== organizationParent(previousOrg)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -225,9 +216,7 @@ export const OrganizationContactProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, parent, env.project);
-      return (yield* ownedByAlchemy(id, existing.email))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.email)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -240,9 +229,7 @@ export const OrganizationContactProvider = () =>
         return pages.flatMap((contacts, index) =>
           contacts
             .filter((contact) => hasOwnershipMarker(contact.email))
-            .map((contact) =>
-              toAttrs(contact, parents[index] ?? "", env.project),
-            ),
+            .map((contact) => toAttrs(contact, parents[index] ?? "", env.project)),
         );
       }),
 
@@ -256,9 +243,7 @@ export const OrganizationContactProvider = () =>
       const userEmail = yield* toEmail(id, news.email, output?.email);
       const stampedEmail = encodeEmail(ownership, userEmail);
       const languageTag = desiredLanguage(news.languageTag);
-      const categories = desiredCategories(
-        news.notificationCategorySubscriptions,
-      );
+      const categories = desiredCategories(news.notificationCategorySubscriptions);
       const body = toCreateBody({
         email: stampedEmail,
         languageTag,
@@ -267,12 +252,7 @@ export const OrganizationContactProvider = () =>
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
-        current = yield* findOwnedContact(
-          yield* listAt(parent),
-          id,
-          output?.name,
-          userEmail,
-        );
+        current = yield* findOwnedContact(yield* listAt(parent), id, output?.name, userEmail);
       }
 
       if (current === undefined) {
@@ -281,9 +261,7 @@ export const OrganizationContactProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
-                Effect.flatMap((contacts) =>
-                  findOwnedContact(contacts, id, undefined, userEmail),
-                ),
+                Effect.flatMap((contacts) => findOwnedContact(contacts, id, undefined, userEmail)),
               ),
             ),
           );

@@ -189,10 +189,7 @@ export class NotebookExecutionJobNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, id: string) =>
   `${locationParent(project, location)}/${COLLECTION}/${id}`;
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob, project: string) => {
   const name = job.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -204,8 +201,7 @@ const toAttrs = (
     labels: userLabels(job.labels),
     jobState: job.jobState,
     gcsOutputUri: job.gcsOutputUri,
-    notebookRuntimeTemplateResourceName:
-      job.notebookRuntimeTemplateResourceName,
+    notebookRuntimeTemplateResourceName: job.notebookRuntimeTemplateResourceName,
     serviceAccount: job.serviceAccount,
     createTime: job.createTime,
     updateTime: job.updateTime,
@@ -220,8 +216,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (job): job is aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob =>
-        job !== undefined,
+      (job): job is aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob => job !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
     Effect.retry({
@@ -247,50 +242,30 @@ const waitUntilGone = (name: string) =>
 
 export const NotebookExecutionJobProvider = () =>
   Provider.succeed(NotebookExecutionJob, {
-    stables: [
-      "name",
-      "notebookExecutionJobId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "notebookExecutionJobId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.notebookExecutionJobId ?? output?.notebookExecutionJobId;
+      const previousId = olds?.notebookExecutionJobId ?? output?.notebookExecutionJobId;
       const nextId = news.notebookExecutionJobId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const sourceChanged =
-        (news.gcsNotebookSource?.uri ?? "") !==
-          (olds?.gcsNotebookSource?.uri ?? "") ||
+        (news.gcsNotebookSource?.uri ?? "") !== (olds?.gcsNotebookSource?.uri ?? "") ||
         (news.directNotebookSource?.content ?? "") !==
           (olds?.directNotebookSource?.content ?? "") ||
-        (news.dataformRepositorySource?.dataformRepositoryResourceName ??
-          "") !==
-          (olds?.dataformRepositorySource?.dataformRepositoryResourceName ??
-            "");
+        (news.dataformRepositorySource?.dataformRepositoryResourceName ?? "") !==
+          (olds?.dataformRepositorySource?.dataformRepositoryResourceName ?? "");
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (olds !== undefined && sourceChanged);
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -301,10 +276,7 @@ export const NotebookExecutionJobProvider = () =>
         olds?.notebookExecutionJobId,
         output?.notebookExecutionJobId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -313,8 +285,7 @@ export const NotebookExecutionJobProvider = () =>
       // job at the generated (instance-unique) id is ours even when the
       // ownership labels name the template.
       const generated = olds?.notebookExecutionJobId === undefined;
-      return generated ||
-        (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+      return generated || (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -322,22 +293,18 @@ export const NotebookExecutionJobProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsNotebookExecutionJobs.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsNotebookExecutionJobs.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.notebookExecutionJobs ?? [])
             .filter((job) =>
-              Object.keys(job.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(job.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((job) => toAttrs(job, env.project)),
         );
@@ -350,10 +317,7 @@ export const NotebookExecutionJobProvider = () =>
         news.notebookExecutionJobId,
         output?.notebookExecutionJobId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -370,8 +334,7 @@ export const NotebookExecutionJobProvider = () =>
             body: {
               displayName: news.displayName ?? jobId,
               labels: desiredLabels,
-              notebookRuntimeTemplateResourceName:
-                news.notebookRuntimeTemplateResourceName,
+              notebookRuntimeTemplateResourceName: news.notebookRuntimeTemplateResourceName,
               customEnvironmentSpec: news.customEnvironmentSpec,
               directNotebookSource: news.directNotebookSource,
               gcsNotebookSource: news.gcsNotebookSource,
@@ -388,8 +351,7 @@ export const NotebookExecutionJobProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
-        const createdName =
-          resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
+        const createdName = resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
         current = yield* waitUntilExists(createdName);
       }
 

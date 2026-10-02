@@ -2,10 +2,10 @@ import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
-import type { Instance } from "./Instance.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
+import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
+import type { Instance } from "./Instance.ts";
 
 /**
  * HTTP implementation of {@link ExecuteSql}.

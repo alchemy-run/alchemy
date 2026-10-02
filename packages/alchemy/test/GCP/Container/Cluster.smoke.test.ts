@@ -1,15 +1,4 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Kubernetes from "@/Kubernetes";
-import type {
-  IdentityState,
-  RegistryState,
-} from "@/Kubernetes/ClusterAdapter.ts";
-import type { Connection } from "@/Kubernetes/Connection.ts";
-import { connectCluster, readObject } from "@/Kubernetes/internal/client.ts";
-import type { KubernetesObjectRef } from "@/Kubernetes/internal/objects.ts";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
+import { spawnSync } from "node:child_process";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
@@ -18,11 +7,20 @@ import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Kubernetes from "@/Kubernetes";
+import type { IdentityState, RegistryState } from "@/Kubernetes/ClusterAdapter.ts";
+import type { Connection } from "@/Kubernetes/Connection.ts";
+import { connectCluster, readObject } from "@/Kubernetes/internal/client.ts";
+import type { KubernetesObjectRef } from "@/Kubernetes/internal/objects.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import { SMOKE_REGION } from "../zones.ts";
 import GkeSmokeApiLive, { GkeSmokeApi } from "./fixtures/smoke-api.ts";
 import GkeSmokeJob from "./fixtures/smoke-job.ts";
 import {
@@ -33,7 +31,6 @@ import {
   SmokeCluster,
   SmokeNamespace,
 } from "./fixtures/smoke-resources.ts";
-import { SMOKE_REGION } from "../zones.ts";
 
 /**
  * GKE flagship smoke — the GCP counterpart of the ECS Task / EKS path:
@@ -52,17 +49,13 @@ import { SMOKE_REGION } from "../zones.ts";
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
 })();
 
-const skip =
-  !process.env.GCP_TEST_SLOW || !!process.env.FAST || !dockerAvailable;
+const skip = !process.env.GCP_TEST_SLOW || !!process.env.FAST || !dockerAvailable;
 
 const testOptions = {
   providers: Layer.mergeAll(GCP.providers(), Kubernetes.providers()),
@@ -132,9 +125,7 @@ const deployProgram = Effect.gen(function* () {
 const call = (request: HttpClientRequest.HttpClientRequest) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
-      response.text.pipe(
-        Effect.map((text) => ({ status: response.status, text })),
-      ),
+      response.text.pipe(Effect.map((text) => ({ status: response.status, text }))),
     ),
   );
 
@@ -149,29 +140,18 @@ const until = <A, E, R>(
   times: number,
 ) =>
   attempt.pipe(
-    Effect.filterOrFail(
-      ready,
-      (value) => new NotReady({ detail: JSON.stringify(value) }),
-    ),
+    Effect.filterOrFail(ready, (value) => new NotReady({ detail: JSON.stringify(value) })),
     Effect.tapError((error) => Effect.logDebug(`not ready: ${String(error)}`)),
     Effect.retry({ schedule: Schedule.spaced("10 seconds"), times }),
   );
 
 /** Bounded wait until an out-of-band probe reports the resource gone. */
-const waitUntilGone = <E, R>(
-  what: string,
-  probe: Effect.Effect<boolean, E, R>,
-) =>
+const waitUntilGone = <E, R>(what: string, probe: Effect.Effect<boolean, E, R>) =>
   probe.pipe(
-    Effect.flatMap((gone) =>
-      gone ? Effect.void : Effect.fail(new StillExists({ what })),
-    ),
+    Effect.flatMap((gone) => (gone ? Effect.void : Effect.fail(new StillExists({ what })))),
     Effect.retry({
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -204,12 +184,8 @@ const namespaceLoadBalancers = Effect.gen(function* () {
     region: SMOKE_REGION,
   });
   return [
-    ...(rules.items ?? []).filter((r) =>
-      (r.description ?? "").includes(marker),
-    ),
-    ...(backends.items ?? []).filter((b) =>
-      (b.description ?? "").includes(marker),
-    ),
+    ...(rules.items ?? []).filter((r) => (r.description ?? "").includes(marker)),
+    ...(backends.items ?? []).filter((b) => (b.description ?? "").includes(marker)),
   ].map((item) => item.name);
 });
 
@@ -278,9 +254,7 @@ describe.skipIf(skip).sequential(
           });
           expect(
             (projectPolicy.bindings ?? []).filter((b) =>
-              (b.members ?? []).some(
-                (m) => m === principals.api || m === principals.job,
-              ),
+              (b.members ?? []).some((m) => m === principals.api || m === principals.job),
             ),
           ).toEqual([]);
         }),
@@ -296,8 +270,7 @@ describe.skipIf(skip).sequential(
         Effect.gen(function* () {
           const key = "api/round-trip.txt";
           const body = yield* Effect.sync(
-            () =>
-              `written through the GKE load balancer ${crypto.randomUUID()}`,
+            () => `written through the GKE load balancer ${crypto.randomUUID()}`,
           );
 
           // A fresh bucket grant may take a moment to reach Storage; the
@@ -319,14 +292,10 @@ describe.skipIf(skip).sequential(
             bucket: outputs.bucketName,
             object: key,
           });
-          expect(object.size).toBe(
-            String(new TextEncoder().encode(body).length),
-          );
+          expect(object.size).toBe(String(new TextEncoder().encode(body).length));
           expect(object.contentType).toBe("text/plain");
 
-          const missing = yield* call(
-            HttpClientRequest.get(`${baseUrl}/objects/nope/missing.txt`),
-          );
+          const missing = yield* call(HttpClientRequest.get(`${baseUrl}/objects/nope/missing.txt`));
           expect(missing.status).toBe(404);
         }),
       {
@@ -348,9 +317,7 @@ describe.skipIf(skip).sequential(
           const job = yield* until(
             readObject({ transport, object: ref! }).pipe(
               Effect.map(
-                (o) =>
-                  (o as { status?: { succeeded?: number; failed?: number } })
-                    .status ?? {},
+                (o) => (o as { status?: { succeeded?: number; failed?: number } }).status ?? {},
               ),
             ),
             (status) => (status.succeeded ?? 0) >= 1,
@@ -363,14 +330,10 @@ describe.skipIf(skip).sequential(
             bucket: outputs.bucketName,
             object: JOB_MARKER_KEY,
           });
-          expect(marker.size).toBe(
-            String(new TextEncoder().encode(JOB_MARKER_BODY).length),
-          );
+          expect(marker.size).toBe(String(new TextEncoder().encode(JOB_MARKER_BODY).length));
 
           // …and the Deployment's read binding serves it back.
-          const read = yield* call(
-            HttpClientRequest.get(`${baseUrl}/objects/${JOB_MARKER_KEY}`),
-          );
+          const read = yield* call(HttpClientRequest.get(`${baseUrl}/objects/${JOB_MARKER_KEY}`));
           expect(read.status).toBe(200);
           expect(read.text).toBe(JOB_MARKER_BODY);
         }),
@@ -394,12 +357,10 @@ describe.skipIf(skip).sequential(
 
           yield* waitUntilGone(
             "cluster",
-            container
-              .getProjectsLocationsClusters({ name: outputs.clusterName })
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              ),
+            container.getProjectsLocationsClusters({ name: outputs.clusterName }).pipe(
+              Effect.as(false),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
           );
           yield* waitUntilGone(
             "bucket",
@@ -421,9 +382,7 @@ describe.skipIf(skip).sequential(
           // so GKE left no forwarding rule or backend service behind.
           yield* waitUntilGone(
             "load balancer",
-            namespaceLoadBalancers.pipe(
-              Effect.map((left) => left.length === 0),
-            ),
+            namespaceLoadBalancers.pipe(Effect.map((left) => left.length === 0)),
           );
           // No grant outlives the workloads at the project level either.
           const { project } = yield* GcpEnvironment.current;
@@ -433,9 +392,7 @@ describe.skipIf(skip).sequential(
           });
           expect(
             (projectPolicy.bindings ?? []).filter((b) =>
-              (b.members ?? []).some(
-                (m) => m === principals.api || m === principals.job,
-              ),
+              (b.members ?? []).some((m) => m === principals.api || m === principals.job),
             ),
           ).toEqual([]);
         }),

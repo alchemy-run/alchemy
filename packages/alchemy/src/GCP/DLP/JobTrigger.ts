@@ -133,9 +133,7 @@ export type JobTrigger = Resource<
  */
 export const JobTrigger = Resource<JobTrigger>("GCP.DLP.JobTrigger");
 
-export class JobTriggerNotResolved extends Data.TaggedError(
-  "GCP.DLP.JobTriggerNotResolved",
-)<{
+export class JobTriggerNotResolved extends Data.TaggedError("GCP.DLP.JobTriggerNotResolved")<{
   name: string;
 }> {}
 
@@ -144,10 +142,7 @@ const DEFAULT_STATUS: JobTriggerStatus = "PAUSED";
 const resourceName = (project: string, triggerId: string) =>
   `projects/${project}/jobTriggers/${triggerId}`;
 
-const toAttrs = (
-  trigger: dlp.GooglePrivacyDlpV2JobTrigger,
-  project: string,
-) => {
+const toAttrs = (trigger: dlp.GooglePrivacyDlpV2JobTrigger, project: string) => {
   const name = trigger.name ?? "";
   const parsed = parseOwnership(trigger.description);
   return {
@@ -180,26 +175,18 @@ export const JobTriggerProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.triggerId ?? output?.triggerId;
       return replaceOnIdentity(
-        previous !== undefined &&
-          news.triggerId !== undefined &&
-          news.triggerId !== previous,
+        previous !== undefined && news.triggerId !== undefined && news.triggerId !== previous,
       );
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const triggerId = yield* toResourceId(
-        id,
-        olds?.triggerId,
-        output?.triggerId,
-      );
+      const triggerId = yield* toResourceId(id, olds?.triggerId, output?.triggerId);
       const name = output?.name ?? resourceName(env.project, triggerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -223,11 +210,7 @@ export const JobTriggerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const triggerId = yield* toResourceId(
-        id,
-        news.triggerId,
-        output?.triggerId,
-      );
+      const triggerId = yield* toResourceId(id, news.triggerId, output?.triggerId);
       const name = resourceName(env.project, triggerId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

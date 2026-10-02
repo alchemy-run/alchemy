@@ -1,18 +1,18 @@
-import { AlchemyContext } from "@/AlchemyContext.ts";
+import { expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import { resolveStateStoreScope } from "@/Alchemist/routes/cloudflare.ts";
+import { AlchemyContext } from "@/AlchemyContext.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
 import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
 import * as Interaction from "@/Interaction.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { expect, it } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 
 const STAGING_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const DEFAULT_ACCOUNT = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -36,20 +36,14 @@ const CLOUDFLARE_ENV_KEYS = [
  * An empty `--env-file` in the temp home is passed through so
  * `loadConfigProvider` never falls back to the checkout's cwd `.env`.
  */
-const withIsolatedHome = <A, E, R>(
-  effect: (envFile: string) => Effect.Effect<A, E, R>,
-) =>
+const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectoryScoped({
-      prefix: "alchemy-cf-bootstrap-profile-",
-    });
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-cf-bootstrap-profile-" });
     const envFile = path.join(dir, "empty.env");
     yield* fs.writeFileString(envFile, "");
-    const previous: Record<string, string | undefined> = {
-      ALCHEMY_HOME: process.env.ALCHEMY_HOME,
-    };
+    const previous: Record<string, string | undefined> = { ALCHEMY_HOME: process.env.ALCHEMY_HOME };
     for (const key of CLOUDFLARE_ENV_KEYS) {
       previous[key] = process.env[key];
     }
@@ -73,11 +67,7 @@ const withIsolatedHome = <A, E, R>(
         Layer.mergeAll(
           Layer.provide(ProfileStoreLive, PlatformServices),
           Layer.provide(CredentialsStoreLive, PlatformServices),
-          Layer.succeed(AlchemyContext, {
-            dotAlchemy: dir,
-            dev: false,
-            adopt: false,
-          }),
+          Layer.succeed(AlchemyContext, { dotAlchemy: dir, dev: false, adopt: false }),
           Interaction.layerNonInteractive(),
           ConfigProvider.layer(ConfigProvider.fromUnknown({})),
         ),
@@ -110,10 +100,7 @@ it.live(
           storedToken(DEFAULT_ACCOUNT, "default-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({
-          profile: "staging",
-          envFile,
-        });
+        const scoped = yield* resolveStateStoreScope({ profile: "staging", envFile });
         expect(scoped.profile).toBe("staging");
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
       }),
@@ -154,10 +141,7 @@ it.live(
           storedToken(STAGING_ACCOUNT, "staging-token"),
         );
 
-        const scoped = yield* resolveStateStoreScope({
-          profile: "staging",
-          envFile,
-        });
+        const scoped = yield* resolveStateStoreScope({ profile: "staging", envFile });
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
 
         // Environment resolution is lazy: missing auth surfaces when the

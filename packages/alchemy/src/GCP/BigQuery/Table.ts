@@ -231,9 +231,7 @@ export type Table = Resource<
  */
 export const Table = Resource<Table>("GCP.BigQuery.Table");
 
-export class TableNotResolved extends Data.TaggedError(
-  "GCP.BigQuery.TableNotResolved",
-)<{
+export class TableNotResolved extends Data.TaggedError("GCP.BigQuery.TableNotResolved")<{
   name: string;
 }> {}
 
@@ -280,9 +278,7 @@ const toFieldSchema = (fields: TableField[]): bigquery.TableFieldSchema[] =>
     collation: field.collation,
   }));
 
-const schemaOf = (
-  schema: bigquery.TableSchema | undefined,
-): TableField[] | undefined => {
+const schemaOf = (schema: bigquery.TableSchema | undefined): TableField[] | undefined => {
   const fields = schema?.fields;
   if (fields === undefined || fields.length === 0) return undefined;
   return fields.flatMap((field) =>
@@ -331,10 +327,7 @@ const schemaChanged = (
   observed: bigquery.TableSchema | undefined,
 ) =>
   desired !== undefined &&
-  !jsonEqual(
-    desired.map(canonField),
-    (schemaOf(observed) ?? []).map(canonField),
-  );
+  !jsonEqual(desired.map(canonField), (schemaOf(observed) ?? []).map(canonField));
 
 const timePartitioningOf = (
   value: bigquery.TimePartitioning | undefined,
@@ -347,24 +340,17 @@ const timePartitioningOf = (
   };
 };
 
-const clusteringOf = (
-  value: bigquery.Clustering | undefined,
-): TableClustering | undefined => {
+const clusteringOf = (value: bigquery.Clustering | undefined): TableClustering | undefined => {
   const fields = (value?.fields ?? []).filter(
     (field): field is string => field !== undefined && field.length > 0,
   );
   return fields.length > 0 ? { fields } : undefined;
 };
 
-const sameOptionalString = (
-  left: string | undefined,
-  right: string | undefined,
-) => (left ?? "") === (right ?? "");
+const sameOptionalString = (left: string | undefined, right: string | undefined) =>
+  (left ?? "") === (right ?? "");
 
-const toAttrs = (
-  table: bigquery.Table | bigquery.TableListTablesItem,
-  project: string,
-) => {
+const toAttrs = (table: bigquery.Table | bigquery.TableListTablesItem, project: string) => {
   const full = table as bigquery.Table;
   const ref = table.tableReference;
   const tableId = ref?.tableId ?? "";
@@ -466,28 +452,20 @@ export const TableProvider = () =>
       const previousDataset = olds?.datasetId ?? output?.datasetId;
       const nextDataset = datasetIdOf(news.datasetId);
       const datasetChanged =
-        previousDataset !== undefined &&
-        datasetIdOf(previousDataset) !== nextDataset;
+        previousDataset !== undefined && datasetIdOf(previousDataset) !== nextDataset;
 
-      const previousPartition =
-        olds?.timePartitioning ?? output?.timePartitioning;
+      const previousPartition = olds?.timePartitioning ?? output?.timePartitioning;
       const nextPartition = news.timePartitioning;
       const partitionChanged =
         nextPartition !== undefined &&
-        ((previousPartition?.type ?? "").toUpperCase() !==
-          nextPartition.type.toUpperCase() ||
+        ((previousPartition?.type ?? "").toUpperCase() !== nextPartition.type.toUpperCase() ||
           (previousPartition?.field ?? "") !== (nextPartition.field ?? ""));
 
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.kmsKeyName ?? previousKms;
       const kmsChanged = previousKms !== nextKms;
 
-      if (
-        !tableIdChanged &&
-        !datasetChanged &&
-        !partitionChanged &&
-        !kmsChanged
-      ) {
+      if (!tableIdChanged && !datasetChanged && !partitionChanged && !kmsChanged) {
         return undefined;
       }
       return {
@@ -509,9 +487,7 @@ export const TableProvider = () =>
       const existing = yield* getByRef(env.project, datasetId, tableId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -545,13 +521,9 @@ export const TableProvider = () =>
                 maxResults: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.tables ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.tables ?? [])),
                 Stream.filter((table) =>
-                  Object.keys(table.labels ?? {}).some((key) =>
-                    key.startsWith("alchemy-"),
-                  ),
+                  Object.keys(table.labels ?? {}).some((key) => key.startsWith("alchemy-")),
                 ),
                 Stream.map((table) => toAttrs(table, env.project)),
                 Stream.runCollect,
@@ -583,19 +555,9 @@ export const TableProvider = () =>
           .insertTables({
             projectId: env.project,
             datasetId,
-            body: toTableBody(
-              env.project,
-              datasetId,
-              tableId,
-              news,
-              desiredLabels,
-            ),
+            body: toTableBody(env.project, datasetId, tableId, news, desiredLabels),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByRef(env.project, datasetId, tableId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, tableId)));
         current = created ?? undefined;
       }
 
@@ -634,14 +596,10 @@ export const TableProvider = () =>
         );
       const clusteringChanged =
         news.clustering !== undefined &&
-        !jsonEqual(
-          news.clustering.fields ?? [],
-          current.clustering?.fields ?? [],
-        );
+        !jsonEqual(news.clustering.fields ?? [], current.clustering?.fields ?? []);
       const requireFilterChanged =
         news.requirePartitionFilter !== undefined &&
-        news.requirePartitionFilter !==
-          (current.requirePartitionFilter === true);
+        news.requirePartitionFilter !== (current.requirePartitionFilter === true);
 
       if (
         labelsChanged ||

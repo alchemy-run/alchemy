@@ -38,6 +38,4 @@ export interface GetTraceGraph extends Binding.Service<
     ) => Effect.Effect<xray.GetTraceGraphResult, xray.GetTraceGraphError>
   >
 > {}
-export const GetTraceGraph = Binding.Service<GetTraceGraph>(
-  "AWS.XRay.GetTraceGraph",
-);
+export const GetTraceGraph = Binding.Service<GetTraceGraph>("AWS.XRay.GetTraceGraph");

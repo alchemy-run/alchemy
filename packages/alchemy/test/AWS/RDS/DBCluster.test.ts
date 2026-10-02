@@ -1,3 +1,7 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster } from "@/AWS/RDS/DBCluster.ts";
@@ -5,10 +9,6 @@ import type { DBClusterProps } from "@/AWS/RDS/DBCluster.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -212,10 +212,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
           return yield* DBCluster("ListCluster", {
             engine: "aurora-postgresql",
             engineMode: "provisioned",
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 0.5,
-              MaxCapacity: 1,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
           });
@@ -225,9 +222,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
       const provider = yield* Provider.findProvider(DBCluster);
       const all = yield* provider.list();
 
-      expect(
-        all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier),
-      ).toBe(true);
+      expect(all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier)).toBe(true);
 
       yield* stack.destroy();
     }),
@@ -268,10 +263,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 0.5,
-              MaxCapacity: 1,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
             backupRetentionPeriod: "1 day",
@@ -293,10 +285,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 1,
-              MaxCapacity: 2,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 1, MaxCapacity: 2 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
             backupRetentionPeriod: "3 days",
@@ -319,10 +308,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 1,
-              MaxCapacity: 2,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 1, MaxCapacity: 2 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
             backupRetentionPeriod: "3 days",
@@ -334,8 +320,5 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       yield* stack.destroy();
     }),
-  {
-    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
-    timeout: 2_400_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"], timeout: 2_400_000 },
 );

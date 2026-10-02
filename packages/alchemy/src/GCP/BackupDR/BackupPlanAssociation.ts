@@ -151,29 +151,18 @@ export const BackupPlanAssociation = Resource<BackupPlanAssociation>(
   "GCP.BackupDR.BackupPlanAssociation",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupPlanAssociationId: string,
-) =>
+const resourceName = (project: string, location: string, backupPlanAssociationId: string) =>
   `projects/${project}/locations/${location}/backupPlanAssociations/${backupPlanAssociationId}`;
 
-const toRules = (
-  rules: readonly backupdr.RuleConfigInfo[] | undefined,
-): RuleConfigInfo[] =>
+const toRules = (rules: readonly backupdr.RuleConfigInfo[] | undefined): RuleConfigInfo[] =>
   (rules ?? []).map((rule) => ({
     ruleId: rule.ruleId,
     lastBackupState: rule.lastBackupState,
     lastBackupError: rule.lastBackupError?.message,
-    lastSuccessfulBackupConsistencyTime:
-      rule.lastSuccessfulBackupConsistencyTime,
+    lastSuccessfulBackupConsistencyTime: rule.lastSuccessfulBackupConsistencyTime,
   }));
 
-const toAttrs = (
-  item: backupdr.BackupPlanAssociation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: backupdr.BackupPlanAssociation, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "backupPlanAssociations", region);
   return {
@@ -192,8 +181,7 @@ const toAttrs = (
       item.cloudSqlInstanceBackupPlanAssociationProperties?.instanceCreateTime,
     filestoreInstanceCreateTime:
       item.filestoreInstanceBackupPlanAssociationProperties?.instanceCreateTime,
-    alloydbClusterUid:
-      item.alloydbClusterBackupPlanAssociationProperties?.clusterUid,
+    alloydbClusterUid: item.alloydbClusterBackupPlanAssociationProperties?.clusterUid,
     state: item.state,
     createTime: item.createTime,
     updateTime: item.updateTime,
@@ -227,9 +215,7 @@ const listOwned = (project: string, region: string) =>
       ...new Set(
         items
           .map((item) => item.backupPlan)
-          .filter(
-            (name): name is string => name !== undefined && name.length > 0,
-          ),
+          .filter((name): name is string => name !== undefined && name.length > 0),
       ),
     ];
     const ownedPlans = yield* Effect.forEach(
@@ -237,30 +223,18 @@ const listOwned = (project: string, region: string) =>
       (name) =>
         getPlan(name).pipe(
           Effect.map((plan) =>
-            plan !== undefined && hasAlchemyLabelMap(plan.labels)
-              ? name
-              : undefined,
+            plan !== undefined && hasAlchemyLabelMap(plan.labels) ? name : undefined,
           ),
         ),
       { concurrency: 8 },
     );
-    const owned = new Set(
-      ownedPlans.filter((name): name is string => name !== undefined),
-    );
-    return items.filter(
-      (item) => item.backupPlan !== undefined && owned.has(item.backupPlan),
-    );
+    const owned = new Set(ownedPlans.filter((name): name is string => name !== undefined));
+    return items.filter((item) => item.backupPlan !== undefined && owned.has(item.backupPlan));
   });
 
 export const BackupPlanAssociationProvider = () =>
   Provider.succeed(BackupPlanAssociation, {
-    stables: [
-      "name",
-      "backupPlanAssociationId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "backupPlanAssociationId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -268,16 +242,12 @@ export const BackupPlanAssociationProvider = () =>
       const previousResource = olds?.resource ?? output?.resource;
       const previousType = olds?.resourceType ?? output?.resourceType;
       return replaceOnIdentity({
-        previousId:
-          olds?.backupPlanAssociationId ?? output?.backupPlanAssociationId,
+        previousId: olds?.backupPlanAssociationId ?? output?.backupPlanAssociationId,
         nextId:
           news.backupPlanAssociationId ??
           olds?.backupPlanAssociationId ??
           output?.backupPlanAssociationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -301,21 +271,14 @@ export const BackupPlanAssociationProvider = () =>
         output?.backupPlanAssociationId,
         "backupplanassoc",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, backupPlanAssociationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupPlanAssociationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       if (output !== undefined) return attrs;
       const plan = yield* getPlan(existing.backupPlan);
-      return plan !== undefined && hasAlchemyLabelMap(plan.labels)
-        ? attrs
-        : Unowned(attrs);
+      return plan !== undefined && hasAlchemyLabelMap(plan.labels) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -333,10 +296,7 @@ export const BackupPlanAssociationProvider = () =>
         output?.backupPlanAssociationId,
         "backupplanassoc",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupPlanAssociationId);
       const backupPlan = backupPlanOf(news.backupPlan, env.project, location);
 
@@ -376,12 +336,11 @@ export const BackupPlanAssociationProvider = () =>
       );
 
       if (!sameText(current.backupPlan, backupPlan)) {
-        const operation =
-          yield* backupdr.patchProjectsLocationsBackupPlanAssociations({
-            name: current.name ?? name,
-            updateMask: "backupPlan",
-            body: { backupPlan },
-          });
+        const operation = yield* backupdr.patchProjectsLocationsBackupPlanAssociations({
+          name: current.name ?? name,
+          updateMask: "backupPlan",
+          body: { backupPlan },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

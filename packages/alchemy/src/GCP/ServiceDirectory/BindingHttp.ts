@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { Endpoint } from "./Endpoint.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Endpoint } from "./Endpoint.ts";
 
 /**
  * Shared HTTP scaffolding for Service Directory endpoint bindings.
  * NOT exported from index.ts.
  */
-export const makeEndpointHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeEndpointHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

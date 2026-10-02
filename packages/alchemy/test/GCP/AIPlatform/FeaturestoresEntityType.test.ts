@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a Featurestore, whose online serving takes ~6 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -77,10 +74,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.entity.description).toEqual("end users");
       expect(created.entity.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsFeaturestoresEntityTypes({
-          name: created.entity.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsFeaturestoresEntityTypes({
+        name: created.entity.name,
+      });
       expect(fetched.name).toEqual(created.entity.name);
 
       const updated = yield* stack.deploy(

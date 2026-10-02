@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsReasoningEnginesMemories({ name }).pipe(
@@ -78,10 +75,9 @@ test.provider(
       expect(created.memory.reasoningEngine).toEqual(created.engine.name);
       expect(created.memory.fact).toEqual("the user prefers concise answers");
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsReasoningEnginesMemories({
-          name: created.memory.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsReasoningEnginesMemories({
+        name: created.memory.name,
+      });
       expect(fetched.name).toEqual(created.memory.name);
 
       const updated = yield* stack.deploy(

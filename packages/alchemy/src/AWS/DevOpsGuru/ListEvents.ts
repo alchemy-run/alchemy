@@ -29,12 +29,7 @@ export interface ListEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.ListEventsRequest,
-    ) => Effect.Effect<
-      devopsguru.ListEventsResponse,
-      devopsguru.ListEventsError
-    >
+    ) => Effect.Effect<devopsguru.ListEventsResponse, devopsguru.ListEventsError>
   >
 > {}
-export const ListEvents = Binding.Service<ListEvents>(
-  "AWS.DevOpsGuru.ListEvents",
-);
+export const ListEvents = Binding.Service<ListEvents>("AWS.DevOpsGuru.ListEvents");

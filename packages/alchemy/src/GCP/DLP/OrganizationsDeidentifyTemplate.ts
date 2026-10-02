@@ -139,10 +139,9 @@ export type OrganizationsDeidentifyTemplate = Resource<
  * @resource
  * @category DLP
  */
-export const OrganizationsDeidentifyTemplate =
-  Resource<OrganizationsDeidentifyTemplate>(
-    "GCP.DLP.OrganizationsDeidentifyTemplate",
-  );
+export const OrganizationsDeidentifyTemplate = Resource<OrganizationsDeidentifyTemplate>(
+  "GCP.DLP.OrganizationsDeidentifyTemplate",
+);
 
 const resourceName = (organization: string, templateId: string) =>
   `${organization}/deidentifyTemplates/${templateId}`;
@@ -178,14 +177,7 @@ const getByName = (name: string) =>
 
 export const OrganizationsDeidentifyTemplateProvider = () =>
   Provider.succeed(OrganizationsDeidentifyTemplate, {
-    stables: [
-      "name",
-      "templateId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "templateId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -201,18 +193,12 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const templateId = yield* toPhysicalId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toPhysicalId(id, olds?.templateId, output?.templateId);
       const name = output?.name ?? resourceName(organization, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -223,15 +209,9 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
         return yield* dlp.listOrganizationsDeidentifyTemplates
           .pages({ parent: organization, pageSize: 100 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.deidentifyTemplates ?? []),
-            ),
-            Stream.filter((template) =>
-              hasOwnershipMarker(template.description),
-            ),
-            Stream.map((template) =>
-              toAttrs(template, organization, env.project),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.deidentifyTemplates ?? [])),
+            Stream.filter((template) => hasOwnershipMarker(template.description)),
+            Stream.map((template) => toAttrs(template, organization, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -240,15 +220,8 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const templateId = yield* toPhysicalId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const templateId = yield* toPhysicalId(id, news.templateId, output?.templateId);
       const name = resourceName(organization, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);
@@ -281,8 +254,7 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const configChanged =
-        fingerprint(current.deidentifyConfig) !== fingerprint(deidentifyConfig);
+      const configChanged = fingerprint(current.deidentifyConfig) !== fingerprint(deidentifyConfig);
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         descriptionChanged ? "description" : undefined,

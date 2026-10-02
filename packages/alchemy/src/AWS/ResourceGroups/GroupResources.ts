@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link GroupResources} — the group is injected from the binding. */
-export type GroupResourcesRequest = Omit<
-  resourcegroups.GroupResourcesInput,
-  "Group"
->;
+export type GroupResourcesRequest = Omit<resourcegroups.GroupResourcesInput, "Group">;
 
 /**
  * Runtime binding for `resource-groups:GroupResources`.
@@ -46,12 +43,7 @@ export interface GroupResources extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GroupResourcesRequest,
-    ) => Effect.Effect<
-      resourcegroups.GroupResourcesOutput,
-      resourcegroups.GroupResourcesError
-    >
+    ) => Effect.Effect<resourcegroups.GroupResourcesOutput, resourcegroups.GroupResourcesError>
   >
 > {}
-export const GroupResources = Binding.Service<GroupResources>(
-  "AWS.ResourceGroups.GroupResources",
-);
+export const GroupResources = Binding.Service<GroupResources>("AWS.ResourceGroups.GroupResources");

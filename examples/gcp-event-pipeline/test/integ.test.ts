@@ -1,12 +1,12 @@
+import { describe, expect } from "bun:test";
+import { spawnSync } from "node:child_process";
 import * as Alchemy from "alchemy";
 import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
-import { describe, expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
+import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -18,8 +18,7 @@ const { getWhenReady } = Test;
 
 // Both hosts are built from `main`, which needs a local image build.
 const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status ===
-  0;
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
 describe.skipIf(!dockerAvailable)("gcp-event-pipeline", () => {
@@ -44,9 +43,7 @@ describe.skipIf(!dockerAvailable)("gcp-event-pipeline", () => {
   const countOf = (baseUrl: string, type: string) =>
     Effect.gen(function* () {
       const res = yield* HttpClient.execute(
-        HttpClientRequest.get(
-          `${baseUrl}/events/count?type=${encodeURIComponent(type)}`,
-        ),
+        HttpClientRequest.get(`${baseUrl}/events/count?type=${encodeURIComponent(type)}`),
       );
       return ((yield* res.json) as { count: number }).count;
     });
@@ -62,9 +59,7 @@ describe.skipIf(!dockerAvailable)("gcp-event-pipeline", () => {
       const accepted = yield* publish(baseUrl, "integ.smoke", { n: 1 });
       expect(accepted.status).toBe(202);
       const { id } = (yield* accepted.json) as { id: string };
-      expect(id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 
       const missingType = yield* HttpClient.execute(
         HttpClientRequest.post(`${baseUrl}/events`).pipe(
@@ -93,9 +88,7 @@ describe.skipIf(!dockerAvailable)("gcp-event-pipeline", () => {
 
       expect(yield* countOf(baseUrl, type)).toBe(0);
 
-      const drain = yield* HttpClient.execute(
-        HttpClientRequest.post(`${baseUrl}/drain`),
-      );
+      const drain = yield* HttpClient.execute(HttpClientRequest.post(`${baseUrl}/drain`));
       expect(drain.status).toBe(202);
 
       // Starting a Cloud Run Job returns immediately; the rows show up once

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as iap from "@distilled.cloud/gcp/iap_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   iap.getProjectsIap_tunnelLocationsDestGroups({ name }).pipe(
@@ -85,19 +82,13 @@ test.provider(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.cidrs.sort()).toEqual(
-        ["10.241.0.0/24", "10.241.1.0/24"].sort(),
-      );
+      expect(updated.cidrs.sort()).toEqual(["10.241.0.0/24", "10.241.1.0/24"].sort());
       expect(updated.fqdns).toEqual(["db.internal.example.com"]);
 
-      const fetchedUpdate = yield* iap.getProjectsIap_tunnelLocationsDestGroups(
-        {
-          name: created.name,
-        },
-      );
-      expect(fetchedUpdate.cidrs?.sort()).toEqual(
-        ["10.241.0.0/24", "10.241.1.0/24"].sort(),
-      );
+      const fetchedUpdate = yield* iap.getProjectsIap_tunnelLocationsDestGroups({
+        name: created.name,
+      });
+      expect(fetchedUpdate.cidrs?.sort()).toEqual(["10.241.0.0/24", "10.241.1.0/24"].sort());
       expect(fetchedUpdate.fqdns).toEqual(["db.internal.example.com"]);
 
       yield* stack.destroy();

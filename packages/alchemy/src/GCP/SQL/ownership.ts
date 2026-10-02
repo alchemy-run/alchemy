@@ -39,13 +39,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-export const matchesOwnership = (
-  description: string | undefined,
-  labels: Record<string, string>,
-) =>
-  parseDescription(description).labels[alchemyLabelKeys.id] ===
-  labels[alchemyLabelKeys.id];
+export const matchesOwnership = (description: string | undefined, labels: Record<string, string>) =>
+  parseDescription(description).labels[alchemyLabelKeys.id] === labels[alchemyLabelKeys.id];

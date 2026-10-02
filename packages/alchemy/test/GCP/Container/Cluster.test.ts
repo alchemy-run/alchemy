@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import { findClusterAdapter } from "@/Kubernetes/ClusterAdapter.ts";
-import * as Test from "@/Test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { findClusterAdapter } from "@/Kubernetes/ClusterAdapter.ts";
+import * as Test from "@/Test/Alchemy";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // GKE cluster create and delete each take 5-10 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -40,9 +37,9 @@ test.provider(
       const page = yield* container.listProjectsLocationsClusters({
         parent: `projects/${project}/locations/-`,
       });
-      expect(
-        (page.clusters ?? []).map((cluster) => cluster.name),
-      ).not.toContain("alchemy-missing-cluster");
+      expect((page.clusters ?? []).map((cluster) => cluster.name)).not.toContain(
+        "alchemy-missing-cluster",
+      );
 
       const missing = yield* container
         .getProjectsLocationsClusters({

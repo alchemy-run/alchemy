@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { Collector } from "./Collector.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import type { Collector } from "./Collector.ts";
 
 /**
  * Shared HTTP scaffolding for Rapid Migration Assessment collector
@@ -13,11 +13,7 @@ import { type BindingIam, grantFor } from "../HttpBinding.ts";
  * construction (after providing Credentials + HttpClient) so the inner
  * runtime Effect is `Effect<A, E>` and does not leak `GcpOpContext`.
  */
-export const makeCollectorHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeCollectorHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: Effect.Effect<

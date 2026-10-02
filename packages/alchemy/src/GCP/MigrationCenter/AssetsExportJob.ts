@@ -25,9 +25,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type AssetsExportJobFileFormat =
-  | mc.SignedUriDestinationFileFormatEnum
-  | (string & {});
+export type AssetsExportJobFileFormat = mc.SignedUriDestinationFileFormatEnum | (string & {});
 
 export type AssetsExportJobProps = {
   /**
@@ -143,17 +141,11 @@ export type AssetsExportJob = Resource<
  * @resource
  * @category MigrationCenter
  */
-export const AssetsExportJob = Resource<AssetsExportJob>(
-  "GCP.MigrationCenter.AssetsExportJob",
-);
+export const AssetsExportJob = Resource<AssetsExportJob>("GCP.MigrationCenter.AssetsExportJob");
 
 const DEFAULT_FORMAT: AssetsExportJobFileFormat = "CSV";
 
-const resourceName = (
-  project: string,
-  location: string,
-  assetsExportJobId: string,
-) =>
+const resourceName = (project: string, location: string, assetsExportJobId: string) =>
   `${locationParent(project, location)}/assetsExportJobs/${assetsExportJobId}`;
 
 const toAttrs = (job: mc.AssetsExportJob, project: string, region: string) => {
@@ -183,9 +175,7 @@ const desiredBody = (
   labels,
   showHidden: news.showHidden === true,
   condition:
-    news.filter !== undefined && news.filter.length > 0
-      ? { filter: news.filter }
-      : undefined,
+    news.filter !== undefined && news.filter.length > 0 ? { filter: news.filter } : undefined,
   signedUriDestination: {
     fileFormat: news.fileFormat ?? DEFAULT_FORMAT,
   },
@@ -211,9 +201,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.assetsExportJobs ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.assetsExportJobs ?? [])),
       Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -224,15 +212,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.assetsExportJobs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.assetsExportJobs ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.AssetsExportJob[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.AssetsExportJob[])),
           ),
       ),
     );
@@ -259,22 +243,14 @@ export const AssetsExportJobProvider = () =>
           filter: olds?.filter ?? output?.filter,
           showHidden: (olds?.showHidden ?? output?.showHidden) === true,
           inventory: (olds?.inventory ?? output?.inventory) !== false,
-          networkDependencies:
-            (olds?.networkDependencies ?? output?.networkDependencies) === true,
-          performanceDataMaxDays:
-            olds?.performanceDataMaxDays ?? output?.performanceDataMaxDays,
+          networkDependencies: (olds?.networkDependencies ?? output?.networkDependencies) === true,
+          performanceDataMaxDays: olds?.performanceDataMaxDays ?? output?.performanceDataMaxDays,
           labels: olds?.labels ?? {},
         });
       return replaceOnIdentity({
         previousId: olds?.assetsExportJobId ?? output?.assetsExportJobId,
-        nextId:
-          news.assetsExportJobId ??
-          olds?.assetsExportJobId ??
-          output?.assetsExportJobId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.assetsExportJobId ?? olds?.assetsExportJobId ?? output?.assetsExportJobId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -291,18 +267,12 @@ export const AssetsExportJobProvider = () =>
         output?.assetsExportJobId,
         "exportjob",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, assetsExportJobId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, assetsExportJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -320,10 +290,7 @@ export const AssetsExportJobProvider = () =>
         output?.assetsExportJobId,
         "exportjob",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, assetsExportJobId);
       const desiredLabels = {
         ...toLabels(news.labels),

@@ -35,9 +35,7 @@ export type SubscriptionDeliveryConfig = {
    * When messages become available to subscribers.
    * `DELIVER_IMMEDIATELY` or `DELIVER_AFTER_STORED`.
    */
-  deliveryRequirement?:
-    | pubsublite.DeliveryConfigDeliveryRequirementEnum
-    | (string & {});
+  deliveryRequirement?: pubsublite.DeliveryConfigDeliveryRequirementEnum | (string & {});
 };
 
 export type SubscriptionPubSubConfig = {
@@ -170,9 +168,7 @@ export type AdminSubscription = Resource<
  * @resource
  * @category PubSubLite
  */
-export const AdminSubscription = Resource<AdminSubscription>(
-  "GCP.PubSubLite.AdminSubscription",
-);
+export const AdminSubscription = Resource<AdminSubscription>("GCP.PubSubLite.AdminSubscription");
 
 const COLLECTION = "subscriptions";
 const TOPIC_COLLECTION = "topics";
@@ -182,9 +178,7 @@ const locationOfTopic = (topic: string, fallback: string) => {
   return parseName(topic, TOPIC_COLLECTION).location || fallback;
 };
 
-const desiredDelivery = (
-  news: AdminSubscriptionProps,
-): pubsublite.DeliveryConfig | undefined => {
+const desiredDelivery = (news: AdminSubscriptionProps): pubsublite.DeliveryConfig | undefined => {
   if (news.deliveryConfig === undefined) return undefined;
   return {
     deliveryRequirement: news.deliveryConfig.deliveryRequirement,
@@ -198,14 +192,8 @@ const desiredExport = (
 ): pubsublite.ExportConfig | undefined => {
   if (news.exportConfig === undefined) return undefined;
   const deadLetter =
-    news.exportConfig.deadLetterTopic !== undefined &&
-    news.exportConfig.deadLetterTopic.length > 0
-      ? expandName(
-          news.exportConfig.deadLetterTopic,
-          project,
-          location,
-          TOPIC_COLLECTION,
-        )
+    news.exportConfig.deadLetterTopic !== undefined && news.exportConfig.deadLetterTopic.length > 0
+      ? expandName(news.exportConfig.deadLetterTopic, project, location, TOPIC_COLLECTION)
       : news.exportConfig.deadLetterTopic;
   const pubsubTopic = news.exportConfig.pubsubConfig?.topic;
   return {
@@ -246,55 +234,36 @@ export const AdminSubscriptionProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousTopic = olds?.topic ?? output?.topic;
-      const topicChanged =
-        previousTopic !== undefined && !sameRef(previousTopic, news.topic);
+      const topicChanged = previousTopic !== undefined && !sameRef(previousTopic, news.topic);
       const inferred = locationOfTopic(
         news.topic,
-        normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
-          DEFAULT_ZONE,
-        ),
+        normalizeLocation(news.location ?? olds?.location ?? output?.location, DEFAULT_ZONE),
       );
       return replaceOnIdentity({
         previousId: olds?.subscriptionId ?? output?.subscriptionId,
-        nextId:
-          news.subscriptionId ?? olds?.subscriptionId ?? output?.subscriptionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          DEFAULT_ZONE,
-        ),
-        nextLocation: normalizeLocation(
-          news.location ?? inferred,
-          DEFAULT_ZONE,
-        ),
+        nextId: news.subscriptionId ?? olds?.subscriptionId ?? output?.subscriptionId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE),
+        nextLocation: normalizeLocation(news.location ?? inferred, DEFAULT_ZONE),
         extra: topicChanged,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const subscriptionId = yield* toResourceId(
-        id,
-        olds?.subscriptionId,
-        output?.subscriptionId,
-      );
+      const subscriptionId = yield* toResourceId(id, olds?.subscriptionId, output?.subscriptionId);
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
           (olds?.topic ? locationOfTopic(olds.topic, DEFAULT_ZONE) : undefined),
         DEFAULT_ZONE,
       );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, subscriptionId);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, subscriptionId);
       const existing = yield* getSubscription(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const owned = yield* ownedByAlchemy(id, attrs.subscriptionId);
       if (owned) return attrs;
-      return hasOwnershipMarker(attrs.subscriptionId)
-        ? undefined
-        : Unowned(attrs);
+      return hasOwnershipMarker(attrs.subscriptionId) ? undefined : Unowned(attrs);
     }),
 
     list: () =>
@@ -306,34 +275,21 @@ export const AdminSubscriptionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const subscriptionId = yield* toResourceId(
-        id,
-        news.subscriptionId,
-        output?.subscriptionId,
-      );
+      const subscriptionId = yield* toResourceId(id, news.subscriptionId, output?.subscriptionId);
       const topicName = expandName(
         news.topic,
         env.project,
         normalizeLocation(
-          news.location ??
-            output?.location ??
-            locationOfTopic(news.topic, DEFAULT_ZONE),
+          news.location ?? output?.location ?? locationOfTopic(news.topic, DEFAULT_ZONE),
           DEFAULT_ZONE,
         ),
         TOPIC_COLLECTION,
       );
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationOfTopic(topicName, DEFAULT_ZONE),
+        news.location ?? output?.location ?? locationOfTopic(topicName, DEFAULT_ZONE),
         DEFAULT_ZONE,
       );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        subscriptionId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, subscriptionId);
       const deliveryConfig = desiredDelivery(news);
       const exportConfig = desiredExport(news, env.project, location);
 
@@ -363,10 +319,7 @@ export const AdminSubscriptionProvider = () =>
       const observedName = current.name ?? name;
       const deliveryChanged =
         deliveryConfig !== undefined &&
-        !sameText(
-          current.deliveryConfig?.deliveryRequirement,
-          deliveryConfig.deliveryRequirement,
-        );
+        !sameText(current.deliveryConfig?.deliveryRequirement, deliveryConfig.deliveryRequirement);
       const exportChanged =
         exportConfig !== undefined &&
         !jsonEqual(

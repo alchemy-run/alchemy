@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -125,9 +120,7 @@ export type SessionTemplate = Resource<
  * @resource
  * @category Dataproc
  */
-export const SessionTemplate = Resource<SessionTemplate>(
-  "GCP.Dataproc.SessionTemplate",
-);
+export const SessionTemplate = Resource<SessionTemplate>("GCP.Dataproc.SessionTemplate");
 
 export class SessionTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.SessionTemplateNotResolved",
@@ -148,11 +141,7 @@ const defaultJupyter = (
   return { ...jupyter, displayName: jupyter.displayName ?? templateId };
 };
 
-const toAttrs = (
-  template: dataproc.SessionTemplate,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (template: dataproc.SessionTemplate, project: string, location: string) => {
   const name = template.name ?? "";
   const parsed = parseResourceName(name, "sessionTemplates", location);
   return {
@@ -206,54 +195,35 @@ const listLocation = (project: string, location: string) =>
     ),
   );
 
-const templateChanged = (
-  current: dataproc.SessionTemplate,
-  desired: dataproc.SessionTemplate,
-) =>
+const templateChanged = (current: dataproc.SessionTemplate, desired: dataproc.SessionTemplate) =>
   (current.description ?? "") !== (desired.description ?? "") ||
   fingerprint(current.jupyterSession) !== fingerprint(desired.jupyterSession) ||
-  fingerprint(current.sparkConnectSession) !==
-    fingerprint(desired.sparkConnectSession) ||
+  fingerprint(current.sparkConnectSession) !== fingerprint(desired.sparkConnectSession) ||
   fingerprint(current.runtimeConfig) !== fingerprint(desired.runtimeConfig) ||
-  fingerprint(current.environmentConfig) !==
-    fingerprint(desired.environmentConfig);
+  fingerprint(current.environmentConfig) !== fingerprint(desired.environmentConfig);
 
 export const SessionTemplateProvider = () =>
   Provider.succeed(SessionTemplate, {
-    stables: [
-      "name",
-      "templateId",
-      "project",
-      "location",
-      "uuid",
-      "createTime",
-    ],
+    stables: ["name", "templateId", "project", "location", "uuid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const nextId = news.templateId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousLocation !== nextLocation)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousLocation === nextLocation &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -261,10 +231,7 @@ export const SessionTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const templateId = yield* toPhysicalId(
         id,
         olds?.templateId,
@@ -272,14 +239,11 @@ export const SessionTemplateProvider = () =>
         MAX_SESSION_TEMPLATE_ID_LENGTH,
         "session",
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -295,10 +259,7 @@ export const SessionTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const templateId = yield* toPhysicalId(
         id,
         news.templateId,

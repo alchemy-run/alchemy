@@ -1,9 +1,3 @@
-import {
-  environmentServiceInstances,
-  waitUntilDeleted,
-  projectServices,
-  environmentVolumes,
-} from "./GraphQL.ts";
 import { randomBytes } from "node:crypto";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
@@ -28,6 +22,12 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  environmentServiceInstances,
+  waitUntilDeleted,
+  projectServices,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -38,15 +38,10 @@ const serviceFields = <E>(service: Query<Service, E>) => ({
   deletedAt: service.deletedAt,
 });
 const attributeInstanceFields = <E>(instance: Query<ServiceInstance, E>) => ({
-  source: instance.source.pipe(
-    Query.map((source) => ({ image: source.image })),
-  ),
+  source: instance.source.pipe(Query.map((source) => ({ image: source.image }))),
   region: instance.region,
   latestDeployment: instance.latestDeployment.pipe(
-    Query.map((deployment) => ({
-      id: deployment.id,
-      status: deployment.status,
-    })),
+    Query.map((deployment) => ({ id: deployment.id, status: deployment.status })),
   ),
 });
 const instanceFields = <E>(instance: Query<ServiceInstance, E>) => ({
@@ -75,34 +70,21 @@ const proxyFields = <E>(proxy: Query<TCPProxy, E>) => ({
   proxyPort: proxy.proxyPort,
 });
 type CloudService = UnwrapPlan<ReturnType<typeof serviceFields>>;
-type CloudAttributeInstance = UnwrapPlan<
-  ReturnType<typeof attributeInstanceFields>
->;
+type CloudAttributeInstance = UnwrapPlan<ReturnType<typeof attributeInstanceFields>>;
 type ServiceInstanceResponse = UnwrapPlan<ReturnType<typeof instanceFields>>;
 type CloudInstance = UnwrapPlan<ReturnType<typeof volumeFields>>;
 type CloudProxy = UnwrapPlan<ReturnType<typeof proxyFields>>;
 
-const readService = Query.fn((id: string) =>
-  serviceFields(Railway.service({ id })),
+const readService = Query.fn((id: string) => serviceFields(Railway.service({ id })));
+const readServiceInstance = Query.fn((environmentId: string, serviceId: string) =>
+  instanceFields(Railway.serviceInstance({ environmentId, serviceId })),
 );
-const readServiceInstance = Query.fn(
-  (environmentId: string, serviceId: string) =>
-    instanceFields(Railway.serviceInstance({ environmentId, serviceId })),
-);
-const readVolumeInstance = Query.fn((id: string) =>
-  volumeFields(Railway.volumeInstance({ id })),
-);
+const readVolumeInstance = Query.fn((id: string) => volumeFields(Railway.volumeInstance({ id })));
 const readProxies = Query.fn((environmentId: string, serviceId: string) =>
   Railway.tcpProxies({ environmentId, serviceId }).pipe(Query.map(proxyFields)),
 );
-const readVariables = Query.fn(
-  (projectId: string, environmentId: string, serviceId: string) =>
-    Railway.variables({
-      projectId,
-      environmentId,
-      serviceId,
-      unrendered: true,
-    }),
+const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  Railway.variables({ projectId, environmentId, serviceId, unrendered: true }),
 );
 const liveEnvironments = (projectId: string) =>
   Query.items(
@@ -113,27 +95,18 @@ const liveEnvironments = (projectId: string) =>
 const serviceCreate = Query.fn((args: { input: ServiceCreateInput }) =>
   serviceFields(Railway.serviceCreate(args)),
 );
-const serviceUpdate = Query.fn(
-  (args: { id: string; input: { name: string } }) =>
-    serviceFields(Railway.serviceUpdate(args)),
+const serviceUpdate = Query.fn((args: { id: string; input: { name: string } }) =>
+  serviceFields(Railway.serviceUpdate(args)),
 );
 const serviceInstanceUpdate = Query.fn(
-  (args: {
-    environmentId: string;
-    serviceId: string;
-    input: ServiceInstanceUpdateInput;
-  }) => Railway.serviceInstanceUpdate(args),
+  (args: { environmentId: string; serviceId: string; input: ServiceInstanceUpdateInput }) =>
+    Railway.serviceInstanceUpdate(args),
 );
-const serviceInstanceDeployV2 = Query.fn(
-  (args: { environmentId: string; serviceId: string }) =>
-    Railway.serviceInstanceDeployV2(args),
+const serviceInstanceDeployV2 = Query.fn((args: { environmentId: string; serviceId: string }) =>
+  Railway.serviceInstanceDeployV2(args),
 );
-const deploymentCancel = Query.fn((args: { id: string }) =>
-  Railway.deploymentCancel(args),
-);
-const serviceDelete = Query.fn((args: { id: string }) =>
-  Railway.serviceDelete(args),
-);
+const deploymentCancel = Query.fn((args: { id: string }) => Railway.deploymentCancel(args));
+const serviceDelete = Query.fn((args: { id: string }) => Railway.serviceDelete(args));
 const volumeCreate = Query.fn((args: { input: VolumeCreateInput }) => {
   const volume = Railway.volumeCreate(args);
   return { id: volume.id, name: volume.name };
@@ -142,15 +115,10 @@ const volumeUpdate = Query.fn((volumeId: string, name: string) => ({
   id: Railway.volumeUpdate({ volumeId, input: { name } }).id,
 }));
 const volumeInstanceUpdate = Query.fn(
-  (args: {
-    volumeId: string;
-    environmentId: string;
-    input: VolumeInstanceUpdateInput;
-  }) => Railway.volumeInstanceUpdate(args),
+  (args: { volumeId: string; environmentId: string; input: VolumeInstanceUpdateInput }) =>
+    Railway.volumeInstanceUpdate(args),
 );
-const volumeDelete = Query.fn((args: { volumeId: string }) =>
-  Railway.volumeDelete(args),
-);
+const volumeDelete = Query.fn((args: { volumeId: string }) => Railway.volumeDelete(args));
 const tcpProxyCreate = Query.fn((args: { input: TCPProxyCreateInput }) =>
   proxyFields(Railway.tcpProxyCreate(args)),
 );
@@ -190,9 +158,7 @@ export const MONGO_START_COMMAND =
  * `Railway.Project` (its primary environment), a `Railway.Environment`,
  * or an `{ environmentId }` stub.
  */
-export type MongoEnvironment = {
-  readonly environmentId: string;
-};
+export type MongoEnvironment = { readonly environmentId: string };
 
 export interface MongoProps {
   /**
@@ -315,11 +281,7 @@ const resolveMongoProps = (
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              MongoEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<MongoEnvironment, never, Providers>
           : resolved.environment;
     return { ...resolved, project, environment };
   });
@@ -418,10 +380,8 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * @product MongoDB
  */
 export const Mongo: typeof MongoResource = Object.assign(
-  (
-    id: string,
-    props: MongoProps | Effect.Effect<MongoProps, never, Providers>,
-  ) => MongoResource(id, resolveMongoProps(props)),
+  (id: string, props: MongoProps | Effect.Effect<MongoProps, never, Providers>) =>
+    MongoResource(id, resolveMongoProps(props)),
   MongoResource,
 );
 
@@ -430,37 +390,27 @@ export const Mongo: typeof MongoResource = Object.assign(
  */
 export const mongo = Mongo;
 
-export class MongoNotCreated extends Data.TaggedError(
-  "Railway.MongoNotCreated",
-)<{
+export class MongoNotCreated extends Data.TaggedError("Railway.MongoNotCreated")<{
   name: string;
   projectId: string;
 }> {}
 
-export class MongoProjectRequired extends Data.TaggedError(
-  "Railway.MongoProjectRequired",
-)<{
+export class MongoProjectRequired extends Data.TaggedError("Railway.MongoProjectRequired")<{
   message: string;
 }> {}
 
-export class MongoDeployFailed extends Data.TaggedError(
-  "Railway.MongoDeployFailed",
-)<{
+export class MongoDeployFailed extends Data.TaggedError("Railway.MongoDeployFailed")<{
   serviceId: string;
   status: string;
   deploymentId: string | undefined;
 }> {}
 
-export class MongoVolumeNotCreated extends Data.TaggedError(
-  "Railway.MongoVolumeNotCreated",
-)<{
+export class MongoVolumeNotCreated extends Data.TaggedError("Railway.MongoVolumeNotCreated")<{
   name: string;
   serviceId: string;
 }> {}
 
-export class MongoCommandError extends Data.TaggedError(
-  "Railway.MongoCommandError",
-)<{
+export class MongoCommandError extends Data.TaggedError("Railway.MongoCommandError")<{
   cause: unknown;
 }> {
   override get message() {
@@ -473,9 +423,7 @@ class MongoPending extends Data.TaggedError("Railway.MongoPending")<{
   status: string;
 }> {}
 
-class MongoDeployPending extends Data.TaggedError(
-  "Railway.MongoDeployPending",
-)<{
+class MongoDeployPending extends Data.TaggedError("Railway.MongoDeployPending")<{
   serviceId: string;
   status: string;
 }> {}
@@ -488,9 +436,7 @@ class VolumePending extends Data.TaggedError("Railway.MongoVolumePending")<{
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -531,9 +477,7 @@ const isGoneVolume = (instance: CloudInstance | undefined) =>
   goneVolumeState(instance.state);
 
 const isGoneProxy = (proxy: CloudProxy | undefined) =>
-  proxy === undefined ||
-  proxy.deletedAt != null ||
-  proxy.syncStatus === "DELETED";
+  proxy === undefined || proxy.deletedAt != null || proxy.syncStatus === "DELETED";
 
 const normalizeDomain = (domain: string) => domain.replace(/\.+$/, "");
 
@@ -543,9 +487,7 @@ const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed === `${desired}:latest` || desired === `${observed}:latest`) {
     return true;
   }
-  return (
-    observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`)
-  );
+  return observed.endsWith(`/${desired}`) || observed.endsWith(`/${desired}:latest`);
 };
 
 const normalizeStart = (value: string | null | undefined) =>
@@ -615,8 +557,7 @@ const toAttrs = (input: {
   database: string;
 }): Mongo["Attributes"] => {
   const name = input.service.name;
-  const domain =
-    input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
+  const domain = input.proxy !== undefined ? normalizeDomain(input.proxy.domain) : undefined;
   const proxyPort = input.proxy?.proxyPort;
   return {
     serviceId: input.service.id,
@@ -674,9 +615,7 @@ const getInstance = (environmentId: string, serviceId: string) =>
 const listProjectServices = (projectId: string) =>
   projectServices(projectId, serviceFields).pipe(
     Effect.map((services) => services.filter((node) => !isGoneService(node))),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed([] as CloudService[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudService[])),
   );
 
 const findByName = (projectId: string, name: string) =>
@@ -693,9 +632,7 @@ const getVolumeByInstanceId = (volumeInstanceId: string) =>
 const listVolumeInstances = (environmentId: string, projectId: string) =>
   environmentVolumes(environmentId, projectId, volumeFields).pipe(
     Effect.map((instances) => instances.filter((node) => !isGoneVolume(node))),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed([] as CloudInstance[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudInstance[])),
   );
 
 const findVolume = (
@@ -710,20 +647,12 @@ const findVolume = (
 const listProxies = (environmentId: string, serviceId: string) =>
   readProxies(environmentId, serviceId).pipe(
     Effect.map((items) => items.filter((proxy) => !isGoneProxy(proxy))),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed([] as CloudProxy[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudProxy[])),
   );
 
-const findProxy = (
-  environmentId: string,
-  serviceId: string,
-  applicationPort: number,
-) =>
+const findProxy = (environmentId: string, serviceId: string, applicationPort: number) =>
   listProxies(environmentId, serviceId).pipe(
-    Effect.map((items) =>
-      items.find((proxy) => proxy.applicationPort === applicationPort),
-    ),
+    Effect.map((items) => items.find((proxy) => proxy.applicationPort === applicationPort)),
   );
 
 /**
@@ -755,16 +684,10 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const listVariableMap = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
+const listVariableMap = (projectId: string, environmentId: string, serviceId: string) =>
   readVariables(projectId, environmentId, serviceId).pipe(
     Effect.map(asVariableMap),
-    Effect.catchTag("RailwayNotFound", () =>
-      Effect.succeed({} as Record<string, string>),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as Record<string, string>)),
   );
 
 const upsertVariable = (input: {
@@ -781,11 +704,7 @@ const syncEnv = Effect.fn(function* (input: {
   serviceId: string;
   desired: Record<string, string>;
 }) {
-  const observed = yield* listVariableMap(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  );
+  const observed = yield* listVariableMap(input.projectId, input.environmentId, input.serviceId);
   let changed = false;
   for (const [name, value] of Object.entries(input.desired)) {
     if (observed[name] !== value) {
@@ -817,9 +736,7 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.MongoPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.MongoPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
@@ -830,21 +747,14 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
       if (instance !== undefined && deployReady(status)) {
         return Effect.succeed(instance);
       }
-      return Effect.fail(
-        new MongoDeployPending({
-          serviceId,
-          status: status ?? "pending",
-        }),
-      );
+      return Effect.fail(new MongoDeployPending({ serviceId, status: status ?? "pending" }));
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.MongoDeployPending",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.MongoDeployPending", () =>
-      getInstance(environmentId, serviceId),
-    ),
+    Effect.catchTag("Railway.MongoDeployPending", () => getInstance(environmentId, serviceId)),
   );
 
 const waitForVolume = (
@@ -856,20 +766,11 @@ const waitForVolume = (
   const observe =
     volumeInstanceId !== undefined && volumeInstanceId.length > 0
       ? getVolumeByInstanceId(volumeInstanceId)
-      : findVolume(
-          environmentId,
-          projectId,
-          (instance) => instance.volumeId === volumeId,
-        );
+      : findVolume(environmentId, projectId, (instance) => instance.volumeId === volumeId);
   return observe.pipe(
     Effect.flatMap((instance) => {
       if (instance === undefined || transientVolumeState(instance.state)) {
-        return Effect.fail(
-          new VolumePending({
-            volumeId,
-            state: instance?.state ?? "creating",
-          }),
-        );
+        return Effect.fail(new VolumePending({ volumeId, state: instance?.state ?? "creating" }));
       }
       return Effect.succeed(instance);
     }),
@@ -882,16 +783,13 @@ const waitForVolume = (
   );
 };
 
-const stampVolumeName = (volumeId: string, name: string) =>
-  volumeUpdate(volumeId, name);
+const stampVolumeName = (volumeId: string, name: string) => volumeUpdate(volumeId, name);
 
 /**
  * Ping a MongoDB deployment. Used from tests over the public TCP proxy
  * and from a {@link Service} with {@link ConnectMongo}.
  */
-export const pingMongo = (
-  url: string,
-): Effect.Effect<{ ok: number }, MongoCommandError> =>
+export const pingMongo = (url: string): Effect.Effect<{ ok: number }, MongoCommandError> =>
   Effect.tryPromise({
     try: async () => {
       const { MongoClient } = await import("mongodb");
@@ -919,13 +817,10 @@ export const MongoProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
-      const regionChanged =
-        news.region !== undefined && news.region !== output.region;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
+      const regionChanged = news.region !== undefined && news.region !== output.region;
       if (projectChanged || environmentChanged || regionChanged) {
         return { action: "replace" as const };
       }
@@ -934,8 +829,7 @@ export const MongoProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const environmentId =
         output?.environmentId ??
         (olds !== undefined
@@ -947,24 +841,15 @@ export const MongoProvider = () =>
           ? yield* getById(output.serviceId)
           : undefined;
       const found =
-        byId ??
-        (projectId !== undefined
-          ? yield* findByName(projectId, name)
-          : undefined);
+        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
       if (found === undefined) return undefined;
       const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
       const resolvedEnvId =
-        environmentId ??
-        environmentIdOf(olds?.project) ??
-        output?.environmentId ??
-        "";
+        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
       const instance =
-        resolvedEnvId.length > 0
-          ? yield* getInstance(resolvedEnvId, found.id)
-          : undefined;
+        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
       const volume =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
             ? yield* findVolume(
@@ -972,8 +857,7 @@ export const MongoProvider = () =>
                 resolvedProjectId,
                 (row) =>
                   (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined &&
-                    row.volumeId === output.volumeId),
+                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
               )
             : undefined;
       const proxy =
@@ -991,13 +875,9 @@ export const MongoProvider = () =>
         proxy,
         projectId: resolvedProjectId,
         environmentId: resolvedEnvId,
-        user:
-          vars.MONGO_INITDB_ROOT_USERNAME ?? output?.user ?? DEFAULT_MONGO_USER,
+        user: vars.MONGO_INITDB_ROOT_USERNAME ?? output?.user ?? DEFAULT_MONGO_USER,
         password: vars.MONGO_INITDB_ROOT_PASSWORD ?? "",
-        database:
-          vars.MONGO_INITDB_DATABASE ??
-          output?.database ??
-          DEFAULT_MONGO_DATABASE,
+        database: vars.MONGO_INITDB_DATABASE ?? output?.database ?? DEFAULT_MONGO_DATABASE,
       });
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -1036,10 +916,7 @@ export const MongoProvider = () =>
                   isMongoImage(instance.source?.image),
               );
               if (instances.length === 0) return [];
-              const volumes = yield* listVolumeInstances(
-                environmentId,
-                project.projectId,
-              );
+              const volumes = yield* listVolumeInstances(environmentId, project.projectId);
               return instances.flatMap((instance) => {
                 const service = services.get(instance.serviceId);
                 return service === undefined
@@ -1050,9 +927,7 @@ export const MongoProvider = () =>
                         instance,
                         projectId: project.projectId,
                         environmentId,
-                        volume: volumes.find(
-                          (row) => row.serviceId === service.id,
-                        ),
+                        volume: volumes.find((row) => row.serviceId === service.id),
                         proxy: undefined,
                         user: DEFAULT_MONGO_USER,
                         password: "",
@@ -1100,39 +975,20 @@ export const MongoProvider = () =>
       }
 
       const existingVars =
-        current !== undefined
-          ? yield* listVariableMap(projectId, environmentId, current.id)
-          : {};
-      const user =
-        existingVars.MONGO_INITDB_ROOT_USERNAME ??
-        props.user ??
-        DEFAULT_MONGO_USER;
+        current !== undefined ? yield* listVariableMap(projectId, environmentId, current.id) : {};
+      const user = existingVars.MONGO_INITDB_ROOT_USERNAME ?? props.user ?? DEFAULT_MONGO_USER;
       const database =
-        existingVars.MONGO_INITDB_DATABASE ??
-        props.database ??
-        DEFAULT_MONGO_DATABASE;
+        existingVars.MONGO_INITDB_DATABASE ?? props.database ?? DEFAULT_MONGO_DATABASE;
       const password =
         existingVars.MONGO_INITDB_ROOT_PASSWORD ??
-        (props.password !== undefined
-          ? unwrapSecret(props.password)
-          : undefined) ??
+        (props.password !== undefined ? unwrapSecret(props.password) : undefined) ??
         (yield* generatePassword);
       const variables = desiredVariables({ user, password, database });
 
       if (current === undefined) {
         const created = yield* serviceCreate({
-          input: {
-            projectId,
-            environmentId,
-            name,
-            source: { image: sourceImage },
-            variables,
-          },
-        }).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+          input: { projectId, environmentId, name, source: { image: sourceImage }, variables },
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -1148,15 +1004,12 @@ export const MongoProvider = () =>
       let needsDeploy = false;
 
       const observedImage = instance?.source?.image ?? undefined;
-      const imageChanged =
-        sourceImage !== undefined && !sameImage(observedImage, sourceImage);
+      const imageChanged = sourceImage !== undefined && !sameImage(observedImage, sourceImage);
       const observedRegion = instance?.region ?? undefined;
-      const regionChanged =
-        props.region !== undefined && props.region !== observedRegion;
+      const regionChanged = props.region !== undefined && props.region !== observedRegion;
       const sleepOn = instance?.sleepApplication !== false;
       const startChanged =
-        normalizeStart(instance?.startCommand) !==
-        normalizeStart(MONGO_START_COMMAND);
+        normalizeStart(instance?.startCommand) !== normalizeStart(MONGO_START_COMMAND);
       if (imageChanged || regionChanged || sleepOn || startChanged) {
         yield* serviceInstanceUpdate({
           environmentId,
@@ -1181,8 +1034,7 @@ export const MongoProvider = () =>
       if (envChanged) needsDeploy = true;
 
       let volume: CloudInstance | undefined =
-        output?.volumeInstanceId !== undefined &&
-        output.volumeInstanceId.length > 0
+        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
           ? yield* getVolumeByInstanceId(output.volumeInstanceId)
           : undefined;
       if (volume === undefined && output?.volumeId !== undefined) {
@@ -1196,9 +1048,7 @@ export const MongoProvider = () =>
         volume = yield* findVolume(
           environmentId,
           projectId,
-          (row) =>
-            (row.serviceId ?? undefined) === current!.id ||
-            row.volume.name === volumeName,
+          (row) => (row.serviceId ?? undefined) === current!.id || row.volume.name === volumeName,
         );
       }
       if (volume === undefined) {
@@ -1217,10 +1067,7 @@ export const MongoProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new MongoVolumeNotCreated({
-          name: volumeName,
-          serviceId: current.id,
-        });
+        return yield* new MongoVolumeNotCreated({ name: volumeName, serviceId: current.id });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1238,25 +1085,15 @@ export const MongoProvider = () =>
             ...(!attached ? { serviceId: current.id } : {}),
           },
         });
-        volume =
-          (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ??
-          volume;
+        volume = (yield* waitForVolume(environmentId, projectId, volume.volumeId)) ?? volume;
         needsDeploy = true;
       }
 
       let proxy = yield* findProxy(environmentId, current.id, MONGO_PORT);
       if (wantPublic && proxy === undefined) {
         const created = yield* tcpProxyCreate({
-          input: {
-            applicationPort: MONGO_PORT,
-            environmentId,
-            serviceId: current.id,
-          },
-        }).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+          input: { applicationPort: MONGO_PORT, environmentId, serviceId: current.id },
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created
@@ -1268,14 +1105,12 @@ export const MongoProvider = () =>
       }
 
       if (needsDeploy || instance?.latestDeployment == null) {
-        yield* serviceInstanceDeployV2({
-          environmentId,
-          serviceId: current.id,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
+        yield* serviceInstanceDeployV2({ environmentId, serviceId: current.id }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.void),
+        );
       }
 
-      instance =
-        (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+      instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
       let finalStatus = instance?.latestDeployment?.status;
       // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
       // container may serve, but Railway keeps its per-environment operation
@@ -1288,12 +1123,10 @@ export const MongoProvider = () =>
             Effect.catchTag("RailwayNotFound", () => Effect.void),
           );
         }
-        yield* serviceInstanceDeployV2({
-          environmentId,
-          serviceId: current.id,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.void));
-        instance =
-          (yield* waitForDeployment(environmentId, current.id)) ?? instance;
+        yield* serviceInstanceDeployV2({ environmentId, serviceId: current.id }).pipe(
+          Effect.catchTag("RailwayValidationError", () => Effect.void),
+        );
+        instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
         finalStatus = instance?.latestDeployment?.status;
       }
       if (deployFailed(finalStatus) || !deployReady(finalStatus)) {
@@ -1346,9 +1179,7 @@ export const MongoProvider = () =>
         yield* waitUntilDeleted(
           "Service",
           serviceId,
-          getById(serviceId).pipe(
-            Effect.map((service) => service === undefined),
-          ),
+          getById(serviceId).pipe(Effect.map((service) => service === undefined)),
         );
       }
       // Proxies usually disappear with the service; wait for the cascade
@@ -1362,20 +1193,13 @@ export const MongoProvider = () =>
             times: 10,
           }),
         );
-        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), {
-          concurrency: 4,
-        });
+        yield* Effect.forEach(leftover, (proxy) => deleteProxy(proxy.id), { concurrency: 4 });
         yield* waitUntilDeleted(
           "TcpProxy",
           serviceId,
-          listProxies(environmentId, serviceId).pipe(
-            Effect.map((proxies) => proxies.length === 0),
-          ),
+          listProxies(environmentId, serviceId).pipe(Effect.map((proxies) => proxies.length === 0)),
         );
-      } else if (
-        output.tcpProxyId !== undefined &&
-        output.tcpProxyId.length > 0
-      ) {
+      } else if (output.tcpProxyId !== undefined && output.tcpProxyId.length > 0) {
         yield* deleteProxy(output.tcpProxyId);
       }
       if (output.volumeId.length > 0) {

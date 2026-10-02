@@ -32,7 +32,6 @@ export interface DescribeTextTranslationJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeTextTranslationJob =
-  Binding.Service<DescribeTextTranslationJob>(
-    "AWS.Translate.DescribeTextTranslationJob",
-  );
+export const DescribeTextTranslationJob = Binding.Service<DescribeTextTranslationJob>(
+  "AWS.Translate.DescribeTextTranslationJob",
+);

@@ -137,11 +137,8 @@ export type ImageImport = Resource<
  */
 export const ImageImport = Resource<ImageImport>("GCP.VMMigration.ImageImport");
 
-const resourceName = (
-  project: string,
-  location: string,
-  imageImportId: string,
-) => `${locationParent(project, location)}/imageImports/${imageImportId}`;
+const resourceName = (project: string, location: string, imageImportId: string) =>
+  `${locationParent(project, location)}/imageImports/${imageImportId}`;
 
 const stripTarget = <T extends { labels?: vm.StringMap; description?: string }>(
   target: T | undefined,
@@ -229,15 +226,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.imageImports ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.imageImports ?? [])),
             Stream.filter(isOwned),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as vm.ImageImport[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as vm.ImageImport[])),
           ),
       ),
     );
@@ -252,27 +245,16 @@ export const ImageImportProvider = () =>
       const extra =
         (news.cloudStorageUri !== undefined &&
           (olds?.cloudStorageUri ?? output?.cloudStorageUri) !== undefined &&
-          news.cloudStorageUri !==
-            (olds?.cloudStorageUri ?? output?.cloudStorageUri)) ||
-        fingerprint(news.encryption) !==
-          fingerprint(olds?.encryption ?? output?.encryption) ||
+          news.cloudStorageUri !== (olds?.cloudStorageUri ?? output?.cloudStorageUri)) ||
+        fingerprint(news.encryption) !== fingerprint(olds?.encryption ?? output?.encryption) ||
         fingerprint(news.diskImageTargetDefaults) !==
-          fingerprint(
-            olds?.diskImageTargetDefaults ?? output?.diskImageTargetDefaults,
-          ) ||
+          fingerprint(olds?.diskImageTargetDefaults ?? output?.diskImageTargetDefaults) ||
         fingerprint(news.machineImageTargetDefaults) !==
-          fingerprint(
-            olds?.machineImageTargetDefaults ??
-              output?.machineImageTargetDefaults,
-          );
+          fingerprint(olds?.machineImageTargetDefaults ?? output?.machineImageTargetDefaults);
       return replaceOnIdentity({
         previousId: olds?.imageImportId ?? output?.imageImportId,
-        nextId:
-          news.imageImportId ?? olds?.imageImportId ?? output?.imageImportId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.imageImportId ?? olds?.imageImportId ?? output?.imageImportId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -289,12 +271,8 @@ export const ImageImportProvider = () =>
         output?.imageImportId,
         "imageimport",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, imageImportId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, imageImportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -316,20 +294,11 @@ export const ImageImportProvider = () =>
         output?.imageImportId,
         "imageimport",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, imageImportId);
       const ownership = yield* createInternalLabels(id);
-      const diskImageTargetDefaults = stampTarget(
-        news.diskImageTargetDefaults,
-        ownership,
-      );
-      const machineImageTargetDefaults = stampTarget(
-        news.machineImageTargetDefaults,
-        ownership,
-      );
+      const diskImageTargetDefaults = stampTarget(news.diskImageTargetDefaults, ownership);
+      const machineImageTargetDefaults = stampTarget(news.machineImageTargetDefaults, ownership);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -365,16 +334,14 @@ export const ImageImportProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* vm
-        .deleteProjectsLocationsImageImports({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* vm.deleteProjectsLocationsImageImports({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

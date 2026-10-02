@@ -48,11 +48,7 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * @binding
  */
 
-export const Postgres = <
-  TRelations extends AnyRelations = EmptyRelations,
-  E = never,
-  R = never,
->(
+export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzlePgConfig<TRelations>,
 ) =>
@@ -60,18 +56,11 @@ export const Postgres = <
     makeExecutionMemo(
       Effect.gen(function* () {
         const [PgClient, PgDrizzle] = yield* Effect.promise(() =>
-          Promise.all([
-            import("@effect/sql-pg/PgClient"),
-            import("drizzle-orm/effect-postgres"),
-          ]),
+          Promise.all([import("@effect/sql-pg/PgClient"), import("drizzle-orm/effect-postgres")]),
         );
         const url = yield* connectionString;
-        const pgCtx = yield* Layer.build(
-          PgClient.layer(resolveConnectionOptions(url)),
-        );
-        return yield* PgDrizzle.makeWithDefaults(config).pipe(
-          Effect.provideContext(pgCtx),
-        );
+        const pgCtx = yield* Layer.build(PgClient.layer(resolveConnectionOptions(url)));
+        return yield* PgDrizzle.makeWithDefaults(config).pipe(Effect.provideContext(pgCtx));
       }),
     ),
     (db) =>

@@ -1,24 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import {
-  CERT_A_PEM,
-  CERT_B_PEM,
-  KEY_A_PEM,
-  KEY_B_PEM,
-} from "./fixtures/https-proxy-cert.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { CERT_A_PEM, CERT_B_PEM, KEY_A_PEM, KEY_B_PEM } from "./fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (targetHttpsProxyName: string) =>
   GcpEnvironment.current.pipe(
@@ -80,12 +72,9 @@ test.provider(
       expect(created.proxy.targetHttpsProxyName).toEqual(expect.any(String));
       expect(created.proxy.description).toEqual("https frontend");
       expect(
-        created.proxy.quicOverride === "NONE" ||
-          created.proxy.quicOverride === undefined,
+        created.proxy.quicOverride === "NONE" || created.proxy.quicOverride === undefined,
       ).toEqual(true);
-      expect(resourceTail(created.proxy.urlMap)).toEqual(
-        created.map.urlMapName,
-      );
+      expect(resourceTail(created.proxy.urlMap)).toEqual(created.map.urlMapName);
       expect(created.proxy.sslCertificates.map(resourceTail)).toContain(
         created.cert.sslCertificateName,
       );
@@ -95,9 +84,7 @@ test.provider(
         targetHttpsProxy: created.proxy.targetHttpsProxyName,
       });
       expect(fetched.name).toEqual(created.proxy.targetHttpsProxyName);
-      expect(resourceTail(fetched.urlMap)).toEqual(
-        resourceTail(created.proxy.urlMap),
-      );
+      expect(resourceTail(fetched.urlMap)).toEqual(resourceTail(created.proxy.urlMap));
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("https frontend");
       expect((fetched.sslCertificates ?? []).map(resourceTail)).toContain(
@@ -145,14 +132,10 @@ test.provider(
         }),
       );
 
-      expect(updated.proxy.targetHttpsProxyName).toEqual(
-        created.proxy.targetHttpsProxyName,
-      );
+      expect(updated.proxy.targetHttpsProxyName).toEqual(created.proxy.targetHttpsProxyName);
       expect(updated.proxy.description).toEqual("updated https");
       expect(updated.proxy.quicOverride).toEqual("ENABLE");
-      expect(resourceTail(updated.proxy.urlMap)).toEqual(
-        updated.other.urlMapName,
-      );
+      expect(resourceTail(updated.proxy.urlMap)).toEqual(updated.other.urlMapName);
       expect(updated.proxy.sslCertificates.map(resourceTail)).toContain(
         updated.certB.sslCertificateName,
       );
@@ -166,12 +149,8 @@ test.provider(
       });
       expect(refetched.description).toContain("updated https");
       expect(refetched.quicOverride).toEqual("ENABLE");
-      expect(resourceTail(refetched.urlMap)).toEqual(
-        resourceTail(updated.proxy.urlMap),
-      );
-      expect(resourceTail(refetched.urlMap)).not.toEqual(
-        resourceTail(created.proxy.urlMap),
-      );
+      expect(resourceTail(refetched.urlMap)).toEqual(resourceTail(updated.proxy.urlMap));
+      expect(resourceTail(refetched.urlMap)).not.toEqual(resourceTail(created.proxy.urlMap));
       expect((refetched.sslCertificates ?? []).map(resourceTail)).toContain(
         updated.certB.sslCertificateName,
       );

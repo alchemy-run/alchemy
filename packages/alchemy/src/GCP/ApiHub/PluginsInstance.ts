@@ -30,12 +30,10 @@ import {
 } from "./internal.ts";
 import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
-export type PluginInstanceAction =
-  apihub.GoogleCloudApihubV1PluginInstanceAction;
+export type PluginInstanceAction = apihub.GoogleCloudApihubV1PluginInstanceAction;
 export type AuthConfig = apihub.GoogleCloudApihubV1AuthConfig;
 export type ConfigVariableMap = apihub.GoogleCloudApihubV1ConfigVariableMap;
-export type SourceEnvironmentMap =
-  apihub.GoogleCloudApihubV1SourceEnvironmentMap;
+export type SourceEnvironmentMap = apihub.GoogleCloudApihubV1SourceEnvironmentMap;
 
 export type PluginsInstanceProps = {
   /**
@@ -157,9 +155,7 @@ export type PluginsInstance = Resource<
  * @resource
  * @category ApiHub
  */
-export const PluginsInstance = Resource<PluginsInstance>(
-  "GCP.ApiHub.PluginsInstance",
-);
+export const PluginsInstance = Resource<PluginsInstance>("GCP.ApiHub.PluginsInstance");
 
 const DEFAULT_ACTIONS: PluginInstanceAction[] = [{ actionId: "sync-metadata" }];
 
@@ -202,16 +198,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  apihub.listProjectsLocationsPluginsInstances
-    .pages({ parent, pageSize: 1000 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.pluginInstances ?? [])),
-      Stream.filter((item) => hasOwnershipMarker(item.displayName)),
-      Stream.map((item) => toAttrs(item, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  apihub.listProjectsLocationsPluginsInstances.pages({ parent, pageSize: 1000 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.pluginInstances ?? [])),
+    Stream.filter((item) => hasOwnershipMarker(item.displayName)),
+    Stream.map((item) => toAttrs(item, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -268,29 +262,18 @@ export const PluginsInstanceProvider = () =>
         (!sameJson(news.authConfig, olds.authConfig) ||
           !sameJson(news.additionalConfig, olds.additionalConfig) ||
           !sameText(news.sourceProjectId, olds.sourceProjectId) ||
-          !sameJson(
-            news.sourceEnvironmentsConfig,
-            olds.sourceEnvironmentsConfig,
-          ) ||
+          !sameJson(news.sourceEnvironmentsConfig, olds.sourceEnvironmentsConfig) ||
           !sameJson(
             (news.actions ?? DEFAULT_ACTIONS).map((action) => action.actionId),
             (olds.actions ?? DEFAULT_ACTIONS).map((action) => action.actionId),
           ));
       const previousPlugin = olds?.plugin ?? output?.plugin;
       const pluginChanged =
-        previousPlugin !== undefined &&
-        news.plugin !== undefined &&
-        news.plugin !== previousPlugin;
+        previousPlugin !== undefined && news.plugin !== undefined && news.plugin !== previousPlugin;
       const identity = replaceOnIdentity({
         previousId: olds?.pluginInstanceId ?? output?.pluginInstanceId,
-        nextId:
-          news.pluginInstanceId ??
-          olds?.pluginInstanceId ??
-          output?.pluginInstanceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.pluginInstanceId ?? olds?.pluginInstanceId ?? output?.pluginInstanceId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -313,14 +296,11 @@ export const PluginsInstanceProvider = () =>
         output?.pluginInstanceId,
       );
       const name =
-        output?.name ??
-        (plugin.length > 0 ? resourceName(plugin, pluginInstanceId) : "");
+        output?.name ?? (plugin.length > 0 ? resourceName(plugin, pluginInstanceId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -381,9 +361,7 @@ export const PluginsInstanceProvider = () =>
         }
         if (current === undefined) {
           current = yield* waitUntilExists(getByName(name), name).pipe(
-            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () => Effect.succeed(undefined)),
           );
         }
       }
@@ -397,10 +375,7 @@ export const PluginsInstanceProvider = () =>
 
       const observedDisplay = parseOwnership(ready.displayName).text;
       const displayChanged = !sameText(observedDisplay, news.displayName);
-      const scheduleChanged = !sameJson(
-        scheduleOf(ready.actions),
-        scheduleOf(actions),
-      );
+      const scheduleChanged = !sameJson(scheduleOf(ready.actions), scheduleOf(actions));
       const updateMask = updateMaskOf(
         displayChanged ? "display_name" : undefined,
         scheduleChanged ? "actions" : undefined,

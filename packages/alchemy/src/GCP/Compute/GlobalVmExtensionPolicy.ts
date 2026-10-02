@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,15 +9,11 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
-export type GlobalVmExtensionPolicyExtensionPolicy =
-  compute.GlobalVmExtensionPolicyExtensionPolicy;
+export type GlobalVmExtensionPolicyExtensionPolicy = compute.GlobalVmExtensionPolicyExtensionPolicy;
 export type GlobalVmExtensionPolicyInstanceSelector =
   compute.GlobalVmExtensionPolicyInstanceSelector;
 export type GlobalVmExtensionPolicyRolloutOperation =
@@ -205,9 +200,7 @@ const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
 // Compute echoes unset extension fields back as empty strings
 // (`{ pinnedVersion: "", stringConfig: "" }`), so compare only set fields.
-const extensionPoliciesKey = (
-  policies: compute.GlobalVmExtensionPolicy["extensionPolicies"],
-) =>
+const extensionPoliciesKey = (policies: compute.GlobalVmExtensionPolicy["extensionPolicies"]) =>
   jsonOf(
     Object.entries(policies ?? {})
       .sort(([a], [b]) => a.localeCompare(b))
@@ -265,16 +258,11 @@ const needsUpdate = (
   ) {
     return true;
   }
-  if (
-    jsonOf(current.instanceSelectors ?? []) !==
-    jsonOf(desired.instanceSelectors ?? [])
-  ) {
+  if (jsonOf(current.instanceSelectors ?? []) !== jsonOf(desired.instanceSelectors ?? [])) {
     return true;
   }
-  const currentPlan =
-    current.rolloutOperation?.rolloutInput?.predefinedRolloutPlan;
-  const desiredPlan =
-    desired.rolloutOperation?.rolloutInput?.predefinedRolloutPlan;
+  const currentPlan = current.rolloutOperation?.rolloutInput?.predefinedRolloutPlan;
+  const desiredPlan = desired.rolloutOperation?.rolloutInput?.predefinedRolloutPlan;
   return (currentPlan ?? "") !== (desiredPlan ?? "");
 };
 
@@ -294,23 +282,13 @@ const awaitResource = (project: string, policyName: string) =>
 
 export const GlobalVmExtensionPolicyProvider = () =>
   Provider.succeed(GlobalVmExtensionPolicy, {
-    stables: [
-      "policyName",
-      "project",
-      "policyId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["policyName", "project", "policyId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName = olds?.policyName ?? output?.policyName;
       const nextName = news.policyName;
-      if (
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName
-      ) {
+      if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -318,11 +296,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyName = yield* toName(
-        id,
-        olds?.policyName,
-        output?.policyName,
-      );
+      const policyName = yield* toName(id, olds?.policyName, output?.policyName);
       const existing = yield* getByName(env.project, policyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -338,9 +312,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
           .pipe(
             Stream.filter((policy) => {
               const { labels } = parseDescription(policy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((policy) => toAttrs(policy, env.project)),
             Stream.runCollect,
@@ -384,11 +356,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
             globalVmExtensionPolicy: policyName,
             body: desired,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, policyName);
         if (current === undefined) {
           return yield* new GlobalVmExtensionPolicyNotResolved({
@@ -445,8 +413,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
             }),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.Compute.GlobalVmExtensionPolicyStillExists",
+          while: (error) => error._tag === "GCP.Compute.GlobalVmExtensionPolicyStillExists",
           schedule: Schedule.spaced("5 seconds"),
           times: 60,
         }),

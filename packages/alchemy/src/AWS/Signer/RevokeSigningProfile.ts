@@ -36,10 +36,7 @@ export interface RevokeSigningProfile extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<signer.RevokeSigningProfileRequest, "profileName">,
-    ) => Effect.Effect<
-      signer.RevokeSigningProfileResponse,
-      signer.RevokeSigningProfileError
-    >
+    ) => Effect.Effect<signer.RevokeSigningProfileResponse, signer.RevokeSigningProfileError>
   >
 > {}
 export const RevokeSigningProfile = Binding.Service<RevokeSigningProfile>(

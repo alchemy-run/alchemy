@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_RETENTION,
@@ -68,9 +63,7 @@ export type BackupVaultProps = {
   /**
    * How a backup's enforced retention end time is inherited.
    */
-  backupRetentionInheritance?:
-    | backupdr.BackupVaultBackupRetentionInheritanceEnum
-    | (string & {});
+  backupRetentionInheritance?: backupdr.BackupVaultBackupRetentionInheritanceEnum | (string & {});
   /**
    * Access restriction for restores. Default is `WITHIN_ORGANIZATION`
    * when omitted at create.
@@ -186,22 +179,15 @@ export type BackupVault = Resource<
  */
 export const BackupVault = Resource<BackupVault>("GCP.BackupDR.BackupVault");
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupVaultId: string,
-) => `projects/${project}/locations/${location}/backupVaults/${backupVaultId}`;
+const resourceName = (project: string, location: string, backupVaultId: string) =>
+  `projects/${project}/locations/${location}/backupVaults/${backupVaultId}`;
 
 const toEncryption = (
   config: backupdr.EncryptionConfig | EncryptionConfig | undefined,
 ): EncryptionConfig | undefined =>
   config === undefined ? undefined : { kmsKeyName: config.kmsKeyName };
 
-const toAttrs = (
-  item: backupdr.BackupVault,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: backupdr.BackupVault, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "backupVaults", region);
   return {
@@ -209,8 +195,7 @@ const toAttrs = (
     backupVaultId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    backupMinimumEnforcedRetentionDuration:
-      item.backupMinimumEnforcedRetentionDuration,
+    backupMinimumEnforcedRetentionDuration: item.backupMinimumEnforcedRetentionDuration,
     backupRetentionInheritance: item.backupRetentionInheritance,
     accessRestriction: item.accessRestriction,
     encryptionConfig: toEncryption(item.encryptionConfig),
@@ -248,38 +233,23 @@ const listOwned = (project: string, region: string) =>
 
 export const BackupVaultProvider = () =>
   Provider.succeed(BackupVault, {
-    stables: [
-      "name",
-      "backupVaultId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "backupVaultId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousKey =
-        olds?.encryptionConfig?.kmsKeyName ??
-        output?.encryptionConfig?.kmsKeyName;
+        olds?.encryptionConfig?.kmsKeyName ?? output?.encryptionConfig?.kmsKeyName;
       const nextKey = news.encryptionConfig?.kmsKeyName;
       return replaceOnIdentity({
         previousId: olds?.backupVaultId ?? output?.backupVaultId,
-        nextId:
-          news.backupVaultId ?? olds?.backupVaultId ?? output?.backupVaultId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.backupVaultId ?? olds?.backupVaultId ?? output?.backupVaultId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        extra:
-          previousKey !== undefined &&
-          nextKey !== undefined &&
-          previousKey !== nextKey,
+        extra: previousKey !== undefined && nextKey !== undefined && previousKey !== nextKey,
       });
     }),
 
@@ -291,18 +261,12 @@ export const BackupVaultProvider = () =>
         output?.backupVaultId,
         "backupvault",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupVaultId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupVaultId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -320,17 +284,13 @@ export const BackupVaultProvider = () =>
         output?.backupVaultId,
         "backupvault",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupVaultId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const retention =
-        news.backupMinimumEnforcedRetentionDuration ?? DEFAULT_RETENTION;
+      const retention = news.backupMinimumEnforcedRetentionDuration ?? DEFAULT_RETENTION;
       const annotations = news.annotations;
 
       let current = yield* getByName(output?.name ?? name);
@@ -377,22 +337,17 @@ export const BackupVaultProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const observedAnnotations = tagRecord(current.annotations);
       const desiredAnnotations = annotations ?? {};
-      const annotationDiff = diffLabels(
-        observedAnnotations,
-        desiredAnnotations,
-      );
+      const annotationDiff = diffLabels(observedAnnotations, desiredAnnotations);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (annotationDiff.upsert.length > 0 ||
-          annotationDiff.removed.length > 0) &&
+        (annotationDiff.upsert.length > 0 || annotationDiff.removed.length > 0) &&
           news.annotations !== undefined &&
           "annotations",
         !sameText(current.description, news.description) && "description",
         !sameText(current.backupMinimumEnforcedRetentionDuration, retention) &&
           "backupMinimumEnforcedRetentionDuration",
         news.backupRetentionInheritance !== undefined &&
-          current.backupRetentionInheritance !==
-            news.backupRetentionInheritance &&
+          current.backupRetentionInheritance !== news.backupRetentionInheritance &&
           "backupRetentionInheritance",
         news.accessRestriction !== undefined &&
           current.accessRestriction !== news.accessRestriction &&

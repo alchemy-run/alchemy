@@ -10,7 +10,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
@@ -307,14 +307,9 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
-const resourceName = (
-  project: string,
-  location: string,
-  certificateTemplateId: string,
-) =>
+const resourceName = (project: string, location: string, certificateTemplateId: string) =>
   `projects/${project}/locations/${location}/certificateTemplates/${certificateTemplateId}`;
 
 const locationParent = (project: string, location: string) =>
@@ -326,14 +321,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     certificateTemplateId:
-      templatesAt >= 0 && parts[templatesAt + 1]
-        ? parts[templatesAt + 1]!
-        : lastSegment(name),
+      templatesAt >= 0 && parts[templatesAt + 1] ? parts[templatesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -341,11 +332,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateTemplateId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateTemplateId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       certificateTemplateId ??
@@ -359,9 +346,7 @@ const toId = (
   });
 
 const toObjectId = (value: privateca.ObjectId | ObjectId | undefined) =>
-  value === undefined
-    ? undefined
-    : { objectIdPath: value.objectIdPath ?? undefined };
+  value === undefined ? undefined : { objectIdPath: value.objectIdPath ?? undefined };
 
 const toObjectIds = (
   values: ReadonlyArray<privateca.ObjectId | ObjectId> | undefined,
@@ -391,10 +376,7 @@ const toCelExpression = (
 };
 
 const toIdentityConstraints = (
-  value:
-    | privateca.CertificateIdentityConstraints
-    | CertificateIdentityConstraints
-    | undefined,
+  value: privateca.CertificateIdentityConstraints | CertificateIdentityConstraints | undefined,
 ): CertificateIdentityConstraints | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -405,10 +387,7 @@ const toIdentityConstraints = (
 };
 
 const toPassthroughExtensions = (
-  value:
-    | privateca.CertificateExtensionConstraints
-    | CertificateExtensionConstraints
-    | undefined,
+  value: privateca.CertificateExtensionConstraints | CertificateExtensionConstraints | undefined,
 ): CertificateExtensionConstraints | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -417,9 +396,7 @@ const toPassthroughExtensions = (
   };
 };
 
-const toKeyUsage = (
-  value: privateca.KeyUsage | KeyUsage | undefined,
-): KeyUsage | undefined => {
+const toKeyUsage = (value: privateca.KeyUsage | KeyUsage | undefined): KeyUsage | undefined => {
   if (value === undefined) return undefined;
   return {
     baseKeyUsage: value.baseKeyUsage,
@@ -445,9 +422,7 @@ const toNameConstraints = (
   };
 };
 
-const toX509Extension = (
-  value: privateca.X509Extension | X509Extension,
-): X509Extension => ({
+const toX509Extension = (value: privateca.X509Extension | X509Extension): X509Extension => ({
   objectId: toObjectId(value.objectId),
   critical: value.critical,
   value: value.value,
@@ -500,9 +475,7 @@ const toAttrs = (template: privateca.CertificateTemplate, project: string) => {
     labels: userLabels(template.labels),
     maximumLifetime: template.maximumLifetime,
     identityConstraints: toIdentityConstraints(template.identityConstraints),
-    passthroughExtensions: toPassthroughExtensions(
-      template.passthroughExtensions,
-    ),
+    passthroughExtensions: toPassthroughExtensions(template.passthroughExtensions),
     predefinedValues: toPredefinedValues(template.predefinedValues),
     createTime: template.createTime,
     updateTime: template.updateTime,
@@ -532,20 +505,14 @@ const getByName = (name: string) =>
  * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
  * and an operation that is already gone.
  */
-const waitForOperation = (
-  operation: privateca.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => privateca.getProjectsLocationsOperations({ name }),
-    { budget: "15 minutes" },
-  ).pipe(
+const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => privateca.getProjectsLocationsOperations({ name }), {
+    budget: "15 minutes",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         (error._tag === "GCP.OperationFailed" &&
-          (error.code === 6 ||
-            (options?.notFoundOk === true && error.code === 5))) ||
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
         (options?.notFoundOk === true && error._tag === "NotFound"),
       () => Effect.succeed(operation),
     ),
@@ -559,8 +526,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new CertificateTemplateNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateTemplateNotResolved",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -574,8 +540,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new CertificateTemplateStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateTemplateStillExists",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -588,13 +553,9 @@ const listOwnedTemplates = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.certificateTemplates ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.certificateTemplates ?? [])),
       Stream.filter((template) =>
-        Object.keys(template.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(template.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((template) => toAttrs(template, project)),
       Stream.runCollect,
@@ -604,32 +565,21 @@ const listOwnedTemplates = (project: string) =>
 
 export const CertificateTemplateProvider = () =>
   Provider.succeed(CertificateTemplate, {
-    stables: [
-      "name",
-      "certificateTemplateId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "certificateTemplateId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousId =
-        olds?.certificateTemplateId ?? output?.certificateTemplateId;
+      const previousId = olds?.certificateTemplateId ?? output?.certificateTemplateId;
       const nextId = news.certificateTemplateId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location ?? env.region,
       );
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation;
 
       if (!replace) return undefined;
@@ -643,18 +593,12 @@ export const CertificateTemplateProvider = () =>
         olds?.certificateTemplateId,
         output?.certificateTemplateId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, certificateTemplateId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, certificateTemplateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -670,9 +614,7 @@ export const CertificateTemplateProvider = () =>
         news.certificateTemplateId,
         output?.certificateTemplateId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, certificateTemplateId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -711,10 +653,8 @@ export const CertificateTemplateProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (observed.description ?? "") !== (news.description ?? "");
-      const lifetimeChanged =
-        (observed.maximumLifetime ?? "") !== (news.maximumLifetime ?? "");
+      const descriptionChanged = (observed.description ?? "") !== (news.description ?? "");
+      const lifetimeChanged = (observed.maximumLifetime ?? "") !== (news.maximumLifetime ?? "");
       const identityChanged =
         fingerprint(observed.identityConstraints) !==
         fingerprint(toIdentityConstraints(news.identityConstraints));
@@ -742,15 +682,14 @@ export const CertificateTemplateProvider = () =>
           predefinedChanged ? "predefinedValues" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* privateca.patchProjectsLocationsCertificateTemplates({
+        const operation = yield* privateca.patchProjectsLocationsCertificateTemplates({
+          name,
+          updateMask: updateMask.join(","),
+          body: {
             name,
-            updateMask: updateMask.join(","),
-            body: {
-              name,
-              ...body,
-            },
-          });
+            ...body,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }

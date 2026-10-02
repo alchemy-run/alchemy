@@ -227,15 +227,11 @@ export const ApplicationsWorkloadProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousDiscovered =
-        olds?.discoveredWorkload ?? output?.discoveredWorkload;
+      const previousDiscovered = olds?.discoveredWorkload ?? output?.discoveredWorkload;
       return replaceOnIdentity({
         previousId: olds?.workloadId ?? output?.workloadId,
         nextId: news.workloadId ?? olds?.workloadId ?? output?.workloadId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -253,16 +249,8 @@ export const ApplicationsWorkloadProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const workloadId = yield* toPhysicalId(
-        id,
-        olds?.workloadId,
-        output?.workloadId,
-        "workload",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const workloadId = yield* toPhysicalId(id, olds?.workloadId, output?.workloadId, "workload");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const application = expandApplication(
         olds?.application ?? output?.application ?? "",
         env.project,
@@ -272,9 +260,7 @@ export const ApplicationsWorkloadProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -286,21 +272,9 @@ export const ApplicationsWorkloadProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const workloadId = yield* toPhysicalId(
-        id,
-        news.workloadId,
-        output?.workloadId,
-        "workload",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const application = expandApplication(
-        news.application,
-        env.project,
-        location,
-      );
+      const workloadId = yield* toPhysicalId(id, news.workloadId, output?.workloadId, "workload");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const application = expandApplication(news.application, env.project, location);
       const name = resourceName(application, workloadId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -352,16 +326,15 @@ export const ApplicationsWorkloadProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* apphub.patchProjectsLocationsApplicationsWorkloads({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              displayName,
-              description,
-              attributes: news.attributes,
-            },
-          });
+        const operation = yield* apphub.patchProjectsLocationsApplicationsWorkloads({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            displayName,
+            description,
+            attributes: news.attributes,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

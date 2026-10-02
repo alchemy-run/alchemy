@@ -59,10 +59,8 @@ export const toWebAppName = (parent: string, webAppId?: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBoolean = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBoolean = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -70,11 +68,7 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  jsonEqual(
-    [...(left ?? [])].slice().sort(),
-    [...(right ?? [])].slice().sort(),
-  );
+) => jsonEqual([...(left ?? [])].slice().sort(), [...(right ?? [])].slice().sort());
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -99,8 +93,7 @@ export const replaceOnIdentity = (input: {
   if (
     input.previousParent !== undefined &&
     input.nextParent !== undefined &&
-    toEnterpriseName(input.previousParent) !==
-      toEnterpriseName(input.nextParent)
+    toEnterpriseName(input.previousParent) !== toEnterpriseName(input.nextParent)
   ) {
     return { action: "replace" as const, deleteFirst: true };
   }
@@ -172,9 +165,7 @@ export const listEnterprisesAt = (projectId: string) =>
         (page) => page.enterprises,
       ).pipe(
         // A missing parent has no children.
-        Effect.catchTag("NotFound", () =>
-          emptyList<androidmanagement.Enterprise>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<androidmanagement.Enterprise>()),
       );
 
 export const listWebAppsAt = (parent: string) =>
@@ -188,9 +179,7 @@ export const listWebAppsAt = (parent: string) =>
         (page) => page.webApps,
       ).pipe(
         // A missing parent has no children.
-        Effect.catchTag("NotFound", () =>
-          emptyList<androidmanagement.WebApp>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<androidmanagement.WebApp>()),
       );
 
 const hydrateEnterprise = (enterprise: androidmanagement.Enterprise) =>
@@ -207,10 +196,7 @@ const hydrateEnterprise = (enterprise: androidmanagement.Enterprise) =>
   });
 
 /** Find an enterprise of `projectId` by its display name. */
-export const findEnterpriseByDisplayName = (
-  projectId: string,
-  displayName: string,
-) =>
+export const findEnterpriseByDisplayName = (projectId: string, displayName: string) =>
   Effect.gen(function* () {
     const listed = yield* listEnterprisesAt(projectId);
     for (const enterprise of listed) {
@@ -222,9 +208,7 @@ export const findEnterpriseByDisplayName = (
 
 /** Find a web app of `parent` by its title. */
 export const findWebAppByTitle = (parent: string, title: string) =>
-  listWebAppsAt(parent).pipe(
-    Effect.map((apps) => apps.find((app) => app.title === title)),
-  );
+  listWebAppsAt(parent).pipe(Effect.map((apps) => apps.find((app) => app.title === title)));
 
 export const defaultWebAppIcons = (
   icons: readonly androidmanagement.WebAppIcon[] | undefined,

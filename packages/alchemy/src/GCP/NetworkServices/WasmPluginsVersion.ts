@@ -15,7 +15,6 @@ import {
   collectPages,
   hasAlchemyLabelKeys,
   lastSegment,
-
   normalizeLocation,
   parentOf,
   parseName,
@@ -170,27 +169,18 @@ const locationFromParent = (wasmPlugin: string, fallback: string) => {
   return parseName(canonical, "wasmPlugins", fallback).location;
 };
 
-const parentPluginName = (
-  project: string,
-  location: string,
-  wasmPlugin: string,
-) => {
+const parentPluginName = (project: string, location: string, wasmPlugin: string) => {
   const canonical = canonicalizeLink(wasmPlugin);
   if (canonical.includes("/wasmPlugins/")) return canonical;
   const id = lastSegment(canonical);
   return `projects/${project}/locations/${location}/wasmPlugins/${id}`;
 };
 
-const resourceNameOf = (parent: string, versionId: string) =>
-  `${parent}/versions/${versionId}`;
+const resourceNameOf = (parent: string, versionId: string) => `${parent}/versions/${versionId}`;
 
-const linkKey = (value: string | undefined) =>
-  lastSegment(canonicalizeLink(value)).toLowerCase();
+const linkKey = (value: string | undefined) => lastSegment(canonicalizeLink(value)).toLowerCase();
 
-const toAttrs = (
-  version: networkservices.WasmPluginVersion,
-  project: string,
-) => {
+const toAttrs = (version: networkservices.WasmPluginVersion, project: string) => {
   const name = version.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_GLOBAL);
   const parent = parentFromVersionName(name);
@@ -214,9 +204,7 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  name.length === 0 ||
-  !name.includes("/wasmPlugins/") ||
-  name.includes("/wasmPlugins//")
+  name.length === 0 || !name.includes("/wasmPlugins/") || name.includes("/wasmPlugins//")
     ? Effect.succeed(undefined)
     : networkservices
         .getProjectsLocationsWasmPluginsVersions({ name })
@@ -227,10 +215,7 @@ const getPlugin = (name: string) =>
     .getProjectsLocationsWasmPlugins({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const replaceIfChanged = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
+const replaceIfChanged = (previous: string | undefined, next: string | undefined) =>
   previous !== undefined &&
   next !== undefined &&
   previous.length > 0 &&
@@ -251,8 +236,7 @@ export const WasmPluginsVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.wasmPluginVersionId ?? output?.wasmPluginVersionId;
+      const previousId = olds?.wasmPluginVersionId ?? output?.wasmPluginVersionId;
       const nextId = news.wasmPluginVersionId
         ? rfc1035(news.wasmPluginVersionId, "wasm-plugin-version")
         : previousId;
@@ -271,10 +255,7 @@ export const WasmPluginsVersionProvider = () =>
         previousLocation !== nextLocation ||
         (previousParent.length > 0 && previousParent !== nextParent) ||
         replaceIfChanged(olds?.imageUri ?? output?.imageUri, news.imageUri) ||
-        replaceIfChanged(
-          olds?.pluginConfigUri ?? output?.pluginConfigUri,
-          news.pluginConfigUri,
-        ) ||
+        replaceIfChanged(olds?.pluginConfigUri ?? output?.pluginConfigUri, news.pluginConfigUri) ||
         replaceIfChanged(olds?.pluginConfigData, news.pluginConfigData)
       ) {
         return { action: "replace" as const };
@@ -287,9 +268,7 @@ export const WasmPluginsVersionProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          (olds?.wasmPlugin
-            ? locationFromParent(olds.wasmPlugin, DEFAULT_GLOBAL)
-            : undefined),
+          (olds?.wasmPlugin ? locationFromParent(olds.wasmPlugin, DEFAULT_GLOBAL) : undefined),
         DEFAULT_GLOBAL,
       );
       const parent = parentPluginName(
@@ -307,9 +286,7 @@ export const WasmPluginsVersionProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -343,9 +320,7 @@ export const WasmPluginsVersionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromParent(news.wasmPlugin, DEFAULT_GLOBAL),
+        news.location ?? output?.location ?? locationFromParent(news.wasmPlugin, DEFAULT_GLOBAL),
         DEFAULT_GLOBAL,
       );
       const parent = parentPluginName(env.project, location, news.wasmPlugin);
@@ -395,10 +370,7 @@ export const WasmPluginsVersionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const plugin = yield* getPlugin(output.wasmPlugin);
-      if (
-        plugin !== undefined &&
-        (plugin.mainVersionId ?? "") === output.wasmPluginVersionId
-      ) {
+      if (plugin !== undefined && (plugin.mainVersionId ?? "") === output.wasmPluginVersionId) {
         const siblings = yield* collectPages(
           networkservices.listProjectsLocationsWasmPluginsVersions.pages({
             parent: output.wasmPlugin,
@@ -407,8 +379,7 @@ export const WasmPluginsVersionProvider = () =>
           (page) => page.wasmPluginVersions,
         );
         const other = siblings.find(
-          (version) =>
-            lastSegment(version.name ?? "") !== output.wasmPluginVersionId,
+          (version) => lastSegment(version.name ?? "") !== output.wasmPluginVersionId,
         );
         if (other !== undefined) {
           const nextMain = lastSegment(other.name ?? "");
@@ -421,9 +392,7 @@ export const WasmPluginsVersionProvider = () =>
                 mainVersionId: nextMain,
               },
             })
-            .pipe(
-              Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
           if (switched !== undefined) {
             yield* waitForOperation(switched, { notFoundOk: true });
           }

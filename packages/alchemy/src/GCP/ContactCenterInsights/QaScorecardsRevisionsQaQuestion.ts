@@ -25,10 +25,7 @@ import {
   updateMaskOf,
 } from "./ownership.ts";
 
-export type QaQuestionType =
-  | "QA_QUESTION_TYPE_UNSPECIFIED"
-  | "CUSTOMIZABLE"
-  | "PREDEFINED";
+export type QaQuestionType = "QA_QUESTION_TYPE_UNSPECIFIED" | "CUSTOMIZABLE" | "PREDEFINED";
 
 export type QaQuestionAnswerChoice = {
   /** String answer value. */
@@ -185,10 +182,9 @@ export type QaScorecardsRevisionsQaQuestion = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const QaScorecardsRevisionsQaQuestion =
-  Resource<QaScorecardsRevisionsQaQuestion>(
-    "GCP.ContactCenterInsights.QaScorecardsRevisionsQaQuestion",
-  );
+export const QaScorecardsRevisionsQaQuestion = Resource<QaScorecardsRevisionsQaQuestion>(
+  "GCP.ContactCenterInsights.QaScorecardsRevisionsQaQuestion",
+);
 
 export class QaScorecardsRevisionsQaQuestionNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardsRevisionsQaQuestionNotResolved",
@@ -200,9 +196,7 @@ const resourceName = (parent: string, qaQuestionId: string) =>
   `${parent}/qaQuestions/${qaQuestionId}`;
 
 const choicesOf = (
-  choices:
-    | cci.GoogleCloudContactcenterinsightsV1QaQuestionAnswerChoiceList
-    | undefined,
+  choices: cci.GoogleCloudContactcenterinsightsV1QaQuestionAnswerChoiceList | undefined,
 ): QaQuestionAnswerChoice[] | undefined => {
   if (choices === undefined) return undefined;
   return choices.map((choice) => ({
@@ -217,10 +211,7 @@ const choicesOf = (
 
 const optionalString = (value: string | undefined): string | undefined => value;
 
-const toAttrs = (
-  question: cci.GoogleCloudContactcenterinsightsV1QaQuestion,
-  project: string,
-) => {
+const toAttrs = (question: cci.GoogleCloudContactcenterinsightsV1QaQuestion, project: string) => {
   const name = question.name ?? "";
   const parsed = parseOwnership(question.answerInstructions);
   return {
@@ -241,8 +232,7 @@ const toAttrs = (
       : undefined,
     qaQuestionDataOptions: question.qaQuestionDataOptions
       ? {
-          conversationDataOptions: question.qaQuestionDataOptions
-            .conversationDataOptions
+          conversationDataOptions: question.qaQuestionDataOptions.conversationDataOptions
             ? {
                 includeDialogflowInteractionData:
                   question.qaQuestionDataOptions.conversationDataOptions
@@ -264,43 +254,28 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listRevisions = (parent: string) =>
-  cci.listProjectsLocationsQaScorecardsRevisions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.qaScorecardRevisions ?? []),
-      ),
-      Stream.map((revision) => revision.name ?? ""),
-      Stream.filter((name) => name.length > 0),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    );
+  cci.listProjectsLocationsQaScorecardsRevisions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.qaScorecardRevisions ?? [])),
+    Stream.map((revision) => revision.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const listAtParent = (parent: string, project: string) =>
-  cci.listProjectsLocationsQaScorecardsRevisionsQaQuestions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.qaQuestions ?? [])),
-      Stream.filter((question) =>
-        hasOwnershipMarker(question.answerInstructions),
-      ),
-      Stream.map((question) => toAttrs(question, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsQaScorecardsRevisionsQaQuestions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.qaQuestions ?? [])),
+    Stream.filter((question) => hasOwnershipMarker(question.answerInstructions)),
+    Stream.map((question) => toAttrs(question, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const QaScorecardsRevisionsQaQuestionProvider = () =>
   Provider.succeed(QaScorecardsRevisionsQaQuestion, {
-    stables: [
-      "name",
-      "qaQuestionId",
-      "parent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "qaQuestionId", "parent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -321,22 +296,13 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const qaQuestionId = yield* toResourceId(
-        id,
-        olds?.qaQuestionId,
-        output?.qaQuestionId,
-      );
+      const qaQuestionId = yield* toResourceId(id, olds?.qaQuestionId, output?.qaQuestionId);
       const name =
-        output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, qaQuestionId)
-          : "");
+        output?.name ?? (olds?.parent !== undefined ? resourceName(olds.parent, qaQuestionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.answerInstructions))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.answerInstructions)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -355,17 +321,10 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const qaQuestionId = yield* toResourceId(
-        id,
-        news.qaQuestionId,
-        output?.qaQuestionId,
-      );
+      const qaQuestionId = yield* toResourceId(id, news.qaQuestionId, output?.qaQuestionId);
       const name = resourceName(news.parent, qaQuestionId);
       const ownership = yield* createInternalLabels(id);
-      const answerInstructions = encodeOwnership(
-        ownership,
-        news.answerInstructions,
-      );
+      const answerInstructions = encodeOwnership(ownership, news.answerInstructions);
       const tags = news.tags ?? [];
 
       let current = yield* getByName(output?.name ?? name);
@@ -409,17 +368,10 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
 
       const currentName = current.name ?? name;
       const bodyChanged = !sameText(current.questionBody, news.questionBody);
-      const abbreviationChanged = !sameText(
-        current.abbreviation,
-        news.abbreviation,
-      );
-      const instructionsChanged =
-        (current.answerInstructions ?? "") !== answerInstructions;
+      const abbreviationChanged = !sameText(current.abbreviation, news.abbreviation);
+      const instructionsChanged = (current.answerInstructions ?? "") !== answerInstructions;
       const orderChanged = (current.order ?? 0) !== (news.order ?? 0);
-      const choicesChanged = !jsonEqual(
-        choicesOf(current.answerChoices),
-        news.answerChoices,
-      );
+      const choicesChanged = !jsonEqual(choicesOf(current.answerChoices), news.answerChoices);
       const tagsChanged = !jsonEqual(current.tags ?? [], tags);
 
       if (
@@ -430,27 +382,26 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
         choicesChanged ||
         tagsChanged
       ) {
-        current =
-          yield* cci.patchProjectsLocationsQaScorecardsRevisionsQaQuestions({
+        current = yield* cci.patchProjectsLocationsQaScorecardsRevisionsQaQuestions({
+          name: currentName,
+          updateMask: updateMaskOf(
+            bodyChanged ? "question_body" : undefined,
+            abbreviationChanged ? "abbreviation" : undefined,
+            instructionsChanged ? "answer_instructions" : undefined,
+            orderChanged ? "order" : undefined,
+            choicesChanged ? "answer_choices" : undefined,
+            tagsChanged ? "tags" : undefined,
+          ),
+          body: {
             name: currentName,
-            updateMask: updateMaskOf(
-              bodyChanged ? "question_body" : undefined,
-              abbreviationChanged ? "abbreviation" : undefined,
-              instructionsChanged ? "answer_instructions" : undefined,
-              orderChanged ? "order" : undefined,
-              choicesChanged ? "answer_choices" : undefined,
-              tagsChanged ? "tags" : undefined,
-            ),
-            body: {
-              name: currentName,
-              questionBody: news.questionBody,
-              abbreviation: news.abbreviation,
-              answerInstructions,
-              order: news.order,
-              answerChoices: news.answerChoices,
-              tags,
-            },
-          });
+            questionBody: news.questionBody,
+            abbreviation: news.abbreviation,
+            answerInstructions,
+            order: news.order,
+            answerChoices: news.answerChoices,
+            tags,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

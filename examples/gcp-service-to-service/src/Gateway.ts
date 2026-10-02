@@ -49,10 +49,7 @@ export default class Gateway extends GCP.Function<Gateway>()(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }).pipe(Effect.provide(GCP.Run.InvokeServiceHttp)),
