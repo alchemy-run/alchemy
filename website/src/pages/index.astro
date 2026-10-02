@@ -409,7 +409,7 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-2 v2-feature" id="loop-edit" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-edit")}</p>
-      <h2 class="v2-h2" data-copy></h2>
+      <h2 class="v2-h2" data-copy>Build features with automatic infrastructure</h2>
       <p class="v2-lede" data-copy>
         Other IaC tools split an app into two programs: infrastructure below a line, and the code that runs above it. Every feature crosses that line, so an agent editing one side can't see the other. In Alchemy, a module owns its whole slice: the resource, the binding that grants access to it, and the API your code calls.
       </p>
@@ -791,16 +791,24 @@ const PROVIDERS = [
     .v2-hero__visual {
       justify-items: stretch;
     }
+    /* Phones show the cycling code (compact form) and drop the deploy
+       terminal, which has no room to overlap it. */
     .v2-hero__visual :global(.v2-hero__code) {
-      display: none;
+      width: auto;
     }
     .v2-hero__visual :global(.v2-hero__reel) {
       width: auto;
       justify-content: flex-start;
     }
     .v2-hero__visual :global(.v2-hero__term) {
-      margin: 0;
-      width: auto;
+      display: none;
+    }
+    /* Stacked, the bottom-left spot falls on the code card. */
+    .v2-motion-toggle {
+      left: auto;
+      right: 16px;
+      bottom: auto;
+      top: 12px;
     }
   }
 

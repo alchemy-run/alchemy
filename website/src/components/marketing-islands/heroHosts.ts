@@ -139,3 +139,29 @@ export const HOSTS: Host[] = [
 /** The template with one host's values filled in. */
 export const hostSource = (values: readonly string[]) =>
   HOST_TEMPLATE.replace(/⟨(\d)⟩/g, (_, i: string) => values[+i]!);
+
+/**
+ * The same program for narrow screens: the props sit one per line and the
+ * request handler is folded to `handler`, so no line passes ~42 columns.
+ * Slot ⟨1⟩ holds the host's extra props on a line of their own.
+ */
+export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
+  "Api",
+  Effect.gen(function* () {
+    return {
+      main: import.meta.url,
+      ⟨1⟩
+    };
+  }),
+  Effect.gen(function* () {
+    const photos = yield* Photos;
+    return { fetch: handler };
+  }).pipe(Effect.provide(⟨2⟩)),
+);`;
+
+/** A host's values for the compact template. */
+export const compactValues = (values: readonly string[]) => [
+  values[0]!,
+  values[1] ? `${values[1].replace(/^, /, "")},` : "",
+  values[2]!,
+];

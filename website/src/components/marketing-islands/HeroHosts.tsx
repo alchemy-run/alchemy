@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { highlightTS } from "../marketing/highlightTS";
-import { HOST_TEMPLATE, HOSTS, type HostResource } from "./heroHosts";
+import {
+  compactValues,
+  HOST_TEMPLATE,
+  HOST_TEMPLATE_COMPACT,
+  HOSTS,
+  type HostResource,
+} from "./heroHosts";
 import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 import "./HeroHosts.css";
 
@@ -17,6 +23,7 @@ type Row = HostResource & { status: Status };
 const GREEN = "var(--alc-accent-bright)";
 const CREATE = "var(--alc-success)";
 const SEGMENTS = HOST_TEMPLATE.split(/⟨(\d)⟩/);
+const SEGMENTS_COMPACT = HOST_TEMPLATE_COMPACT.split(/⟨(\d)⟩/);
 const ROLL_MS = 450;
 
 export default function HeroHosts() {
@@ -120,35 +127,51 @@ export default function HeroHosts() {
   const spinner = useSpinner(rows.some((r) => r.status === "creating"));
   const h = HOSTS[host]!;
 
-  // The template, with each value in a slot that rolls when it changes.
-  const code = SEGMENTS.map((seg, n) => {
-    if (n % 2 === 0)
+  // A template, with each value in a slot that rolls when it changes.
+  const render = (
+    segments: string[],
+    was: readonly string[],
+    now: readonly string[],
+  ) =>
+    segments.map((seg, n) => {
+      if (n % 2 === 0)
+        return (
+          <span
+            key={n}
+            dangerouslySetInnerHTML={{ __html: highlightTS(seg) }}
+          />
+        );
+      const k = +seg;
+      const rolling = was[k] !== now[k];
       return (
-        <span key={n} dangerouslySetInnerHTML={{ __html: highlightTS(seg) }} />
-      );
-    const k = +seg;
-    const was = roll.was[k]!;
-    const now = roll.now[k]!;
-    const rolling = was !== now;
-    return (
-      <span
-        key={`${n}-${roll.n}`}
-        className={`hh-slot ${rolling ? "is-active is-rolling" : ""}`}
-        style={
-          {
-            "--from": `${was.length}ch`,
-            "--to": `${now.length}ch`,
-            width: `${now.length}ch`,
-          } as CSSProperties
-        }
-      >
-        <span className="hh-slot__strip">
-          <span dangerouslySetInnerHTML={{ __html: highlightTS(was) || "" }} />
-          <span dangerouslySetInnerHTML={{ __html: highlightTS(now) || "" }} />
+        <span
+          key={`${n}-${roll.n}`}
+          className={`hh-slot ${rolling ? "is-active is-rolling" : ""}`}
+          style={
+            {
+              "--from": `${was[k]!.length}ch`,
+              "--to": `${now[k]!.length}ch`,
+              width: `${now[k]!.length}ch`,
+            } as CSSProperties
+          }
+        >
+          <span className="hh-slot__strip">
+            <span
+              dangerouslySetInnerHTML={{ __html: highlightTS(was[k]!) || "" }}
+            />
+            <span
+              dangerouslySetInnerHTML={{ __html: highlightTS(now[k]!) || "" }}
+            />
+          </span>
         </span>
-      </span>
-    );
-  });
+      );
+    });
+  const code = render(SEGMENTS, roll.was, roll.now);
+  const compact = render(
+    SEGMENTS_COMPACT,
+    compactValues(roll.was),
+    compactValues(roll.now),
+  );
 
   return (
     <>
@@ -171,7 +194,8 @@ export default function HeroHosts() {
           <div className="alc-code-block__header">
             <span className="alc-code-block__filename">src/api.ts</span>
           </div>
-          <pre className="alc-code-block__pre">{code}</pre>
+          <pre className="alc-code-block__pre hh-pre--full">{code}</pre>
+          <pre className="alc-code-block__pre hh-pre--compact">{compact}</pre>
         </div>
       </div>
       <div className="v2-hero__term" aria-hidden>

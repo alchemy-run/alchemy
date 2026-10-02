@@ -91,6 +91,19 @@
   }
 }
 
+/* Narrow screens show the compact program (see HOST_TEMPLATE_COMPACT). */
+.hh-pre--compact {
+  display: none;
+}
+@media (max-width: 760px) {
+  .hh-pre--full {
+    display: none;
+  }
+  .hh-pre--compact {
+    display: block;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hh-reel__item {
     transition: none;
