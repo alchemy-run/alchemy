@@ -851,19 +851,27 @@ export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> =
   OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes);
 
 /**
+ * The OAuth scope that grants a refresh token. Every authorization requests
+ * it, and the token response echoes it into the stored scopes, so it is
+ * never a catalog scope.
+ */
+export const OFFLINE_ACCESS_SCOPE = "offline_access";
+
+/**
  * Split stored scopes into those the current OAuth client offers and those
- * it does not. Profiles configured against an older client (or scope
- * catalog) can hold scopes the current client rejects, and a single unknown
- * scope invalidates the entire authorize URL — sanitize with this before
- * building one.
+ * it does not, leaving out {@link OFFLINE_ACCESS_SCOPE}. Profiles configured
+ * against an older client (or scope catalog) can hold scopes the current
+ * client rejects, and a single unknown scope invalidates the entire
+ * authorize URL — sanitize with this before building one.
  */
 export const partitionOAuthScopes = (
   scopes: ReadonlyArray<string>,
 ): { valid: string[]; dropped: string[] } => {
   const known = new Set<string>(ALL_SCOPE_IDS);
+  const catalog = scopes.filter((scope) => scope !== OFFLINE_ACCESS_SCOPE);
   return {
-    valid: scopes.filter((scope) => known.has(scope)),
-    dropped: scopes.filter((scope) => !known.has(scope)),
+    valid: catalog.filter((scope) => known.has(scope)),
+    dropped: catalog.filter((scope) => !known.has(scope)),
   };
 };
 
