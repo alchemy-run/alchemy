@@ -37,10 +37,10 @@ const prismaAuthProvider = getAuthProvider<
 
 const readStoredCredentials = Effect.gen(function* () {
   const auth = yield* prismaAuthProvider;
-  return yield* auth.read("default", {
-    method: "stored",
-    serviceToken: "stored-token",
-  });
+  return yield* auth.read(
+    "default",
+    Effect.succeed({ method: "stored" as const, serviceToken: "stored-token" }),
+  );
 });
 
 const readEnvironmentCredentials = Effect.gen(function* () {

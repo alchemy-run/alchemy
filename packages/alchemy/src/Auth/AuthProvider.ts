@@ -311,9 +311,20 @@ export interface AuthProviderImpl<
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-> extends AuthProviderImpl<Config, Credentials> {
+> extends Omit<AuthProviderImpl<Config, Credentials>, "read"> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /**
+   * {@link AuthProviderImpl.read} under the profile's credentials lock, with
+   * `loadConfig` run inside the lock. A silent refresh spends a single-use
+   * refresh token, so config loaded before the lock can hold a token that
+   * another process, or an earlier resolve in this one, already rotated.
+   */
+  read<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<Credentials, E | AuthError | NeedsReauth>;
   /** Log each environment contract once per built provider layer. */
   readonly logEnvironmentCredentials: (
     used: ReadonlyArray<string>,
@@ -456,10 +467,12 @@ export const AuthProvider =
                 ),
               configureMethods: service.configureMethods,
             }),
-        read: (profileName, config, updateConfig) =>
+        read: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.read(profileName, config, updateConfig),
+            Effect.flatMap(loadConfig, (config) =>
+              service.read(profileName, config, updateConfig),
+            ),
           ).pipe(Effect.provideContext(ctx)),
         readEnvironment: service.readEnvironment?.pipe(
           Effect.provideContext(ctx),
