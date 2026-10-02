@@ -25,6 +25,22 @@ export interface AstroProps<
    */
   rootDir?: string;
   /**
+   * A custom Worker entry that wraps Astro's handler and adds exports of its
+   * own (Durable Object classes, a `scheduled` handler, ...). Import the Astro
+   * handler from `@alchemy.run/frontend-frameworks/astro/entrypoints/server`
+   * and re-export or extend its `default`:
+   *
+   * ```ts
+   * import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+   * export { MyDurableObject } from "./do.ts";
+   * export default { ...handler, scheduled: async () => {} };
+   * ```
+   *
+   * A relative path resolves against {@link rootDir}; a bare specifier resolves
+   * as a package import. When unset, Astro's server entrypoint is deployed.
+   */
+  main?: string;
+  /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file under `rootDir` is hashed, plus the
    * nearest package-manager lockfile. Provide explicit globs to narrow the
@@ -330,6 +346,7 @@ export const Astro: {
               rootDir: props.rootDir,
               options: {
                 rootDir: props.rootDir,
+                main: props.main,
                 memo: props.memo,
                 // Passed through verbatim (including `false`) so the
                 // source provider can skip its session-driver wiring on
