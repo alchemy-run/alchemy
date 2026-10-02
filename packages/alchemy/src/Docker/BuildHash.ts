@@ -223,6 +223,55 @@ const resolveDockerIgnore = Effect.fn(function* ({
   } satisfies DockerIgnore;
 });
 
+/**
+ * List the entries of a Docker build context, relative to the context.
+ *
+ * Symbolic links are reported but never followed: Docker sends the link
+ * itself, and following directory links walks out of the context (pnpm/Bun
+ * `node_modules` links into the workspace root) or loops forever (a link to
+ * an ancestor). A directory ignored by `.dockerignore` is not descended into
+ * unless a negated (`!`) rule could re-include something below it.
+ */
+const listBuildContextEntries = Effect.fn(function* (
+  context: string,
+  dockerignore: DockerIgnore | undefined,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const rules = dockerignore?.rules ?? [];
+  const canPruneIgnoredDirectories = rules.every((rule) => rule.ignored);
+  const entries: Array<string> = [];
+  const pending: Array<string> = [""];
+
+  for (
+    let directory = pending.pop();
+    directory !== undefined;
+    directory = pending.pop()
+  ) {
+    const names = yield* fs.readDirectory(path.join(context, directory));
+    for (const name of names) {
+      const entry = directory === "" ? name : path.join(directory, name);
+      const ignored = isDockerIgnored(entry, rules);
+      if (ignored && canPruneIgnoredDirectories) {
+        continue;
+      }
+      entries.push(entry);
+
+      const fullPath = path.join(context, entry);
+      const link = yield* Effect.result(fs.readLink(fullPath));
+      if (Result.isSuccess(link)) {
+        continue;
+      }
+      const info = yield* fs.stat(fullPath);
+      if (info.type === "Directory") {
+        pending.push(entry);
+      }
+    }
+  }
+
+  return entries;
+});
+
 interface DockerBuildContextSelection {
   /** Absolute build-context directory. */
   readonly context: string;
@@ -314,7 +363,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     hasher.update(dockerfileContent);
   });
 
-  const entries = yield* fs.readDirectory(context, { recursive: true });
+  const entries = yield* listBuildContextEntries(context, dockerignore);
   for (const entry of entries.sort()) {
     const normalizedEntry = normalizeRelativePath(entry);
     if (
