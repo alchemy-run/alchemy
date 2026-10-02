@@ -434,9 +434,9 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-3 v2-feature" id="loop-types" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-types")}</p>
-      <h2 class="v2-h2" data-copy>Type checking proves your infra is sound</h2>
+      <h2 class="v2-h2" data-copy>Type checking proves your infra is correct</h2>
       <p class="v2-lede" data-copy>
-        Every module's requirements are part of its type, so the type checker sees every layer of the app. Forget a Layer and the Worker doesn't compile. The agent finds out in milliseconds, before anything deploys.
+        Each Layer declares what it needs in its type: the resources it creates, the access it grants, and the services it calls. Leave one out and the program doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
       </p>
       <div class="v2-split v2-split--narrow">
         <CodeBlock
@@ -456,7 +456,7 @@ const PROVIDERS = [
       <p class="v2-kicker">{railKicker("loop-local")}</p>
       <h2 class="v2-h2" data-copy>Get fast feedback with local emulation</h2>
       <p class="v2-lede" data-copy>
-        <code class="alc-code-inline">alchemy dev</code> runs the whole program on your machine: Workers, Durable Objects, queues and buckets on emulated services, and a frontend that reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and it runs on the same emulated services.
+        <code class="alc-code-inline">alchemy dev</code> runs Workers, Durable Objects, queues and buckets on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
       </p>
       <div class="v2-split">
         <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
@@ -472,7 +472,7 @@ const PROVIDERS = [
       <p class="v2-kicker">{railKicker("loop-live")}</p>
       <h2 class="v2-h2" data-copy>Test a live deployment when ready to PR</h2>
       <p class="v2-lede" data-copy>
-        The same test deploys the app to a stage of its own, runs against it, and destroys it afterwards. Real Workers, real buckets, real permissions. It runs the same way on your machine and in CI.
+        Once it works locally, run the same test without <code class="alc-code-inline">LOCAL=1</code>. It deploys the app to a stage of its own, runs against real Workers, buckets and permissions, and destroys the stage afterwards, in about 20 seconds.
       </p>
       <div class="v2-split">
         <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
@@ -509,7 +509,7 @@ const PROVIDERS = [
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
       <h2 class="v2-h2" data-copy>Collect OTeL and configure monitoring on day 1</h2>
       <p class="v2-lede" data-copy>
-        Datasets, dashboards and alert monitors are resources in the same program as your app. Provide one Layer and every request is traced and logged. Swap the Layer to send telemetry to a different platform.
+        Provide one Layer and every request is traced and logged with OpenTelemetry from the first deploy. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app. Swap the Layer to send telemetry to a different platform.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/api.ts" code={TELEMETRY_SRC} compact />
