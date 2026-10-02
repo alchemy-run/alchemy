@@ -166,3 +166,26 @@ export const isServerOwnedByStack = Effect.fn(function* (
   const tags = tagRecord(server.tags);
   return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
 });
+
+/**
+ * Whether the SQL managed instance is tagged as owned by the current
+ * stack and stage. Instance settings and children that cannot carry tags
+ * inherit ownership from their instance.
+ */
+export const isManagedInstanceOwnedByStack = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  managedInstanceName: string,
+) {
+  const instance = yield* orUndefinedIfNotFound(
+    sql.GetManagedInstance({
+      subscriptionId,
+      resourceGroupName,
+      managedInstanceName,
+    }),
+  );
+  if (instance === undefined) return false;
+  const { stack, stage } = yield* stackAndStage;
+  const tags = tagRecord(instance.tags);
+  return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
+});
