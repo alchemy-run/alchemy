@@ -61,6 +61,18 @@ body.alc-root,
    Code block — terminal-themed wrapper used by static <CodeBlock>
    ============================================================ */
 
+/* Highlighted lines (CodeBlock's `highlight` prop). */
+.alc-code-block__line {
+  display: block;
+  margin: 0 -16px;
+  padding: 0 16px;
+  border-left: 2px solid transparent;
+}
+.alc-code-block__line.is-lit {
+  border-left-color: #7ee787;
+  background: rgba(126, 231, 135, 0.07);
+}
+
 .alc-code-block {
   background: var(--alc-bg-code);
   border: 1px solid var(--alc-hairline);

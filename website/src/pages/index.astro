@@ -12,6 +12,7 @@ import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
+import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 
 // Modules: one Layer creates the resource, binds it, and exposes the API.
@@ -59,29 +60,22 @@ const TERM_LINE = Math.max(
   ),
 );
 const STACK_WIDTH = Math.max(...HOST_LINES.flat().map((l) => l.length));
-const PREVIEW_SRC = `export default Alchemy.Stack(
-  "my-app",
-  {
-    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const api = yield* Api;
-    const pullRequest = yield* Config.Int("PULL_REQUEST").pipe(
-      Config.option,
-      Config.map(Option.getOrUndefined),
-    );
-    if (pullRequest) {
-      yield* GitHub.Comment("Preview", {
-        owner: "acme",
-        repository: "my-app",
-        issueNumber: pullRequest,
-        body: Output.interpolate\`Preview deployed to \${api.url}\`,
-      });
-    }
-    return { url: api.url };
-  }),
-);`;
+// Cropped to the comment logic inside the Stack.
+const PREVIEW_SRC = `const api = yield* Api;
+const pr = yield* Config.option(Config.Int("PULL_REQUEST"));
+const sha = yield* Config.String("GITHUB_SHA");
+
+if (Option.isSome(pr)) {
+  yield* GitHub.Comment("Preview", {
+    owner: "acme",
+    repository: "my-app",
+    issueNumber: pr.value,
+    body: Output.interpolate\`Preview: \${api.url} (\${sha})\`,
+    allowDelete: true,
+  });
+}`;
+// The GitHub.Comment block, highlighted in the snippet above.
+const PREVIEW_COMMENT_LINES: [number, number][] = [[6, 12]];
 
 // The vertical track beside the sections that walk the full picture.
 const RAIL = [
@@ -440,7 +434,7 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-3 v2-feature" id="loop-types" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-types")}</p>
-      <h2 class="v2-h2" data-copy>TypeScript guarantees it is correct</h2>
+      <h2 class="v2-h2" data-copy>Type checking proves your infra is sound</h2>
       <p class="v2-lede" data-copy>
         Every module's requirements are part of its type, so the type checker sees every layer of the app. Forget a Layer and the Worker doesn't compile. The agent finds out in milliseconds, before anything deploys.
       </p>
@@ -460,7 +454,7 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-4 v2-feature" id="loop-local" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-local")}</p>
-      <h2 class="v2-h2" data-copy>Get fast feedback local emulation</h2>
+      <h2 class="v2-h2" data-copy>Get fast feedback with local emulation</h2>
       <p class="v2-lede" data-copy>
         <code class="alc-code-inline">alchemy dev</code> runs the whole program on your machine: Workers, Durable Objects, queues and buckets on emulated services, and a frontend that reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and it runs on the same emulated services.
       </p>
@@ -496,8 +490,14 @@ const PROVIDERS = [
       <p class="v2-lede" data-copy>
         CI deploys each pull request to its own stage, runs the same tests, and comments a link to try it. The comment is a resource in the same program, so it is updated on every push and deleted with the preview. Merging deploys to production.
       </p>
-      <div class="v2-split v2-split--narrow">
-        <CodeBlock filename="alchemy.run.ts" code={PREVIEW_SRC} compact />
+      <div class="v2-split v2-split--preview">
+        <CodeBlock
+          filename="alchemy.run.ts"
+          code={PREVIEW_SRC}
+          compact
+          highlight={PREVIEW_COMMENT_LINES}
+        />
+        <PreviewComment client:visible />
       </div>
     </div>
   </section>
@@ -1191,6 +1191,11 @@ const PROVIDERS = [
   /* One card, as wide as one column of a split. */
   .v2-split--narrow {
     grid-template-columns: minmax(0, 720px);
+  }
+  @media (min-width: 901px) {
+    .v2-split--preview {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    }
   }
 
   /* ---------- the rail: where each section sits in the full picture ---------- */
