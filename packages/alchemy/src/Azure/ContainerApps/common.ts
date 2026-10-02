@@ -89,7 +89,11 @@ export const createContainerAppsName = Effect.fn(function* (
 /** Managed identity of a Container Apps resource. */
 export interface ContainerAppsIdentity {
   /** Identity type. */
-  type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
+  type:
+    | "None"
+    | "SystemAssigned"
+    | "UserAssigned"
+    | "SystemAssigned,UserAssigned";
   /** ARM IDs of the user-assigned identities to attach. */
   userAssignedIdentities?: string[];
 }
@@ -216,7 +220,9 @@ const taggedByStack = Effect.fn(function* (
 ) {
   const { stack, stage } = yield* stackAndStage;
   const record = tagRecord(tags);
-  return record["alchemy::stack"] === stack && record["alchemy::stage"] === stage;
+  return (
+    record["alchemy::stack"] === stack && record["alchemy::stage"] === stage
+  );
 });
 
 /**

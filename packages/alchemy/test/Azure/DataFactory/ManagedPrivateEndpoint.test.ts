@@ -49,7 +49,10 @@ const endpointGone = (
 
 const program = (groupId: "blob" | "queue") =>
   Effect.gen(function* () {
+    // Endpoint provisioning consistently ended in `Failed` when the target
+    // sat in the ~90-character generated group name; a short name works.
     const group = yield* Azure.Resources.ResourceGroup("MpeGroup", {
+      name: "alchemy-test-adf-mpe",
       location: "eastus",
     });
     const account = yield* Azure.Storage.StorageAccount("MpeAccount", {
@@ -77,8 +80,8 @@ const program = (groupId: "blob" | "queue") =>
   });
 
 // ~$0.01: a Standard_LRS account plus a managed private endpoint (billed
-// per hour only while a managed IR runs). ~5-8 minutes: each endpoint
-// provisions asynchronously in 1-3 minutes.
+// per hour only while a managed IR runs). ~8-12 minutes: each endpoint
+// provisions asynchronously in 3-5 minutes and the test creates two.
 test.provider(
   "create, replace, and delete a managed private endpoint",
   (stack) =>
@@ -131,6 +134,6 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:datafactory", "live"],
-    timeout: 600_000,
+    timeout: 900_000,
   },
 );

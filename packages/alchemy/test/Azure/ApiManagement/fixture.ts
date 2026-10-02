@@ -50,3 +50,21 @@ export const untilGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
       times: 12,
     }),
   );
+
+/**
+ * Resource group + Developer-tier service for entities Consumption lacks
+ * (groups, self-hosted gateways). Developer bills ~$0.07/h but provisions
+ * in 30-45 minutes, so tests using it are gated behind `runExpensive`.
+ */
+export const developerService = Effect.gen(function* () {
+  const group = yield* Azure.Resources.ResourceGroup("Group", {
+    location: "eastus",
+  });
+  const service = yield* Azure.ApiManagement.Service("Developer", {
+    resourceGroup: group.resourceGroupName,
+    sku: { name: "Developer", capacity: 1 },
+    publisherEmail: "ops@example.com",
+    publisherName: "Alchemy",
+  });
+  return { group, service };
+});

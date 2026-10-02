@@ -237,13 +237,15 @@ const toProperties = (
 
 /**
  * Ready once provisioning succeeded and the latest revision is ready, so
- * callers can route traffic as soon as the deploy returns.
+ * callers can route traffic as soon as the deploy returns. Express
+ * environments never report a ready revision; their single revision is
+ * ready when provisioning succeeds.
  */
 const appState = (observed: app.GetContainerAppResponse) => {
   const props = observed.properties;
   const state = props?.provisioningState ?? "InProgress";
   if (state !== "Succeeded") return state;
-  return props?.latestRevisionName !== undefined &&
+  return props?.latestReadyRevisionName !== undefined &&
     props.latestReadyRevisionName !== props.latestRevisionName
     ? "RevisionProvisioning"
     : "Succeeded";

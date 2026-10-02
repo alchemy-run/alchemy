@@ -1,7 +1,9 @@
 import * as datafactory from "@distilled.cloud/azure/datafactory";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -13,7 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createChildName, factoryOwnedByStack } from "./FactoryChild.ts";
+import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export interface ManagedPrivateEndpointProps {
   /** Resource group of the factory. Changing it replaces the endpoint. */
@@ -27,14 +29,17 @@ export interface ManagedPrivateEndpointProps {
    */
   managedVirtualNetworkName?: string;
   /**
-   * Endpoint name: letters, digits, `_`, and `-`, at most 127 characters.
-   * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the endpoint.
+   * Endpoint name: letters, digits, `_`, and `-`. Data Factory names the
+   * underlying private endpoint `<factoryName>.<name>`, which must fit in 80
+   * characters. If omitted, a unique name that fits is generated from the
+   * app, stage, and logical ID. Changing it replaces the endpoint.
    */
   name?: string;
   /**
    * ARM resource ID of the target resource (storage account, SQL server,
-   * key vault, ...). Changing it replaces the endpoint.
+   * key vault, ...). Changing it replaces the endpoint. Observed: targets in
+   * very long resource group names (~90 characters) make provisioning end
+   * in `Failed` with no actionable error.
    */
   privateLinkResourceId: string;
   /**
@@ -126,9 +131,21 @@ export const ManagedPrivateEndpoint = Resource<ManagedPrivateEndpoint>(
 
 const DEFAULT_VNET = "default";
 
-const createEndpointName = Effect.fn(function* (id: string) {
-  const name = yield* createChildName(id);
-  return name.slice(0, 127);
+/**
+ * Data Factory names the underlying private endpoint
+ * `<factoryName>.<endpointName>`, and private endpoint names are limited to
+ * 80 characters; a longer combined name makes provisioning end in `Failed`.
+ */
+const createEndpointName = Effect.fn(function* (
+  id: string,
+  factoryName: string,
+) {
+  const name = yield* createPhysicalName({
+    id,
+    maxLength: Math.max(8, Math.min(40, 79 - factoryName.length)),
+    delimiter: "_",
+  });
+  return name.replace(/[^A-Za-z0-9_]/g, "_");
 });
 
 const getEndpoint = (
@@ -232,7 +249,7 @@ export const ManagedPrivateEndpointProvider = () =>
       const name =
         output?.managedPrivateEndpointName ??
         olds?.name ??
-        (yield* createEndpointName(id));
+        (yield* createEndpointName(id, factoryName));
       const observed = yield* getEndpoint(
         subscriptionId,
         resourceGroup,
@@ -259,7 +276,7 @@ export const ManagedPrivateEndpointProvider = () =>
       const name =
         news.name ??
         output?.managedPrivateEndpointName ??
-        (yield* createEndpointName(id));
+        (yield* createEndpointName(id, factoryName));
       const get = getEndpoint(
         subscriptionId,
         resourceGroup,
@@ -268,36 +285,56 @@ export const ManagedPrivateEndpointProvider = () =>
         name,
       );
 
-      // Observe.
-      const observed = yield* get;
+      const where = {
+        subscriptionId,
+        resourceGroupName: resourceGroup,
+        factoryName,
+        managedVirtualNetworkName: vnet,
+        managedPrivateEndpointName: name,
+      };
 
-      // Ensure. Every property is create-only (diff replaces on change),
-      // so an existing endpoint only needs to finish provisioning. A
-      // previously failed endpoint is recreated.
-      if (
-        observed === undefined ||
-        observed.properties.provisioningState === "Failed"
-      ) {
-        yield* datafactory.ManagedPrivateEndpointsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          factoryName,
-          managedVirtualNetworkName: vnet,
-          managedPrivateEndpointName: name,
-          properties: {
-            privateLinkResourceId: news.privateLinkResourceId,
-            groupId: news.groupId,
-            fqdns: news.fqdns,
-          },
-        });
-      }
-
-      // Provisioning is asynchronous (Provisioning -> Succeeded).
-      const fresh = yield* waitForProvisioned(
-        `managed private endpoint ${name}`,
-        get,
-        (endpoint) => endpoint.properties.provisioningState,
-        { interval: "10 seconds", times: 48 },
+      // Observe -> ensure -> wait. Every property is create-only (diff
+      // replaces on change), so an existing endpoint only needs to finish
+      // provisioning. Provisioning occasionally ends in `Failed` on a
+      // fresh managed virtual network; a failed endpoint is deleted and
+      // recreated (bounded).
+      const ensure = Effect.gen(function* () {
+        const observed = yield* get;
+        if (observed?.properties.provisioningState === "Failed") {
+          yield* ignoreNotFound(
+            datafactory.DeleteManagedPrivateEndpoint(where),
+          );
+          yield* waitUntilGone(`managed private endpoint ${name}`, get, {
+            interval: "10 seconds",
+            times: 36,
+          });
+        }
+        if (
+          observed === undefined ||
+          observed.properties.provisioningState === "Failed"
+        ) {
+          yield* datafactory.ManagedPrivateEndpointsCreateOrUpdate({
+            ...where,
+            properties: {
+              privateLinkResourceId: news.privateLinkResourceId,
+              groupId: news.groupId,
+              fqdns: news.fqdns,
+            },
+          });
+        }
+        // Provisioning is asynchronous (Provisioning -> Succeeded).
+        return yield* waitForProvisioned(
+          `managed private endpoint ${name}`,
+          get,
+          (endpoint) => endpoint.properties.provisioningState,
+          { interval: "10 seconds", times: 36 },
+        );
+      });
+      const fresh = yield* ensure.pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Azure.ProvisioningFailed",
+          times: 1,
+        }),
       );
       return toAttrs(resourceGroup, factoryName, vnet, name, fresh);
     }),
@@ -311,10 +348,23 @@ export const ManagedPrivateEndpointProvider = () =>
         managedVirtualNetworkName: output.managedVirtualNetworkName,
         managedPrivateEndpointName: output.managedPrivateEndpointName,
       };
+      const get = orUndefinedIfNotFound(
+        datafactory.GetManagedPrivateEndpoint(where),
+      );
+      // Data Factory rejects deleting an endpoint that is still
+      // provisioning ("Invalid resource request"), so wait it out first.
+      yield* get.pipe(
+        Effect.repeat({
+          until: (endpoint) =>
+            endpoint?.properties.provisioningState !== "Provisioning",
+          schedule: Schedule.spaced("10 seconds"),
+          times: 36,
+        }),
+      );
       yield* ignoreNotFound(datafactory.DeleteManagedPrivateEndpoint(where));
       yield* waitUntilGone(
         `managed private endpoint ${output.managedPrivateEndpointName}`,
-        orUndefinedIfNotFound(datafactory.GetManagedPrivateEndpoint(where)),
+        get,
         { interval: "10 seconds", times: 36 },
       );
     }),

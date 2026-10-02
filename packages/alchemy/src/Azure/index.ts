@@ -1,6 +1,7 @@
 export * as ApiManagement from "./ApiManagement/index.ts";
 export * from "./AuthProvider.ts";
 export * as Authorization from "./Authorization/index.ts";
+export * as ContainerApps from "./ContainerApps/index.ts";
 export * as CosmosDB from "./CosmosDB/index.ts";
 export * as DataFactory from "./DataFactory/index.ts";
 export * as DnsResolver from "./DnsResolver/index.ts";

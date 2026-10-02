@@ -124,14 +124,19 @@ const getGlobalParameter = (
     }),
   );
 
-const toParameters = (
-  map: { [key: string]: datafactory.GlobalParameterSpecification | undefined },
-): Record<string, GlobalParameterValue> =>
+const toParameters = (map: {
+  [key: string]: datafactory.GlobalParameterSpecification | undefined;
+}): Record<string, GlobalParameterValue> =>
   Object.fromEntries(
     Object.entries(map).flatMap(([key, spec]) =>
       spec === undefined
         ? []
-        : [[key, { type: spec.type as GlobalParameterType, value: spec.value }]],
+        : [
+            [
+              key,
+              { type: spec.type as GlobalParameterType, value: spec.value },
+            ],
+          ],
     ),
   );
 

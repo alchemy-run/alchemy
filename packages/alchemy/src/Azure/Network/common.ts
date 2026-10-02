@@ -114,8 +114,7 @@ export const waitNetworkGoneSlow = <A, E, R>(
 ) => waitUntilGone(label, get, { interval: "15 seconds", times: 100 });
 
 /** Last segment of an ARM ID (the sub-resource name). */
-export const nameOf = (armId: string | undefined) =>
-  armId?.split("/").pop();
+export const nameOf = (armId: string | undefined) => armId?.split("/").pop();
 
 /** Wait for a deleted Microsoft.Network resource to disappear. */
 export const waitNetworkGone = <A, E, R>(
@@ -160,6 +159,42 @@ export const subnetInput = (
     },
   };
 };
+
+/**
+ * Converge a child resource (route, security rule, peering) whose parent
+ * PUT re-sends the observed child collection. A parent update racing the
+ * child write can carry a stale copy of the child and revert it, so after
+ * applying, wait for the parent to settle, re-observe the child, and
+ * re-apply while it drifted (bounded).
+ */
+export const convergeChild = <
+  A extends { readonly properties?: { readonly provisioningState?: string } },
+  P extends { readonly properties?: { readonly provisioningState?: string } },
+  E1,
+  R1,
+  E2,
+  R2,
+  E3,
+  R3,
+>(options: {
+  readonly label: string;
+  readonly get: Effect.Effect<A | undefined, E1, R1>;
+  readonly getParent: Effect.Effect<P | undefined, E2, R2>;
+  readonly drifted: (observed: A | undefined) => boolean;
+  readonly apply: Effect.Effect<unknown, E3, R3>;
+}) =>
+  Effect.gen(function* () {
+    const { label, get, getParent, drifted, apply } = options;
+    let observed: A | undefined;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      if (drifted(yield* get)) yield* apply;
+      observed = yield* waitNetworkProvisioned(label, get);
+      yield* waitNetworkProvisioned(`parent of ${label}`, getParent);
+      const settled = yield* get;
+      if (settled !== undefined && !drifted(settled)) return settled;
+    }
+    return observed!;
+  });
 
 /**
  * Ownership of tagless child resources (subnets, routes, peerings, DNS zone

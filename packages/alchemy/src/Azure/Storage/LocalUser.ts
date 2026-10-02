@@ -262,7 +262,8 @@ const keysKey = (keys: ReadonlyArray<storage.SshPublicKey>) =>
   JSON.stringify(
     keys
       .map((key) => ({
-        key: (key.key ?? "").trim(),
+        // Azure drops the trailing comment of an OpenSSH key.
+        key: (key.key ?? "").trim().split(/\s+/).slice(0, 2).join(" "),
         description: key.description ?? "",
       }))
       .sort((a, b) => a.key.localeCompare(b.key)),

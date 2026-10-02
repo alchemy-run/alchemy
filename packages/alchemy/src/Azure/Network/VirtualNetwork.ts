@@ -311,19 +311,22 @@ export const VirtualNetworkProvider = () =>
         (props?.privateEndpointVNetPolicies ?? "Disabled") !==
           desired.privateEndpointVNetPolicies;
       if (propsDiffer) {
-        yield* network
-          .VirtualNetworksCreateOrUpdate({
+        // Each attempt re-reads subnets and peerings: a busy retry with a
+        // stale copy would revert a concurrent Subnet / peering write.
+        yield* Effect.gen(function* () {
+          const current = (yield* get)?.properties;
+          yield* network.VirtualNetworksCreateOrUpdate({
             ...where,
             location,
             tags,
             properties: {
               ...desired,
-              subnets: props?.subnets?.map(subnetInput),
+              subnets: current?.subnets?.map(subnetInput),
               virtualNetworkPeerings:
-                props?.virtualNetworkPeerings?.map(peeringInput),
+                current?.virtualNetworkPeerings?.map(peeringInput),
             },
-          })
-          .pipe(Effect.retry(whileNetworkBusy));
+          });
+        }).pipe(Effect.retry(whileNetworkBusy));
       } else if (tagsDiffer(observed?.tags, tags)) {
         yield* network
           .UpdateVirtualNetworkTags({ ...where, tags })

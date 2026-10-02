@@ -29,7 +29,8 @@ export interface AuthorizationProviderGrantTypes {
   authorizationCode?: AuthorizationProviderGrantParameters;
   /**
    * Parameters of the OAuth2 client-credentials grant, e.g.
-   * `{ clientId, clientSecret, resourceUri, tenantId }` for `aad`.
+   * `{ resourceUri, scopes, loginUri, tenantId }` for `aad` (the client id
+   * and secret belong to each authorization, not the provider).
    */
   clientCredentials?: AuthorizationProviderGrantParameters;
 }
@@ -101,9 +102,9 @@ export interface AuthorizationProvider extends Resource<
  *   identityProvider: "aad",
  *   grantTypes: {
  *     clientCredentials: {
- *       clientId: appClientId,
- *       clientSecret: Redacted.make(appClientSecret),
  *       resourceUri: "https://graph.microsoft.com",
+ *       scopes: "https://graph.microsoft.com/.default",
+ *       loginUri: "https://login.windows.net",
  *       tenantId,
  *     },
  *   },
@@ -132,6 +133,11 @@ export const AuthorizationProvider = Resource<AuthorizationProvider>(
   "Azure.ApiManagement.AuthorizationProvider",
 );
 
+/**
+ * Read the provider through the name-filtered list. The single-entity GET
+ * serves a stale copy for minutes after an update or delete, while the
+ * list reflects writes immediately.
+ */
 const getProvider = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -139,12 +145,22 @@ const getProvider = (
   authorizationProviderId: string,
 ) =>
   orUndefinedIfNotFound(
-    apim.GetAuthorizationProvider({
-      subscriptionId,
-      resourceGroupName,
-      serviceName,
-      authorizationProviderId,
-    }),
+    apim
+      .ListAuthorizationProviderByService({
+        subscriptionId,
+        resourceGroupName,
+        serviceName,
+        _filter: `name eq '${authorizationProviderId}'`,
+      })
+      // The exact-name filter matches at most one entity, so the first page
+      // is authoritative even though APIM may still return a nextLink.
+      .pipe(
+        Effect.map((page) =>
+          page.value?.find((provider) =>
+            sameName(provider.name, authorizationProviderId),
+          ),
+        ),
+      ),
   );
 
 const revealParameters = (
@@ -179,7 +195,7 @@ const toAttrs = (
   resourceGroup: string,
   serviceName: string,
   name: string,
-  provider: apim.GetAuthorizationProviderResponse,
+  provider: apim.AuthorizationProviderContract,
 ): AuthorizationProvider["Attributes"] => ({
   authorizationProviderName: name,
   authorizationProviderId: provider.id ?? "",
@@ -211,11 +227,16 @@ export const AuthorizationProviderProvider = () =>
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.serviceName, output.serviceName) ||
         (news.name !== undefined &&
-          !sameName(news.name, output.authorizationProviderName)) ||
-        (output.identityProvider !== "" &&
-          !sameName(news.identityProvider, output.identityProvider))
+          !sameName(news.name, output.authorizationProviderName))
       ) {
         return { action: "replace" } as const;
+      }
+      if (
+        output.identityProvider !== "" &&
+        !sameName(news.identityProvider, output.identityProvider)
+      ) {
+        // Same identifier: the old provider must go before the new one is created.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -269,12 +290,18 @@ export const AuthorizationProviderProvider = () =>
         observed !== undefined &&
         previous !== undefined &&
         observed.properties?.displayName === displayName &&
-        sameName(observed.properties?.identityProvider, news.identityProvider) &&
+        sameName(
+          observed.properties?.identityProvider,
+          news.identityProvider,
+        ) &&
         sameParameters(
           grantTypes.authorizationCode,
           previous.authorizationCode,
         ) &&
-        sameParameters(grantTypes.clientCredentials, previous.clientCredentials);
+        sameParameters(
+          grantTypes.clientCredentials,
+          previous.clientCredentials,
+        );
 
       const current =
         inSync && observed !== undefined

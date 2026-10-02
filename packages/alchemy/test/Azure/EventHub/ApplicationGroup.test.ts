@@ -4,6 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -31,10 +32,11 @@ const program = (props: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // Application groups need a Standard namespace.
+    // Application groups need a Premium (or Dedicated) namespace.
     const namespace = yield* Azure.EventHub.Namespace("Events", {
       resourceGroup: group.resourceGroupName,
-      sku: "Standard",
+      sku: "Premium",
+      capacity: 1,
     });
     // Both rules stay deployed across the replacement step.
     const producers = yield* Azure.EventHub.NamespaceAuthorizationRule(
@@ -64,8 +66,9 @@ const program = (props: {
     return { group, namespace, rule, appGroup };
   });
 
-// Standard namespace (~$0.03/hour) for a few minutes: well under $0.05.
-test.provider(
+// Premium namespace, 1 PU (~$1.23/hour, billed per started hour): ~$1.25
+// per run, 5-10 minutes to provision.
+test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete an application group",
   (stack) =>
     Effect.gen(function* () {
@@ -125,11 +128,11 @@ test.provider(
   { tags, timeout: 600_000 },
 );
 
-// Throttling policies need the distilled patch
+// Premium namespace, 1 PU (~$1.25 per run). Needs the distilled patch
 // patches/eventhub/ApplicationGroupCreateOrUpdateApplicationGroup.json
-// (the generated policy schema strips rateLimitThreshold/metricId) to be
-// regenerated. Standard namespace for a few minutes: well under $0.05.
-test.provider.skipIf(!process.env.AZURE_TEST_EVENTHUB_APPGROUP_POLICIES)(
+// regenerated (the generated policy schema strips rateLimitThreshold and
+// metricId).
+test.provider.skipIf(!runExpensive)(
   "apply and update throttling policies on an application group",
   (stack) =>
     Effect.gen(function* () {
@@ -185,6 +188,53 @@ test.provider.skipIf(!process.env.AZURE_TEST_EVENTHUB_APPGROUP_POLICIES)(
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
+    }).pipe(logLevel),
+  { tags, timeout: 600_000 },
+);
+
+// Ungated probe: a Standard namespace (~$0.03/hour, a few minutes) rejects
+// application groups with the typed tier error, which the provider treats
+// as "absent" on read and delete.
+test.provider(
+  "a Standard namespace rejects application groups with a typed error",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, namespace } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          const namespace = yield* Azure.EventHub.Namespace("Events", {
+            resourceGroup: group.resourceGroupName,
+            sku: "Standard",
+          });
+          return { group, namespace };
+        }),
+      );
+      const subscriptionId = yield* subscription;
+      const error = yield* eventhub
+        .ApplicationGroupCreateOrUpdateApplicationGroup({
+          subscriptionId,
+          resourceGroupName: group.resourceGroupName,
+          namespaceName: namespace.namespaceName,
+          applicationGroupName: "probe",
+          properties: { clientAppGroupIdentifier: "SASKeyName=probe" },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("EventHubApplicationGroupNotSupported");
+      const getError = yield* eventhub
+        .GetApplicationGroup({
+          subscriptionId,
+          resourceGroupName: group.resourceGroupName,
+          namespaceName: namespace.namespaceName,
+          applicationGroupName: "probe",
+        })
+        .pipe(Effect.flip);
+      expect(getError._tag).toEqual("EventHubApplicationGroupNotSupported");
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 600_000 },
 );

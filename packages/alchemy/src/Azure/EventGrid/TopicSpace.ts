@@ -57,7 +57,10 @@ export interface TopicSpace extends Resource<
     namespace: string;
     /** MQTT topic templates. */
     topicTemplates: string[];
-    /** Description (Alchemy ownership marker stripped). */
+    /**
+     * Description. Azure does not return it on GET, so this is the desired
+     * description after a deploy.
+     */
     description: string | undefined;
   },
   never,
@@ -69,8 +72,8 @@ export interface TopicSpace extends Resource<
  * bindings grant client groups publish or subscribe access to a topic
  * space.
  *
- * Topic spaces have no tags; Alchemy appends an ownership marker to the
- * `description`.
+ * Topic spaces have no tags and Azure does not return their `description`
+ * on GET, so ownership follows the parent namespace.
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-topic-spaces
  *
@@ -166,12 +169,15 @@ export const TopicSpaceProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, namespace, name, observed);
-      return (yield* isOwnedDescription(id, observed.properties?.description))
+      // GET returns `description: null` for this type, so the marker cannot
+      // be observed; ownership then follows the parent namespace.
+      const description = observed.properties?.description;
+      return description == null || (yield* isOwnedDescription(id, description))
         ? attrs
         : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.EventGrid");
       const { resourceGroup, namespace } = news;
@@ -190,12 +196,20 @@ export const TopicSpaceProvider = () =>
           topicSpaceName: name,
           properties: { description, topicTemplates: news.topicTemplates },
         }),
+        // GET returns `description: null`; when it cannot be observed, the
+        // previous props are the only hint that it changed.
         differs: (have) =>
-          have.properties?.description !== description ||
+          (have.properties?.description == null
+            ? olds === undefined || olds.description !== news.description
+            : have.properties.description !== description) ||
           sorted(have.properties?.topicTemplates) !==
             sorted(news.topicTemplates),
       });
-      return toAttrs(resourceGroup, namespace, name, observed);
+      return {
+        ...toAttrs(resourceGroup, namespace, name, observed),
+        description:
+          userDescription(observed.properties?.description) ?? news.description,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {

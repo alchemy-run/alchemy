@@ -192,7 +192,8 @@ export const PrivateDnsZoneGroupProvider = () =>
         (news.name !== undefined &&
           !sameId(news.name, output.privateDnsZoneGroupName))
       ) {
-        return { action: "replace" } as const;
+        // A private endpoint holds one zone group: delete the old group first.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

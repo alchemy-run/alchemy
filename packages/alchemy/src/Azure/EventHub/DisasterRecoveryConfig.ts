@@ -300,11 +300,7 @@ export const DisasterRecoveryConfigProvider = () =>
       }
 
       // Pairing is asynchronous; block until replication is established.
-      const fresh = yield* waitForRole(
-        `geo-DR alias ${alias}`,
-        get,
-        "Primary",
-      );
+      const fresh = yield* waitForRole(`geo-DR alias ${alias}`, get, "Primary");
       return toAttrs(resourceGroup, namespace, alias, fresh);
     }),
 

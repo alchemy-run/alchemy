@@ -12,6 +12,7 @@ import type { ServiceProviders } from "./ServiceProviders.ts";
 // its `<Service>/Providers.ts`; never list resources here.
 import * as ApiManagementProviders from "./ApiManagement/Providers.ts";
 import * as AuthorizationProviders from "./Authorization/Providers.ts";
+import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
 import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
 import * as DataFactoryProviders from "./DataFactory/Providers.ts";
 import * as DnsResolverProviders from "./DnsResolver/Providers.ts";
@@ -29,6 +30,7 @@ import * as WebProviders from "./Web/Providers.ts";
 const services: ReadonlyArray<ServiceProviders> = [
   ApiManagementProviders,
   AuthorizationProviders,
+  ContainerAppsProviders,
   CosmosDBProviders,
   DataFactoryProviders,
   DnsResolverProviders,

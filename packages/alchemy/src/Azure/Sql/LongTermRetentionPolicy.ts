@@ -188,6 +188,27 @@ const RESET: sql.LongTermRetentionPolicyProperties = {
   yearlyRetention: NONE,
 };
 
+/**
+ * The PUT body for `desired`. Azure rejects any `yearlyRetention` (even
+ * `PT0S`) without a `weekOfYear` in 1-52, so "no yearly retention" is only
+ * written when the observed policy still has one, reusing its week.
+ */
+const putBody = (
+  desired: sql.LongTermRetentionPolicyProperties,
+  observed: ObservedPolicy | undefined,
+): sql.LongTermRetentionPolicyProperties => {
+  if (!sameDuration(desired.yearlyRetention, NONE)) return desired;
+  const rest = {
+    ...desired,
+    yearlyRetention: undefined,
+    weekOfYear: undefined,
+  };
+  const current = observed?.properties;
+  return current !== undefined && !sameDuration(current.yearlyRetention, NONE)
+    ? { ...rest, yearlyRetention: NONE, weekOfYear: current.weekOfYear }
+    : rest;
+};
+
 export const LongTermRetentionPolicyProvider = () =>
   Provider.succeed(LongTermRetentionPolicy, {
     stables: ["policyId", "serverName", "databaseName", "resourceGroup"],
@@ -258,7 +279,7 @@ export const LongTermRetentionPolicyProvider = () =>
           serverName: server,
           databaseName: database,
           policyName: POLICY_NAME,
-          properties: desired,
+          properties: putBody(desired, observed),
         });
       }
 
@@ -273,8 +294,16 @@ export const LongTermRetentionPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const get = getPolicy(
+        subscriptionId,
+        output.resourceGroup,
+        output.serverName,
+        output.databaseName,
+      );
       // The policy cannot be removed; stop taking long-term backups (a
       // missing database or server means there is nothing left to reset).
+      const observed = yield* get;
+      if (observed === undefined || matches(observed, RESET)) return;
       yield* ignoreNotFound(
         sql.LongTermRetentionPoliciesCreateOrUpdate({
           subscriptionId,
@@ -282,17 +311,12 @@ export const LongTermRetentionPolicyProvider = () =>
           serverName: output.serverName,
           databaseName: output.databaseName,
           policyName: POLICY_NAME,
-          properties: RESET,
+          properties: putBody(RESET, observed),
         }),
       );
       yield* waitUntilGone(
         `sql long-term retention on ${output.databaseName}`,
-        getPolicy(
-          subscriptionId,
-          output.resourceGroup,
-          output.serverName,
-          output.databaseName,
-        ).pipe(
+        get.pipe(
           Effect.map((policy) =>
             policy === undefined || matches(policy, RESET) ? undefined : policy,
           ),

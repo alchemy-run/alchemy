@@ -13,11 +13,11 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  convergeChild,
   createNetworkName,
   sameId,
   sameSet,
   waitNetworkGone,
-  waitNetworkProvisioned,
   whileNetworkBusy,
 } from "./common.ts";
 
@@ -250,9 +250,8 @@ const desiredProperties = (news: SecurityRuleProps, description: string) => {
   };
 };
 
-const asgIds = (
-  groups: ReadonlyArray<{ readonly id?: string }> | undefined,
-) => (groups ?? []).flatMap((group) => (group.id ? [group.id] : []));
+const asgIds = (groups: ReadonlyArray<{ readonly id?: string }> | undefined) =>
+  (groups ?? []).flatMap((group) => (group.id ? [group.id] : []));
 
 export const SecurityRuleProvider = () =>
   Provider.succeed(SecurityRule, {
@@ -275,7 +274,8 @@ export const SecurityRuleProvider = () =>
         !sameId(news.networkSecurityGroup, output.networkSecurityGroup) ||
         (news.name !== undefined && !sameId(news.name, output.securityRuleName))
       ) {
-        return { action: "replace" } as const;
+        // Priorities are unique per direction within an NSG: delete the old rule first.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -286,7 +286,9 @@ export const SecurityRuleProvider = () =>
       const nsg = output?.networkSecurityGroup ?? olds?.networkSecurityGroup;
       if (resourceGroup === undefined || nsg === undefined) return undefined;
       const name =
-        output?.securityRuleName ?? olds?.name ?? (yield* createNetworkName(id));
+        output?.securityRuleName ??
+        olds?.name ??
+        (yield* createNetworkName(id));
       const observed = yield* getRule(subscriptionId, resourceGroup, nsg, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, nsg, name, observed);
@@ -314,39 +316,52 @@ export const SecurityRuleProvider = () =>
         name,
       );
 
-      // Observe.
-      let observed = yield* get;
-      const p = observed?.properties;
-
       // Ensure + sync: the rule is one PUT; skip it when nothing drifted.
-      const differs =
-        observed === undefined ||
-        p?.description !== desired.description ||
-        p?.priority !== desired.priority ||
-        p?.direction !== desired.direction ||
-        p?.access !== desired.access ||
-        p?.protocol !== desired.protocol ||
-        p?.sourcePortRange !== desired.sourcePortRange ||
-        !sameSet(p?.sourcePortRanges, desired.sourcePortRanges) ||
-        p?.destinationPortRange !== desired.destinationPortRange ||
-        !sameSet(p?.destinationPortRanges, desired.destinationPortRanges) ||
-        p?.sourceAddressPrefix !== desired.sourceAddressPrefix ||
-        !sameSet(p?.sourceAddressPrefixes, desired.sourceAddressPrefixes) ||
-        p?.destinationAddressPrefix !== desired.destinationAddressPrefix ||
-        !sameSet(
-          p?.destinationAddressPrefixes,
-          desired.destinationAddressPrefixes,
-        ) ||
-        !sameSet(
-          asgIds(p?.sourceApplicationSecurityGroups),
-          news.sourceApplicationSecurityGroupIds,
-        ) ||
-        !sameSet(
-          asgIds(p?.destinationApplicationSecurityGroups),
-          news.destinationApplicationSecurityGroupIds,
+      const drifted = (observed: Observed | undefined) => {
+        const p = observed?.properties;
+        return (
+          observed === undefined ||
+          p?.description !== desired.description ||
+          p?.priority !== desired.priority ||
+          p?.direction !== desired.direction ||
+          p?.access !== desired.access ||
+          p?.protocol !== desired.protocol ||
+          p?.sourcePortRange !== desired.sourcePortRange ||
+          !sameSet(p?.sourcePortRanges, desired.sourcePortRanges) ||
+          p?.destinationPortRange !== desired.destinationPortRange ||
+          !sameSet(p?.destinationPortRanges, desired.destinationPortRanges) ||
+          p?.sourceAddressPrefix !== desired.sourceAddressPrefix ||
+          !sameSet(p?.sourceAddressPrefixes, desired.sourceAddressPrefixes) ||
+          p?.destinationAddressPrefix !== desired.destinationAddressPrefix ||
+          !sameSet(
+            p?.destinationAddressPrefixes,
+            desired.destinationAddressPrefixes,
+          ) ||
+          !sameSet(
+            asgIds(p?.sourceApplicationSecurityGroups),
+            news.sourceApplicationSecurityGroupIds,
+          ) ||
+          !sameSet(
+            asgIds(p?.destinationApplicationSecurityGroups),
+            news.destinationApplicationSecurityGroupIds,
+          )
         );
-      if (differs) {
-        yield* network
+      };
+
+      // Observe -> ensure + sync, re-checked after a concurrent NSG update
+      // (which re-sends the observed rules) settles.
+      const observed = yield* convergeChild({
+        label: `security rule ${networkSecurityGroup}/${name}`,
+        get,
+        getParent: orUndefinedIfNotFound(
+          network.GetNetworkSecurityGroup({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            networkSecurityGroupName: networkSecurityGroup,
+          }),
+        ),
+        drifted,
+        apply: network
           .SecurityRulesCreateOrUpdate({
             subscriptionId,
             resourceGroupName: resourceGroup,
@@ -354,12 +369,8 @@ export const SecurityRuleProvider = () =>
             securityRuleName: name,
             properties: desired,
           })
-          .pipe(Effect.retry(whileNetworkBusy));
-      }
-      observed = yield* waitNetworkProvisioned(
-        `security rule ${networkSecurityGroup}/${name}`,
-        get,
-      );
+          .pipe(Effect.retry(whileNetworkBusy)),
+      });
       return toAttrs(resourceGroup, networkSecurityGroup, name, observed);
     }),
 

@@ -57,9 +57,9 @@ test.provider(
       expect(observed.properties?.cors?.corsRules?.[0]?.allowedOrigins).toEqual(
         ["https://app.example.com"],
       );
-      expect(observed.properties?.cors?.corsRules?.[0]?.maxAgeInSeconds).toEqual(
-        600,
-      );
+      expect(
+        observed.properties?.cors?.corsRules?.[0]?.maxAgeInSeconds,
+      ).toEqual(600);
 
       // In-place update: a different origin and method set.
       const updated = yield* stack.deploy(

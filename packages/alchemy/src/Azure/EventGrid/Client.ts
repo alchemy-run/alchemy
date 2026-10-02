@@ -220,7 +220,9 @@ export const ClientProvider = () =>
         return undefined;
       }
       const name =
-        output?.clientName ?? olds?.name ?? (yield* createEventGridName(id, 50));
+        output?.clientName ??
+        olds?.name ??
+        (yield* createEventGridName(id, 50));
       const observed = yield* getClient(
         subscriptionId,
         resourceGroup,

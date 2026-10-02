@@ -251,17 +251,20 @@ export const RouteTableProvider = () =>
         (observed.properties?.disableBgpRoutePropagation ?? false) !==
           disableBgpRoutePropagation
       ) {
-        yield* network
-          .RouteTablesCreateOrUpdate({
+        // Each attempt re-reads the routes: a busy retry with a stale copy
+        // would revert a concurrent Route write.
+        yield* Effect.gen(function* () {
+          const current = yield* get;
+          yield* network.RouteTablesCreateOrUpdate({
             ...where,
             location,
             tags,
             properties: {
               disableBgpRoutePropagation,
-              routes: observed?.properties?.routes?.map(routeInput),
+              routes: current?.properties?.routes?.map(routeInput),
             },
-          })
-          .pipe(Effect.retry(whileNetworkBusy));
+          });
+        }).pipe(Effect.retry(whileNetworkBusy));
       } else if (tagsDiffer(observed.tags, tags)) {
         yield* network
           .UpdateRouteTableTags({ ...where, tags })

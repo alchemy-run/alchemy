@@ -19,7 +19,8 @@ import {
   subsetMatches,
 } from "./Common.ts";
 
-export type VersioningScheme = apim.ApiVersionSetContractPropertiesVersioningScheme;
+export type VersioningScheme =
+  apim.ApiVersionSetContractPropertiesVersioningScheme;
 
 export interface ApiVersionSetProps {
   /** Resource group of the API Management service. Changing it replaces the version set. */
