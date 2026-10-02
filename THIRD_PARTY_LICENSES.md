@@ -55,7 +55,9 @@ section above.
 Portions of `packages/cloudflare-runtime`, including the vendored
 `workers-shared` and `workflows-shared` source trees and local binding
 implementations adapted from Miniflare, are derived from Cloudflare's
-`workers-sdk` repository. Alchemy uses these portions under the MIT option of
+`workers-sdk` repository. The published package also redistributes
+Miniflare's prebuilt Local Explorer (API worker, UI and Durable Object
+wrapper) under `dist/core/explorer`. Alchemy uses these portions under the MIT option of
 the upstream `MIT OR Apache-2.0` license.
 
 Copyright (c) 2020 Cloudflare, Inc. <wrangler@cloudflare.com>

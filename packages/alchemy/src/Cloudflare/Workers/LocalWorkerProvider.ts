@@ -885,6 +885,9 @@ export const LocalWorkerProvider = () =>
                       cache: worker.dev.cache,
                       // Per-worker request.cf override (`dev: { cf: {...} }`).
                       cf: worker.dev.cf,
+                      // Miniflare's Local Explorer at `<url>/cdn-cgi/explorer`
+                      // (browse/edit local KV, D1, R2, DOs, Workflows).
+                      explorer: true,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
                     })

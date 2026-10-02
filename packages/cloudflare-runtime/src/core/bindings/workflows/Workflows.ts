@@ -33,9 +33,11 @@ import { ConfigError } from "../../RuntimeError.shared.ts";
 import type { Workflow } from "../../RuntimeWorker.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
 
-const WORKFLOWS_WRAPPED_BINDING_MODULE =
+export const WORKFLOWS_WRAPPED_BINDING_MODULE =
   "cloudflare-runtime:workflows-wrapped-binding";
 const WORKFLOWS_STORAGE_SERVICE_NAME = "workflows:storage";
+/** Subdirectory of the runtime storage holding workflow engine state. */
+export const WORKFLOWS_STORAGE_DIRECTORY = "workflows";
 
 export class Workflows extends Plugin.Service<Workflows>()(
   "cloudflare-runtime/plugin/Workflows",
@@ -59,7 +61,10 @@ export const WorkflowsLive = Layer.effect(
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
-      const persistPath = path.join(storageDiskPath, "workflows");
+      const persistPath = path.join(
+        storageDiskPath,
+        WORKFLOWS_STORAGE_DIRECTORY,
+      );
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
         Effect.mapError(
           (cause) =>

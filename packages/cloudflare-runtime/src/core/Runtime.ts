@@ -3,10 +3,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Docker from "./Docker.ts";
+import * as Explorer from "./explorer/Explorer.ts";
 import type * as Globals from "./globals/Globals.ts";
 import * as Storage from "./globals/Storage.ts";
 import {
@@ -19,7 +21,11 @@ import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
-import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
+import {
+  ConfigError,
+  type RuntimeError,
+  SystemError,
+} from "./RuntimeError.shared.ts";
 import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import * as Workerd from "./workerd/Workerd.ts";
@@ -46,6 +52,9 @@ export const RuntimeLive = Layer.effect(
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
     const docker = yield* Docker.Docker;
+    // Optional so custom runtime layers need not provide it; only workers
+    // that enable `explorer` require it.
+    const explorerService = yield* Effect.serviceOption(Explorer.Explorer);
     const plugins =
       yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
 
@@ -216,6 +225,21 @@ export const RuntimeLive = Layer.effect(
             concurrency: "unbounded",
           },
         );
+        const userModules = worker.modules.map(moduleToWorkerd);
+        const explorer = worker.explorer
+          ? yield* Option.match(explorerService, {
+              onNone: () =>
+                Effect.fail(
+                  new ConfigError({
+                    subtag: "ExplorerUnavailable",
+                    message: "The Local Explorer is not configured.",
+                    hint: "Provide `Explorer.ExplorerLive` to the runtime layer (included in `layerRuntime`).",
+                  }),
+                ),
+              onSome: (explorer) =>
+                explorer.make(worker, bindings, userModules),
+            })
+          : undefined;
         const sockets: Array<WorkerdConfig.Socket> = [
           {
             name: SOCKET_USER_ENTRY,
@@ -241,7 +265,7 @@ export const RuntimeLive = Layer.effect(
                     compatibilityDate: worker.compatibilityDate,
                     compatibilityFlags: worker.compatibilityFlags,
                     bindings,
-                    modules: worker.modules.map(moduleToWorkerd),
+                    modules: explorer?.modules ?? userModules,
                     durableObjectNamespaces:
                       worker.durableObjectNamespaces?.map((namespace) => {
                         const imageName = imageNames.get(namespace.className);
@@ -269,6 +293,7 @@ export const RuntimeLive = Layer.effect(
                   },
                 },
                 ...config.services,
+                ...(explorer?.services ?? []),
               ],
               extensions: config.extensions,
             },
