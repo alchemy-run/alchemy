@@ -19,12 +19,7 @@ const CREATE = "var(--alc-success)";
 const SEGMENTS = HOST_TEMPLATE.split(/⟨(\d)⟩/);
 const ROLL_MS = 450;
 
-export default function HeroHosts({
-  icons,
-}: {
-  /** Reel icon SVG bodies (24×24), keyed by `Host.icon`. */
-  icons: Record<string, string | undefined>;
-}) {
+export default function HeroHosts() {
   const [host, setHost] = useState(0);
   const [start, setStart] = useState<{ at: number; key: number }>({
     at: 0,
@@ -163,19 +158,9 @@ export default function HeroHosts({
             <button
               type="button"
               className={`hh-reel__item ${i === host ? "is-active" : ""}`}
-              style={x.color ? { ["--brand" as string]: x.color } : undefined}
               aria-pressed={i === host}
               onClick={() => setStart((s) => ({ at: i, key: s.key + 1 }))}
             >
-              {icons[x.icon] && (
-                <svg
-                  viewBox="0 0 24 24"
-                  width="13"
-                  height="13"
-                  aria-hidden
-                  dangerouslySetInnerHTML={{ __html: icons[x.icon]! }}
-                />
-              )}
               {x.label}
             </button>
           </li>

@@ -8,8 +8,6 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import HeroHosts from "../components/marketing-islands/HeroHosts.tsx";
 import { HOSTS, hostSource } from "../components/marketing-islands/heroHosts";
-import { icons as brandIcons } from "@iconify-json/simple-icons";
-import { TAB_ICONS } from "../docs-icons";
 import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -61,13 +59,6 @@ const TERM_LINE = Math.max(
   ),
 );
 const STACK_WIDTH = Math.max(...HOST_LINES.flat().map((l) => l.length));
-const HOST_ICONS = Object.fromEntries(
-  HOSTS.map((h) => [
-    h.icon,
-    h.icon === "GoogleCloud" ? brandIcons.icons.googlecloud?.body : TAB_ICONS[h.icon],
-  ]),
-);
-
 const PREVIEW_SRC = `export default Alchemy.Stack(
   "my-app",
   {
@@ -241,7 +232,7 @@ const PROVIDERS = [
         aria-hidden="true"
         style={`--term-line:${TERM_LINE};--term-col:${TERM_COL}ch;--code-cols:${STACK_WIDTH + 1}ch`}
       >
-        <HeroHosts client:load icons={HOST_ICONS} />
+        <HeroHosts client:load />
       </div>
     </div>
   </section>
@@ -728,8 +719,12 @@ const PROVIDERS = [
     font-family: var(--alc-font-mono);
     font-size: 11px;
   }
+  /* The host reel spans the code card's width, edge to edge. */
   .v2-hero__visual :global(.v2-hero__reel) {
     grid-area: 1 / 1;
+    width: calc(34px + var(--code-cols));
+    max-width: 100%;
+    justify-content: space-between;
   }
   .v2-hero__visual :global(.v2-hero__code .alc-code-block__pre) {
     font-size: 11px;
@@ -798,6 +793,10 @@ const PROVIDERS = [
     }
     .v2-hero__visual :global(.v2-hero__code) {
       display: none;
+    }
+    .v2-hero__visual :global(.v2-hero__reel) {
+      width: auto;
+      justify-content: flex-start;
     }
     .v2-hero__visual :global(.v2-hero__term) {
       margin: 0;

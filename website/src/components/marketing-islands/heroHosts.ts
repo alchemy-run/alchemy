@@ -34,10 +34,6 @@ export interface HostResource {
 export interface Host {
   /** Reel label. */
   label: string;
-  /** Icon key, resolved to an SVG body by the page. */
-  icon: string;
-  /** Brand color for the active reel item. */
-  color?: string;
   values: [string, string, string];
   resources: HostResource[];
   url?: string;
@@ -46,8 +42,6 @@ export interface Host {
 export const HOSTS: Host[] = [
   {
     label: "Workers",
-    icon: "Cloudflare",
-    color: "#f4811f",
     values: ["Cloudflare.Worker", "", "PhotosR2"],
     resources: [
       { id: "Photos", type: "Cloudflare.R2.Bucket" },
@@ -57,8 +51,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Lambda",
-    icon: "AWS",
-    color: "#ff9900",
     values: ["AWS.Lambda.Function", "", "PhotosS3"],
     resources: [
       { id: "Photos", type: "AWS.S3.Bucket" },
@@ -68,8 +60,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "ECS",
-    icon: "AWS",
-    color: "#ff9900",
     values: [
       "AWS.ECS.Service",
       ", cluster: yield* Cluster, port: 3000",
@@ -83,8 +73,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Cloud Run",
-    icon: "GoogleCloud",
-    color: "#4285f4",
     values: ["GCP.Run.Service", "", "PhotosGCS"],
     resources: [
       { id: "Photos", type: "GCP.Storage.Bucket" },
@@ -94,8 +82,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Kubernetes",
-    icon: "Kubernetes",
-    color: "#326ce5",
     values: [
       "Kubernetes.Deployment",
       ", cluster: yield* Cluster, port: 3000",
@@ -108,8 +94,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Fly",
-    icon: "Fly",
-    color: "#996bec",
     values: ["Fly.Service", "", "PhotosTigris"],
     resources: [
       { id: "Photos", type: "Fly.Bucket" },
@@ -119,7 +103,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Railway",
-    icon: "Railway",
     values: ["Railway.Service", ", project: yield* Project", "PhotosRailway"],
     resources: [
       { id: "Project", type: "Railway.Project" },
@@ -130,8 +113,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Hetzner",
-    icon: "Hetzner",
-    color: "#d50c2d",
     values: [
       "Hetzner.Service",
       ", server: yield* Box, port: 3000",
@@ -145,8 +126,6 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Neon",
-    icon: "Neon",
-    color: "#37c38f",
     values: ["Neon.Function", ", branch: yield* Main", "PhotosNeon"],
     resources: [
       { id: "Db", type: "Neon.Project" },
