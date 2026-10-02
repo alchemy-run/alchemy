@@ -306,13 +306,15 @@ const makeExporterLayer = (options?: {
       }
       if (metrics.length > 0) {
         routes.set(SENTINEL.metrics, metrics);
+        // Metrics are exported as protobuf: some OTLP backends (Axiom)
+        // reject JSON on `/v1/metrics` with 415. Traces and logs stay JSON.
         layers.push(
           OtlpMetrics.layer({
             url: SENTINEL.metrics,
             resource,
             exportInterval: options?.exportInterval,
             shutdownTimeout: options?.shutdownTimeout,
-          }),
+          }).pipe(Layer.provide(OtlpSerialization.layerProtobuf)),
         );
       }
       return Layer.mergeAll(...(layers as [Layer.Layer<never>])).pipe(
@@ -332,9 +334,11 @@ const makeExporterLayer = (options?: {
 /**
  * The runtime half of the {@link layerOtlp} binding, and the default
  * per-event Layer: reads the bound `OTEL_EXPORTER_OTLP_*` values back and
- * constructs the OTLP JSON exporters. Each signal resolves independently;
- * only configured signals export; resolves to `Layer.empty` when nothing is
- * bound, so telemetry is free until a layer is provided.
+ * constructs the OTLP exporters: traces and logs as JSON, metrics as
+ * protobuf (Axiom's `/v1/metrics` only accepts `application/x-protobuf`).
+ * Each signal resolves independently; only configured signals export;
+ * resolves to `Layer.empty` when nothing is bound, so telemetry is free
+ * until a layer is provided.
  *
  * The periodic export intervals are effectively disabled: the exporter is
  * built per event and the request-scope flush delivers everything. An
