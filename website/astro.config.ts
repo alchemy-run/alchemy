@@ -261,6 +261,7 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
+        ThemeSelect: "./src/components/starlight/ThemeSelect.astro",
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",

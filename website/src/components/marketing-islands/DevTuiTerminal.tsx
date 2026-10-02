@@ -20,16 +20,16 @@ import {
  *   does when the stack output is ready.
  */
 
-// Palette lifted verbatim from packages/alchemy/src/Util/Theme.ts — the
-// terminal body is always dark, so the raw hex values are correct here.
+// Palette lifted verbatim from packages/alchemy/src/Util/Theme.ts, for a
+// dark terminal. Marketing pages override the variables in light mode.
 const C = {
-  brand: "#e28a5b",
-  success: "#9acb69",
-  warning: "#efb85a",
-  info: "#b6c77a",
-  muted: "#8f887c",
-  accentBright: "#c5df8c",
-  emphasis: "#f5f0e6",
+  brand: "var(--alc-tui-brand, #e28a5b)",
+  success: "var(--alc-tui-success, #9acb69)",
+  warning: "var(--alc-tui-warning, #efb85a)",
+  info: "var(--alc-tui-info, #b6c77a)",
+  muted: "var(--alc-tui-muted, #8f887c)",
+  accentBright: "var(--alc-tui-accent-bright, #c5df8c)",
+  emphasis: "var(--alc-tui-emphasis, #f5f0e6)",
 };
 
 type Status =

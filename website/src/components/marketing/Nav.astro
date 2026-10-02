@@ -8,8 +8,8 @@ interface Props {
    * is no Starlight sidebar — so every control stays in the top bar on all
    * viewports. Docs pages render this as Starlight's `Header` override and
    * leave it unset; there the GitHub/Discord links are dropped on mobile (they
-   * live in the hamburger menu footer) while the theme toggle stays in the top
-   * bar (see the `.alc-nav--docs` mobile rule below).
+   * live in the hamburger menu footer; see the `.alc-nav--docs` mobile rule
+   * below).
    */
   marketing?: boolean;
 }
@@ -53,47 +53,6 @@ const { marketing = false } = Astro.props;
     </svg>
     <span class="alc-nav__link-text">Discord</span>
   </a>
-  <button
-    type="button"
-    class="alc-nav__theme-toggle"
-    aria-label="Toggle color theme"
-    title="Toggle color theme"
-    data-theme-toggle
-  >
-    {/* Sun — shown in dark mode (click → light) */}
-    <svg
-      class="alc-theme-icon alc-theme-icon--sun"
-      aria-hidden="true"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.75"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <circle cx="12" cy="12" r="4"></circle>
-      <path
-        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-      ></path>
-    </svg>
-    {/* Moon — shown in light mode (click → dark) */}
-    <svg
-      class="alc-theme-icon alc-theme-icon--moon"
-      aria-hidden="true"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.75"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
-    </svg>
-  </button>
 </nav>
 
 <style>
@@ -171,41 +130,6 @@ const { marketing = false } = Astro.props;
     border-radius: 4px;
     padding: 1px 5px;
   }
-  .alc-nav__theme-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid var(--alc-hairline-2);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--alc-fg-2);
-    cursor: pointer;
-    font: inherit;
-    transition:
-      color var(--alc-dur) var(--alc-ease),
-      border-color var(--alc-dur) var(--alc-ease),
-      background-color var(--alc-dur) var(--alc-ease);
-  }
-  .alc-nav__theme-toggle:hover {
-    color: var(--alc-accent-deep);
-    border-color: var(--alc-accent-40);
-    background: var(--alc-bg-elev-1);
-  }
-  .alc-nav__theme-toggle:focus-visible {
-    outline: 2px solid var(--alc-accent-40);
-    outline-offset: 2px;
-  }
-  .alc-theme-icon {
-    display: block;
-  }
-  /* Show one icon per mode. Default (no [data-theme] yet, before pre-paint
-     script runs) shows the moon — matches the historical light bias. */
-  .alc-theme-icon--sun { display: none; }
-  :global([data-theme="dark"]) .alc-theme-icon--sun { display: block; }
-  :global([data-theme="dark"]) .alc-theme-icon--moon { display: none; }
   .alc-nav__link {
     color: var(--alc-fg-2);
     text-decoration: none;
@@ -220,7 +144,7 @@ const { marketing = false } = Astro.props;
     gap: 6px;
   }
 
-  /* Collapse search to an icon-only button (matching the theme toggle) —
+  /* Collapse search to an icon-only button —
      docs pages have no other search entry point, so it must stay reachable. */
   @media (max-width: 880px) {
     .alc-nav__search {
@@ -263,11 +187,10 @@ const { marketing = false } = Astro.props;
   /*
    * Docs pages render this nav inside Starlight's fixed `<header>`, which
    * reserves room on the right for the floating hamburger button and shows a
-   * mobile menu (with theme select + social icons in its footer) below the
+   * mobile menu (with social icons in its footer) below the
    * `md` (50rem) breakpoint. Packing every control into the top bar too made it
    * overflow past that reserved area and slide under the hamburger. Below 50rem
-   * we drop just the GitHub/Discord links — they live in the hamburger menu —
-   * but keep the theme toggle in the top bar so it stays one tap away. The
+   * we drop just the GitHub/Discord links — they live in the hamburger menu. The
    * docs gutter is also trimmed on mobile (see `--sl-nav-pad-x` in custom.css)
    * to make room. Marketing pages have no hamburger/menu, so they keep every
    * control (see `marketing`).
@@ -446,20 +369,3 @@ const { marketing = false } = Astro.props;
   }
 </style>
 
-<script is:inline>
-  (() => {
-    const button = document.querySelector("[data-theme-toggle]");
-    if (!button) return;
-    const STORAGE_KEY = "starlight-theme";
-    button.addEventListener("click", () => {
-      const current = document.documentElement.dataset.theme === "dark"
-        ? "dark"
-        : "light";
-      const next = current === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {}
-    });
-  })();
-</script>

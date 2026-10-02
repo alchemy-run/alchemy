@@ -135,15 +135,15 @@ export function TermChrome({
       <div className="alc-term__header">
         <span
           className="alc-code-block__dot"
-          style={{ background: "var(--alc-danger)" }}
+          style={{ background: "var(--alc-dot-red)" }}
         />
         <span
           className="alc-code-block__dot"
-          style={{ background: "var(--alc-warn)" }}
+          style={{ background: "var(--alc-dot-yellow)" }}
         />
         <span
           className="alc-code-block__dot"
-          style={{ background: "var(--alc-accent-bright)" }}
+          style={{ background: "var(--alc-dot-green)" }}
         />
         <span className="alc-term__title">{title}</span>
         <span style={{ flex: 1 }} />

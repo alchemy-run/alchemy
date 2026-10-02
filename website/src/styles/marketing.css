@@ -40,6 +40,24 @@ body.alc-root,
 }
 
 /* ============================================================
+   Code surfaces on marketing pages: muted and status colors lifted to
+   ≥7:1 (WCAG AAA) on the walnut code background.
+   ============================================================ */
+[data-theme="dark"]
+  .alc-root
+  :is(.alc-code-block, .alc-term, .prf-win, .v2-steps__code) {
+  --alc-code-comment: #ddd0ac;
+  --alc-code-literal: #ffbea0;
+  --alc-code-type: #86e3ff;
+  --alc-accent-bright: #b9d68d;
+  --alc-success: #b9d68d;
+  --alc-danger: #ffa48f;
+  --alc-warn: #f5c97a;
+  --alc-tui-muted: #d6cfc3;
+  --alc-tui-brand: #fac2a3;
+}
+
+/* ============================================================
    Code block — terminal-themed wrapper used by static <CodeBlock>
    ============================================================ */
 
@@ -59,8 +77,8 @@ body.alc-root,
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(var(--alc-code-edge), 0.08);
+  background: rgba(var(--alc-code-lift), 0.02);
   flex: 0 0 auto;
 }
 .alc-code-block__filename {
@@ -313,8 +331,8 @@ body.alc-root,
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(var(--alc-code-edge), 0.08);
+  background: rgba(var(--alc-code-lift), 0.02);
 }
 .eff-showcase__tabs {
   display: flex;
@@ -349,8 +367,8 @@ body.alc-root,
 }
 .eff-showcase__tab[data-active="true"] {
   color: var(--alc-fg-invert);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(232, 220, 192, 0.12);
+  background: rgba(var(--alc-code-lift), 0.05);
+  border-color: rgba(var(--alc-code-edge), 0.12);
 }
 .eff-showcase__body {
   position: relative;
@@ -376,7 +394,7 @@ body.alc-root,
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid rgba(232, 220, 192, 0.08);
+  border-right: 1px solid rgba(var(--alc-code-edge), 0.08);
 }
 .eff-showcase__pre {
   margin: 0;
@@ -900,8 +918,8 @@ body.alc-root,
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(var(--alc-code-edge), 0.08);
+  background: rgba(var(--alc-code-lift), 0.02);
 }
 .async-tabs__tabs {
   display: flex;
@@ -936,8 +954,8 @@ body.alc-root,
 }
 .async-tabs__tab[data-active="true"] {
   color: var(--alc-fg-invert);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(232, 220, 192, 0.12);
+  background: rgba(var(--alc-code-lift), 0.05);
+  border-color: rgba(var(--alc-code-edge), 0.12);
 }
 .async-tabs__body {
   position: relative;
