@@ -30,7 +30,20 @@ const NAME_MAX_LENGTH = 250;
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
 
+export interface ProductMarketingFeature {
+  /**
+   * The marketing feature name, up to 80 characters.
+   */
+  name: string;
+}
+
 export interface ProductProps {
+  /**
+   * Stripe product id to create the product under, instead of letting
+   * Stripe generate one. Useful when the id is referenced from outside
+   * the stack. Create-only — changing it replaces the product.
+   */
+  id?: string;
   /**
    * Display name of the product. If omitted, a unique name is generated
    * from the stack, stage, and logical id.
@@ -49,6 +62,16 @@ export interface ProductProps {
    * Up to 8 image URLs meant to be displayable to the customer.
    */
   images?: string[];
+  /**
+   * Up to 15 marketing features displayed in Stripe pricing tables.
+   * Passing an empty array clears them.
+   */
+  marketingFeatures?: ProductMarketingFeature[];
+  /**
+   * Stripe tax code id (`txcd_…`) used by Stripe Tax to categorize the
+   * product. Passing `undefined` leaves the account default in place.
+   */
+  taxCode?: string;
   /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
@@ -71,6 +94,10 @@ export type Product = Resource<
     active: boolean;
     /** Image URLs meant to be displayable to the customer. */
     images: string[];
+    /** Marketing features displayed in Stripe pricing tables. */
+    marketingFeatures: ProductMarketingFeature[];
+    /** Stripe tax code id, if one is set. */
+    taxCode: string | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the product was created. */
@@ -84,8 +111,10 @@ export type Product = Resource<
 
 /**
  * A Stripe Product — the catalog item that Prices, invoices, and Checkout
- * attach to. Name, description, active, images, and metadata are updated
- * in place. Deleting a product is only possible when it has no Prices.
+ * attach to. Name, description, active, images, marketing features, tax
+ * code, and metadata are updated in place. A caller-chosen `id` is
+ * create-only, so changing it replaces the product. Deleting a product is
+ * only possible when it has no Prices.
  *
  * @see https://docs.stripe.com/api/products
  *
@@ -115,6 +144,16 @@ export type Product = Resource<
  * });
  * ```
  *
+ * **Example:** Fixed id, tax code, and marketing features
+ * ```typescript
+ * const product = yield* Stripe.Product("pro-plan", {
+ *   id: "prod_pro_plan",
+ *   name: "Pro Plan",
+ *   taxCode: "txcd_10103001",
+ *   marketingFeatures: [{ name: "Unlimited members" }],
+ * });
+ * ```
+ *
  * ### Destroying a Product
  * **Example:** Delete when it has no prices
  * ```typescript
@@ -140,12 +179,34 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
+// `tax_code` is expandable, so Stripe returns either the id or the whole
+// tax code object depending on the request.
+const toTaxCode = (taxCode: StripeProduct["tax_code"]): string | undefined => {
+  if (taxCode == null) return undefined;
+  return typeof taxCode === "string" ? taxCode : taxCode.id;
+};
+
+const toMarketingFeatures = (
+  features: StripeProduct["marketing_features"] | null | undefined,
+): ProductMarketingFeature[] =>
+  (features ?? []).flatMap((feature) =>
+    feature.name === undefined ? [] : [{ name: feature.name }],
+  );
+
+const marketingFeaturesEqual = (
+  a: readonly ProductMarketingFeature[],
+  b: readonly ProductMarketingFeature[],
+): boolean =>
+  a.length === b.length && a.every((left, i) => left.name === b[i]?.name);
+
 const toAttrs = (product: StripeProduct) => ({
   id: product.id,
   name: product.name,
   description: product.description ?? undefined,
   active: product.active,
   images: product.images,
+  marketingFeatures: toMarketingFeatures(product.marketing_features),
+  taxCode: toTaxCode(product.tax_code),
   metadata: userMetadata(product.metadata),
   created: product.created,
   livemode: product.livemode,
@@ -231,8 +292,13 @@ export const ProductProvider = () =>
   Provider.succeed(Product, {
     stables: ["id", "created", "livemode"],
 
-    diff: Effect.fn(function* ({ news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      // Stripe accepts a caller-chosen id only on create, so pointing the
+      // resource at a different one means a new product.
+      if (news.id !== undefined && news.id !== (output?.id ?? olds?.id)) {
+        return { action: "replace" } as const;
+      }
       return undefined;
     }),
 
@@ -264,20 +330,33 @@ export const ProductProvider = () =>
       const desiredActive = news.active ?? true;
       const desiredDescription = news.description ?? "";
       const desiredImages = news.images ?? [];
+      const desiredMarketingFeatures = news.marketingFeatures ?? [];
+      const desiredTaxCode = news.taxCode ?? "";
 
       let current = yield* observe({
-        id: output?.id,
+        id: news.id ?? output?.id,
         logicalId: id,
       });
+      // A caller-chosen id names the product exactly. While that id is being
+      // replaced, the ownership-tag fallback finds the outgoing product, which
+      // carries the same tags under its old id, so it is not a match.
+      if (news.id !== undefined && current?.id !== news.id) {
+        current = undefined;
+      }
 
       if (current === undefined) {
         current = yield* CreateProduct({
           name,
           active: desiredActive,
+          ...(news.id !== undefined ? { id: news.id } : {}),
           ...(desiredDescription.length > 0
             ? { description: desiredDescription }
             : {}),
           ...(desiredImages.length > 0 ? { images: desiredImages } : {}),
+          ...(desiredMarketingFeatures.length > 0
+            ? { marketing_features: desiredMarketingFeatures }
+            : {}),
+          ...(desiredTaxCode.length > 0 ? { tax_code: desiredTaxCode } : {}),
           metadata,
         }).pipe(
           withRequestOptions({
@@ -294,12 +373,23 @@ export const ProductProvider = () =>
       const descriptionChanged =
         (current.description ?? "") !== desiredDescription;
       const imagesChanged = !arrayEquals(current.images, desiredImages);
+      const marketingFeaturesChanged = !marketingFeaturesEqual(
+        toMarketingFeatures(current.marketing_features),
+        desiredMarketingFeatures,
+      );
+      // `undefined` leaves whatever the account default put there; only an
+      // explicit value is reconciled.
+      const currentTaxCode = toTaxCode(current.tax_code) ?? "";
+      const taxCodeChanged =
+        news.taxCode !== undefined && currentTaxCode !== desiredTaxCode;
 
       if (
         !nameChanged &&
         !activeChanged &&
         !descriptionChanged &&
         !imagesChanged &&
+        !marketingFeaturesChanged &&
+        !taxCodeChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -313,6 +403,15 @@ export const ProductProvider = () =>
         ...(imagesChanged
           ? { images: desiredImages.length > 0 ? desiredImages : "" }
           : {}),
+        ...(marketingFeaturesChanged
+          ? {
+              marketing_features:
+                desiredMarketingFeatures.length > 0
+                  ? desiredMarketingFeatures
+                  : "",
+            }
+          : {}),
+        ...(taxCodeChanged ? { tax_code: desiredTaxCode } : {}),
         ...(metadataChanged
           ? {
               metadata: {
