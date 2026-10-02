@@ -32,6 +32,15 @@ export interface SendingSubdomainProps {
    * `string` (not `string`) so it is statically knowable in `diff`.
    */
   name: string;
+  /**
+   * Whether Cloudflare keeps a preview of each sent message in the activity
+   * log (retained for about seven days). Subdomains onboarded on or after
+   * 2026-07-02 start with previews on. Omit to leave the setting as
+   * Cloudflare has it.
+   *
+   * @see https://developers.cloudflare.com/email-service/observability/logs/#message-preview
+   */
+  previewEnabled?: boolean;
 }
 
 export interface SendingSubdomainAttributes {
@@ -51,6 +60,8 @@ export interface SendingSubdomainAttributes {
   dkimSelector: string | undefined;
   /** The return-path domain used for bounce handling. */
   returnPathDomain: string | undefined;
+  /** Whether sent messages can be previewed in the activity log. */
+  previewEnabled: boolean | undefined;
   /** ISO8601 creation timestamp. */
   created: string | undefined;
   /** ISO8601 last-modified timestamp. */
@@ -74,9 +85,8 @@ export type SendingSubdomain = Resource<
  * created automatically and `enabled` flips to `true` once they validate
  * (usually immediately).
  *
- * The resource is existence-only: the API offers create, get, list, and
- * delete but no update, so changing `name` or `zoneId` triggers a
- * replacement.
+ * Changing `name` or `zoneId` triggers a replacement; `previewEnabled` is
+ * updated in place.
  *
  * Safety: sending subdomains carry no ownership markers. When there is no
  * prior state, `read` scans the zone for an existing subdomain with the
@@ -91,6 +101,16 @@ export type SendingSubdomain = Resource<
  * });
  * // sending.enabled — true once DNS records validated
  * // sending.dkimSelector / sending.returnPathDomain — provisioned config
+ * ```
+ *
+ * ### Message previews
+ * **Example:** Keep no copies of sent messages in the activity log
+ * ```typescript
+ * const sending = yield* Cloudflare.Email.SendingSubdomain("Mail", {
+ *   zoneId: zone.zoneId,
+ *   name: "mail.example.com",
+ *   previewEnabled: false,
+ * });
  * ```
  *
  * ### Externally-hosted zones
@@ -125,7 +145,7 @@ export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
 
 export const SendingSubdomainProvider = () =>
   Provider.succeed(SendingSubdomain, {
-    // No update API exists — every attribute is stable across updates.
+    // Only `previewEnabled` changes in place.
     stables: [
       "subdomainId",
       "zoneId",
@@ -165,7 +185,7 @@ export const SendingSubdomainProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as SendingSubdomainProps;
       const n = news as SendingSubdomainProps;
-      // The API has no update operation — any prop change is a replace.
+      // `name` and `zoneId` are identity; `previewEnabled` updates in place.
       if (o.name !== undefined && o.name !== n.name) {
         return { action: "replace" } as const;
       }
@@ -240,13 +260,21 @@ export const SendingSubdomainProvider = () =>
           );
       }
 
-      // 4. Sync — nothing is mutable; the only convergence left is DNS
-      //    validation. Cloudflare auto-creates the records on CF-hosted
+      // 4. Sync — converge `previewEnabled` when it is declared, then wait
+      //    for DNS validation. Cloudflare auto-creates the records on CF-hosted
       //    zones but validation is eventually consistent: poll briefly
       //    for `enabled` to flip, and return the observed state either
       //    way (an externally-hosted zone stays disabled until the user
       //    adds the records — that is not a deploy failure).
-      const ensured = observed;
+      const ensured =
+        news.previewEnabled !== undefined &&
+        observed.previewEnabled !== news.previewEnabled
+          ? yield* emailSending.editSubdomain({
+              zoneId,
+              subdomainId: observed.tag,
+              previewEnabled: news.previewEnabled,
+            })
+          : observed;
       const final = ensured.enabled
         ? ensured
         : yield* getSubdomain(zoneId, ensured.tag).pipe(
@@ -314,6 +342,7 @@ const toAttributes = (
   enabled: subdomain.enabled,
   dkimSelector: subdomain.dkimSelector ?? undefined,
   returnPathDomain: subdomain.returnPathDomain ?? undefined,
+  previewEnabled: subdomain.previewEnabled ?? undefined,
   created: subdomain.created ?? undefined,
   modified: subdomain.modified ?? undefined,
 });
