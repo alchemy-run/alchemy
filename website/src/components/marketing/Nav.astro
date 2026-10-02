@@ -173,16 +173,22 @@ const { marketing = false } = Astro.props;
   @media (max-width: 480px) {
     .alc-nav { gap: 12px; }
   }
-  /* On phones, Docs, Blog, Compare and the icons don't all fit. Docs is
-     the one to drop: the hero CTA and the footer both lead there. */
+  /* On phones every link stays: the gaps, text and wordmark shrink so
+     Docs, Blog, Compare and the icons fit down to 320px. */
   @media (max-width: 460px) {
     .alc-nav { gap: 10px; }
-    .alc-nav__link--docs { display: none; }
+    .alc-nav__link { font-size: 13.5px; }
+    /* The wordmark's size is an inline style (Logo's size prop). */
+    .alc-nav__brand :global(.alc-logo__word) { font-size: 20px !important; }
   }
   @media (max-width: 380px) {
-    .alc-nav { gap: 6px; }
-    /* The wordmark's size is an inline style (Logo's size prop). */
-    .alc-nav__brand :global(.alc-logo__word) { font-size: 19px !important; }
+    .alc-nav { gap: 7px; }
+    .alc-nav__link { font-size: 13px; }
+    .alc-nav__brand :global(.alc-logo__word) { font-size: 17px !important; }
+  }
+  /* The narrowest phones keep the mark and drop the wordmark. */
+  @media (max-width: 350px) {
+    .alc-nav__brand :global(.alc-logo__word) { display: none; }
   }
   /*
    * Docs pages render this nav inside Starlight's fixed `<header>`, which
