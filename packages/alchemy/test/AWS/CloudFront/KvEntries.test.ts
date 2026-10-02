@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { KeyValueStore, KvEntries } from "@/AWS/CloudFront";
+import { KeyValueStore, KvEntries, KvRoutesUpdate } from "@/AWS/CloudFront";
 import { extractValue, withKvsRegion } from "@/AWS/CloudFront/common.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -101,6 +101,53 @@ describe(
             "/": "/index.html",
             "/about": "/about-v2.html",
             "/contact": "/contact.html",
+          });
+
+          yield* stack.destroy();
+          yield* assertKeyValueStoreDeleted(deployed.store.keyValueStoreName);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "delete without purge leaves keys it does not own",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          // A routes table and unpurged entries sharing one namespace — the
+          // layout older Routers wrote their inline route metadata in.
+          const routesTable = (withEntries: boolean) =>
+            Effect.gen(function* () {
+              const store = yield* KeyValueStore("SharedStore", {
+                comment: "kv-entries shared namespace",
+              });
+              yield* KvRoutesUpdate("Routes", {
+                store: store.keyValueStoreArn,
+                namespace: "router",
+                key: "routes",
+                entry: "url,29e7,,/api",
+              });
+              if (withEntries) {
+                yield* KvEntries("Metadata", {
+                  store: store.keyValueStoreArn,
+                  namespace: "router",
+                  entries: { "29e7:metadata": "{}" },
+                });
+              }
+              return { store };
+            });
+
+          const deployed = yield* stack.deploy(routesTable(true));
+          const store = deployed.store.keyValueStoreArn;
+          yield* assertEntries(store, "router", {
+            routes: JSON.stringify(["url,29e7,,/api"]),
+            "29e7:metadata": "{}",
+          });
+
+          yield* stack.deploy(routesTable(false));
+          yield* assertEntries(store, "router", {
+            routes: JSON.stringify(["url,29e7,,/api"]),
           });
 
           yield* stack.destroy();
