@@ -274,6 +274,31 @@ export const readObject = Effect.fn(function* ({
   });
 });
 
+/** List the Pods in a namespace that match a label selector. */
+export const listPods = Effect.fn(function* ({
+  transport,
+  namespace,
+  labelSelector,
+}: {
+  transport: ClusterTransport;
+  namespace: string;
+  labelSelector: string;
+}) {
+  const listed = (yield* requestJson({
+    transport,
+    method: "GET",
+    path: `/api/v1/namespaces/${encodeURIComponent(namespace)}/pods?labelSelector=${encodeURIComponent(labelSelector)}`,
+  })) as { items?: unknown[] } | undefined;
+  return (listed?.items ?? []) as ReadonlyArray<{
+    metadata?: { name?: string };
+    status?: {
+      containerStatuses?: ReadonlyArray<{
+        state?: { waiting?: { reason?: string; message?: string } };
+      }>;
+    };
+  }>;
+});
+
 export const applyObject = Effect.fn(function* ({
   transport,
   object,

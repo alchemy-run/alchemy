@@ -152,9 +152,8 @@ Deployment keeps the name it was created with.
 ## Keep the Service internal
 
 `serviceType` defaults to `LoadBalancer`, which asks the cluster for
-an external load balancer and waits up to about three minutes for
-one to be assigned. A local cluster has no load balancer, so the
-example sets `serviceType: "ClusterIP"`. The Service gets a
+an external load balancer. A local cluster has no load balancer, so
+the example sets `serviceType: "ClusterIP"`. The Service gets a
 cluster-internal address only, and you'll reach it through
 `kubectl port-forward`.
 

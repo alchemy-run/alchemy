@@ -1259,3 +1259,64 @@ describe("Output.toEnvKey / toUpper", { tags: ["unit", "local"] }, () => {
     expect(Output.toEnvKey("svc", "api-key")).toBe("SVC_API_KEY");
   });
 });
+
+describe("Output.referencedAttributes", { tags: ["unit", "local"] }, () => {
+  const attrsOf = (value: unknown) =>
+    Object.fromEntries(
+      [...Output.referencedAttributes(value)].map(([fqn, attrs]) => [
+        fqn,
+        [...attrs].sort(),
+      ]),
+    );
+
+  it("records the attribute read by a property access", () => {
+    const web = Output.of(fakeResource("Test.Web", "Web")) as any;
+    expect(attrsOf({ url: web.url, name: web.serviceName })).toEqual({
+      Web: ["serviceName", "url"],
+    });
+  });
+
+  it("records every attribute for a whole-resource reference", () => {
+    const web = fakeResource("Test.Web", "Web");
+    expect(attrsOf({ web: Output.of(web) })).toEqual({ Web: ["*"] });
+  });
+
+  it("follows derived outputs to the attributes they read", () => {
+    const web = Output.of(fakeResource("Test.Web", "Web")) as any;
+    const url = Output.interpolate`http://${web.serviceName}:${web.port}`;
+    const upper = Output.map(web.url, (u: string) => u.toUpperCase());
+    expect(attrsOf({ url, upper })).toEqual({
+      Web: ["port", "serviceName", "url"],
+    });
+  });
+
+  it("records only the top-level attribute of a nested access", () => {
+    const web = Output.of(fakeResource("Test.Web", "Web")) as any;
+    expect(attrsOf({ host: web.status.loadBalancer.host })).toEqual({
+      Web: ["status"],
+    });
+  });
+
+  it("treats mapping a whole resource as reading all of it", () => {
+    const web = Output.of(fakeResource("Test.Web", "Web")) as any;
+    expect(attrsOf(web.map((w: { url: string }) => w.url))).toEqual({
+      Web: ["*"],
+    });
+  });
+
+  it("merges references to several resources and ignores plain values", () => {
+    const a = Output.of(fakeResource("Test.A", "A")) as any;
+    const b = Output.of(fakeResource("Test.B", "B")) as any;
+    expect(attrsOf([{ x: a.id, n: 1 }, "s", { y: [b.arn, a.id] }])).toEqual({
+      A: ["id"],
+      B: ["arn"],
+    });
+  });
+
+  it("terminates on cyclic plain data", () => {
+    const a = Output.of(fakeResource("Test.A", "A")) as any;
+    const cyclic: any = { ref: a.id };
+    cyclic.self = cyclic;
+    expect(attrsOf(cyclic)).toEqual({ A: ["id"] });
+  });
+});

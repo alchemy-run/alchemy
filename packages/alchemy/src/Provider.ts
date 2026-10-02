@@ -340,6 +340,36 @@ export interface ProviderService<
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
+  /**
+   * Attributes the cloud fills in after `reconcile` returns — a load
+   * balancer address, a Job's completion. `reconcile` never waits for them;
+   * it returns them only if they're already known. The engine calls
+   * {@link settle} for the ones something actually references (a downstream
+   * resource's props or bindings, `dependsOn`, or the Stack's outputs).
+   */
+  eventual?: Extract<keyof Res["Attributes"], string>[];
+  /**
+   * Wait for the requested {@link eventual} attributes and return their
+   * values. Called after `reconcile` (or for an unchanged resource) only when
+   * something references them, so a slow load balancer never delays
+   * consumers that don't need it.
+   *
+   * Wait without a time limit until the value exists, and fail only on a
+   * definitive failure (a failed Job, an image that can't be pulled). The
+   * user bounds the wait (`--settle-timeout`, or interrupting the deploy).
+   * Must be idempotent: return immediately when `output` already holds a
+   * settled value.
+   */
+  settle?(input: {
+    id: string;
+    fqn: string;
+    instanceId: string;
+    news: Props<Res>;
+    output: Res["Attributes"];
+    /** The referenced eventual attributes to wait for. */
+    attributes: ReadonlySet<Extract<keyof Res["Attributes"], string>>;
+    session: ScopedPlanStatusSession;
+  }): Effect.Effect<Partial<Res["Attributes"]>, any, ReconcileReq>;
   delete(input: {
     id: string;
     /**

@@ -351,6 +351,59 @@ resources to Workers and Lambdas — and when bindings form a cycle,
 alchemy handles it with a two-phase plan; see
 [Circular Bindings](/infrastructure-as-effects/circular-bindings).
 
+## Ordering without passing a value
+
+Sometimes a resource must come after another without taking anything
+from it: run the app after a migration, or create a record after a
+service is serving. Pipe the resource through `dependsOn`:
+
+```typescript
+import { dependsOn } from "alchemy";
+
+const migrate = yield* Kubernetes.Job("Migrate", {
+  cluster,
+  main: import.meta.url,
+});
+
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "ghcr.io/acme/web:1.4.0",
+  port: 8080,
+}).pipe(dependsOn(migrate));
+```
+
+`dependsOn` adds an edge to the graph like an Output in props does,
+without changing the resource's props. Adding or removing it never
+triggers an update. It decorates everything declared inside the piped
+Effect, so it can order a whole scope, and nested calls accumulate.
+Destroy deletes the dependent first.
+
+## Eventual attributes
+
+Some attributes are filled in by the cloud after a resource is
+created: a load balancer's address, a Job's completion. These are
+**eventual attributes**. Alchemy doesn't wait for them unless
+something needs them. It waits only when:
+
+- another resource reads the attribute in its props or bindings,
+- a resource `dependsOn` the attribute, or the whole resource (which
+  waits for all of its eventual attributes), or
+- the Stack returns the attribute as an output.
+
+Everything else deploys without waiting, including resources that
+read the same resource's other attributes. Once an eventual attribute
+has been waited for, its value is saved, so later deploys don't wait
+again until the resource changes.
+
+The wait has no time limit. It ends when the value exists, or fails
+when the provider sees a definitive failure, such as a failed Job.
+Bound it with [`alchemy deploy --settle-timeout`](/cli/deploy) (for
+example in CI), or interrupt the deploy.
+
+Each resource's reference page marks its eventual attributes. The
+[Kubernetes](/kubernetes/workloads/object-lifecycle#waiting-for-eventual-attributes)
+`Deployment.url` and `Job.completedAt` are examples.
+
 ## Circular references
 
 Real systems have cycles — two Workers that call each other, a

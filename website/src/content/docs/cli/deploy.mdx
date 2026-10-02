@@ -53,6 +53,7 @@ When the plan contains no changes, the approval prompt is skipped automatically.
 | `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
 | `--detailed`        | Show declared resource properties as YAML                                                                                  |
 | `--force`           | Force updates for resources that would otherwise no-op                                                                     |
+| `--settle-timeout <duration>` | Fail if waiting for an [eventual attribute](/infrastructure-as-code/resource#eventual-attributes) takes longer than this, e.g. `10 minutes`. Unbounded by default. |
 | `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`)                                                  |
 | `--env-file <path>` | Load environment variables from a file                                                                                     |

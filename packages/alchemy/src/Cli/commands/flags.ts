@@ -104,6 +104,18 @@ export const force = Flag.Boolean("force").pipe(
   Flag.withDefault(false),
 );
 
+export const settleTimeout = Flag.String("settle-timeout").pipe(
+  Flag.withDescription(
+    "Fail if waiting for an eventual attribute (e.g. a load balancer address or a Job's completion) takes longer than this, e.g. '10 minutes'. Unbounded by default.",
+  ),
+  Flag.filterMap(
+    (value) => Duration.fromInput(value as Duration.Input),
+    (value) =>
+      `Invalid --settle-timeout '${value}'. Use a duration such as '90 seconds' or '10 minutes'.`,
+  ),
+  Flag.optional,
+);
+
 /** One pattern per occurrence; commas and whitespace are preserved. */
 const selectionFlag = (name: "include" | "exclude", description: string) =>
   Flag.String(name).pipe(

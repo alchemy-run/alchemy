@@ -102,8 +102,8 @@ reach them with `kubectl port-forward`:
 kubectl --context kind-alchemy port-forward service/web 9898:9898
 ```
 
-A `LoadBalancer` Service would wait about three minutes for an
-address that never arrives.
+A `LoadBalancer` Service never gets an address on a local cluster,
+so anything that reads its `url` would wait forever.
 
 ## Expose services on localhost
 

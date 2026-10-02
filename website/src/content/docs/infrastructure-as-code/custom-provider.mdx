@@ -438,6 +438,41 @@ deterministic naming), brand foreign ones with `Unowned` so the engine
 gates the takeover behind `--adopt`. The full three-way return
 semantics are in [Providers › read](/infrastructure-as-code/provider#read).
 
+## Eventual attributes (optional)
+
+If the cloud fills in some attributes after `reconcile` returns, such
+as an address assigned asynchronously, don't wait for them in
+`reconcile`. Declare them `eventual` and wait in `settle`:
+
+```typescript
+return Service.Provider.of({
+  eventual: ["url"],
+  reconcile: Effect.fn(function* ({ news, output }) {
+    // ... create or update ...
+    // Return `url` only if the cloud already has it.
+    return { serviceId, url: current.url ?? undefined };
+  }),
+  settle: Effect.fn(function* ({ output, attributes }) {
+    if (output.url !== undefined) return {};
+    const url = yield* waitForUrl(output.serviceId);
+    return { url };
+  }),
+});
+```
+
+The engine calls `settle` only when something references one of the
+eventual attributes (a downstream resource, `dependsOn`, or the Stack
+output), with the referenced ones in `attributes`. It merges the
+returned values into the Attributes and saves them. Consumers that
+don't read them never wait.
+
+- **Wait without a time limit.** Fail only on a definitive failure.
+  The user bounds the wait with `--settle-timeout`.
+- **Be idempotent.** Return `{}` when `output` already holds the value.
+- **Treat returned values from `reconcile` as provisional.** After
+  every `reconcile`, the engine calls `settle` again for referenced
+  eventual attributes.
+
 ## Implement `list`
 
 `list` enumerates every product in the account, returning the same

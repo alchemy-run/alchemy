@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -85,6 +86,11 @@ export type AppliedPlan<P extends Plan> = {
 
 export interface ApplyOptions {
   planDisplay?: PlanDisplayOptions;
+  /**
+   * Fail any `settle` (waiting for an eventual attribute such as a load
+   * balancer address) still running after this long. Unbounded by default.
+   */
+  settleTimeout?: Duration.Input;
   /** Structured event sink for non-CLI callers. */
   session?: PlanStatusSession;
 }
@@ -270,6 +276,7 @@ export const apply = <P extends Plan>(
         state,
         stackName,
         stage,
+        options.settleTimeout ?? plan.settleTimeout,
       );
 
       // TODO(sam): support roll back to previous state if errors occur during expansion
@@ -393,6 +400,7 @@ const executePlan = Effect.fn(function* (
   },
   stackName: string,
   stage: string,
+  settleTimeout?: Duration.Input,
 ) {
   // Resources and tasks share the same FQN namespace and DAG, so the
   // scheduler tracks them together. Each entry gets a single Deferred that
@@ -422,12 +430,24 @@ const executePlan = Effect.fn(function* (
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
+  // `settled` fires once a node's referenced eventual attributes (see
+  // `ProviderService.eventual`) have been settled — right after
+  // `readyStable` when it has none. Only consumers that read an upstream's
+  // eventual attributes (`node.settledUpstreams`) wait on it.
+  const settled = Object.fromEntries(
+    yield* Effect.all(
+      Object.keys(allNodes).map((fqn) =>
+        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
+      ),
+    ),
+  ) as Record<string, Deferred.Deferred<void>>;
+
   const getOutputs = (): Record<string, any> =>
     Object.fromEntries(
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
     );
 
-  const waitForDeps = (fqns: string[]) =>
+  const waitForDeps = (fqns: string[], settledUpstreams: string[] = []) =>
     Effect.all(
       fqns
         .filter((fqn) => fqn in ready)
@@ -447,16 +467,22 @@ const executePlan = Effect.fn(function* (
           // against final outputs once the cycle settles.
           plan.cycleMembers.has(fqn)
             ? Deferred.await(ready[fqn])
-            : Deferred.await(readyStable[fqn]),
+            : settledUpstreams.includes(fqn)
+              ? Deferred.await(settled[fqn])
+              : Deferred.await(readyStable[fqn]),
         ),
       { concurrency: "unbounded" },
     );
 
-  const waitForStableDeps = (fqns: string[]) =>
+  const waitForStableDeps = (fqns: string[], settledUpstreams: string[] = []) =>
     Effect.all(
       fqns
         .filter((fqn) => fqn in readyStable)
-        .map((fqn) => Deferred.await(readyStable[fqn])),
+        .map((fqn) =>
+          settledUpstreams.includes(fqn)
+            ? Deferred.await(settled[fqn])
+            : Deferred.await(readyStable[fqn]),
+        ),
       { concurrency: "unbounded" },
     );
 
@@ -471,6 +497,7 @@ const executePlan = Effect.fn(function* (
             tracker,
             ready,
             readyStable,
+            settled,
             terminalStatuses,
             session,
             state,
@@ -486,6 +513,7 @@ const executePlan = Effect.fn(function* (
             tracker,
             ready,
             readyStable,
+            settled,
             terminalStatuses as any,
             session,
             state,
@@ -495,6 +523,7 @@ const executePlan = Effect.fn(function* (
             waitForDeps,
             failures,
             plan.cycleMembers.has(fqn),
+            settleTimeout,
           ),
     ),
     { concurrency: "unbounded" },
@@ -509,6 +538,13 @@ const executePlan = Effect.fn(function* (
     );
   }
 });
+
+/** `--settle-timeout` elapsed while waiting for eventual attributes. */
+export class SettleTimeout extends Data.TaggedError("SettleTimeout")<{
+  message: string;
+  fqn: string;
+  attributes: string[];
+}> {}
 
 interface LifecycleFailure {
   fqn: string;
@@ -554,6 +590,7 @@ const executeNode = (
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
   readyStable: Record<string, Deferred.Deferred<void>>,
+  settled: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
     string,
     {
@@ -576,40 +613,54 @@ const executeNode = (
   stackName: string,
   stage: string,
   getOutputs: () => Record<string, any>,
-  waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+  waitForDeps: (
+    fqns: string[],
+    settledUpstreams?: string[],
+  ) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
   inCycle: boolean,
+  settleTimeout?: Duration.Input,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
+    // The last row this node committed, so `settle` can extend it.
+    let committed: ResourceState | undefined;
     const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
-      state.set({
-        stack: stackName,
-        stage,
-        fqn,
-        // Early commits (`creating`/`replacing`) persist plan props that may
-        // still hold unresolved Output exprs; strip them so state stores only
-        // plain data (see stripUnresolved in Diff.ts).
-        //
-        // Binding rows follow the same rule. Even the RESOLVED binding
-        // payload can carry Effect leaves — a tagged Worker/Function class in
-        // `env` (the circular-bindings pattern) is a function-typed Effect
-        // that `Output.evaluate` passes through untouched. A JSON state store
-        // would persist it via its `toJSON` as an `{"_id":"Effect",...}`
-        // relic, which the next plan's `diffBindings` compares against the
-        // live class stripped to `undefined` — a phantom binding "update" on
-        // every deploy, forever. Stripping at the commit boundary keeps both
-        // store kinds consistent with the comparison in `havePropsChanged`.
-        value: {
-          ...value,
-          adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
-          props: stripUnresolved(value.props),
-          bindings: stripUnresolved(value.bindings),
-          namespace,
-        } as S,
-      });
+      state
+        .set({
+          stack: stackName,
+          stage,
+          fqn,
+          // Early commits (`creating`/`replacing`) persist plan props that may
+          // still hold unresolved Output exprs; strip them so state stores only
+          // plain data (see stripUnresolved in Diff.ts).
+          //
+          // Binding rows follow the same rule. Even the RESOLVED binding
+          // payload can carry Effect leaves — a tagged Worker/Function class in
+          // `env` (the circular-bindings pattern) is a function-typed Effect
+          // that `Output.evaluate` passes through untouched. A JSON state store
+          // would persist it via its `toJSON` as an `{"_id":"Effect",...}`
+          // relic, which the next plan's `diffBindings` compares against the
+          // live class stripped to `undefined` — a phantom binding "update" on
+          // every deploy, forever. Stripping at the commit boundary keeps both
+          // store kinds consistent with the comparison in `havePropsChanged`.
+          value: {
+            ...value,
+            adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
+            props: stripUnresolved(value.props),
+            bindings: stripUnresolved(value.bindings),
+            namespace,
+          } as S,
+        })
+        .pipe(
+          Effect.tap((row) =>
+            Effect.sync(() => {
+              committed = row;
+            }),
+          ),
+        );
 
     const scopedSession = {
       ...session,
@@ -687,10 +738,84 @@ const executeNode = (
       });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
+
+    // Wait for the eventual attributes (`ProviderService.eventual`) that a
+    // consumer or the Stack output references, then persist them. Consumers
+    // that don't read them were already released by `readyStable`.
+    const settleEventual = Effect.gen(function* () {
+      const attributes = node.settle ?? [];
+      const current = tracker[fqn];
+      // Cycle members are re-reconciled by `converge` after this pass, which
+      // would discard settled values; their eventual attributes aren't
+      // waited for.
+      if (
+        inCycle ||
+        attributes.length === 0 ||
+        !node.provider.settle ||
+        !current
+      ) {
+        return;
+      }
+      yield* scopedSession.note(`waiting for ${attributes.join(", ")}`);
+      const values = yield* node.provider
+        .settle({
+          id: logicalId,
+          fqn,
+          instanceId: current.instanceId,
+          news: current.props,
+          output: current.output,
+          // The node is typed against the generic ResourceLike, whose
+          // attribute keys are `never`.
+          attributes: new Set(attributes) as unknown as ReadonlySet<never>,
+          session: scopedSession,
+        })
+        .pipe(
+          instrumentLifecycle(
+            "settle",
+            fqn,
+            node.resource.Type,
+            logicalId,
+            current.instanceId,
+          ),
+          (effect) =>
+            settleTimeout === undefined
+              ? effect
+              : effect.pipe(
+                  Effect.timeoutOrElse({
+                    duration: settleTimeout,
+                    orElse: () =>
+                      Effect.fail(
+                        new SettleTimeout({
+                          message: `Timed out waiting for ${attributes.join(", ")} of ${logicalId} (--settle-timeout)`,
+                          fqn,
+                          attributes,
+                        }),
+                      ),
+                  }),
+                ),
+        );
+      const attr = { ...current.output, ...values };
+      tracker[fqn] = { ...current, output: attr };
+      const row =
+        committed ?? (node.action === "noop" ? node.state : undefined);
+      if (row) {
+        yield* commit({
+          ...row,
+          attr,
+          settled: [...new Set([...(row.settled ?? []), ...attributes])],
+        } as ResourceState);
+      }
+    });
+
     // Signal only after reconcile completes — never during precreate. Tasks
     // (and any other consumer that calls `waitForStableDeps`) block on this
-    // so they observe the resource's final attrs rather than a stub.
-    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
+    // so they observe the resource's final attrs rather than a stub. Then
+    // settle eventual attributes and release the consumers that read them.
+    const signalReadyStable = Effect.gen(function* () {
+      yield* Deferred.succeed(readyStable[fqn], void 0);
+      yield* settleEventual;
+      yield* Deferred.succeed(settled[fqn], void 0);
+    });
 
     const storeAndSignal = (t: ResourceTracker) =>
       Effect.gen(function* () {
@@ -760,7 +885,10 @@ const executeNode = (
     const allUpstreamFqns = () => {
       const propDeps = Object.keys(Output.resolveUpstream(node.props));
       const bindingDeps = Object.keys(Output.resolveUpstream(node.bindings));
-      return [...new Set([...propDeps, ...bindingDeps])];
+      const orderDeps = Object.keys(
+        Output.resolveUpstream(node.resource.DependsOn ?? []),
+      );
+      return [...new Set([...propDeps, ...bindingDeps, ...orderDeps])];
     };
 
     // ── instance ID ──
@@ -909,7 +1037,7 @@ const executeNode = (
 
         // Create runs against fully resolved upstream outputs and bindings, not the
         // raw Output expressions stored in the plan.
-        yield* waitForDeps(allUpstreamFqns());
+        yield* waitForDeps(allUpstreamFqns(), node.settledUpstreams);
 
         yield* report("creating");
         const outputs = getOutputs();
@@ -1059,7 +1187,7 @@ const executeNode = (
         // See create-flow note: while we're waiting on upstream outputs
         // this resource isn't actually updating yet.
         yield* report("pending");
-        yield* waitForDeps(allUpstreamFqns());
+        yield* waitForDeps(allUpstreamFqns(), node.settledUpstreams);
         const outputs = getOutputs();
 
         const news = (yield* Output.evaluate(node.props, outputs)) as Record<
@@ -1142,6 +1270,8 @@ const executeNode = (
             // has to continue afterwards.
             ...node.state,
             attr,
+            // Fresh attrs: eventual attributes are provisional again.
+            settled: undefined,
             props: news,
             // Resolved payload, not raw `node.bindings` — see create commit.
             bindings: bindingOutputs,
@@ -1360,7 +1490,7 @@ const executeNode = (
 
         // Replacement create is evaluated exactly like create, but against the new
         // generation's instance id and with the previous generations preserved in `old`.
-        yield* waitForDeps(allUpstreamFqns());
+        yield* waitForDeps(allUpstreamFqns(), node.settledUpstreams);
 
         yield* report("creating replacement");
         const outputs = getOutputs();
@@ -1474,6 +1604,7 @@ const executeNode = (
           readyStable[fqn],
           cause as Cause.Cause<never>,
         );
+        yield* Deferred.failCause(settled[fqn], cause as Cause.Cause<never>);
         yield* session.emit({
           _tag: "apply.resource.status",
           fqn,
@@ -1527,6 +1658,7 @@ const executeActionNode = (
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
   readyStable: Record<string, Deferred.Deferred<void>>,
+  settled: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
     string,
     {
@@ -1552,7 +1684,10 @@ const executeActionNode = (
   stackName: string,
   stage: string,
   getOutputs: () => Record<string, any>,
-  waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+  waitForDeps: (
+    fqns: string[],
+    settledUpstreams?: string[],
+  ) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
 ): Effect.Effect<void, never, any> =>
   Effect.gen(function* () {
@@ -1578,7 +1713,10 @@ const executeActionNode = (
       });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
-    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
+    // Actions have no eventual attributes, so they settle when they finish.
+    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0).pipe(
+      Effect.andThen(Deferred.succeed(settled[fqn], void 0)),
+    );
 
     const skip = (state: RanActionState) =>
       Effect.gen(function* () {
@@ -1622,6 +1760,7 @@ const executeActionNode = (
           ...Object.keys(Output.upstreamAny(task.Captures)),
         ]),
       ].filter((f) => f in readyStable),
+      node.settledUpstreams,
     );
 
     const outputs = getOutputs();
@@ -1692,6 +1831,7 @@ const executeActionNode = (
           readyStable[fqn],
           cause as Cause.Cause<never>,
         );
+        yield* Deferred.failCause(settled[fqn], cause as Cause.Cause<never>);
         yield* session.emit({
           _tag: "apply.resource.status",
           fqn,

@@ -3,6 +3,7 @@
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -166,6 +167,19 @@ export interface ApplyNodeBase<
   renamedFrom?: string[] | undefined;
   /** Preserve the FQN-reuse exclusion across generations and state transitions. */
   adoptionBlocked?: "migrated-fqn";
+  /**
+   * This resource's eventual attributes (`ProviderService.eventual`) that
+   * something references and that aren't settled yet. Apply calls the
+   * provider's `settle` for them after `reconcile` (or, for a noop, before
+   * signaling consumers).
+   */
+  settle?: string[];
+  /**
+   * Upstream FQNs whose eventual attributes this resource references. Apply
+   * waits for those upstreams to settle, and for every other upstream only
+   * to reconcile.
+   */
+  settledUpstreams?: string[];
 }
 
 export interface Create<
@@ -239,6 +253,8 @@ export interface ActionNodeBase<T extends ActionLike = ActionLike> {
   readonly kind: "action";
   def: T;
   downstream: string[];
+  /** Upstream FQNs whose eventual attributes this action reads. */
+  settledUpstreams?: string[];
 }
 
 export interface ActionRun<
@@ -296,6 +312,8 @@ export type Plan<Output = any> = {
    * publish a fresh attr (the common, linear case).
    */
   cycleMembers: ReadonlySet<string>;
+  /** See {@link MakePlanOptions.settleTimeout}. */
+  settleTimeout?: Duration.Input;
   /**
    * The run-level default {@link ProviderMode} this plan was built with
    * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
@@ -374,6 +392,11 @@ export interface MakePlanOptions {
   force?: boolean;
   include?: never;
   exclude?: never;
+  /**
+   * Fail any `settle` (waiting for an eventual attribute such as a load
+   * balancer address) still running after this long. Unbounded by default.
+   */
+  settleTimeout?: Duration.Input;
 }
 
 export interface FilteredPlanOptions
@@ -435,7 +458,7 @@ const makePlan = <A>(
         Output.upstreamAny(
           isAction(node)
             ? [node.Input, node.Captures]
-            : [node.Props, stack.bindings[node.FQN] ?? []],
+            : [node.Props, stack.bindings[node.FQN] ?? [], node.DependsOn],
         ),
       );
     const selected = yield* selectResources(declared, upstream, options);
@@ -942,6 +965,20 @@ const makePlan = <A>(
                 oldState.status === "updated" ||
                 oldState.status === "replaced"
               ) {
+                // Eventual attributes that were never settled aren't final
+                // yet: keep them evaluable so consumers read the value
+                // `settle` produces during apply.
+                const unsettled = unsettledEventual(provider, oldState);
+                if (unsettled.length > 0) {
+                  return new Output.ResourceExpr(
+                    resourceExpr.src,
+                    Object.fromEntries(
+                      Object.entries(oldState.attr ?? {}).filter(
+                        ([key]) => !unsettled.includes(key),
+                      ),
+                    ),
+                  );
+                }
                 // we can safely return the attributes if we know they have stabilized
                 return oldState?.attr;
               } else {
@@ -1162,7 +1199,9 @@ const makePlan = <A>(
         (resource) =>
           [
             resource.FQN,
-            Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
+            Object.values(
+              Output.upstreamAny([resource.Props, resource.DependsOn]),
+            ).map((r) => r.FQN),
           ] as const,
       ),
       ...actions.map(
@@ -2132,6 +2171,56 @@ const makePlan = <A>(
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
 
+    // ── Eventual attributes ──────────────────────────────────────────────
+    // Record which eventual attributes (`ProviderService.eventual`) each
+    // resource must settle, and which upstreams each consumer must wait to
+    // settle. An eventual attribute nobody references is never waited for.
+    {
+      const addSettle = (
+        consumer: { settledUpstreams?: string[] } | undefined,
+        refs: Map<string, Set<string>>,
+      ) => {
+        for (const [upFqn, attrs] of refs) {
+          const up = resourceGraph[upFqn];
+          const eventual = up?.provider?.eventual ?? [];
+          if (eventual.length === 0) continue;
+          const wanted = referencedEventual(eventual, attrs);
+          if (wanted.length === 0) continue;
+          if (consumer && upFqn in resourceGraph) {
+            consumer.settledUpstreams = [
+              ...new Set([...(consumer.settledUpstreams ?? []), upFqn]),
+            ];
+          }
+          // An unchanged resource keeps the values it already settled.
+          const pending =
+            up.action === "noop"
+              ? wanted.filter(
+                  (attr) => !(up.state.settled ?? []).includes(attr),
+                )
+              : wanted;
+          if (pending.length > 0) {
+            up.settle = [...new Set([...(up.settle ?? []), ...pending])];
+          }
+        }
+      };
+      for (const resource of resources) {
+        const node = resourceGraph[resource.FQN];
+        if (!node) continue;
+        const refs = Output.referencedAttributes(resource.Props);
+        Output.referencedAttributes(stack.bindings[resource.FQN] ?? [], refs);
+        Output.referencedAttributes(resource.DependsOn, refs);
+        addSettle(node, refs);
+      }
+      for (const action of actions) {
+        const refs = Output.referencedAttributes(action.Input);
+        Output.referencedAttributes(action.Captures, refs);
+        addSettle(actionGraph[action.FQN], refs);
+      }
+      if (!selected) {
+        addSettle(undefined, Output.referencedAttributes(stack.output));
+      }
+    }
+
     // SCC membership of the combined upstream graph. Apply uses it to
     // decide whether an update node must publish its prior attr early to
     // break a cycle, or can simply wait for upstreams like a DAG node
@@ -2424,6 +2513,7 @@ const makePlan = <A>(
       selectedFqns: selected,
       cycleMembers,
       defaultMode: runDefaultMode,
+      settleTimeout: options.settleTimeout,
     } satisfies Plan<A | undefined> as Plan<A | undefined>;
   }).pipe(
     // Owns the memoized resolutions' fibers for the plan's duration.
@@ -2476,6 +2566,28 @@ export const destroy = (stack: {
  * Whether any `env` value a Platform's Init captured differs from the
  * persisted props. An unresolved value counts as changed.
  */
+/** A provider's eventual attributes not yet settled on a persisted row. */
+const unsettledEventual = (
+  provider: { eventual?: readonly string[] },
+  state: { settled?: string[] },
+): string[] =>
+  (provider.eventual ?? []).filter(
+    (attr) => !(state.settled ?? []).includes(attr),
+  );
+
+/**
+ * The eventual attributes of `upstream` that a set of references reads:
+ * every eventual attribute for a whole-resource reference, else the
+ * referenced ones.
+ */
+const referencedEventual = (
+  eventual: readonly string[],
+  attrs: ReadonlySet<string>,
+): string[] =>
+  attrs.has(Output.ALL_ATTRIBUTES)
+    ? [...eventual]
+    : eventual.filter((attr) => attrs.has(attr));
+
 const capturedEnvChanged = (
   resource: ResourceLike,
   olds: { env?: Record<string, unknown> } | undefined,
