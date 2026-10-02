@@ -45,6 +45,15 @@ describe(
       expect(dropped).toEqual(["account:read"]);
     });
 
+    it("neither keeps nor drops the offline_access scope", () => {
+      // The token response echoes offline_access into the stored scopes;
+      // the authorize step adds it back itself.
+      expect(partitionOAuthScopes(["zone.read", "offline_access"])).toEqual({
+        valid: ["zone.read"],
+        dropped: [],
+      });
+    });
+
     it("keeps the basic template inside the client allowlist", () => {
       expect(BASIC_SCOPES.length).toBeGreaterThan(0);
       expect(BASIC_SCOPES.every((scope) => scope in ALL_SCOPES)).toBe(true);

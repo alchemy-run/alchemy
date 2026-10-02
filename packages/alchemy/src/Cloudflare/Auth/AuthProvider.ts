@@ -50,6 +50,7 @@ import {
   customOAuthScopeDefaults,
   OAUTH_SCOPE_GROUPS,
   OAUTH_SCOPE_NAMES,
+  OFFLINE_ACCESS_SCOPE,
   partitionOAuthScopes,
 } from "./OAuthScopes.ts";
 
@@ -267,7 +268,7 @@ export const CloudflareAuth = AuthProviderLayer<
       Effect.gen(function* () {
         const authorization = yield* OAuthClient.authorize([
           ...scopes,
-          "offline_access",
+          OFFLINE_ACCESS_SCOPE,
         ]);
 
         const credentials = yield* browserOAuth({
