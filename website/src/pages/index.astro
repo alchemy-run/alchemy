@@ -14,6 +14,7 @@ import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
 import PRLifecycle from "../components/marketing-islands/PRLifecycle.tsx";
 import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
+import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
 
 // Modules: one Layer creates the resource, binds it, and exposes the API.
@@ -95,30 +96,6 @@ test("PUT + GET round-trips through R2", Effect.gen(function* () {
   const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
   expect(yield* res.text).toBe("hi!");
 }));`;
-
-const TELEMETRY_SRC = `export default Cloudflare.Worker(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const photos = yield* Photos;
-    return { fetch: handler };
-  }).pipe(
-    Effect.provide([PhotosR2, Observability]),
-  ),
-);`;
-
-const OBSERVABILITY_SRC = `export const Observability = Layer.unwrap(
-  Effect.gen(function* () {
-    const traces = yield* Axiom.Dataset("Traces", tracesProps);
-    const logs = yield* Axiom.Dataset("Logs", logsProps);
-    const token = yield* Axiom.ApiToken("Ingest", ingestProps);
-
-    yield* Axiom.Dashboard("Dashboard", dashboardProps);
-    yield* Axiom.Monitor("Errors", errorRateProps);
-
-    return Axiom.Telemetry({ token, traces, logs });
-  }),
-);`;
 
 /** The app's layers, bottom-up, and what the Photos module owns in each. */
 const PYRAMID = [
@@ -490,10 +467,7 @@ const PROVIDERS = [
       <p class="v2-lede" data-copy>
         Provide one Layer and every request is traced and logged with OpenTelemetry from the first deploy. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app. Swap the Layer to send telemetry to a different platform.
       </p>
-      <div class="v2-split">
-        <CodeBlock filename="src/api.ts" code={TELEMETRY_SRC} compact />
-        <CodeBlock filename="src/Observability.ts" code={OBSERVABILITY_SRC} compact />
-      </div>
+      <ObservabilityDash client:visible />
     </div>
   </section>
 
