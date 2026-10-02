@@ -22,8 +22,10 @@ import {
   waitForDatabaseReady,
 } from "../Util.ts";
 import {
+  ensurePostgresBranchParameters,
   ensurePostgresProductionBranchClusterSize,
   toPostgresClusterSku,
+  type PostgresClusterParameters,
   type PostgresClusterSize,
 } from "./PostgresClusterSize.ts";
 import {
@@ -47,6 +49,34 @@ export interface PostgresDatabaseProps extends BaseDatabaseProps {
    * @see {@link PostgresClusterSize}
    */
   clusterSize: PostgresClusterSize;
+
+  /**
+   * Cluster configuration parameters for the default branch, nested by
+   * namespace (`patroni`, `pgconf`, `pgbouncer`).
+   *
+   * Only the parameters declared here are managed. One left out keeps
+   * whatever value it has rather than reverting to its default, so a
+   * stack can own a single knob without owning the configuration.
+   *
+   * Applied through the same change-request API as {@link clusterSize}.
+   * A parameter marked `restart` restarts the branch's Postgres when it
+   * changes; `pgconf.max_connections` is one.
+   *
+   * @see https://planetscale.com/docs/postgres/cluster-configuration/parameters
+   *
+   * @example
+   * ```ts
+   * const db = yield* Planetscale.PostgresDatabase("Db", {
+   *   clusterSize: "PS_10",
+   *   parameters: {
+   *     // Bound the server connections PSBouncer opens across all users,
+   *     // so several poolers cannot oversubscribe `max_connections`.
+   *     pgbouncer: { max_db_connections: "40" },
+   *   },
+   * })
+   * ```
+   */
+  parameters?: PostgresClusterParameters;
 
   /**
    * PostgreSQL major version. Defaults to the latest available major
@@ -359,6 +389,18 @@ export const PostgresDatabaseProvider = () =>
         branch,
         news.clusterSize,
       );
+
+      // Parameters follow the resize: both queue change requests on the
+      // same branch, and the resize is the one that can replace the
+      // cluster the parameters are written to.
+      if (news.parameters) {
+        yield* ensurePostgresBranchParameters(
+          organization,
+          updated.name,
+          branch,
+          news.parameters,
+        );
+      }
 
       const migrationTarget = {
         organization,

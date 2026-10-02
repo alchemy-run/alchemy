@@ -5,7 +5,10 @@ import {
   makeBranchProvider,
 } from "../Branch.ts";
 import type { Providers } from "../Providers.ts";
-import type { PostgresClusterSize } from "./PostgresClusterSize.ts";
+import type {
+  PostgresClusterParameters,
+  PostgresClusterSize,
+} from "./PostgresClusterSize.ts";
 import type { PostgresDatabase } from "./PostgresDatabase.ts";
 import {
   runPostgresImports,
@@ -28,6 +31,18 @@ export interface PostgresBranchProps extends BaseBranchProps {
    * requires the full SKU (e.g. `"M1_10_AWS_ARM_D_METAL_10"`).
    */
   clusterSize?: PostgresClusterSize;
+
+  /**
+   * Cluster configuration parameters for the branch, nested by namespace
+   * (`patroni`, `pgconf`, `pgbouncer`).
+   *
+   * Only the parameters declared here are managed; one left out keeps its
+   * current value rather than reverting to its default. Applied through
+   * the same change-request API as {@link clusterSize}, after it.
+   *
+   * @see https://planetscale.com/docs/postgres/cluster-configuration/parameters
+   */
+  parameters?: PostgresClusterParameters;
 
   /**
    * Total number of replicas for the branch. `0` creates or converges the
