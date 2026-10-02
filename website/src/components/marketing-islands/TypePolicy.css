@@ -1,4 +1,4 @@
-/* The type-check section's binding → client type animation (TypePolicy.tsx). */
+/* The type-check section: binding, generated IAM policy, type error (TypePolicy.tsx). */
 
 .tp {
   display: grid;
@@ -67,7 +67,8 @@
 }
 .tp-line {
   display: inline-block;
-  min-width: 100%;
+  box-sizing: border-box;
+  min-width: calc(100% + 32px);
   margin: 0 -16px;
   padding: 0 16px 0 14px;
   border-left: 2px solid transparent;
@@ -152,7 +153,7 @@
   }
 }
 
-/* The client type the binding hands back. */
+/* The IAM policy the binding generates. */
 .tp-type {
   padding: 14px 16px;
   font-family: var(--alc-font-mono);
@@ -160,54 +161,42 @@
   line-height: 1.7;
 }
 .tp-type__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   border-bottom: 1px solid rgba(var(--alc-code-edge), 0.08);
-  color: var(--alc-code-type);
+  font-size: 11px;
+  color: var(--alc-code-comment);
   white-space: nowrap;
+}
+.tp-yaml {
+  margin: 0 -16px;
+  padding: 0 16px;
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+}
+.tp-yaml .tp-line {
+  margin: 0 -16px;
+  padding: 0 16px 0 14px;
+}
+.tp-y-c {
+  color: var(--alc-code-comment);
+  font-style: italic;
+}
+.tp-y-k {
+  color: var(--alc-code-type);
+}
+.tp-y-v {
+  color: var(--alc-code-string);
 }
 .tp-muted {
   color: var(--alc-code-comment);
 }
-.tp-group + .tp-group {
-  margin-top: 12px;
-}
-.tp-group__label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--alc-code-comment);
-}
-.tp-group__note {
-  color: var(--alc-danger);
-}
-.tp-method {
-  display: flex;
-  gap: 8px;
-  color: var(--alc-fg-invert);
-  transition:
-    color 300ms ease,
-    opacity 300ms ease;
-}
-.tp-method__mark {
-  width: 1em;
-  color: var(--alc-success);
-}
-.tp-group.is-revoked .tp-method {
-  color: var(--alc-code-comment);
-  text-decoration: line-through;
-  text-decoration-color: var(--alc-danger);
-}
-.tp-group.is-revoked .tp-method__mark {
-  color: var(--alc-danger);
-}
-.tp-method.is-used {
-  color: var(--alc-danger);
-  font-weight: 600;
-}
-
 .alc-motion-paused .tp * {
   animation-play-state: paused !important;
 }

@@ -3,34 +3,26 @@ import { highlightTS } from "../marketing/highlightTS";
 import "./TypePolicy.css";
 
 /*
- * The binding you ask for decides the client type you get back, so the
- * code can only do what the binding grants. The loop narrows
- * `ReadWriteBucket` to `ReadBucket`: the write methods leave the client's
- * type and `photos.put` stops compiling, then it widens back.
+ * Each AWS binding is one IAM action, and it hands back a client typed for
+ * that one operation. The loop swaps `AWS.S3.PutObject` for
+ * `AWS.S3.GetObject`: the generated policy changes to `s3:GetObject`, and the
+ * upload stops compiling because a GetObject request has no `Body`.
  *
- * The diagnostic is TypeScript's real message for this code (the talk
- * deck type-checks the same snippet, FilesRead.error.ts).
+ * The diagnostic is TypeScript's real message for this code.
  */
 
-const RW = "ReadWriteBucket";
-const R = "ReadBucket";
-const ERROR = "Property 'put' does not exist on type 'ReadBucketClient'.";
+const PUT = "PutObject";
+const GET = "GetObject";
+const ERROR =
+  "Object literal may only specify known properties, and 'Body' does not exist in type 'Omit<GetObjectRequest, \"Bucket\">'.";
 
-// Narrow, check, hold the error, widen back, check, hold.
+// Swap, check, hold the error, swap back, check, hold.
 const T_NARROW = 1000;
 const T_ERROR = T_NARROW + 600;
 const T_WIDEN = T_ERROR + 1900;
 const T_CLEAN = T_WIDEN + 600;
 const LOOP_MS = T_CLEAN + 1000;
 const ROLL_MS = 450;
-
-const READ = ["head", "get", "list"];
-const WRITE = [
-  "put",
-  "delete",
-  "createMultipartUpload",
-  "resumeMultipartUpload",
-];
 
 const isPaused = () =>
   document.documentElement.classList.contains("alc-motion-paused") ||
@@ -86,19 +78,17 @@ export default function TypePolicy() {
     };
   }, []);
 
-  const readOnly = t >= T_NARROW && t < T_WIDEN;
+  const swapped = t >= T_NARROW && t < T_WIDEN;
   const rolling =
     (t >= T_NARROW && t < T_NARROW + ROLL_MS) ||
     (t >= T_WIDEN && t < T_WIDEN + ROLL_MS);
-  const was = rolling ? (readOnly ? RW : R) : readOnly ? R : RW;
-  const now = readOnly ? R : RW;
-  const rollKey = readOnly ? 1 : 0;
+  const now = swapped ? GET : PUT;
+  const was = rolling ? (swapped ? PUT : GET) : now;
+  const rollKey = swapped ? 1 : 0;
   const checking =
     (t >= T_NARROW + ROLL_MS && t < T_ERROR) ||
     (t >= T_WIDEN + ROLL_MS && t < T_CLEAN);
   const error = t >= T_ERROR && t < T_WIDEN + ROLL_MS;
-  const client = `${now}Client`;
-  const wasClient = `${was}Client`;
 
   return (
     <div className="tp" aria-hidden>
@@ -126,14 +116,12 @@ export default function TypePolicy() {
         <pre className="tp-code">
           <span
             dangerouslySetInnerHTML={hl(
-              'export const PhotosR2 = Layer.effect(\n  Photos,\n  Effect.gen(function* () {\n    const bucket = yield* Cloudflare.R2.Bucket("Photos");\n',
+              'export const PhotosS3 = Layer.effect(\n  Photos,\n  Effect.gen(function* () {\n    const bucket = yield* AWS.S3.Bucket("Photos");\n',
             )}
           />
-          <span className={`tp-line ${rolling || readOnly ? "is-lit" : ""}`}>
+          <span className={`tp-line ${rolling || swapped ? "is-lit" : ""}`}>
             <span
-              dangerouslySetInnerHTML={hl(
-                "    const photos = yield* Cloudflare.R2.",
-              )}
+              dangerouslySetInnerHTML={hl("    const write = yield* AWS.S3.")}
             />
             <Slot was={was} now={now} k={rollKey} />
             <span dangerouslySetInnerHTML={hl("(bucket);")} />
@@ -141,20 +129,16 @@ export default function TypePolicy() {
           {"\n"}
           <span
             dangerouslySetInnerHTML={hl(
-              "    return {\n      list: () => photos.list(),\n",
+              "    return {\n      upload: (name, body) =>\n",
             )}
           />
           <span className={`tp-line ${error ? "is-error" : ""}`}>
-            <span
-              dangerouslySetInnerHTML={hl(
-                "      upload: (name, body) => photos.",
-              )}
-            />
+            <span dangerouslySetInnerHTML={hl("        write({ Key: name, ")} />
             <span
               className={error ? "tp-squiggle" : ""}
-              dangerouslySetInnerHTML={hl("put")}
+              dangerouslySetInnerHTML={hl("Body")}
             />
-            <span dangerouslySetInnerHTML={hl("(name, body),")} />
+            <span dangerouslySetInnerHTML={hl(": body }),")} />
           </span>
           {"\n"}
           <span className={`tp-diag ${error ? "is-shown" : ""}`}>
@@ -166,35 +150,27 @@ export default function TypePolicy() {
 
       <div className="tp-type">
         <div className="tp-type__head">
-          <span className="tp-muted">photos:</span>{" "}
-          <Slot was={wasClient} now={client} k={rollKey} />
+          <span>iam-policy.yaml</span>
+          <span className="tp-muted">generated at deploy</span>
         </div>
-        <div className="tp-group">
-          <div className="tp-group__label">read</div>
-          {READ.map((m) => (
-            <div key={m} className="tp-method">
-              <span className="tp-method__mark">✓</span>
-              {m}
-            </div>
-          ))}
-        </div>
-        <div className={`tp-group ${readOnly ? "is-revoked" : ""}`}>
-          <div className="tp-group__label">
-            write
-            <span className="tp-group__note">
-              {readOnly ? "not granted" : ""}
-            </span>
-          </div>
-          {WRITE.map((m) => (
-            <div
-              key={m}
-              className={`tp-method ${m === "put" && error ? "is-used" : ""}`}
-            >
-              <span className="tp-method__mark">{readOnly ? "✗" : "✓"}</span>
-              {m}
-            </div>
-          ))}
-        </div>
+        <pre className="tp-yaml">
+          <span className="tp-y-c"># the Api function's role</span>
+          {"\n"}
+          <span className="tp-y-k">Statement</span>:{"\n"}
+          {"  - "}
+          <span className="tp-y-k">Effect</span>:{" "}
+          <span className="tp-y-v">Allow</span>
+          {"\n    "}
+          <span className="tp-y-k">Action</span>:{"\n"}
+          <span className={`tp-line ${rolling || swapped ? "is-lit" : ""}`}>
+            {"      - "}
+            <span className="tp-y-v">s3:</span>
+            <Slot was={was} now={now} k={rollKey} />
+          </span>
+          {"\n    "}
+          <span className="tp-y-k">Resource</span>:{"\n      - "}
+          <span className="tp-y-v">arn:aws:s3:::my-app-photos-x7k2/*</span>
+        </pre>
       </div>
     </div>
   );
