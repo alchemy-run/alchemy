@@ -14,6 +14,7 @@ import {
   requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
+  waitForProvisioned,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import {
@@ -77,6 +78,13 @@ export interface NetworkResourceSpec<
   readonly physicalName?: (id: string) => Effect.Effect<string>;
   /** Wait budgets for slow (10+ minute) resources. */
   readonly slow?: boolean;
+  /**
+   * Readiness state of the observed resource (`Succeeded` = usable,
+   * `Failed`/`Canceled` = terminal, anything else = keep polling). Use it
+   * when `provisioningState` alone is not enough (e.g. hub routing state).
+   * @default `properties.provisioningState`
+   */
+  readonly readyState?: (observed: Obs) => string | undefined;
   /** Typed delete errors meaning "still referenced, retry". */
   readonly inUseTags?: ReadonlyArray<string>;
   /** Delete the old resource before creating its replacement. */
@@ -133,6 +141,14 @@ export interface NetworkResourceSpec<
    * matched against the observed resource, case-insensitively
    */
   readonly drifted?: (observed: Obs, body: B, news: Res["Props"]) => boolean;
+  /**
+   * Whether a write-only field (a secret Azure never returns) changed
+   * since the previous deploy; true re-sends the PUT.
+   */
+  readonly writeOnlyChanged?: (
+    news: Res["Props"],
+    olds: Res["Props"] | undefined,
+  ) => boolean;
   /** Attributes from the path and the observed resource. */
   readonly toAttrs: (path: NetworkPath, observed: Obs) => Res["Attributes"];
   /** Types nuke must delete this resource before. */
@@ -204,9 +220,18 @@ export const networkProvider =
     const physicalName =
       spec.physicalName ??
       ((id: string) => createPhysicalName({ id, maxLength: 80 }));
-    const waitReady = spec.slow
-      ? waitNetworkProvisionedSlow
-      : waitNetworkProvisioned;
+    const waitReady = <E, R>(
+      label: string,
+      get: Effect.Effect<Obs | undefined, E, R>,
+    ) =>
+      spec.readyState !== undefined
+        ? waitForProvisioned(label, get, spec.readyState, {
+            interval: spec.slow ? "15 seconds" : "3 seconds",
+            times: spec.slow ? 160 : 100,
+          })
+        : spec.slow
+          ? waitNetworkProvisionedSlow(label, get)
+          : waitNetworkProvisioned(label, get);
     const waitGone = spec.slow ? waitNetworkGoneSlow : waitNetworkGone;
     const describe = (path: NetworkPath) =>
       `${spec.label} ${[...parents.map((p) => path[p]), path.name].join("/")}`;
@@ -324,10 +349,12 @@ export const networkProvider =
       reconcile: Effect.fn(function* ({
         id,
         news,
+        olds,
         output,
       }: {
         id: string;
         news: Res["Props"];
+        olds?: Res["Props"] | undefined;
         output: Res["Attributes"] | undefined;
       }) {
         const env = yield* AzureEnvironment.current;
@@ -377,6 +404,7 @@ export const networkProvider =
           // A resource left `Failed` (e.g. by a dependency that was still
           // provisioning) converges by re-applying the PUT.
           observed.properties?.provisioningState === "Failed" ||
+          (spec.writeOnlyChanged?.(news, olds) ?? false) ||
           (spec.drifted
             ? spec.drifted(observed, body, news)
             : subsetDiffers(comparable, observed));

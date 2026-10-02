@@ -1,10 +1,31 @@
 import type * as network from "@distilled.cloud/azure/network";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { stackAndStage, waitForProvisioned, waitUntilGone } from "../Arm.ts";
 
 // Shared Microsoft.Network helpers. Internal: not exported from index.ts.
+
+/** Unwrap a secret prop that may be given as plain text or `Redacted`. */
+export const reveal = (
+  value: string | Redacted.Redacted<string> | undefined,
+): string | undefined =>
+  value === undefined
+    ? undefined
+    : Redacted.isRedacted(value)
+      ? Redacted.value(value)
+      : value;
+
+/**
+ * Whether a write-only secret changed since the previous deploy (always
+ * true on adoption, when there is no previous deploy).
+ */
+export const secretChanged = (
+  next: string | Redacted.Redacted<string> | undefined,
+  prev: string | Redacted.Redacted<string> | undefined,
+  hasOlds: boolean,
+) => next !== undefined && (!hasOlds || reveal(next) !== reveal(prev));
 
 export const lower = (value: string | undefined) => value?.toLowerCase();
 

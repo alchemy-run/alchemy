@@ -15,6 +15,7 @@ import * as AppConfigurationProviders from "./AppConfiguration/Providers.ts";
 import * as AuthorizationProviders from "./Authorization/Providers.ts";
 import * as AutomationProviders from "./Automation/Providers.ts";
 import * as AzureStackHCIProviders from "./AzureStackHCI/Providers.ts";
+import * as CdnProviders from "./Cdn/Providers.ts";
 import * as CognitiveServicesProviders from "./CognitiveServices/Providers.ts";
 import * as ComputeProviders from "./Compute/Providers.ts";
 import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
@@ -23,29 +24,43 @@ import * as ContainerRegistryProviders from "./ContainerRegistry/Providers.ts";
 import * as ContainerServiceProviders from "./ContainerService/Providers.ts";
 import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
 import * as DataFactoryProviders from "./DataFactory/Providers.ts";
+import * as DataShareProviders from "./DataShare/Providers.ts";
+import * as DataReplicationProviders from "./DataReplication/Providers.ts";
+import * as DesktopVirtualizationProviders from "./DesktopVirtualization/Providers.ts";
+import * as DevCenterProviders from "./DevCenter/Providers.ts";
 import * as DevTestLabsProviders from "./DevTestLabs/Providers.ts";
+import * as DeviceRegistryProviders from "./DeviceRegistry/Providers.ts";
+import * as DiscoveryProviders from "./Discovery/Providers.ts";
 import * as DnsResolverProviders from "./DnsResolver/Providers.ts";
 import * as EdgeProviders from "./Edge/Providers.ts";
 import * as EventGridProviders from "./EventGrid/Providers.ts";
 import * as EventHubProviders from "./EventHub/Providers.ts";
+import * as HybridNetworkProviders from "./HybridNetwork/Providers.ts";
+import * as IoTOperationsProviders from "./IoTOperations/Providers.ts";
 import * as LogAnalyticsProviders from "./LogAnalytics/Providers.ts";
 import * as KeyVaultProviders from "./KeyVault/Providers.ts";
+import * as KustoProviders from "./Kusto/Providers.ts";
 import * as LogicProviders from "./Logic/Providers.ts";
 import * as MachineLearningProviders from "./MachineLearning/Providers.ts";
 import * as ManagedIdentityProviders from "./ManagedIdentity/Providers.ts";
 import * as ManagedNetworkFabricProviders from "./ManagedNetworkFabric/Providers.ts";
+import * as MigrateProviders from "./Migrate/Providers.ts";
 import * as MonitorProviders from "./Monitor/Providers.ts";
 import * as MySQLProviders from "./MySQL/Providers.ts";
+import * as NetAppProviders from "./NetApp/Providers.ts";
 import * as NetworkProviders from "./Network/Providers.ts";
+import * as NetworkCloudProviders from "./NetworkCloud/Providers.ts";
 import * as PolicyProviders from "./Policy/Providers.ts";
 import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
 import * as PrivateDnsProviders from "./PrivateDns/Providers.ts";
 import * as RecoveryServicesProviders from "./RecoveryServices/Providers.ts";
 import * as RedisProviders from "./Redis/Providers.ts";
+import * as RelayProviders from "./Relay/Providers.ts";
 import * as ResourcesProviders from "./Resources/Providers.ts";
 import * as SearchProviders from "./Search/Providers.ts";
 import * as SecurityInsightsProviders from "./SecurityInsights/Providers.ts";
 import * as ServiceBusProviders from "./ServiceBus/Providers.ts";
+import * as SiteRecoveryProviders from "./SiteRecovery/Providers.ts";
 import * as SqlProviders from "./Sql/Providers.ts";
 import * as StorageProviders from "./Storage/Providers.ts";
 import * as SynapseProviders from "./Synapse/Providers.ts";
@@ -58,6 +73,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   AuthorizationProviders,
   AutomationProviders,
   AzureStackHCIProviders,
+  CdnProviders,
   CognitiveServicesProviders,
   ComputeProviders,
   ContainerAppsProviders,
@@ -66,29 +82,43 @@ const services: ReadonlyArray<ServiceProviders> = [
   ContainerServiceProviders,
   CosmosDBProviders,
   DataFactoryProviders,
+  DataShareProviders,
+  DataReplicationProviders,
+  DesktopVirtualizationProviders,
+  DevCenterProviders,
   DevTestLabsProviders,
+  DeviceRegistryProviders,
+  DiscoveryProviders,
   DnsResolverProviders,
   EdgeProviders,
   EventGridProviders,
   EventHubProviders,
+  HybridNetworkProviders,
+  IoTOperationsProviders,
   LogAnalyticsProviders,
   KeyVaultProviders,
+  KustoProviders,
   LogicProviders,
   MachineLearningProviders,
   ManagedIdentityProviders,
   ManagedNetworkFabricProviders,
+  MigrateProviders,
   MonitorProviders,
   MySQLProviders,
+  NetAppProviders,
   NetworkProviders,
+  NetworkCloudProviders,
   PolicyProviders,
   PostgreSQLProviders,
   PrivateDnsProviders,
   RecoveryServicesProviders,
   RedisProviders,
+  RelayProviders,
   ResourcesProviders,
   SearchProviders,
   SecurityInsightsProviders,
   ServiceBusProviders,
+  SiteRecoveryProviders,
   SqlProviders,
   StorageProviders,
   SynapseProviders,
