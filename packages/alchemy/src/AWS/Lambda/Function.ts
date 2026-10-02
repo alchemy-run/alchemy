@@ -21,7 +21,12 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
+import {
+  deepEqual,
+  havePropsChanged,
+  isResolved,
+  stripEffects,
+} from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -2047,7 +2052,19 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the bundle hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" &&
+            desired !== null &&
+            "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
