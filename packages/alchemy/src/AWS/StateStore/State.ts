@@ -128,6 +128,27 @@ type S3Deps = Credentials | HttpClient | Region;
  * );
  * ```
  *
+ * ### Supplying the AWS Environment
+ * The state store resolves its account, region and credentials from the
+ * default environment: the configured profile, CI credentials or the ambient
+ * AWS environment, on first use. Pass the same `AWSEnvironment` layer that
+ * `AWS.providers(environment)` receives so the state bucket and every
+ * resource provider share one lazily resolved credential source.
+ *
+ * **Example:** Runtime-resolved credentials shared with the providers
+ * ```typescript
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers(environment),
+ *     state: AWS.state({ bucketName: "my-company-state" }, environment),
+ *   },
+ *   Effect.gen(function* () {
+ *     // ...
+ *   }),
+ * );
+ * ```
+ *
  * ### Managing SSE-C Restrictions
  * **Example:** Block customer-provided encryption keys on the state bucket
  * ```typescript
@@ -147,7 +168,10 @@ type S3Deps = Credentials | HttpClient | Region;
  *
  * @resource
  */
-export const state = (options: S3StateOptions = {}) =>
+export const state = (
+  options: S3StateOptions = {},
+  environment = DefaultEnvironment,
+) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -165,7 +189,7 @@ export const state = (options: S3StateOptions = {}) =>
     Layer.provideMerge(AwsRegion.fromEnvironment),
     Layer.provideMerge(AwsCredentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    Layer.provideMerge(environment),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
