@@ -239,7 +239,51 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
   "AWS",
 ) {}
 
-export const providers = () =>
+/**
+ * Every AWS provider, pinned to one AWS environment.
+ *
+ * By default the environment is resolved lazily from the configured
+ * profile, CI credentials or the ambient AWS environment on first use. Pass
+ * an `AWSEnvironment` layer to supply the account, region and credential
+ * source yourself — for example credentials assumed at runtime through a
+ * native provider chain — so every provider and `AWS.state(options,
+ * environment)` share one lazy credential source instead of stored
+ * credentials.
+ *
+ * **Example:** Default environment
+ * ```typescript
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   { providers: AWS.providers(), state: AWS.state() },
+ *   program,
+ * );
+ * ```
+ *
+ * **Example:** Runtime-resolved credentials shared with the state store
+ * ```typescript
+ * const environment = Layer.effect(
+ *   AWS.AWSEnvironment,
+ *   Effect.gen(function* () {
+ *     const session = yield* assumeDeployRole;
+ *     return Effect.succeed({
+ *       accountId: session.accountId,
+ *       region: session.region,
+ *       credentials: session.credentials,
+ *     });
+ *   }),
+ * );
+ *
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers(environment),
+ *     state: AWS.state({}, environment),
+ *   },
+ *   program,
+ * );
+ * ```
+ */
+export const providers = (environment = DefaultEnvironment) =>
   Layer.effect(
     Providers,
     // Providers are PINNED to the environment they are registered with (the
@@ -1989,7 +2033,7 @@ export const providers = () =>
     Layer.provideMerge(Region.fromEnvironment),
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    Layer.provideMerge(environment),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's
