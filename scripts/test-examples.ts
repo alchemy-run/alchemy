@@ -383,9 +383,6 @@ const testResults = await runParallel(
     cwd: example,
     serial: serialGroup(example),
   })),
-  // Each suite can build and upload several websites in parallel. Bound
-  // aggregate CPU/network load so their setup hooks can finish on time.
-  { concurrency: 4 },
 );
 const failedTests = testResults.filter((result) => result.exitCode !== 0);
 
