@@ -184,6 +184,40 @@ import {
   WebApplicationFirewallPolicyProvider,
 } from "./WebApplicationFirewallPolicy.ts";
 
+import { VirtualWan, VirtualWanProvider } from "./VirtualWan.ts";
+
+import { VpnSite, VpnSiteProvider } from "./VpnSite.ts";
+
+import { VpnServerConfiguration, VpnServerConfigurationProvider } from "./VpnServerConfiguration.ts";
+
+import { VpnServerConfigurationPolicyGroup, VpnServerConfigurationPolicyGroupProvider } from "./VpnServerConfigurationPolicyGroup.ts";
+
+import { VirtualHub, VirtualHubProvider } from "./VirtualHub.ts";
+
+import { HubVirtualNetworkConnection, HubVirtualNetworkConnectionProvider } from "./HubVirtualNetworkConnection.ts";
+
+import { HubRouteTable, HubRouteTableProvider } from "./HubRouteTable.ts";
+
+import { VirtualHubBgpConnection, VirtualHubBgpConnectionProvider } from "./VirtualHubBgpConnection.ts";
+
+import { VpnGateway, VpnGatewayProvider } from "./VpnGateway.ts";
+
+import { VpnConnection, VpnConnectionProvider } from "./VpnConnection.ts";
+
+import { VpnGatewayNatRule, VpnGatewayNatRuleProvider } from "./VpnGatewayNatRule.ts";
+
+import { P2sVpnGateway, P2sVpnGatewayProvider } from "./P2sVpnGateway.ts";
+
+import { VirtualHubIpConfiguration, VirtualHubIpConfigurationProvider } from "./VirtualHubIpConfiguration.ts";
+
+import { RouteMap, RouteMapProvider } from "./RouteMap.ts";
+
+import { RoutingIntent, RoutingIntentProvider } from "./RoutingIntent.ts";
+
+import { VirtualHubConnectionPolicy, VirtualHubConnectionPolicyProvider } from "./VirtualHubConnectionPolicy.ts";
+
+import { BastionHost, BastionHostProvider } from "./BastionHost.ts";
+
 export const resources = [
   AdminRule,
   AdminRuleCollection,
@@ -192,6 +226,7 @@ export const resources = [
   ApplicationSecurityGroup,
   ApplicationSecurityGroupAddressPrefixSet,
   AzureFirewall,
+  BastionHost,
   ConnectionAnalyzer,
   ConnectionMonitor,
   ConnectivityConfiguration,
@@ -199,6 +234,8 @@ export const resources = [
   FirewallPolicy,
   FirewallPolicyRuleCollectionGroup,
   FlowLog,
+  HubRouteTable,
+  HubVirtualNetworkConnection,
   InboundNatRule,
   IpGroup,
   IpamPool,
@@ -221,6 +258,7 @@ export const resources = [
   NetworkSecurityPerimeterLoggingConfiguration,
   NetworkSecurityPerimeterProfile,
   NetworkWatcher,
+  P2sVpnGateway,
   PrivateDnsZoneGroup,
   PrivateEndpoint,
   PrivateLinkService,
@@ -231,8 +269,10 @@ export const resources = [
   Route,
   RouteFilter,
   RouteFilterRule,
+  RouteMap,
   RouteTable,
   RoutingConfiguration,
+  RoutingIntent,
   RoutingRule,
   RoutingRuleCollection,
   ScopeConnection,
@@ -245,9 +285,20 @@ export const resources = [
   ServiceEndpointPolicyDefinition,
   Subnet,
   VerifierWorkspace,
+  VirtualHub,
+  VirtualHubBgpConnection,
+  VirtualHubConnectionPolicy,
+  VirtualHubIpConfiguration,
   VirtualNetwork,
   VirtualNetworkPeering,
   VirtualNetworkTap,
+  VirtualWan,
+  VpnConnection,
+  VpnGateway,
+  VpnGatewayNatRule,
+  VpnServerConfiguration,
+  VpnServerConfigurationPolicyGroup,
+  VpnSite,
   WebApplicationFirewallPolicy,
 ];
 
@@ -320,5 +371,25 @@ export const layers = () =>
       VirtualNetworkPeeringProvider(),
       VirtualNetworkTapProvider(),
       WebApplicationFirewallPolicyProvider(),
+    ),
+    // Virtual WAN, gateways, ExpressRoute, and appliances.
+    Layer.mergeAll(
+      BastionHostProvider(),
+      HubRouteTableProvider(),
+      HubVirtualNetworkConnectionProvider(),
+      P2sVpnGatewayProvider(),
+      RouteMapProvider(),
+      RoutingIntentProvider(),
+      VirtualHubBgpConnectionProvider(),
+      VirtualHubConnectionPolicyProvider(),
+      VirtualHubIpConfigurationProvider(),
+      VirtualHubProvider(),
+      VirtualWanProvider(),
+      VpnConnectionProvider(),
+      VpnGatewayNatRuleProvider(),
+      VpnGatewayProvider(),
+      VpnServerConfigurationPolicyGroupProvider(),
+      VpnServerConfigurationProvider(),
+      VpnSiteProvider(),
     ),
   );
