@@ -44,6 +44,7 @@ interface ObservedConfig {
   readonly enableJs?: boolean | null;
   readonly fightMode?: boolean | null;
   readonly aiBotsProtection?: string | null;
+  readonly aiSearch?: string | null;
   readonly sbfmDefinitelyAutomated?: string | null;
   readonly sbfmVerifiedBots?: string | null;
   readonly sbfmStaticResourceProtection?: boolean | null;
@@ -251,6 +252,44 @@ describe.sequential(
           }).pipe(Effect.ensuring(restoreSbfm(zoneId, original)));
 
           yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
+
+    test.provider.skipIf(!destructive)(
+      "sets the AI search crawler policy and restores it on destroy",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+
+          const original = yield* getConfig(zoneId);
+          const target =
+            original.aiSearch === "block" ? "disabled" : ("block" as const);
+
+          const created = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
+                zoneId,
+                aiSearch: target,
+              });
+            }),
+          );
+          expect(created.aiSearch).toEqual(target);
+          expect(created.initialSettings.aiSearch ?? null).toEqual(
+            original.aiSearch ?? null,
+          );
+
+          const live = yield* getConfig(zoneId);
+          expect(live.aiSearch).toEqual(target);
+
+          yield* stack.destroy();
+
+          const after = yield* getConfig(zoneId);
+          if (original.aiSearch != null) {
+            expect(after.aiSearch).toEqual(original.aiSearch);
+          }
         }).pipe(logLevel),
       { timeout: 240_000 },
     );
