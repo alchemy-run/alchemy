@@ -14,6 +14,7 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   requireSinglePage,
+  resourceGroupOf,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -209,9 +210,6 @@ const getAccount = (
       accountName,
     }),
   );
-
-const resourceGroupOf = (armId: string | undefined) =>
-  armId?.match(/\/resourceGroups\/([^/]+)/i)?.[1];
 
 const toAttrs = (
   resourceGroup: string,
