@@ -52,6 +52,20 @@ export type StoreSecretProps = {
    * Optional free-form description.
    */
   comment?: string;
+  /**
+   * Only send `value` when the secret is first created. Once a secret with
+   * this name exists in the store — including one adopted, or found again
+   * after alchemy's own state was lost — its stored value is kept and never
+   * overwritten; a later change to `value` still reconciles `scopes` and
+   * `comment` but leaves the value alone.
+   *
+   * The Secrets Store API is write-only, so an overwritten value can never
+   * be read back. Use this for secrets whose rotation is destructive — an
+   * encryption key protecting data at rest — where a stale value is
+   * strictly safer than an unintended new one.
+   * @default false
+   */
+  preserveExistingValue?: boolean;
 };
 
 export type Secret = Resource<
@@ -232,13 +246,23 @@ export const SecretProviderLive = () =>
         observed = existing;
       }
 
+      // The secret already exists (routine update, adoption, or recovery
+      // after state loss). With `preserveExistingValue` its stored value is
+      // authoritative: never PATCH it, whatever `news.value` says now.
+      if (news.preserveExistingValue) {
+        yield* Effect.logInfo(
+          `Secret '${name}' already exists; keeping its stored value (preserveExistingValue).`,
+        );
+      }
       const patched = yield* secretsStore.patchStoreSecret({
         accountId,
         storeId,
         secretId: observed.id,
         scopes,
         comment: news.comment,
-        value: Redacted.value(news.value),
+        ...(news.preserveExistingValue
+          ? {}
+          : { value: Redacted.value(news.value) }),
       });
       const status = yield* waitForSecretActive(
         { accountId, storeId, secretId: observed.id },
@@ -432,12 +456,16 @@ export const SecretProviderLocal = () =>
 
           // Seed — write the value into the local simulator so the dev
           // worker's `env.<binding>.get()` returns it. An overwrite is
-          // idempotent, so re-running after a crash converges.
-          yield* seedLocalSecret(
-            storeId,
-            name,
-            Redacted.value(news.value),
-          ).pipe(Effect.provideContext(runtimeContext));
+          // idempotent, so re-running after a crash converges. Mirrors the
+          // live rule for `preserveExistingValue`: an already-seeded secret
+          // keeps its value.
+          if (!(news.preserveExistingValue && output?.secretId)) {
+            yield* seedLocalSecret(
+              storeId,
+              name,
+              Redacted.value(news.value),
+            ).pipe(Effect.provideContext(runtimeContext));
+          }
 
           return {
             secretId: output?.secretId ?? generateLocalId(),
