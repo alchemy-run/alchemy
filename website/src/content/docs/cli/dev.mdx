@@ -11,11 +11,27 @@ Run your stack in development mode with hot reloading. Resources are deployed to
 
 ## How it works
 
-`dev` re-runs your stack under `bun --watch` (or `node --watch` with type-stripping flags on supported Node versions) via `alchemy/bin/exec`.
+`dev` watches the stack's imports through `alchemy/bin/exec`. Node reloads the stack in the exec process; Bun starts a fresh exec process after each stack change. The supervisor and local provider sidecar survive these reloads.
 
 `--yes` and dev mode are implied, so approval prompts never appear.
 
 A failed apply keeps dev alive so healthy resources keep serving — fix the error and save to redeploy.
+
+## Repeated invocations
+
+One supervisor owns each **canonical stack entrypoint path and resolved stage** in your local Alchemy home (`~/.alchemy`, or `$ALCHEMY_HOME`). Relative paths and symlinks to the same entrypoint share ownership. Different entrypoints or stages remain independent, even if their stack declarations use the same name.
+
+Running the same invocation again reports the owner's PID and exits with status **1**. The original session keeps running, and its terminal retains control. Use that terminal, or stop the session there with Ctrl+C before starting a replacement.
+
+The ownership check happens before another exec process or sidecar starts. It detects a live supervisor, which may still be starting its resources.
+
+A repeated invocation with a different working directory, profile selection, environment-file selection, `--force`, or include/exclude filters fails with a conflict message. Profile selection records whether `--profile` was explicit and, when inherited, the shell's `$ALCHEMY_PROFILE`. Explicit overrides have their own precedence with stack secret providers. Explicit `--env-file .env` also counts as a different selection because it gives dotenv values precedence over process environment variables.
+
+Filter order and duplicate filters preserve the same selection. Ownership records store only option metadata; environment-file contents and credentials remain private. Changes to environment-file contents are outside the ownership check.
+
+Ownership is released after child cleanup. A later invocation can recover a record whose owner PID is known to have exited. An unreadable or corrupt record, or uncertain PID liveness, stops the invocation with an error.
+
+Metadata updates use a short-lived lock with automatic age-based recovery disabled. An abrupt exit during a metadata update can leave that lock behind. The timeout error identifies its directory; after stopping other Alchemy processes, remove that directory and retry.
 
 ## Flags
 

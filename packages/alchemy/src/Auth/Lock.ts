@@ -51,6 +51,7 @@ export const sanitizeLockKey = (key: string): string =>
 const acquireFileLock = Effect.fn(function* (
   lockPath: string,
   timeout: Duration.Input,
+  allowStaleReaping: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -98,7 +99,9 @@ const acquireFileLock = Effect.fn(function* (
       ),
   ).pipe(
     Effect.catchReason("PlatformError", "AlreadyExists", () =>
-      reapStale.pipe(Effect.andThen(Effect.fail(new LockHeld()))),
+      (allowStaleReaping ? reapStale : Effect.void).pipe(
+        Effect.andThen(Effect.fail(new LockHeld())),
+      ),
     ),
     Effect.retry({
       while: (error) => error._tag === "LockHeld",
@@ -194,6 +197,12 @@ export const withLock = <A, E, R>(
   options?: {
     readonly timeout?: Duration.Input;
     /**
+     * Allow age-based recovery of abandoned locks. Disable when exclusivity
+     * must survive suspended holders; abandoned locks then need manual removal.
+     * @default true
+     */
+    readonly reapStale?: boolean;
+    /**
      * Human-readable name of the work being serialised, used in the debug
      * log lines and the stall notice. Defaults to `key`.
      */
@@ -242,6 +251,7 @@ export const withLock = <A, E, R>(
       yield* acquireFileLock(
         lockPath,
         options?.timeout ?? DEFAULT_TIMEOUT,
+        options?.reapStale !== false,
       ).pipe(Effect.orDie);
       phase.current = "held";
       yield* Effect.logDebug(`auth lock: acquired '${lockPath}' for ${label}`);
