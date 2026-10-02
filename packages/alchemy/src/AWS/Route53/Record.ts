@@ -343,6 +343,20 @@ export const normalizeHostedZoneId = (hostedZoneId: string) =>
 export const normalizeName = (name: string) =>
   name.endsWith(".") ? name : `${name}.`;
 
+/**
+ * Route 53 returns record names in lowercase with special characters as
+ * `\ddd` octal escapes (a wildcard `*` comes back as `\052`), so compare
+ * names in that decoded, lowercase form.
+ *
+ * @internal shared with `Records.ts` — not exported from the barrel.
+ */
+export const canonicalName = (name: string) =>
+  normalizeName(name)
+    .replace(/\\(\d{3})/g, (_, code: string) =>
+      String.fromCharCode(Number.parseInt(code, 8)),
+    )
+    .toLowerCase();
+
 /** @internal shared with `Records.ts` — not exported from the barrel. */
 export const toAliasTarget = (
   aliasTarget: route53.AliasTarget | undefined,
@@ -544,7 +558,7 @@ export const RecordProvider = () =>
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
-            recordSet.Name === normalizeName(props.name) &&
+            canonicalName(recordSet.Name) === canonicalName(props.name) &&
             recordSet.Type === props.type &&
             (recordSet.SetIdentifier ?? undefined) === props.setIdentifier,
         );
