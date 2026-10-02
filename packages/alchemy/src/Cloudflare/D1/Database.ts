@@ -299,7 +299,15 @@ export const ProviderLive = () =>
         (olds.primaryLocationHint !== news.primaryLocationHint &&
           news.primaryLocationHint !== undefined)
       ) {
-        return { action: "replace" } as const;
+        // D1 names are unique per account, so a replacement that keeps an
+        // explicit name cannot coexist with its predecessor: create-first
+        // would adopt the existing database by name and garbage collection
+        // would then delete it. Delete the old generation first instead.
+        // Generated names change with the new instance id, so they stay
+        // create-first.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       const oldReplicationMode =
         output?.readReplication?.mode ??
