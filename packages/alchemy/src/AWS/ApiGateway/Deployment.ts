@@ -187,7 +187,7 @@ const bindingDigest = (data: RestApiBinding): Input<string> => {
     Output.asOutput(v as string | Output.Output<string>),
   );
   return Output.map(Output.all(...values), (parts) =>
-    [data.kind, ...(parts as unknown as unknown[]).map(String)].join("|"),
+    [data.kind, ...parts.map(String)].join("|"),
   );
 };
 
