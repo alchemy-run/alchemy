@@ -22,7 +22,7 @@ import type { ContainerApplication } from "../Containers/ContainerApplication.ts
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
-import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
+import { getHyperdriveDevOriginForHost } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
@@ -285,7 +285,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         yield* resource.bind`${bindingName}`({
           bindings: [resolvedBindingMeta],
           hyperdrives: isHyperdriveConnection(binding)
-            ? getHyperdriveDevOrigin(binding)
+            ? yield* getHyperdriveDevOriginForHost(binding, resource)
             : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
           // worker-only bindings and `SendEmail` descriptors piped through

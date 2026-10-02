@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
+import { defaultProviderMode, type ProviderMode } from "../../ProviderMode.ts";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { Connect, type ConnectClient } from "./Connect.ts";
 import type { Connection } from "./Connection.ts";
@@ -24,7 +25,7 @@ export const ConnectBinding = Layer.effect(
               id: connection.hyperdriveId as unknown as string,
             },
           ],
-          hyperdrives: getHyperdriveDevOrigin(connection),
+          hyperdrives: yield* getHyperdriveDevOriginForHost(connection, host),
         });
       }
 
@@ -47,6 +48,23 @@ export const ConnectBinding = Layer.effect(
     });
   }),
 );
+
+/**
+ * The `hyperdrives` dev channel for `connection` bound to `host`. Only the
+ * local worker provider reads it, so it is contributed only when the host
+ * runs locally — its registration-captured `Mode` (`Alchemy.remote()` →
+ * `"live"`) or the run default (`alchemy dev` → `"local"`), the same
+ * resolution the planner applies to the host. A live host (`alchemy deploy`,
+ * or a `remote()` worker in dev) never evaluates the dev origin, so an
+ * Access-protected origin without a `dev` override deploys.
+ */
+export const getHyperdriveDevOriginForHost = Effect.fn(function* (
+  connection: Connection,
+  host: { readonly Mode?: ProviderMode | undefined },
+) {
+  const mode = host.Mode ?? (yield* defaultProviderMode);
+  return mode === "local" ? getHyperdriveDevOrigin(connection) : undefined;
+});
 
 export const getHyperdriveDevOrigin = (connection: Connection) => {
   const origin = Output.map(
