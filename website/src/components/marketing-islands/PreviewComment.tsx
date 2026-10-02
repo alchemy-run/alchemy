@@ -80,7 +80,8 @@ export default function PreviewComment() {
   const status = (p: (typeof pushes)[number]) =>
     p.deploying ? (
       <span className="pc-status pc-status--run">
-        <span className="pc-spin" /> deploying<span className="pc-wide"> pr-147</span>
+        <span className="pc-spin" /> deploying
+        <span className="pc-wide"> pr-147</span>
       </span>
     ) : p.deployed ? (
       <span className="pc-status pc-status--ok">
