@@ -197,7 +197,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
             store: kvStore.keyValueStoreArn as any,
             namespace: kvNamespace,
             key: "routes",
-            entry: `url,${routeNs},,${normalizePattern(pattern)}`,
+            entry: `url,${kvNamespace}:${routeNs},,${normalizePattern(pattern)}`,
           });
         } else {
           const bucketRoute = route as any;
@@ -221,7 +221,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
             store: kvStore.keyValueStoreArn as any,
             namespace: kvNamespace,
             key: "routes",
-            entry: `bucket,${routeNs},,${normalizePattern(pattern)}`,
+            entry: `bucket,${kvNamespace}:${routeNs},,${normalizePattern(pattern)}`,
           });
         }
       }
