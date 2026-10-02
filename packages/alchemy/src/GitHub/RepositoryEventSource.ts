@@ -70,11 +70,10 @@ export interface RepositoryEventSourceProps<
   events?: E;
 
   /**
-   * Secret used to verify each delivery's `HMAC-SHA256` signature. When set,
-   * the event source provisions the webhook with this secret and the runtime
-   * rejects deliveries whose `X-Hub-Signature-256` header doesn't match.
-   * Strongly recommended — without it, anyone who learns the delivery URL can
-   * forge events.
+   * Secret used to verify each delivery's `HMAC-SHA256` signature. The event
+   * source provisions the webhook with this secret and the runtime rejects
+   * deliveries whose `X-Hub-Signature-256` header doesn't match. When omitted,
+   * a random secret is generated at deploy and bound onto the host.
    */
   secret?: Redacted.Redacted<string>;
 
