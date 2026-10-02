@@ -188,12 +188,7 @@ export const DomainEventSubscriptionProvider = () =>
       const observed = yield* reconcileSubscription(
         {
           label: `event grid domain event subscription ${name}`,
-          get: getSubscription(
-            subscriptionId,
-            resourceGroup,
-            domain,
-            name,
-          ),
+          get: getSubscription(subscriptionId, resourceGroup, domain, name),
           create: (properties) =>
             eventgrid.DomainEventSubscriptionsCreateOrUpdate({
               ...where,

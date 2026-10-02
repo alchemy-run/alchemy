@@ -35,12 +35,13 @@ export interface CaCertificateProps {
    */
   name?: string;
   /**
-   * The CA certificate in base64-encoded PEM form (the PEM body without the
-   * `-----BEGIN/END CERTIFICATE-----` lines). Changing it replaces the
-   * resource.
+   * The CA certificate in PEM format, including the
+   * `-----BEGIN CERTIFICATE-----` header and `-----END CERTIFICATE-----`
+   * footer (surrounding whitespace is trimmed). Must not contain a private
+   * key. Changing it replaces the resource.
    */
   encodedCertificate: string;
-  /** Description of the CA certificate. */
+  /** Description of the CA certificate. Changing it replaces the resource. */
   description?: string;
 }
 
@@ -72,28 +73,28 @@ export interface CaCertificate extends Resource<
  * Clients whose certificates chain to it authenticate with the
  * `*MatchesAuthenticationName` validation schemes.
  *
- * CA certificates have no tags; Alchemy appends an ownership marker to the
- * `description`.
+ * CA certificates are immutable: Azure rejects updates, so changing any
+ * prop replaces the certificate. They have no tags; Alchemy appends an
+ * ownership marker to the `description`.
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-certificate-chain-client-authentication
  *
  * ### Registering a CA
  * **Example:** CA certificate from a PEM file
  * ```typescript
- * const pem = yield* fs.readFileString("ca.pem");
  * const ca = yield* Azure.EventGrid.CaCertificate("devices-ca", {
  *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
- *   encodedCertificate: pem
- *     .replace(/-----(BEGIN|END) CERTIFICATE-----/g, "")
- *     .replace(/\s/g, ""),
+ *   encodedCertificate: yield* fs.readFileString("ca.pem"),
  *   description: "Device fleet CA",
  * });
  * ```
  *
  * @resource
  */
-export const CaCertificate = Resource<CaCertificate>("Azure.EventGrid.CaCertificate");
+export const CaCertificate = Resource<CaCertificate>(
+  "Azure.EventGrid.CaCertificate",
+);
 
 type ObservedCaCertificate = Pick<eventgrid.CaCertificate, "id" | "properties">;
 
@@ -129,7 +130,12 @@ const toAttrs = (
 
 export const CaCertificateProvider = () =>
   Provider.succeed(CaCertificate, {
-    stables: ["caCertificateName", "caCertificateId", "resourceGroup", "namespace"],
+    stables: [
+      "caCertificateName",
+      "caCertificateId",
+      "resourceGroup",
+      "namespace",
+    ],
 
     // Deleted with their namespace.
     list: Effect.fn(function* () {
@@ -142,8 +148,11 @@ export const CaCertificateProvider = () =>
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.namespace, output.namespace) ||
         (news.name !== undefined && news.name !== output.caCertificateName) ||
+        // Azure rejects every update of a CA certificate ("CA Certificates
+        // cannot be updated"), so any change replaces it.
         (olds?.encodedCertificate !== undefined &&
-          news.encodedCertificate !== olds.encodedCertificate)
+          (news.encodedCertificate.trim() !== olds.encodedCertificate.trim() ||
+            news.description !== olds.description))
       ) {
         return { action: "replace" } as const;
       }
@@ -193,11 +202,12 @@ export const CaCertificateProvider = () =>
           caCertificateName: name,
           properties: {
             description,
-            encodedCertificate: news.encodedCertificate,
+            // Azure rejects a PEM with a trailing newline.
+            encodedCertificate: news.encodedCertificate.trim(),
           },
         }),
-        // The certificate itself is immutable (a change replaces).
-        differs: (have) => have.properties?.description !== description,
+        // Immutable: Azure rejects updates, and diff replaces on any change.
+        differs: () => false,
       });
       return toAttrs(resourceGroup, namespace, name, observed);
     }),

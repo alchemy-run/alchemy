@@ -1,5 +1,8 @@
 import * as Layer from "effect/Layer";
-import { ApplicationGroup, ApplicationGroupProvider } from "./ApplicationGroup.ts";
+import {
+  ApplicationGroup,
+  ApplicationGroupProvider,
+} from "./ApplicationGroup.ts";
 import { Cluster, ClusterProvider } from "./Cluster.ts";
 import { ConsumerGroup, ConsumerGroupProvider } from "./ConsumerGroup.ts";
 import {

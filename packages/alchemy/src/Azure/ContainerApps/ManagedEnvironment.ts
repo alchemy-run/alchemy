@@ -11,6 +11,7 @@ import {
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
+  ProvisioningFailed,
   requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
@@ -98,8 +99,15 @@ export interface ManagedEnvironmentProps {
    */
   location?: string;
   /**
-   * Workload profiles. A `Consumption` profile makes this a workload
-   * profiles environment; omit for Azure's default environment type.
+   * Environment tier. `Express` is a fully managed, fast-provisioning tier
+   * for HTTP apps (no jobs, Dapr, Easy Auth, custom domains, workload
+   * profiles, or Azure Files mounts). Changing it replaces the environment.
+   * @default Azure's default (`WorkloadProfiles`)
+   */
+  environmentMode?: "ConsumptionOnly" | "WorkloadProfiles" | "Express";
+  /**
+   * Workload profiles of a `WorkloadProfiles` environment. Include a
+   * `Consumption` profile for serverless apps.
    */
   workloadProfiles?: ManagedEnvironmentWorkloadProfile[];
   /**
@@ -159,6 +167,8 @@ export interface ManagedEnvironment extends Resource<
     resourceGroup: string;
     /** Location of the environment. */
     location: string;
+    /** Environment tier (`WorkloadProfiles`, `ConsumptionOnly`, `Express`). */
+    environmentMode: string | undefined;
     /** Default domain of apps in the environment, e.g. `{hash}.eastus.azurecontainerapps.io`. */
     defaultDomain: string | undefined;
     /** Static IP address of the environment. */
@@ -181,8 +191,10 @@ export interface ManagedEnvironment extends Resource<
  * — the shared network and logging boundary that container apps, jobs,
  * Dapr components, and storages live in.
  *
- * Creating an environment takes 3-6 minutes; deleting one 2-5 minutes. A
- * Consumption environment costs nothing while idle.
+ * Creating a standard environment takes 3-6 minutes; deleting one 2-5
+ * minutes (10+ minutes after a failed create). An `Express` environment
+ * provisions in seconds. Environments cost nothing while idle. New
+ * subscriptions may be limited to one standard environment per region.
  *
  * @see https://learn.microsoft.com/azure/container-apps/environment
  *
@@ -195,6 +207,14 @@ export interface ManagedEnvironment extends Resource<
  *   workloadProfiles: [
  *     { name: "Consumption", workloadProfileType: "Consumption" },
  *   ],
+ * });
+ * ```
+ *
+ * **Example:** Express environment for HTTP apps
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   resourceGroup: group.resourceGroupName,
+ *   environmentMode: "Express",
  * });
  * ```
  *
@@ -239,6 +259,7 @@ const toAttrs = (
   environmentId: env.id ?? "",
   resourceGroup,
   location: env.location,
+  environmentMode: env.properties?.environmentMode,
   defaultDomain: env.properties?.defaultDomain,
   staticIp: env.properties?.staticIp,
   eventStreamEndpoint: env.properties?.eventStreamEndpoint,
@@ -303,14 +324,29 @@ const observableProperties = (
         },
 });
 
-const provisioned = (
-  label: string,
-  get: ReturnType<typeof getEnvironment>,
-) =>
+/**
+ * Poll until the environment is provisioned. A failed environment carries
+ * the platform's reason in `deploymentErrors`; surface it.
+ */
+const provisioned = (label: string, get: ReturnType<typeof getEnvironment>) =>
   waitForProvisioned(label, get, (env) => env.properties?.provisioningState, {
     interval: "10 seconds",
     times: 60,
-  });
+  }).pipe(
+    Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
+      get.pipe(
+        Effect.flatMap((env) =>
+          Effect.fail(
+            new ProvisioningFailed({
+              resource: failure.resource,
+              state: failure.state,
+              message: `${failure.message}: ${env?.properties?.deploymentErrors ?? "no deployment errors reported"}`,
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
 
 export const ManagedEnvironmentProvider = () =>
   Provider.succeed(ManagedEnvironment, {
@@ -346,6 +382,7 @@ export const ManagedEnvironmentProvider = () =>
           (fingerprint(news.vnetConfiguration) !==
             fingerprint(olds.vnetConfiguration) ||
             (news.zoneRedundant ?? false) !== (olds.zoneRedundant ?? false) ||
+            lower(news.environmentMode) !== lower(olds.environmentMode) ||
             lower(news.infrastructureResourceGroup) !==
               lower(olds.infrastructureResourceGroup)))
       ) {
@@ -376,6 +413,9 @@ export const ManagedEnvironmentProvider = () =>
       const env = yield* AzureEnvironment.current;
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.App");
+      // Environments run on platform-managed AKS clusters; an unregistered
+      // `Microsoft.ContainerService` fails provisioning asynchronously.
+      yield* ensureRegistered(subscriptionId, "Microsoft.ContainerService");
       const resourceGroup = news.resourceGroup;
       const name =
         news.name ??
@@ -405,6 +445,7 @@ export const ManagedEnvironmentProvider = () =>
           identity,
           properties: {
             ...mutable,
+            environmentMode: news.environmentMode,
             vnetConfiguration: news.vnetConfiguration,
             zoneRedundant: news.zoneRedundant,
             infrastructureResourceGroup: news.infrastructureResourceGroup,
@@ -455,7 +496,9 @@ export const ManagedEnvironmentProvider = () =>
           output.resourceGroup,
           output.environmentName,
         ),
-        { interval: "10 seconds", times: 60 },
+        // Environment deletes regularly take 5-25 minutes (longer after a
+        // failed create, which sits in `ScheduledForDelete`).
+        { interval: "10 seconds", times: 180 },
       );
     }),
 

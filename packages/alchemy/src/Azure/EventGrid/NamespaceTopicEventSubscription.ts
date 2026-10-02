@@ -238,7 +238,9 @@ const desiredFilters = (
   filters: props.filters,
 });
 
-const normalizeFilters = (filters: eventgrid.FiltersConfiguration | undefined) =>
+const normalizeFilters = (
+  filters: eventgrid.FiltersConfiguration | undefined,
+) =>
   JSON.stringify({
     includedEventTypes: [...(filters?.includedEventTypes ?? [])].sort(),
     filters: (filters?.filters ?? []).map((f) => ({
@@ -292,8 +294,9 @@ const deliveryDiffers = (
     withIdentity !== undefined &&
     (have?.deliveryWithResourceIdentity?.identity?.type !==
       withIdentity.identity?.type ||
-      (have?.deliveryWithResourceIdentity?.identity?.userAssignedIdentity ?? "")
-        .toLowerCase() !==
+      (
+        have?.deliveryWithResourceIdentity?.identity?.userAssignedIdentity ?? ""
+      ).toLowerCase() !==
         (withIdentity.identity?.userAssignedIdentity ?? "").toLowerCase() ||
       destinationDiffers(
         have?.deliveryWithResourceIdentity?.destination,
@@ -424,7 +427,10 @@ export const NamespaceTopicEventSubscriptionProvider = () =>
                 push: { ...have?.push, ...stripUndefined(delivery.push) },
               };
       }
-      if (normalizeFilters(props.filtersConfiguration) !== normalizeFilters(filters)) {
+      if (
+        normalizeFilters(props.filtersConfiguration) !==
+        normalizeFilters(filters)
+      ) {
         patch.filtersConfiguration = filters;
       }
       if (

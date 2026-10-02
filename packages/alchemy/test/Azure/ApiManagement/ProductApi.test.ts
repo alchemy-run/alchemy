@@ -26,9 +26,7 @@ const productApis = (
       serviceName,
       productId,
     }),
-  ).pipe(
-    Effect.map((page) => (page.value ?? []).map((api) => api.name ?? "")),
-  );
+  ).pipe(Effect.map((page) => (page.value ?? []).map((api) => api.name ?? "")));
 
 /** Poll until the product's APIs match `expected` (bounded). */
 const untilApis = (
@@ -108,9 +106,9 @@ test.provider(
       // Replacement: link the other API; the old link is removed.
       const replaced = yield* stack.deploy(program("alchemy-pa-two"));
       expect(replaced.link?.apiName).toEqual("alchemy-pa-two");
-      expect(
-        yield* untilApis(rg, svc, product, ["alchemy-pa-two"]),
-      ).toEqual(["alchemy-pa-two"]);
+      expect(yield* untilApis(rg, svc, product, ["alchemy-pa-two"])).toEqual([
+        "alchemy-pa-two",
+      ]);
 
       // Removing the link leaves the product without APIs.
       yield* stack.deploy(program());

@@ -8,7 +8,6 @@ import {
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -92,10 +91,9 @@ const findProductApi = (
         productId,
         _filter: `name eq '${apiId}'`,
       })
+      // The exact-name filter matches at most one API, so the first page is
+      // authoritative even if APIM returns a nextLink.
       .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListProductApiByProduct", page),
-        ),
         Effect.map((page) =>
           page.value?.find((api) => sameName(api.name, apiId)),
         ),

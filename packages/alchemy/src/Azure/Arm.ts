@@ -28,6 +28,9 @@ export const NOT_FOUND_TAGS = [
   "ShareNotFound",
   "QueueNotFound",
   "ManagementPolicyNotFound",
+  "BlobInventoryPolicyNotFound",
+  "AdvancedPlatformMetricsRuleNotFound",
+  "ObjectReplicationPolicyNotFound",
   "ApiManagementServiceNotFound",
   "NotFound",
 ] as const;

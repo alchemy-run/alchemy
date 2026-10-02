@@ -45,3 +45,15 @@ export const withPublicIps =
   (count: number) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     publicIps.withPermits(count)(self);
+
+/**
+ * The trial caps Container Apps managed environments per region
+ * (`MaxNumberOfRegionalEnvironmentsInSubscription`). Tests that create an
+ * environment hold the single slot for their whole body.
+ */
+const managedEnvironments = Semaphore.makeUnsafe(1);
+
+/** Run a test body while holding the one Container Apps environment slot. */
+export const withManagedEnvironment = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => managedEnvironments.withPermits(1)(self);

@@ -46,7 +46,9 @@ const globalParameterGone = (
     }),
   );
 
-const program = (parameters: Azure.DataFactory.GlobalParameterProps["parameters"]) =>
+const program = (
+  parameters: Azure.DataFactory.GlobalParameterProps["parameters"],
+) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("GlobalParameterGroup", {
       location: "eastus",

@@ -137,11 +137,16 @@ export const GroupProvider = () =>
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.serviceName, output.serviceName) ||
-        (news.name !== undefined && !sameName(news.name, output.groupName)) ||
+        (news.name !== undefined && !sameName(news.name, output.groupName))
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
         (news.type ?? "custom") !== output.type ||
         (olds !== undefined && news.externalId !== olds.externalId)
       ) {
-        return { action: "replace" } as const;
+        // Same identifier: the old group must go before the new one is created.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

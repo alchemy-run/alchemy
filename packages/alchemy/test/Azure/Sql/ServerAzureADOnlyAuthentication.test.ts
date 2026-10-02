@@ -63,7 +63,7 @@ const program = (props: {
       administratorLoginPassword: props.password,
     });
     const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity(
-      "Admin",
+      "Identity",
       { resourceGroup: group.resourceGroupName },
     );
     const admin = yield* Azure.Sql.ServerAzureADAdministrator("Admin", {

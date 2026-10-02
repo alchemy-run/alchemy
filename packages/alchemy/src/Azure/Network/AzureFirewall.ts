@@ -276,7 +276,12 @@ const projectIpConfigurations = (
 
 export const AzureFirewallProvider = () =>
   Provider.succeed(AzureFirewall, {
-    stables: ["azureFirewallName", "azureFirewallId", "resourceGroup", "location"],
+    stables: [
+      "azureFirewallName",
+      "azureFirewallId",
+      "resourceGroup",
+      "location",
+    ],
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
@@ -415,7 +420,11 @@ export const AzureFirewallProvider = () =>
       ).pipe(Effect.retry(whileNetworkBusy));
       yield* waitNetworkGoneSlow(
         `Azure Firewall ${output.azureFirewallName}`,
-        getFirewall(subscriptionId, output.resourceGroup, output.azureFirewallName),
+        getFirewall(
+          subscriptionId,
+          output.resourceGroup,
+          output.azureFirewallName,
+        ),
       );
     }),
 

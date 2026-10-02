@@ -41,7 +41,9 @@ export interface PrivateEndpointConnectionProps {
    */
   status?: "Approved" | "Rejected";
   /**
-   * Reason for the decision, shown to the private endpoint's owner.
+   * Reason for the decision, shown to the private endpoint's owner. Azure
+   * records it only when the status changes; changing just the description
+   * of an existing decision has no effect.
    * @default unmanaged
    */
   description?: string;
@@ -282,13 +284,10 @@ export const PrivateEndpointConnectionProvider = () =>
         name,
       );
 
-      // Sync the decision.
+      // Sync the decision. Azure only records the description together
+      // with a status change, so a description-only change is not sent.
       const state = observed.properties?.privateLinkServiceConnectionState;
-      if (
-        state?.status !== status ||
-        (news.description !== undefined &&
-          state.description !== news.description)
-      ) {
+      if (state?.status !== status) {
         yield* storage.PutPrivateEndpointConnection({
           subscriptionId,
           resourceGroupName: resourceGroup,
@@ -305,7 +304,11 @@ export const PrivateEndpointConnectionProvider = () =>
       const fresh = yield* waitForProvisioned(
         `private endpoint connection ${name}`,
         get,
-        (connection) => connection.properties?.provisioningState,
+        (connection) =>
+          connection.properties?.privateLinkServiceConnectionState.status ===
+          status
+            ? connection.properties.provisioningState
+            : "Updating",
         { interval: "3 seconds", times: 40 },
       );
       return toAttrs(resourceGroup, storageAccount, privateEndpointId, fresh);

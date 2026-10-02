@@ -78,7 +78,8 @@ export interface Certificate extends Resource<
 /**
  * A client certificate stored in an API Management service, used for
  * mutual TLS to backends (`Backend.credentials.certificateIds`) and for
- * self-hosted gateway hostnames.
+ * self-hosted gateway hostnames. A service stores each certificate
+ * (thumbprint) only once.
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-mutual-certificates
  *
@@ -148,22 +149,37 @@ const toAttrs = (
 
 export const CertificateProvider = () =>
   Provider.succeed(Certificate, {
-    stables: ["certificateName", "certificateId", "serviceName", "resourceGroup"],
+    stables: [
+      "certificateName",
+      "certificateId",
+      "serviceName",
+      "resourceGroup",
+    ],
 
     // Certificates live inside a service; nuke removes them with it.
     list: Effect.fn(function* () {
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
-        !sameName(news.serviceName, output.serviceName) ||
-        (news.name !== undefined &&
-          !sameName(news.name, output.certificateName))
+        !sameName(news.serviceName, output.serviceName)
       ) {
         return { action: "replace" } as const;
+      }
+      if (
+        news.name !== undefined &&
+        !sameName(news.name, output.certificateName)
+      ) {
+        // A service stores each certificate (thumbprint) only once, so a
+        // renamed certificate with unchanged content must be deleted first.
+        const sameContent =
+          olds !== undefined &&
+          reveal(olds.data) === reveal(news.data) &&
+          olds.keyVault?.secretIdentifier === news.keyVault?.secretIdentifier;
+        return { action: "replace", deleteFirst: sameContent } as const;
       }
       return undefined;
     }),

@@ -46,7 +46,11 @@ const groupGone = (
     }),
   );
 
-const program = (props: { query: string; description?: string; name?: string }) =>
+const program = (props: {
+  query: string;
+  description?: string;
+  name?: string;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",

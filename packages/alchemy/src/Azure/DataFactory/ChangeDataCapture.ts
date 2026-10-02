@@ -234,7 +234,9 @@ export const ChangeDataCaptureProvider = () =>
         return undefined;
       }
       const name =
-        output?.changeDataCaptureName ?? olds?.name ?? (yield* createCdcName(id));
+        output?.changeDataCaptureName ??
+        olds?.name ??
+        (yield* createCdcName(id));
       const observed = yield* getCdc({
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -254,7 +256,9 @@ export const ChangeDataCaptureProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.DataFactory");
       const { resourceGroup, factoryName } = news;
       const name =
-        news.name ?? output?.changeDataCaptureName ?? (yield* createCdcName(id));
+        news.name ??
+        output?.changeDataCaptureName ??
+        (yield* createCdcName(id));
       const where: Where = {
         subscriptionId,
         resourceGroupName: resourceGroup,

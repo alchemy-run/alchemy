@@ -102,9 +102,7 @@ test.provider(
       );
       expect(reset.properties?.shareDeleteRetentionPolicy?.days).toEqual(7);
       expect(
-        reset.properties?.protocolSettings?.smb?.versions
-          ?.split(";")
-          .sort(),
+        reset.properties?.protocolSettings?.smb?.versions?.split(";").sort(),
       ).toEqual(["SMB2.1", "SMB3.0", "SMB3.1.1"]);
 
       yield* stack.destroy();

@@ -62,7 +62,10 @@ export interface PermissionBinding extends Resource<
     clientGroup: string | undefined;
     /** Granted permission. */
     permission: "Publisher" | "Subscriber" | undefined;
-    /** Description (Alchemy ownership marker stripped). */
+    /**
+     * Description. Azure does not return it on GET, so this is the desired
+     * description after a deploy.
+     */
     description: string | undefined;
   },
   never,
@@ -73,8 +76,8 @@ export interface PermissionBinding extends Resource<
  * Grants an MQTT client group publish or subscribe access to a topic space
  * in an Event Grid namespace.
  *
- * Permission bindings have no tags; Alchemy appends an ownership marker to
- * the `description`.
+ * Permission bindings have no tags and Azure does not return their
+ * `description` on GET, so ownership follows the parent namespace.
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-access-control
  *
@@ -102,9 +105,14 @@ export interface PermissionBinding extends Resource<
  *
  * @resource
  */
-export const PermissionBinding = Resource<PermissionBinding>("Azure.EventGrid.PermissionBinding");
+export const PermissionBinding = Resource<PermissionBinding>(
+  "Azure.EventGrid.PermissionBinding",
+);
 
-type ObservedPermissionBinding = Pick<eventgrid.PermissionBinding, "id" | "properties">;
+type ObservedPermissionBinding = Pick<
+  eventgrid.PermissionBinding,
+  "id" | "properties"
+>;
 
 const getPermissionBinding = (
   subscriptionId: string,
@@ -139,7 +147,12 @@ const toAttrs = (
 
 export const PermissionBindingProvider = () =>
   Provider.succeed(PermissionBinding, {
-    stables: ["permissionBindingName", "permissionBindingId", "resourceGroup", "namespace"],
+    stables: [
+      "permissionBindingName",
+      "permissionBindingId",
+      "resourceGroup",
+      "namespace",
+    ],
 
     // Deleted with their namespace.
     list: Effect.fn(function* () {
@@ -177,12 +190,15 @@ export const PermissionBindingProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, namespace, name, observed);
-      return (yield* isOwnedDescription(id, observed.properties?.description))
+      // GET returns `description: null` for this type, so the marker cannot
+      // be observed; ownership then follows the parent namespace.
+      const description = observed.properties?.description;
+      return description == null || (yield* isOwnedDescription(id, description))
         ? attrs
         : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.EventGrid");
       const { resourceGroup, namespace } = news;
@@ -193,7 +209,12 @@ export const PermissionBindingProvider = () =>
       const description = yield* markedDescription(id, news.description);
       const observed = yield* reconcileChild({
         label: `event grid permission binding ${name}`,
-        get: getPermissionBinding(subscriptionId, resourceGroup, namespace, name),
+        get: getPermissionBinding(
+          subscriptionId,
+          resourceGroup,
+          namespace,
+          name,
+        ),
         put: eventgrid.PermissionBindingsCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,
@@ -206,13 +227,21 @@ export const PermissionBindingProvider = () =>
             permission: news.permission,
           },
         }),
+        // GET returns `description: null`; when it cannot be observed, the
+        // previous props are the only hint that it changed.
         differs: (have) =>
-          have.properties?.description !== description ||
+          (have.properties?.description == null
+            ? olds === undefined || olds.description !== news.description
+            : have.properties.description !== description) ||
           !sameName(have.properties?.topicSpaceName, news.topicSpace) ||
           !sameName(have.properties?.clientGroupName, news.clientGroup) ||
           have.properties?.permission !== news.permission,
       });
-      return toAttrs(resourceGroup, namespace, name, observed);
+      return {
+        ...toAttrs(resourceGroup, namespace, name, observed),
+        description:
+          userDescription(observed.properties?.description) ?? news.description,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {

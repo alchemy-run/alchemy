@@ -87,7 +87,9 @@ export interface ApplicationGroup extends Resource<
  * An Event Hubs application group — a set of client applications,
  * identified by a SAS rule or an Entra application ID, that share
  * resource-governance policies such as ingress/egress throttling.
- * Needs a `Standard` (or higher) namespace.
+ * Needs a `Premium` namespace or a namespace in a Dedicated cluster; Basic
+ * and Standard namespaces reject application groups with
+ * `EventHubApplicationGroupNotSupported`.
  *
  * Application groups have no tags; Alchemy treats a group as owned when
  * its namespace carries this stack's ownership tags.
@@ -155,6 +157,11 @@ const getApplicationGroup = (
       namespaceName,
       applicationGroupName,
     }),
+  ).pipe(
+    // A Basic/Standard namespace cannot hold application groups at all.
+    Effect.catchTag("EventHubApplicationGroupNotSupported", () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const toAttrs = (
@@ -310,6 +317,12 @@ export const ApplicationGroupProvider = () =>
           namespaceName: output.namespace,
           applicationGroupName: output.applicationGroupName,
         }),
+      ).pipe(
+        // The namespace tier cannot hold application groups: nothing exists.
+        Effect.catchTag(
+          "EventHubApplicationGroupNotSupported",
+          () => Effect.void,
+        ),
       );
       yield* waitUntilGone(
         `application group ${output.applicationGroupName}`,

@@ -46,14 +46,44 @@ const cdcGone = (
     }),
   );
 
-const connection = (referenceName: string) => ({
+const connection = (
+  referenceName: string,
+  common: Array<{ name: string; value: unknown }>,
+) => ({
   type: "linkedservicetype",
   linkedService: { referenceName, type: "LinkedServiceReference" as const },
   linkedServiceType: "AzureBlobFS",
   isInlineDataset: true,
+  commonDslConnectorProperties: common,
 });
 
-const program = (props: { name: string; description: string; interval: number }) =>
+const delimited = [
+  { name: "allowSchemaDrift", value: true },
+  { name: "inferDriftedColumnTypes", value: true },
+  { name: "format", value: "delimited" },
+  { name: "enableCdc", value: true },
+  { name: "skipInitialLoad", value: true },
+  { name: "columnNamesAsHeader", value: true },
+  { name: "columnDelimiter", value: "," },
+];
+
+const entity = (container: string, folderPath: string) => ({
+  name: `${container}/${folderPath}`,
+  properties: {
+    schema: [],
+    dslConnectorProperties: [
+      { name: "container", value: container },
+      { name: "fileSystem", value: container },
+      { name: "folderPath", value: folderPath },
+    ],
+  },
+});
+
+const program = (props: {
+  name: string;
+  description: string;
+  interval: number;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("CdcGroup", {
       location: "eastus",
@@ -74,14 +104,26 @@ const program = (props: { name: string; description: string; interval: number })
       description: props.description,
       sourceConnectionsInfo: [
         {
-          sourceEntities: [{ name: "input/orders" }],
-          connection: connection(lake.linkedServiceName),
+          sourceEntities: [entity("input", "orders")],
+          connection: connection(lake.linkedServiceName, delimited),
         },
       ],
       targetConnectionsInfo: [
         {
-          targetEntities: [{ name: "output/orders" }],
-          connection: connection(lake.linkedServiceName),
+          targetEntities: [entity("output", "orders")],
+          connection: connection(lake.linkedServiceName, delimited),
+          dataMapperMappings: [
+            {
+              sourceEntityName: "input/orders",
+              targetEntityName: "output/orders",
+              sourceConnectionReference: {
+                connectionName: lake.linkedServiceName,
+                type: "linkedservicetype",
+              },
+              attributeMappingInfo: { attributeMappings: [] },
+            },
+          ],
+          relationships: [],
         },
       ],
       policy: {
@@ -111,9 +153,9 @@ test.provider(
       );
       expect(observed.properties.description).toMatch(/^orders \[alchemy /);
       expect(observed.properties.policy.recurrence?.interval).toEqual(15);
-      expect(observed.properties.sourceConnectionsInfo[0]?.sourceEntities?.[0]?.name).toEqual(
-        "input/orders",
-      );
+      expect(
+        observed.properties.sourceConnectionsInfo[0]?.sourceEntities?.[0]?.name,
+      ).toEqual("input/orders");
 
       // In place: description and recurrence.
       yield* stack.deploy(
@@ -129,7 +171,11 @@ test.provider(
 
       // Renaming replaces the CDC.
       yield* stack.deploy(
-        program({ name: "orders_cdc2", description: "orders v2", interval: 30 }),
+        program({
+          name: "orders_cdc2",
+          description: "orders v2",
+          interval: 30,
+        }),
       );
       const renamed = yield* getCdc(
         group.resourceGroupName,
@@ -138,7 +184,11 @@ test.provider(
       );
       expect(renamed.name).toEqual("orders_cdc2");
       expect(
-        yield* cdcGone(group.resourceGroupName, factory.factoryName, "orders_cdc"),
+        yield* cdcGone(
+          group.resourceGroupName,
+          factory.factoryName,
+          "orders_cdc",
+        ),
       ).toEqual("gone");
 
       yield* stack.destroy();

@@ -211,9 +211,15 @@ export const FleetProvider = () =>
         times: 60,
       });
 
-      // Sync tags against observed tags.
+      // Sync tags against observed tags. The PATCH rejects bodies without a
+      // location (which its schema lacks), so re-PUT the fleet instead.
       if (tagsDiffer(observed.tags, tags)) {
-        yield* cosmos.UpdateFleet({ ...where, tags });
+        yield* cosmos.CreateFleet({
+          ...where,
+          location: normalizeLocation(observed.location) || location,
+          tags,
+          properties: {},
+        });
         observed = yield* waitForProvisioned(
           label,
           get,

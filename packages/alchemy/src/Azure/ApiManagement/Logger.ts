@@ -115,7 +115,12 @@ const getLogger = (
   loggerId: string,
 ) =>
   orUndefinedIfNotFound(
-    apim.GetLogger({ subscriptionId, resourceGroupName, serviceName, loggerId }),
+    apim.GetLogger({
+      subscriptionId,
+      resourceGroupName,
+      serviceName,
+      loggerId,
+    }),
   );
 
 const revealCredentials = (
@@ -168,11 +173,16 @@ export const LoggerProvider = () =>
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.serviceName, output.serviceName) ||
-        (news.name !== undefined && !sameName(news.name, output.loggerName)) ||
-        (output.loggerType !== "" &&
-          !sameName(news.loggerType, output.loggerType))
+        (news.name !== undefined && !sameName(news.name, output.loggerName))
       ) {
         return { action: "replace" } as const;
+      }
+      if (
+        output.loggerType !== "" &&
+        !sameName(news.loggerType, output.loggerType)
+      ) {
+        // Same identifier: the old logger must go before the new one is created.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -235,18 +245,18 @@ export const LoggerProvider = () =>
         inSync && observed !== undefined
           ? observed
           : yield* apim.LoggerCreateOrUpdate({
-            subscriptionId,
-            resourceGroupName: resourceGroup,
-            serviceName,
-            loggerId: name,
-            properties: {
-              loggerType: news.loggerType,
-              description: news.description,
-              credentials,
-              isBuffered: news.isBuffered ?? true,
-              resourceId: news.resourceId,
-            },
-          });
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              serviceName,
+              loggerId: name,
+              properties: {
+                loggerType: news.loggerType,
+                description: news.description,
+                credentials,
+                isBuffered: news.isBuffered ?? true,
+                resourceId: news.resourceId,
+              },
+            });
       return toAttrs(resourceGroup, serviceName, name, current);
     }),
 

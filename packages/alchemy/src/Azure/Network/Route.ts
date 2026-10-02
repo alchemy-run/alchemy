@@ -12,11 +12,11 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  convergeChild,
   createNetworkName,
   parentOwned,
   sameId,
   waitNetworkGone,
-  waitNetworkProvisioned,
   whileNetworkBusy,
 } from "./common.ts";
 
@@ -164,7 +164,8 @@ export const RouteProvider = () =>
         !sameId(news.routeTable, output.routeTable) ||
         (news.name !== undefined && !sameId(news.name, output.routeName))
       ) {
-        return { action: "replace" } as const;
+        // Address prefixes are unique per route table: delete the old route first.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -204,18 +205,24 @@ export const RouteProvider = () =>
         news.name ?? output?.routeName ?? (yield* createNetworkName(id));
       const get = getRoute(subscriptionId, resourceGroup, routeTable, name);
 
-      // Observe.
-      let observed = yield* get;
-      const p = observed?.properties;
-
-      // Ensure + sync: one PUT when missing or any field drifts.
-      if (
-        observed === undefined ||
-        p?.addressPrefix !== news.addressPrefix ||
-        p?.nextHopType !== news.nextHopType ||
-        p?.nextHopIpAddress !== news.nextHopIpAddress
-      ) {
-        yield* network
+      // Observe -> ensure + sync (one PUT when missing or any field
+      // drifts), re-checked after a concurrent route-table update settles.
+      const observed = yield* convergeChild({
+        label: `route ${routeTable}/${name}`,
+        get,
+        getParent: orUndefinedIfNotFound(
+          network.GetRouteTable({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            routeTableName: routeTable,
+          }),
+        ),
+        drifted: (route) =>
+          route === undefined ||
+          route.properties?.addressPrefix !== news.addressPrefix ||
+          route.properties?.nextHopType !== news.nextHopType ||
+          route.properties?.nextHopIpAddress !== news.nextHopIpAddress,
+        apply: network
           .RoutesCreateOrUpdate({
             subscriptionId,
             resourceGroupName: resourceGroup,
@@ -227,12 +234,8 @@ export const RouteProvider = () =>
               nextHopIpAddress: news.nextHopIpAddress,
             },
           })
-          .pipe(Effect.retry(whileNetworkBusy));
-      }
-      observed = yield* waitNetworkProvisioned(
-        `route ${routeTable}/${name}`,
-        get,
-      );
+          .pipe(Effect.retry(whileNetworkBusy)),
+      });
       return toAttrs(resourceGroup, routeTable, name, observed);
     }),
 

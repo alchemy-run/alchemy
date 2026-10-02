@@ -12,12 +12,12 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  convergeChild,
   createNetworkName,
   parentOwned,
   sameId,
   sameSet,
   waitNetworkGone,
-  waitNetworkProvisioned,
   whileNetworkBusy,
 } from "./common.ts";
 
@@ -213,7 +213,8 @@ export const VirtualNetworkPeeringProvider = () =>
         !sameId(news.remoteVirtualNetworkId, output.remoteVirtualNetworkId) ||
         (news.name !== undefined && !sameId(news.name, output.peeringName))
       ) {
-        return { action: "replace" } as const;
+        // A VNet holds one peering per remote VNet: delete the old peering first.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -258,7 +259,12 @@ export const VirtualNetworkPeeringProvider = () =>
         virtualNetworkPeeringName: name,
       };
       const label = `peering ${virtualNetwork}/${name}`;
-      const get = getPeering(subscriptionId, resourceGroup, virtualNetwork, name);
+      const get = getPeering(
+        subscriptionId,
+        resourceGroup,
+        virtualNetwork,
+        name,
+      );
 
       // Observe.
       let observed = yield* get;
@@ -295,39 +301,60 @@ export const VirtualNetworkPeeringProvider = () =>
 
       // Ensure + sync: one PUT when missing, a flag drifts, or the remote
       // address space changed since the peering last synced.
-      const p = observed?.properties;
-      const outOfSync =
-        p?.peeringSyncLevel !== undefined &&
-        p.peeringSyncLevel !== "FullyInSync" &&
-        p.peeringState === "Connected";
-      const differs =
-        observed === undefined ||
-        (p?.allowVirtualNetworkAccess ?? true) !==
-          desired.allowVirtualNetworkAccess ||
-        (p?.allowForwardedTraffic ?? false) !== desired.allowForwardedTraffic ||
-        (p?.allowGatewayTransit ?? false) !== desired.allowGatewayTransit ||
-        (p?.useRemoteGateways ?? false) !== desired.useRemoteGateways ||
-        (p?.doNotVerifyRemoteGateways ?? false) !==
-          desired.doNotVerifyRemoteGateways ||
-        (p?.peerCompleteVnets ?? true) !== desired.peerCompleteVnets ||
-        (p?.enableOnlyIPv6Peering ?? false) !== desired.enableOnlyIPv6Peering ||
-        (news.localSubnetNames !== undefined &&
-          !sameSet(p?.localSubnetNames, news.localSubnetNames)) ||
-        (news.remoteSubnetNames !== undefined &&
-          !sameSet(p?.remoteSubnetNames, news.remoteSubnetNames));
-      if (differs || outOfSync) {
-        yield* network
-          .VirtualNetworkPeeringsCreateOrUpdate({
-            ...where,
-            syncRemoteAddressSpace:
-              observed !== undefined && outOfSync ? "true" : undefined,
-            properties: desired,
-          })
-          .pipe(Effect.retry(whileNetworkBusy));
-      }
+      const outOfSync = (peering: Observed | undefined) =>
+        peering?.properties?.peeringSyncLevel !== undefined &&
+        peering.properties.peeringSyncLevel !== "FullyInSync" &&
+        peering.properties.peeringState === "Connected";
+      const drifted = (peering: Observed | undefined) => {
+        const p = peering?.properties;
+        return (
+          peering === undefined ||
+          outOfSync(peering) ||
+          (p?.allowVirtualNetworkAccess ?? true) !==
+            desired.allowVirtualNetworkAccess ||
+          (p?.allowForwardedTraffic ?? false) !==
+            desired.allowForwardedTraffic ||
+          (p?.allowGatewayTransit ?? false) !== desired.allowGatewayTransit ||
+          (p?.useRemoteGateways ?? false) !== desired.useRemoteGateways ||
+          (p?.doNotVerifyRemoteGateways ?? false) !==
+            desired.doNotVerifyRemoteGateways ||
+          (p?.peerCompleteVnets ?? true) !== desired.peerCompleteVnets ||
+          (p?.enableOnlyIPv6Peering ?? false) !==
+            desired.enableOnlyIPv6Peering ||
+          (news.localSubnetNames !== undefined &&
+            !sameSet(p?.localSubnetNames, news.localSubnetNames)) ||
+          (news.remoteSubnetNames !== undefined &&
+            !sameSet(p?.remoteSubnetNames, news.remoteSubnetNames))
+        );
+      };
+
+      // Ensure + sync: one PUT when missing, a flag drifts, or the remote
+      // address space changed since the peering last synced; re-checked
+      // after a concurrent VNet update (which re-sends peerings) settles.
       // The peering stays `Initiated` until the reverse peering exists;
-      // only wait for provisioning, not for `Connected`.
-      observed = yield* waitNetworkProvisioned(label, get);
+      // only provisioning is awaited, not `Connected`.
+      observed = yield* convergeChild({
+        label,
+        get,
+        getParent: orUndefinedIfNotFound(
+          network.GetVirtualNetwork({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            virtualNetworkName: virtualNetwork,
+          }),
+        ),
+        drifted,
+        apply: Effect.gen(function* () {
+          const current = yield* get;
+          yield* network
+            .VirtualNetworkPeeringsCreateOrUpdate({
+              ...where,
+              syncRemoteAddressSpace: outOfSync(current) ? "true" : undefined,
+              properties: desired,
+            })
+            .pipe(Effect.retry(whileNetworkBusy));
+        }),
+      });
       return toAttrs(resourceGroup, virtualNetwork, name, observed);
     }),
 

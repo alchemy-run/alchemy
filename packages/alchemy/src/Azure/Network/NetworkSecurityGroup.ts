@@ -262,18 +262,20 @@ export const NetworkSecurityGroupProvider = () =>
         observed === undefined ||
         (observed.properties?.flushConnection ?? false) !== flushConnection
       ) {
-        yield* network
-          .NetworkSecurityGroupsCreateOrUpdate({
+        // Each attempt re-reads the rules: a busy retry with a stale copy
+        // would revert a concurrent SecurityRule write.
+        yield* Effect.gen(function* () {
+          const current = yield* get;
+          yield* network.NetworkSecurityGroupsCreateOrUpdate({
             ...where,
             location,
             tags,
             properties: {
               flushConnection,
-              securityRules:
-                observed?.properties?.securityRules?.map(ruleInput),
+              securityRules: current?.properties?.securityRules?.map(ruleInput),
             },
-          })
-          .pipe(Effect.retry(whileNetworkBusy));
+          });
+        }).pipe(Effect.retry(whileNetworkBusy));
       } else if (tagsDiffer(observed.tags, tags)) {
         yield* network
           .UpdateNetworkSecurityGroupTags({ ...where, tags })

@@ -262,7 +262,10 @@ export const SessionPoolProvider = () =>
             (news.poolManagementType ?? "Dynamic") !==
               (olds.poolManagementType ?? "Dynamic")))
       ) {
-        return { action: "replace" } as const;
+        // Pools hold only ephemeral sessions, names are unique per resource
+        // group, and small subscriptions are capped at one pool: delete the
+        // old pool before creating its replacement.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

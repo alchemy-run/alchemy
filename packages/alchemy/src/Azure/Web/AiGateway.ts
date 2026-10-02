@@ -89,6 +89,8 @@ const createGatewayName = (id: string) =>
 
 type ObservedGateway = web.GetAiGatewayResponse;
 
+// Until `Microsoft.Web/aigateways` is rolled out to a subscription, ARM
+// rejects the type itself (`InvalidResourceType`): no gateway can exist.
 const getGateway = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -96,6 +98,8 @@ const getGateway = (
 ) =>
   orUndefinedIfNotFound(
     web.GetAiGateway({ subscriptionId, resourceGroupName, name }),
+  ).pipe(
+    Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
   );
 
 const toAttrs = (
@@ -128,6 +132,9 @@ export const AiGatewayProvider = () =>
         .pipe(
           Effect.flatMap((page) =>
             requireSinglePage("ListAiGatewayBySubscription", page),
+          ),
+          Effect.catchTag("InvalidResourceType", () =>
+            Effect.succeed({ value: [] as web.AiGatewayListResult["value"] }),
           ),
         );
       return (page.value ?? []).flatMap((gateway) => {
@@ -214,7 +221,7 @@ export const AiGatewayProvider = () =>
           resourceGroupName: output.resourceGroup,
           name: output.aiGatewayName,
         }),
-      );
+      ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.void));
       yield* waitUntilGone(
         `AI gateway ${output.aiGatewayName}`,
         getGateway(subscriptionId, output.resourceGroup, output.aiGatewayName),

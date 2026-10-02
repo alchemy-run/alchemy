@@ -1,5 +1,6 @@
 import * as storage from "@distilled.cloud/azure/storage";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -182,7 +183,19 @@ export const QueueServicePropertiesProvider = () =>
         ...where,
         properties: { cors: { corsRules: toStorageCorsRules(news.cors) } },
       });
-      const fresh = yield* storage.GetQueueServiceServiceProperties(where);
+      // The settings propagate to the Queue service asynchronously.
+      const cors = news.cors;
+      const fresh = yield* storage.GetQueueServiceServiceProperties(where).pipe(
+        Effect.repeat({
+          until: (current) =>
+            !storageCorsDiffers(
+              fromStorageCorsRules(current.properties?.cors),
+              cors,
+            ),
+          schedule: Schedule.spaced("2 seconds"),
+          times: 30,
+        }),
+      );
       return toAttrs(resourceGroup, storageAccount, fresh);
     }),
 
@@ -191,12 +204,28 @@ export const QueueServicePropertiesProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       if (olds?.cors === undefined) return;
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        accountName: output.storageAccount,
+      };
       yield* ignoreNotFound(
         storage.SetQueueServiceServiceProperties({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          accountName: output.storageAccount,
+          ...where,
           properties: { cors: { corsRules: [] } },
+        }),
+      );
+      // Wait for the reset to propagate to the Queue service.
+      yield* getService(
+        where.subscriptionId,
+        where.resourceGroupName,
+        where.accountName,
+      ).pipe(
+        Effect.repeat({
+          until: (current) =>
+            (current?.properties?.cors?.corsRules ?? []).length === 0,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 30,
         }),
       );
     }),
