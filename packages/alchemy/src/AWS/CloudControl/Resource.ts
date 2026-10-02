@@ -3,7 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource as makeResource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -141,7 +141,7 @@ const buildPatch = (
 ): Array<{ op: "add" | "replace"; path: string; value: unknown }> =>
   Object.entries(desired).flatMap(([key, value]) => {
     const hasKey = Object.prototype.hasOwnProperty.call(observed, key);
-    if (hasKey && JSON.stringify(observed[key]) === JSON.stringify(value)) {
+    if (hasKey && deepEqual(observed[key], value)) {
       return [];
     }
     return [
@@ -152,6 +152,35 @@ const buildPatch = (
       },
     ];
   });
+
+/**
+ * Normalize `AWS::SSM::Document` state before diffing. SSM returns JSON
+ * `Content` as a formatted string, so compare it structurally, and omits
+ * the write-only `UpdateMethod`, which selects how a real change is applied
+ * rather than describing persistent document state — resend it only
+ * alongside an actual change.
+ *
+ * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ssm-document.html
+ */
+const resourcePatch = (
+  typeName: string,
+  observed: Record<string, unknown>,
+  desired: Record<string, unknown>,
+) => {
+  if (typeName !== "AWS::SSM::Document") return buildPatch(observed, desired);
+  const { UpdateMethod, ...document } = desired;
+  const normalizeDocument = (value: Record<string, unknown>) =>
+    value.DocumentFormat === "JSON" && typeof value.Content === "string"
+      ? { ...value, Content: JSON.parse(value.Content) }
+      : value;
+  const patch = buildPatch(
+    normalizeDocument(observed),
+    normalizeDocument(document),
+  );
+  return patch.length > 0 && UpdateMethod !== undefined
+    ? [...patch, ...buildPatch(observed, { UpdateMethod })]
+    : patch;
+};
 
 export const CloudControlResourceProvider = () =>
   Provider.effect(
@@ -274,7 +303,8 @@ export const CloudControlResourceProvider = () =>
           } else {
             // 3. Sync — patch only the drifted user-specified keys.
             identifier = description.Identifier!;
-            const patch = buildPatch(
+            const patch = resourcePatch(
+              typeName,
               parseProperties(description.Properties),
               news.desiredState,
             );
