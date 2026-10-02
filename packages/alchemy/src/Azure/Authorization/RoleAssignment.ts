@@ -1,7 +1,6 @@
 import * as authorization from "@distilled.cloud/azure/authorization";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { createHash } from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -10,12 +9,18 @@ import {
   ignoreNotFound,
   orUndefinedIfNotFound,
   requireSinglePage,
-  stackAndStage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  descriptionWithMarker,
+  deterministicGuid,
+  MARKER,
+  normalizeScope,
+  ownershipMarker,
+} from "./Ownership.ts";
 
 export type PrincipalType = authorization.RoleAssignmentPropertiesPrincipalType;
 
@@ -155,33 +160,8 @@ export const roleDefinitionIdOf = (
 const roleGuidOf = (roleDefinitionId: string) =>
   roleDefinitionId.split("/").pop()?.toLowerCase() ?? roleDefinitionId;
 
-const normalizeScope = (scope: string) =>
-  `/${scope.replace(/^\/+|\/+$/g, "")}`.toLowerCase();
-
-const MARKER = /\s*\[alchemy ([^\]]+)\]$/;
-
-const ownershipMarker = Effect.fn(function* (id: string) {
-  const { stack, stage } = yield* stackAndStage;
-  return `[alchemy ${stack}/${stage}/${id}]`;
-});
-
-const descriptionWithMarker = (
-  description: string | undefined,
-  marker: string,
-) => (description ? `${description} ${marker}` : marker);
-
 /** Deterministic GUID name for the assignment. */
-const assignmentName = Effect.fn(function* (id: string, instanceId: string) {
-  const { stack, stage } = yield* stackAndStage;
-  const hex = yield* Effect.sync(() =>
-    createHash("sha256")
-      .update(`${stack}/${stage}/${id}/${instanceId}`)
-      .digest("hex"),
-  );
-  // RFC 4122 layout with version 4 / variant bits so ARM accepts it.
-  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-});
+const assignmentName = deterministicGuid;
 
 const getAssignment = (scope: string, roleAssignmentName: string) =>
   orUndefinedIfNotFound(
@@ -233,7 +213,17 @@ export const RoleAssignmentProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Scope, role and principal IDs are stable attributes upstream; an
+      // unresolved one means its resource is being replaced.
+      if (
+        !isResolved(news.scope) ||
+        !isResolved(news.roleDefinitionId) ||
+        !isResolved(news.principalId)
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
       if (
         normalizeScope(news.scope) !== normalizeScope(output.scope) ||
         roleGuidOf(news.roleDefinitionId) !==
@@ -337,6 +327,7 @@ export const RoleAssignmentProvider = () =>
 
     nuke: {
       dependsOn: [
+        "Azure.Authorization.RoleDefinition",
         "Azure.ManagedIdentity.UserAssignedIdentity",
         "Azure.Storage.*",
         "Azure.Resources.ResourceGroup",

@@ -11,38 +11,76 @@ import type { ServiceProviders } from "./ServiceProviders.ts";
 // One import + one `services` entry per service, sorted. Each service owns
 // its `<Service>/Providers.ts`; never list resources here.
 import * as ApiManagementProviders from "./ApiManagement/Providers.ts";
+import * as AppConfigurationProviders from "./AppConfiguration/Providers.ts";
 import * as AuthorizationProviders from "./Authorization/Providers.ts";
+import * as AutomationProviders from "./Automation/Providers.ts";
+import * as CognitiveServicesProviders from "./CognitiveServices/Providers.ts";
+import * as ComputeProviders from "./Compute/Providers.ts";
 import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
+import * as ContainerInstanceProviders from "./ContainerInstance/Providers.ts";
+import * as ContainerRegistryProviders from "./ContainerRegistry/Providers.ts";
+import * as ContainerServiceProviders from "./ContainerService/Providers.ts";
 import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
 import * as DataFactoryProviders from "./DataFactory/Providers.ts";
 import * as DnsResolverProviders from "./DnsResolver/Providers.ts";
 import * as EventGridProviders from "./EventGrid/Providers.ts";
 import * as EventHubProviders from "./EventHub/Providers.ts";
+import * as LogAnalyticsProviders from "./LogAnalytics/Providers.ts";
+import * as KeyVaultProviders from "./KeyVault/Providers.ts";
+import * as LogicProviders from "./Logic/Providers.ts";
+import * as MachineLearningProviders from "./MachineLearning/Providers.ts";
 import * as ManagedIdentityProviders from "./ManagedIdentity/Providers.ts";
+import * as ManagedNetworkFabricProviders from "./ManagedNetworkFabric/Providers.ts";
+import * as MonitorProviders from "./Monitor/Providers.ts";
+import * as MySQLProviders from "./MySQL/Providers.ts";
 import * as NetworkProviders from "./Network/Providers.ts";
 import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
+import * as PrivateDnsProviders from "./PrivateDns/Providers.ts";
+import * as RecoveryServicesProviders from "./RecoveryServices/Providers.ts";
+import * as RedisProviders from "./Redis/Providers.ts";
 import * as ResourcesProviders from "./Resources/Providers.ts";
+import * as SearchProviders from "./Search/Providers.ts";
 import * as ServiceBusProviders from "./ServiceBus/Providers.ts";
 import * as SqlProviders from "./Sql/Providers.ts";
 import * as StorageProviders from "./Storage/Providers.ts";
+import * as SynapseProviders from "./Synapse/Providers.ts";
 import * as WebProviders from "./Web/Providers.ts";
 
 const services: ReadonlyArray<ServiceProviders> = [
   ApiManagementProviders,
+  AppConfigurationProviders,
   AuthorizationProviders,
+  AutomationProviders,
+  CognitiveServicesProviders,
+  ComputeProviders,
   ContainerAppsProviders,
+  ContainerInstanceProviders,
+  ContainerRegistryProviders,
+  ContainerServiceProviders,
   CosmosDBProviders,
   DataFactoryProviders,
   DnsResolverProviders,
   EventGridProviders,
   EventHubProviders,
+  LogAnalyticsProviders,
+  KeyVaultProviders,
+  LogicProviders,
+  MachineLearningProviders,
   ManagedIdentityProviders,
+  ManagedNetworkFabricProviders,
+  MonitorProviders,
+  MySQLProviders,
   NetworkProviders,
   PostgreSQLProviders,
+  PrivateDnsProviders,
+  RecoveryServicesProviders,
+  RedisProviders,
   ResourcesProviders,
+  SearchProviders,
   ServiceBusProviders,
   SqlProviders,
   StorageProviders,
+  SynapseProviders,
   WebProviders,
 ];
 

@@ -23,6 +23,15 @@ import { DatabaseAccount, DatabaseAccountProvider } from "./DatabaseAccount.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
 import { Fleetspace, FleetspaceProvider } from "./Fleetspace.ts";
 import { GremlinDatabase, GremlinDatabaseProvider } from "./GremlinDatabase.ts";
+import { MongoCluster, MongoClusterProvider } from "./MongoCluster.ts";
+import {
+  MongoClusterFirewallRule,
+  MongoClusterFirewallRuleProvider,
+} from "./MongoClusterFirewallRule.ts";
+import {
+  MongoClusterUser,
+  MongoClusterUserProvider,
+} from "./MongoClusterUser.ts";
 import { MongoCollection, MongoCollectionProvider } from "./MongoCollection.ts";
 import { MongoDatabase, MongoDatabaseProvider } from "./MongoDatabase.ts";
 import { SqlContainer, SqlContainerProvider } from "./SqlContainer.ts";
@@ -47,6 +56,9 @@ export const resources = [
   Fleet,
   Fleetspace,
   GremlinDatabase,
+  MongoCluster,
+  MongoClusterFirewallRule,
+  MongoClusterUser,
   MongoCollection,
   MongoDatabase,
   SqlContainer,
@@ -66,6 +78,9 @@ export const layers = () =>
     FleetProvider(),
     FleetspaceProvider(),
     GremlinDatabaseProvider(),
+    MongoClusterProvider(),
+    MongoClusterFirewallRuleProvider(),
+    MongoClusterUserProvider(),
     MongoCollectionProvider(),
     MongoDatabaseProvider(),
     SqlContainerProvider(),

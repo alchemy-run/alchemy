@@ -72,3 +72,7 @@ export const subsetMatches = (desired: unknown, observed: unknown): boolean => {
   }
   return desired === observed;
 };
+
+/** Logger name of a logger ARM id (GET may return a service-relative id). */
+export const loggerNameOf = (loggerId: string | undefined) =>
+  loggerId?.split("/loggers/")[1];

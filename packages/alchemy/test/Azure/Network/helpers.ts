@@ -45,3 +45,15 @@ export const withPublicIps =
   (count: number) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     publicIps.withPermits(count)(self);
+
+/**
+ * Azure rejects two network managers with overlapping scope accesses on
+ * the same subscription. Network Manager tests hold this lock for their
+ * whole body (run them in one `alchemy-test` process).
+ */
+const networkManagers = Semaphore.makeUnsafe(1);
+
+/** Run a test body while holding the subscription's network manager slot. */
+export const withNetworkManager = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => networkManagers.withPermits(1)(self);

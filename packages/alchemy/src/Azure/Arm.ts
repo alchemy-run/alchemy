@@ -71,12 +71,16 @@ export const ensureRegistered = (subscriptionId: string, namespace: string) =>
     const key = `${subscriptionId}/${namespace.toLowerCase()}`;
     if (yield* Effect.sync(() => registered.has(key))) return;
     const request = { subscriptionId, resourceProviderNamespace: namespace };
-    const current = yield* resources.GetProvider(request);
+    // A read on every reconcile: retry the occasional truncated response.
+    const getProvider = resources
+      .GetProvider(request)
+      .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 3 }));
+    const current = yield* getProvider;
     if (current.registrationState !== "Registered") {
       if (current.registrationState !== "Registering") {
         yield* resources.RegisterProvider(request);
       }
-      const final = yield* resources.GetProvider(request).pipe(
+      const final = yield* getProvider.pipe(
         Effect.repeat({
           until: (provider) => provider.registrationState === "Registered",
           schedule: Schedule.spaced("5 seconds"),

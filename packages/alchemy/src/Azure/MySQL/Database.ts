@@ -1,0 +1,255 @@
+import * as mysql from "@distilled.cloud/azure/mysql";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource } from "../../Resource.ts";
+import {
+  ensureRegistered,
+  ignoreNotFound,
+  orUndefinedIfNotFound,
+  waitForProvisioned,
+  waitUntilGone,
+} from "../Arm.ts";
+import { AzureEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
+import {
+  MYSQL_NAMESPACE,
+  serverOwnedByStack,
+  type ServerRef,
+  whileServerBusy,
+} from "./common.ts";
+
+export interface DatabaseProps {
+  /** Resource group of the server. Changing it replaces the database. */
+  resourceGroup: string;
+  /** Name of the flexible server. Changing it replaces the database. */
+  server: string;
+  /**
+   * Database name (up to 64 characters). If omitted, a unique name is
+   * generated from the app, stage, and logical ID. The built-in `mysql`,
+   * `sys`, `information_schema`, and `performance_schema` databases cannot
+   * be managed. Changing it replaces the database.
+   */
+  name?: string;
+  /**
+   * Character set. Changing it replaces the database.
+   * @default "utf8mb4"
+   */
+  charset?: string;
+  /**
+   * Collation. Changing it replaces the database.
+   * @default the character set's default collation on the server
+   *   (`utf8mb4_0900_ai_ci` on MySQL 8)
+   */
+  collation?: string;
+}
+
+export interface Database extends Resource<
+  "Azure.MySQL.Database",
+  DatabaseProps,
+  {
+    /** Name of the database. */
+    databaseName: string;
+    /** ARM resource ID of the database. */
+    databaseId: string;
+    /** Name of the flexible server. */
+    server: string;
+    /** Resource group of the server. */
+    resourceGroup: string;
+    /** Character set. */
+    charset: string;
+    /** Collation. */
+    collation: string;
+  },
+  never,
+  Providers
+> {}
+
+/**
+ * A database on an Azure Database for MySQL flexible server.
+ *
+ * Databases cannot be tagged; Alchemy treats a database as its own when its
+ * server carries this stack and stage's ownership tags.
+ *
+ * @see https://learn.microsoft.com/azure/mysql/flexible-server/overview
+ *
+ * ### Creating a Database
+ * **Example:** Database with the default charset and collation
+ * ```typescript
+ * const server = yield* Azure.MySQL.FlexibleServer("db", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
+ * const app = yield* Azure.MySQL.Database("app", {
+ *   resourceGroup: group.resourceGroupName,
+ *   server: server.serverName,
+ *   name: "app",
+ * });
+ * ```
+ *
+ * **Example:** Custom collation
+ * ```typescript
+ * const reports = yield* Azure.MySQL.Database("reports", {
+ *   resourceGroup: group.resourceGroupName,
+ *   server: server.serverName,
+ *   charset: "utf8mb4",
+ *   collation: "utf8mb4_unicode_ci",
+ * });
+ * ```
+ *
+ * @resource
+ */
+export const Database = Resource<Database>("Azure.MySQL.Database");
+
+export class ReservedDatabaseName extends Data.TaggedError(
+  "Azure.MySQL.ReservedDatabaseName",
+)<{ readonly name: string; readonly message: string }> {}
+
+const RESERVED = new Set([
+  "mysql",
+  "sys",
+  "information_schema",
+  "performance_schema",
+]);
+const DEFAULT_CHARSET = "utf8mb4";
+
+const createDatabaseName = Effect.fn(function* (id: string) {
+  const name = yield* createPhysicalName({
+    id,
+    maxLength: 64,
+    lowercase: true,
+    delimiter: "_",
+  });
+  return name.replace(/[^a-z0-9_]/g, "_");
+});
+
+interface DatabaseRef extends ServerRef {
+  readonly databaseName: string;
+}
+
+const getDatabase = (ref: DatabaseRef) =>
+  orUndefinedIfNotFound(mysql.GetDatabase(ref));
+
+const toAttrs = (
+  ref: DatabaseRef,
+  database: mysql.GetDatabaseResponse,
+): Database["Attributes"] => ({
+  databaseName: ref.databaseName,
+  databaseId: database.id ?? "",
+  server: ref.serverName,
+  resourceGroup: ref.resourceGroupName,
+  charset: database.properties?.charset ?? DEFAULT_CHARSET,
+  collation: database.properties?.collation ?? "",
+});
+
+const sameText = (a: string | undefined, b: string | undefined) =>
+  a?.toLowerCase() === b?.toLowerCase();
+
+export const DatabaseProvider = () =>
+  Provider.succeed(Database, {
+    stables: ["databaseName", "databaseId", "server", "resourceGroup"],
+
+    // Databases live inside a server; nuke removes them with it.
+    list: Effect.fn(function* () {
+      return [];
+    }),
+
+    diff: Effect.fn(function* ({ news, output }) {
+      if (!isResolved(news) || output === undefined) return undefined;
+      if (
+        !sameText(news.resourceGroup, output.resourceGroup) ||
+        !sameText(news.server, output.server) ||
+        (news.name !== undefined && news.name !== output.databaseName) ||
+        !sameText(news.charset ?? DEFAULT_CHARSET, output.charset) ||
+        (news.collation !== undefined &&
+          !sameText(news.collation, output.collation))
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const resourceGroupName = output?.resourceGroup ?? olds?.resourceGroup;
+      const serverName = output?.server ?? olds?.server;
+      if (resourceGroupName === undefined || serverName === undefined) {
+        return undefined;
+      }
+      const ref: DatabaseRef = {
+        subscriptionId,
+        resourceGroupName,
+        serverName,
+        databaseName:
+          output?.databaseName ?? olds?.name ?? (yield* createDatabaseName(id)),
+      };
+      const observed = yield* getDatabase(ref);
+      if (observed === undefined) return undefined;
+      const attrs = toAttrs(ref, observed);
+      return (yield* serverOwnedByStack(ref)) ? attrs : Unowned(attrs);
+    }),
+
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      yield* ensureRegistered(subscriptionId, MYSQL_NAMESPACE);
+      const databaseName =
+        news.name ?? output?.databaseName ?? (yield* createDatabaseName(id));
+      if (RESERVED.has(databaseName)) {
+        return yield* new ReservedDatabaseName({
+          name: databaseName,
+          message: `'${databaseName}' is a built-in database and cannot be managed`,
+        });
+      }
+      const ref: DatabaseRef = {
+        subscriptionId,
+        resourceGroupName: news.resourceGroup,
+        serverName: news.server,
+        databaseName,
+      };
+
+      // Observe; databases are existence-only (no update API).
+      const observed = yield* getDatabase(ref);
+
+      // Ensure. The PUT is a long-running operation (202 + empty body).
+      if (observed === undefined) {
+        yield* mysql
+          .CreateDatabase({
+            ...ref,
+            properties: {
+              charset: news.charset ?? DEFAULT_CHARSET,
+              collation: news.collation,
+            },
+          })
+          .pipe(Effect.retry(whileServerBusy));
+      }
+      const fresh = yield* waitForProvisioned(
+        `MySQL database ${databaseName}`,
+        getDatabase(ref),
+        () => undefined,
+        { interval: "5 seconds", times: 60 },
+      );
+      return toAttrs(ref, fresh);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const ref: DatabaseRef = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        serverName: output.server,
+        databaseName: output.databaseName,
+      };
+      yield* ignoreNotFound(
+        mysql.DeleteDatabase(ref).pipe(Effect.retry(whileServerBusy)),
+      );
+      yield* waitUntilGone(
+        `MySQL database ${output.databaseName}`,
+        getDatabase(ref),
+        { interval: "5 seconds", times: 60 },
+      );
+    }),
+
+    nuke: { dependsOn: ["Azure.MySQL.FlexibleServer"] },
+  });
