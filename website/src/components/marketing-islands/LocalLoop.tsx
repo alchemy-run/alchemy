@@ -31,7 +31,7 @@ export const EDIT_MS = 8800;
 // The live run replays the preview benchmark's measured phases
 // (examples/cloudflare-preview-benchmark): deploy 13.35s, destroy 4.76s.
 // It plays at LIVE_SPEED× so the step stays short, and says so.
-const LIVE_SPEED = 2;
+export const LIVE_SPEED = 2;
 const T_RUN1 = 300;
 const T_EMU_UP = 1500;
 const T_EMU_TEST = [1500, 1900] as const;

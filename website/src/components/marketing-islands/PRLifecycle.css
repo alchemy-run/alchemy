@@ -37,25 +37,110 @@
   gap: 4px;
   padding: 0 5px 6px;
 }
-.prf-groups span {
-  padding: 0 4px 5px;
-  border-bottom: 1px solid var(--alc-hairline-3);
+/* Group headers: the label lights up while its steps play, and its line
+   fills as they go. This is the tab bar's progress indicator. */
+.prf-group {
+  position: relative;
+  padding: 0 4px 10px;
   font-family: var(--alc-font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--alc-fg-3);
+  transition: color 240ms ease;
+}
+.prf-group + .prf-group {
+  margin-left: 8px;
+}
+.prf-group.is-active {
+  color: var(--alc-accent-text);
+  font-weight: 700;
+}
+.prf-group.is-done {
+  color: var(--alc-fg-1);
+}
+.prf-group__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 4px;
+  background: var(--alc-hairline-3);
+  overflow: hidden;
+  transition: height 240ms ease;
+}
+.prf-group.is-active .prf-group__track {
+  height: 4px;
+}
+.prf-group__fill {
+  display: block;
+  height: 100%;
+  background: var(--alc-accent-text);
+  transform-origin: left;
+}
+
+/* How the current step's timing relates to a measured run. */
+.prf-timing {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: -4px 0 14px;
+  padding: 0 4px;
+  font-size: 13px;
   color: var(--alc-fg-2);
 }
-.prf-groups span + span {
-  margin-left: 8px;
+.prf-timing__badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.prf-timing__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.prf-timing--real .prf-timing__badge {
+  color: var(--alc-accent-text);
+}
+.prf-timing--real .prf-timing__dot {
+  animation: prf-pulse 1s ease-in-out infinite;
+}
+.prf-timing--scaled .prf-timing__badge {
+  color: #f5c97a;
+}
+.prf-timing--staged .prf-timing__badge {
+  color: var(--alc-fg-3);
+}
+.prf-timing__clock {
+  font-family: var(--alc-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alc-fg-1);
+  font-variant-numeric: tabular-nums;
+}
+.prf-timing__note {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 .prf-tabs {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
-  /* Extra bottom room: the progress line runs below the highlight. */
-  padding: 4px 4px 13px;
+  padding: 4px;
   border: 1px solid var(--alc-hairline-2);
   border-radius: 12px;
   background: var(--alc-bg-elev-1);
@@ -64,7 +149,7 @@
 .prf-tabs__pill {
   position: absolute;
   top: 4px;
-  bottom: 13px;
+  bottom: 4px;
   z-index: 0;
   border-radius: 8px;
   background: var(--alc-bg);
@@ -126,6 +211,7 @@
   color: var(--alc-bg);
 }
 .prf-tabs__track {
+  display: none;
   position: absolute;
   left: 12px;
   right: 12px;
@@ -1102,6 +1188,16 @@
 @media (max-width: 640px) {
   .prf-groups {
     display: none;
+  }
+  /* Without the headers, a line under the tabs shows progress. */
+  .prf-tabs__track {
+    display: block;
+  }
+  .prf-tabs {
+    padding-bottom: 13px;
+  }
+  .prf-tabs__pill {
+    bottom: 13px;
   }
   .prf-tabs {
     display: flex;

@@ -9,7 +9,13 @@ import {
 } from "react";
 import { prefersReducedMotion, useSpinner } from "./_terminal";
 import { yantraSvg } from "../../brand/yantra";
-import { AgentPane, EDIT_MS, EditorPane, LOCAL_MS } from "./LocalLoop";
+import {
+  AgentPane,
+  EDIT_MS,
+  EditorPane,
+  LIVE_SPEED,
+  LOCAL_MS,
+} from "./LocalLoop";
 import "./PRLifecycle.css";
 
 /*
@@ -38,6 +44,12 @@ const STEPS: { id: StepId; label: string; ms: number }[] = [
   { id: "deploy", label: "Deploy", ms: 14550 },
   { id: "test", label: "Test", ms: 10500 },
   { id: "merge", label: "Merge", ms: 11300 },
+];
+
+// The tab bar's headers. Each fills as the animation moves through its steps.
+const GROUPS = [
+  { label: "Your machine", steps: 2 },
+  { label: "CI/CD", steps: 4 },
 ];
 
 const PR = 147;
@@ -172,6 +184,47 @@ const phaseAt = (phases: Phase[], t: number) =>
 /** Seconds since `from`, ticking so long waits visibly move. */
 const secs = (t: number, from: number) =>
   `${Math.max(0, (t - from) / 1000).toFixed(1)}s`;
+
+/**
+ * How each step's timing relates to a real run, shown under the tab bar.
+ * The measured numbers come from one run of examples/cloudflare-preview-
+ * benchmark (see the constants above).
+ */
+const TIMING: Record<
+  StepId,
+  { badge: string; tone: "real" | "scaled" | "staged"; note: string }
+> = {
+  edit: {
+    badge: "Staged",
+    tone: "staged",
+    note: "The agent's typing is staged. The type check itself answers in milliseconds.",
+  },
+  local: {
+    badge: `Measured · ${LIVE_SPEED}× speed`,
+    tone: "scaled",
+    note: "The live test replays a measured deploy (13.4s) and destroy (4.8s), played at double speed.",
+  },
+  open: {
+    badge: "Setup shortened",
+    tone: "staged",
+    note: "Checkout and install are sped up; they aren't part of what Alchemy does.",
+  },
+  deploy: {
+    badge: "Real time",
+    tone: "real",
+    note: "A measured preview deploy: 13.4s for three resources and a GitHub comment, then 0.9s until the URL answers.",
+  },
+  test: {
+    badge: `Real time · tests ${TEST_SLOWDOWN}× slower`,
+    tone: "scaled",
+    note: "A measured 4.8s run. The three tests take about 0.3s each, so they are slowed down to be readable.",
+  },
+  merge: {
+    badge: "Real time",
+    tone: "real",
+    note: "Measured: prod deploys as an update in 7.6s while the preview is destroyed in 4.8s.",
+  },
+};
 
 /** While paused, spinners hold their frame like everything else. */
 const PausedContext = createContext(false);
@@ -318,8 +371,32 @@ export default function PRLifecycle() {
         <div className="prf-tabs-row">
           <div className="prf-tabs-col">
             <div className="prf-groups" aria-hidden>
-              <span style={{ gridColumn: "span 2" }}>Your machine</span>
-              <span style={{ gridColumn: "span 4" }}>CI/CD</span>
+              {GROUPS.map((g, gi) => {
+                const first = GROUPS.slice(0, gi).reduce(
+                  (n, x) => n + x.steps,
+                  0,
+                );
+                const done = Math.min(
+                  g.steps,
+                  Math.max(0, step + Math.min(elapsed, dur) / dur - first),
+                );
+                const active = step >= first && step < first + g.steps;
+                return (
+                  <span
+                    key={g.label}
+                    className={`prf-group ${active ? "is-active" : done >= g.steps ? "is-done" : ""}`}
+                    style={{ gridColumn: `span ${g.steps}` }}
+                  >
+                    {g.label}
+                    <span className="prf-group__track">
+                      <span
+                        className="prf-group__fill"
+                        style={{ transform: `scaleX(${done / g.steps})` }}
+                      />
+                    </span>
+                  </span>
+                );
+              })}
             </div>
             <div
               className="prf-tabs"
@@ -379,6 +456,19 @@ export default function PRLifecycle() {
               </svg>
             )}
           </button>
+        </div>
+
+        <div className={`prf-timing prf-timing--${TIMING[id].tone}`}>
+          <span className="prf-timing__badge">
+            <span className="prf-timing__dot" aria-hidden />
+            {TIMING[id].badge}
+          </span>
+          {id === "deploy" && (
+            <span className="prf-timing__clock">
+              {secs(Math.min(t, T_DEPLOYED), 0)}
+            </span>
+          )}
+          <span className="prf-timing__note">{TIMING[id].note}</span>
         </div>
 
         <div
