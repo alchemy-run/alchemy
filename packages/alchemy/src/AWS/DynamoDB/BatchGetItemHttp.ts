@@ -1,16 +1,19 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
+import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
+import { isBindingHost } from "../Lambda/Function.ts";
 import {
   BatchGetItem,
   type BatchGetItemRequest,
   type BatchGetItemTables,
 } from "./BatchGetItem.ts";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchGetItemHttp = Layer.effect(
   BatchGetItem,
   Effect.gen(function* () {
+    const batchGetItem = yield* DynamoDB.batchGetItem;
+
     return Effect.fn(function* (...tables: BatchGetItemTables) {
       const sortedTables = sortTables(tables);
       const tableNames = new Map(
@@ -33,17 +36,22 @@ export const BatchGetItemHttp = Layer.effect(
         return yield* TableName;
       });
 
-      const access = yield* grantTables(
-        `AWS.DynamoDB.BatchGetItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
-        () => [
-          {
-            Effect: "Allow",
-            Action: ["dynamodb:BatchGetItem"],
-            Resource: sortedTables.map((table) => table.tableArn),
-          },
-        ],
-      );
-      const region = yield* tablesRegion(access, sortedTables);
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchGetItem(${sortedTables}))`(
+            {
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["dynamodb:BatchGetItem"],
+                  Resource: sortedTables.map((table) => table.tableArn),
+                },
+              ],
+            },
+          );
+        }
+      }
 
       return Effect.fn(`AWS.DynamoDB.BatchGetItem(${sortedTables})`)(function* (
         request: BatchGetItemRequest,
@@ -56,14 +64,10 @@ export const BatchGetItemHttp = Layer.effect(
             }),
         );
 
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.batchGetItem({
-            ...request,
-            RequestItems: Object.fromEntries(requestItems),
-          }),
-        );
+        return yield* batchGetItem({
+          ...request,
+          RequestItems: Object.fromEntries(requestItems),
+        });
       });
     });
   }),

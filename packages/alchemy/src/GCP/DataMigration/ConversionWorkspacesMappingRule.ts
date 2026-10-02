@@ -292,7 +292,9 @@ const listRules = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.mappingRules ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as dm.MappingRule[])),
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed([] as dm.MappingRule[]),
+      ),
     );
 
 const listOwned = (project: string, region: string) =>

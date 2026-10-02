@@ -306,16 +306,18 @@ export const waitForOperation = (
   waitForGcpOperation(
     operation,
     (name) =>
-      baremetalsolution.getProjectsLocationsOperations({ name }).pipe(
-        Effect.catchTag("NotFound", (error) =>
-          options?.notFoundOk === true
-            ? Effect.succeed<baremetalsolution.Operation>({
-                name,
-                done: true,
-              })
-            : Effect.fail(error),
+      baremetalsolution
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<baremetalsolution.Operation>({
+                  name,
+                  done: true,
+                })
+              : Effect.fail(error),
+          ),
         ),
-      ),
     { budget: "30 minutes" },
   ).pipe(
     Effect.catchIf(

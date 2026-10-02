@@ -17,16 +17,18 @@ export const waitForOperation = (
   waitForGcpOperation(
     operation,
     (name) =>
-      certificatemanager.getProjectsLocationsOperations({ name }).pipe(
-        Effect.catchTag("NotFound", (error) =>
-          options?.notFoundOk === true
-            ? Effect.succeed<certificatemanager.Operation>({
-                name,
-                done: true,
-              })
-            : Effect.fail(error),
+      certificatemanager
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<certificatemanager.Operation>({
+                  name,
+                  done: true,
+                })
+              : Effect.fail(error),
+          ),
         ),
-      ),
     { budget: "10 minutes" },
   ).pipe(
     Effect.catchIf(

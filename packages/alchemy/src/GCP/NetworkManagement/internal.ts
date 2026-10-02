@@ -242,7 +242,11 @@ export const waitForOperation = (
   operation: networkmanagement.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  waitForLongRunning(operation, getOperation, { budget: "10 minutes" }).pipe(
+  waitForLongRunning(
+    operation,
+    getOperation,
+    { budget: "10 minutes" },
+  ).pipe(
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
@@ -347,12 +351,16 @@ const parentOfResource = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () =>
+          Effect.succeed(undefined),
+        ),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () =>
+            Effect.succeed(undefined),
+          ),
         )
       : Effect.succeed(undefined);
 

@@ -11,7 +11,6 @@ import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
 import { toSeconds, toWireDays } from "../../Util/Duration.ts";
 import type { DistributiveOmit } from "../../Util/types.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
@@ -49,10 +48,7 @@ export type DurableRunServices =
   | DurableStep
   | DurableExecutionContext
   | HandlerContext
-  | Scope
-  // Runtime-only binding clients (`Alchemy.RuntimeContext`); provided per
-  // invocation from the function's own runtime context.
-  | RuntimeContext;
+  | Scope;
 
 /**
  * A durable function implementation: a function from a typed `Input` payload
@@ -534,15 +530,11 @@ const composeDurableImpl = (
     const fn = yield* (
       impl as Effect.Effect<DurableFunctionImpl<any, any>>
     ).pipe(Effect.provideService(DurableFunctionScope, handle));
-    const runtime = yield* RuntimeContext;
 
     yield* host.listen(
       makeDurableListener({
         name,
-        run: (input) =>
-          fn(input).pipe(
-            Effect.provideService(RuntimeContext, runtime),
-          ) as Effect.Effect<unknown>,
+        run: (input) => fn(input) as Effect.Effect<unknown>,
       }),
     );
 
