@@ -794,8 +794,11 @@ export interface DBInstance extends Resource<
  * ```
  *
  * Declared policies are checked with `ValidateResourcePolicy`, including
- * unchanged plans, and writes additionally use `BlockPublicPolicy`. Deployment
- * requires `secretsmanager:ValidateResourcePolicy` permission. Alchemy compares
+ * unchanged plans, and writes additionally use `BlockPublicPolicy`. Once the
+ * managed secret exists, validation names it, so deployment requires
+ * `secretsmanager:ValidateResourcePolicy` and `secretsmanager:PutResourcePolicy`
+ * on that secret rather than on `*`. Before the first create, with no secret
+ * yet, validation runs without a target. Alchemy compares
  * live policy metadata without reading secret values. RDS owns credential
  * generation, rotation, and secret deletion. Only instance-managed secrets are
  * supported; an Aurora or Multi-AZ cluster owns its own secret, and RDS Custom
@@ -1766,11 +1769,16 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
+      // ValidateResourcePolicy is authorized like PutResourcePolicy on its
+      // target; without a SecretId the target is `*`, so an identity scoped to
+      // the instance's own secret ARN is denied. Name the known secret.
       const validateMasterSecretPolicy = Effect.fn(function* (
         policy: PolicyDocument | undefined,
+        secretArn?: string,
       ) {
         if (policy === undefined) return;
         const validation = yield* secretsmanager.validateResourcePolicy({
+          ...(secretArn === undefined ? {} : { SecretId: secretArn }),
           ResourcePolicy: stringifyPolicyDocument(policy),
         });
         if (validation.PolicyValidationPassed !== true) {
@@ -1904,6 +1912,7 @@ export const DBInstanceProvider = () =>
           if (!isResolved(news)) return undefined;
           yield* validateMasterSecretPolicy(
             news.masterUserSecretResourcePolicy,
+            output?.masterUserSecretArn,
           );
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
@@ -1988,6 +1997,7 @@ export const DBInstanceProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           yield* validateMasterSecretPolicy(
             news.masterUserSecretResourcePolicy,
+            output?.masterUserSecretArn,
           );
           const identifier =
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
