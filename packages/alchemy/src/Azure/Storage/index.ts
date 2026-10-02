@@ -1,2 +1,17 @@
+export * from "./AdvancedPlatformMetrics.ts";
 export * from "./BlobContainer.ts";
+export * from "./BlobInventoryPolicy.ts";
+export * from "./BlobServiceProperties.ts";
+export * from "./EncryptionScope.ts";
+export * from "./FileServiceProperties.ts";
+export * from "./FileShare.ts";
+export * from "./LocalUser.ts";
+export * from "./ManagementPolicy.ts";
+export * from "./ObjectReplicationPolicy.ts";
+export * from "./PrivateEndpointConnection.ts";
+export * from "./Queue.ts";
+export * from "./QueueServiceProperties.ts";
 export * from "./StorageAccount.ts";
+export type { StorageCorsRule } from "./StorageCors.ts";
+export * from "./Table.ts";
+export * from "./TableServiceProperties.ts";

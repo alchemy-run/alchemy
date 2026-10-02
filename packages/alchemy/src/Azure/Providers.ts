@@ -10,16 +10,38 @@ import * as Environment from "./Environment.ts";
 import type { ServiceProviders } from "./ServiceProviders.ts";
 // One import + one `services` entry per service, sorted. Each service owns
 // its `<Service>/Providers.ts`; never list resources here.
+import * as ApiManagementProviders from "./ApiManagement/Providers.ts";
 import * as AuthorizationProviders from "./Authorization/Providers.ts";
+import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
+import * as DataFactoryProviders from "./DataFactory/Providers.ts";
+import * as DnsResolverProviders from "./DnsResolver/Providers.ts";
+import * as EventGridProviders from "./EventGrid/Providers.ts";
+import * as EventHubProviders from "./EventHub/Providers.ts";
 import * as ManagedIdentityProviders from "./ManagedIdentity/Providers.ts";
+import * as NetworkProviders from "./Network/Providers.ts";
+import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
 import * as ResourcesProviders from "./Resources/Providers.ts";
+import * as ServiceBusProviders from "./ServiceBus/Providers.ts";
+import * as SqlProviders from "./Sql/Providers.ts";
 import * as StorageProviders from "./Storage/Providers.ts";
+import * as WebProviders from "./Web/Providers.ts";
 
 const services: ReadonlyArray<ServiceProviders> = [
+  ApiManagementProviders,
   AuthorizationProviders,
+  CosmosDBProviders,
+  DataFactoryProviders,
+  DnsResolverProviders,
+  EventGridProviders,
+  EventHubProviders,
   ManagedIdentityProviders,
+  NetworkProviders,
+  PostgreSQLProviders,
   ResourcesProviders,
+  ServiceBusProviders,
+  SqlProviders,
   StorageProviders,
+  WebProviders,
 ];
 
 export class Providers extends Provider.ProviderCollection<Providers>()(

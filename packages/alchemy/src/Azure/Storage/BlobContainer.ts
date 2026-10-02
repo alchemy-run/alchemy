@@ -2,10 +2,8 @@ import * as storage from "@distilled.cloud/azure/storage";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import {
   ensureRegistered,
   ignoreNotFound,
@@ -16,6 +14,12 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  createStorageChildName as createContainerName,
+  isOwnedByMetadata as isOwnedContainer,
+  ownershipMetadata,
+  userMetadata,
+} from "./StorageOwnership.ts";
 
 export type BlobPublicAccess = "None" | "Blob" | "Container";
 
@@ -100,52 +104,6 @@ export interface BlobContainer extends Resource<
 export const BlobContainer = Resource<BlobContainer>(
   "Azure.Storage.BlobContainer",
 );
-
-/**
- * Container metadata keys must be C# identifiers, so the `alchemy::*`
- * ownership tags are stored as `alchemy_*`.
- */
-const toMetadataKey = (key: string) => key.replace(/^alchemy::/, "alchemy_");
-const toTagKey = (key: string) => key.replace(/^alchemy_/, "alchemy::");
-
-const ownershipMetadata = Effect.fn(function* (id: string) {
-  const tags = yield* createInternalTags(id);
-  return Object.fromEntries(
-    Object.entries(tags).map(([key, value]) => [toMetadataKey(key), value]),
-  );
-});
-
-const userMetadata = (
-  metadata: Record<string, string | undefined> | undefined,
-) =>
-  Object.fromEntries(
-    Object.entries(tagRecord(metadata)).filter(
-      ([key]) => !key.startsWith("alchemy_"),
-    ),
-  );
-
-const isOwnedContainer = (
-  id: string,
-  metadata: Record<string, string | undefined> | undefined,
-) =>
-  hasAlchemyTags(
-    id,
-    Object.fromEntries(
-      Object.entries(tagRecord(metadata)).map(([key, value]) => [
-        toTagKey(key),
-        value,
-      ]),
-    ),
-  );
-
-const createContainerName = Effect.fn(function* (id: string) {
-  const name = yield* createPhysicalName({
-    id,
-    maxLength: 63,
-    lowercase: true,
-  });
-  return name.replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-");
-});
 
 const getContainer = (
   subscriptionId: string,
