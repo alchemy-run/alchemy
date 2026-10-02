@@ -13,18 +13,18 @@ deploy plan: unchanged resources are no-ops, out-of-band edits show as
 **drifted**, and resources deleted behind alchemy's back show as
 **missing**.
 
-By default, `drift` only reports changes. Pass `--repair` to restore drifted
-and missing resources to the last deployed state. Alchemy shows the plan and
-asks for approval unless you pass `--yes`. It reads the cloud state again
-before applying the repair.
+When drift is detected in an interactive terminal, `drift` shows the plan
+and asks whether to **Repair** or **Cancel** (Cancel is the default). In a
+non-interactive terminal it only reports. Pass `--repair` to restore drifted
+and missing resources to the last deployed state without prompting. Alchemy
+reads the cloud state again before applying the repair.
 
 ## Flags
 
 | Option              | Description                                                        |
 | ------------------- | ------------------------------------------------------------------ |
-| `--repair`          | Repair detected drift after showing and confirming the plan        |
+| `--repair`          | Repair detected drift without prompting                            |
 | `--stage <name>`    | Stage to check (defaults to `$ALCHEMY_STAGE` or `live_$USER`)       |
-| `--yes`             | Skip the repair confirmation prompt                                |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
 | `--env-file <path>` | Load environment variables from a file                             |
 | `--config, -c <file>` | Stack file to check (defaults to `alchemy.run.ts`)               |
@@ -39,7 +39,7 @@ alchemy drift
 alchemy drift --stage prod
 
 # Repair drift without an interactive prompt (e.g. a scheduled job)
-alchemy drift --stage prod --repair --yes
+alchemy drift --stage prod --repair
 ```
 
 ## Where next
