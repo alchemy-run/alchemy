@@ -44,6 +44,19 @@ export interface CloudflareTelemetryProps {
    */
   enabled?: boolean;
   /**
+   * Run each Effect fiber step in the active span's async context so
+   * platform spans and console output attach under that Effect span.
+   * Set to `false` to leave the fiber's async context alone, keeping every
+   * AsyncLocalStorage store entered during the event visible to Effect code.
+   * Effect child spans still nest under their parent in Workers Traces;
+   * parentless spans start in the current JavaScript async context.
+   * Platform spans and console output are then not guaranteed to attach
+   * under the active Effect span: they attach to the invocation or the
+   * nearest JavaScript async ancestor instead.
+   * @default true
+   */
+  fiberContext?: boolean;
+  /**
    * Head-based sampling rate for Workers Traces (`0`–`1`).
    * Omitted unless set — Cloudflare's default applies.
    */
@@ -128,6 +141,19 @@ export const assertCloudflareTelemetryCompatibility = (
  * );
  * ```
  *
+ * ### Preserving request context
+ * **Example:** Keep middleware AsyncLocalStorage stores visible to Effect code
+ * ```typescript
+ * Effect.provide(Cloudflare.Telemetry({ fiberContext: false }))
+ * ```
+ *
+ * Effect child spans still nest in Workers Traces, and parentless spans
+ * start in the current async context. Fiber steps keep their scheduled
+ * async context, so stores entered during the event remain visible.
+ * Platform spans and console output may attach to the invocation or the
+ * nearest JavaScript async ancestor instead of the active Effect span.
+ * Omit `fiberContext` to retain the default fiber context propagation.
+ *
  * ### Combining with other exporters
  * **Example:** Native traces plus another exporter's logs and metrics
  * ```typescript
@@ -165,6 +191,8 @@ export const Telemetry = (
       }
       // The runtime bridges build the registered Layer per event with a
       // forked MemoMap, so the Tracer is naturally fresh per invocation.
-      return AlchemyTelemetry.layer(cloudflareTracerLayer);
+      return AlchemyTelemetry.layer(
+        cloudflareTracerLayer(props.fiberContext ?? true),
+      );
     }),
   );
