@@ -229,6 +229,7 @@ export const makeWakuAwsTarget = (
       runtime: "node",
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "waku",
       config: {
         rootDir: context.root,

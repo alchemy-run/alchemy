@@ -271,6 +271,7 @@ export const target = (config: AstroAwsConfig = {}): AstroAwsTarget => ({
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "astro",
       config: {
         rootDir: context.root,
