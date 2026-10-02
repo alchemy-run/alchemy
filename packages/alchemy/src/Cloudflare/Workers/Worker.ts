@@ -35,7 +35,12 @@ import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
-import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import {
+  type AssetManifest,
+  type Assets,
+  type AssetsConfig,
+  type AssetsProps,
+} from "./Assets.ts";
 import type {
   WorkerAccessConfig,
   WorkerAccessIdentity,
@@ -160,7 +165,7 @@ export type WorkerEnvBindings<Bindings> = {
 
 export type WorkerAssetsConfig =
   | string
-  | (AssetsConfig & { directory?: never })
+  | (AssetsConfig & Pick<AssetsProps, "retainPrevious"> & { directory?: never })
   | AssetsProps
   | AssetsWithHash;
 
@@ -1255,6 +1260,20 @@ export type Worker<Bindings = any> = Resource<
      * rules are deployed.
      */
     affinityZoneIds?: string[] | undefined;
+    /**
+     * The current build's asset manifest entries matching
+     * `assets.retainPrevious.paths`, recorded so a deploy of a different
+     * build can keep serving them. `undefined` when `retainPrevious` is not
+     * set.
+     */
+    retainedAssets?: AssetManifest | undefined;
+    /**
+     * The previous build's entries this deploy kept serving under
+     * `assets.retainPrevious`. A redeploy of the same build carries them
+     * again. `undefined` when `retainPrevious` is not set or no previous
+     * build is recorded.
+     */
+    carriedAssets?: AssetManifest | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
