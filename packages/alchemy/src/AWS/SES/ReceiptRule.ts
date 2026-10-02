@@ -1,5 +1,6 @@
 import * as ses from "@distilled.cloud/aws/ses";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -246,6 +247,17 @@ export const ReceiptRuleProvider = () =>
                 Rule: rule,
               })
               .pipe(
+                // IAM roles can exist before SES is able to assume them.
+                Effect.retry({
+                  while: (e): boolean =>
+                    e._tag === "InvalidParameterValue" &&
+                    (e.message?.includes(
+                      "Could not assume the provided IAM Role",
+                    ) ??
+                      false),
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 12,
+                }),
                 Effect.catchTag("AlreadyExistsException", () =>
                   ses.updateReceiptRule({
                     RuleSetName: ruleSetName,

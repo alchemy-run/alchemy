@@ -1,6 +1,12 @@
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { Role } from "@/AWS/IAM";
+import { Bucket } from "@/AWS/S3";
 import { ReceiptRule, ReceiptRuleSet } from "@/AWS/SES";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import * as iam from "@distilled.cloud/aws/iam";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as ses from "@distilled.cloud/aws/ses";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -117,6 +123,119 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertRuleDeleted(ruleSet.ruleSetName, rule.ruleName);
+    }),
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
+);
+
+// A fresh role exercises IAM propagation without inserting a sleep before SES.
+// Whether AWS actually returns the transient error on a given run is not
+// deterministic; verify the real deployment rather than mocking the error.
+test.provider(
+  "creates an S3 action with a freshly created IAM role",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { rule, role, bucket } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const ruleSet = yield* ReceiptRuleSet("RoleSet", {});
+          const bucket = yield* Bucket("Mail", { forceDestroy: true });
+          const ruleName = "deliver-to-s3";
+          const role = yield* Role("DeliveryRole", {
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ses.amazonaws.com" },
+                  Action: ["sts:AssumeRole"],
+                  Condition: {
+                    StringEquals: { "AWS:SourceAccount": accountId },
+                    ArnEquals: {
+                      "AWS:SourceArn": Output.interpolate`arn:aws:ses:${region}:${accountId}:receipt-rule-set/${ruleSet.ruleSetName}:receipt-rule/${ruleName}`,
+                    },
+                  },
+                },
+              ],
+            },
+            inlinePolicies: {
+              DeliverMail: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Action: ["s3:PutObject"],
+                    Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+                  },
+                ],
+              },
+            },
+          });
+          const rule = yield* ReceiptRule("Rule", {
+            ruleSetName: ruleSet.ruleSetName,
+            ruleName,
+            actions: [
+              {
+                S3Action: {
+                  BucketName: bucket.bucketName,
+                  IamRoleArn: role.roleArn,
+                },
+              },
+            ],
+          });
+          return { rule, role, bucket };
+        }),
+      );
+
+      const observed = yield* ses.describeReceiptRule({
+        RuleSetName: rule.ruleSetName,
+        RuleName: rule.ruleName,
+      });
+      expect(observed.Rule?.Actions).toEqual([
+        {
+          S3Action: { BucketName: bucket.bucketName, IamRoleArn: role.roleArn },
+        },
+      ]);
+
+      yield* stack.destroy();
+      yield* assertRuleDeleted(rule.ruleSetName, rule.ruleName);
+      expect(
+        yield* iam.getRole({ RoleName: role.roleName }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "NoSuchEntityException" });
+      expect(
+        yield* s3.headBucket({ Bucket: bucket.bucketName }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "NotFound" });
+    }),
+  { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "does not retry unrelated InvalidParameterValue errors",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* stack.deploy(ReceiptRuleSet("InvalidRecipientSet", {}));
+      const failure = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const ruleSet = yield* ReceiptRuleSet("InvalidRecipientSet", {});
+            yield* ReceiptRule("InvalidRecipient", {
+              ruleSetName: ruleSet.ruleSetName,
+              recipients: ["not a valid recipient"],
+              actions: [{ StopAction: { Scope: "RuleSet" } }],
+            });
+          }),
+        )
+        .pipe(
+          // Retrying every InvalidParameterValue would take at least 60s.
+          Effect.timeout("30 seconds"),
+          Effect.flip,
+        );
+      expect(failure).toMatchObject({ _tag: "InvalidParameterValue" });
+      expect(failure.message).not.toContain(
+        "Could not assume the provided IAM Role",
+      );
+      yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
 );
