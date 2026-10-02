@@ -42,7 +42,10 @@ export interface ManagedNetworkProps {
    * Firewall.
    * @default "AllowInternetOutbound"
    */
-  isolationMode?: "Disabled" | "AllowInternetOutbound" | "AllowOnlyApprovedOutbound";
+  isolationMode?:
+    | "Disabled"
+    | "AllowInternetOutbound"
+    | "AllowOnlyApprovedOutbound";
   /**
    * Managed network generation (one-way upgrade from `V1` to `V2`).
    * @default Azure's default (`V2`)

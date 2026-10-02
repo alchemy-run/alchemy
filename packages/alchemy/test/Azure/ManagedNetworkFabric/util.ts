@@ -9,7 +9,11 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const tags = ["provider:azure", "provider:azure:managednetworkfabric", "live"];
+export const tags = [
+  "provider:azure",
+  "provider:azure:managednetworkfabric",
+  "live",
+];
 
 export const subscription = Effect.map(
   Azure.AzureEnvironment.current,

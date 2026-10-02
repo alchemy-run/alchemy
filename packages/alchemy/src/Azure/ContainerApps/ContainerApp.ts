@@ -86,6 +86,11 @@ export interface ContainerAppProps {
   /** Managed identity of the app. */
   identity?: ContainerAppsIdentity;
   /**
+   * App kind: `workflowapp` (Logic Apps Standard host, see
+   * `ContainerApps.LogicApp`) or `functionapp`. Changing it replaces the app.
+   */
+  kind?: "workflowapp" | "functionapp";
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -280,10 +285,11 @@ export const ContainerAppProvider = () =>
       });
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
+        (olds !== undefined && lower(news.kind) !== lower(olds.kind)) ||
         (news.name !== undefined && news.name !== output.containerAppName) ||
         (news.location !== undefined &&
           !sameLocation(news.location, output.location)) ||
@@ -331,6 +337,7 @@ export const ContainerAppProvider = () =>
         location,
         tags,
         identity: toIdentity(news.identity),
+        kind: news.kind,
         properties,
       });
       const ready = waitForProvisioned(`container app ${name}`, get, appState, {

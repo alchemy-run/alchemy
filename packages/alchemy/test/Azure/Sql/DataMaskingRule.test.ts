@@ -35,7 +35,7 @@ const listRules = (
 
 const program = (
   password: Redacted.Redacted<string>,
-  props: { name?: string; maskingFunction: "Email" | "Default" },
+  props: { columnName: string; maskingFunction: "Email" | "Default" },
 ) =>
   Effect.gen(function* () {
     // The AdventureWorksLT sample provides a real column to mask.
@@ -53,10 +53,9 @@ const program = (
     });
     const rule = yield* Azure.Sql.DataMaskingRule("MaskEmail", {
       ...scope,
-      name: props.name,
       schemaName: "SalesLT",
       tableName: "Customer",
-      columnName: "EmailAddress",
+      columnName: props.columnName,
       maskingFunction: props.maskingFunction,
     });
     return { group, server, database, rule };
@@ -71,7 +70,10 @@ test.provider(
       const password = yield* newPassword;
 
       const { group, server, database, rule } = yield* stack.deploy(
-        program(password, { maskingFunction: "Email" }),
+        program(password, {
+          columnName: "EmailAddress",
+          maskingFunction: "Email",
+        }),
       );
       const list = listRules(
         group.resourceGroupName,
@@ -79,31 +81,34 @@ test.provider(
         database.databaseName,
       );
       const observed = (yield* list).find(
-        (r) => r.name === rule.dataMaskingRuleName,
+        (r) => r.properties?.columnName === "EmailAddress",
       );
       expect(observed?.properties?.maskingFunction).toEqual("Email");
       expect(rule.column).toEqual("SalesLT.Customer.EmailAddress");
 
       // In place: switch the masking function.
       const updated = yield* stack.deploy(
-        program(password, { maskingFunction: "Default" }),
+        program(password, {
+          columnName: "EmailAddress",
+          maskingFunction: "Default",
+        }),
       );
       expect(updated.rule.dataMaskingRuleName).toEqual(
         rule.dataMaskingRuleName,
       );
       expect(
-        (yield* list).find((r) => r.name === rule.dataMaskingRuleName)
+        (yield* list).find((r) => r.properties?.columnName === "EmailAddress")
           ?.properties?.maskingFunction,
       ).toEqual("Default");
 
-      // Renaming replaces the rule; the old one is disabled.
+      // A different column is a different rule: replacement.
       const replaced = yield* stack.deploy(
-        program(password, { name: "alchemy-mask", maskingFunction: "Default" }),
+        program(password, { columnName: "Phone", maskingFunction: "Default" }),
       );
-      expect(replaced.rule.dataMaskingRuleName).toEqual("alchemy-mask");
-      const names = (yield* list).map((r) => r.name);
-      expect(names).toContain("alchemy-mask");
-      expect(names).not.toContain(rule.dataMaskingRuleName);
+      expect(replaced.rule.column).toEqual("SalesLT.Customer.Phone");
+      const columns = (yield* list).map((r) => r.properties?.columnName);
+      expect(columns).toContain("Phone");
+      expect(columns).not.toContain("EmailAddress");
 
       yield* stack.destroy();
       expect(

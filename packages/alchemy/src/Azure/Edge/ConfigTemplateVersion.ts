@@ -25,7 +25,7 @@ export interface ConfigTemplateVersionProps {
    */
   version: string;
   /**
-   * Config template YAML: an optional inline `configTemplate:` plus `configs:`.
+   * Config template YAML: an optional inline `schema:` plus `configs:`.
    * Versions are immutable; changing it replaces the version.
    */
   configurations: string;
@@ -43,7 +43,7 @@ export interface ConfigTemplateVersion extends Resource<
     resourceGroup: string;
     /** ARM resource ID of the version. */
     configTemplateVersionId: string;
-    /** Config template YAML: an optional inline `configTemplate:` plus `configs:`. */
+    /** Config template YAML. */
     configurations: string;
   },
   never,
@@ -53,7 +53,7 @@ export interface ConfigTemplateVersion extends Resource<
 /**
  * An immutable version of an Azure Arc workload orchestration config
  * template. The YAML `configurations` carry the shared configuration
- * values and, optionally, the configTemplate rules they validate against.
+ * values and, optionally, the schema rules they validate against.
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
@@ -61,14 +61,14 @@ export interface ConfigTemplateVersion extends Resource<
  * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template
  *
  * ### Publishing a Version
- * **Example:** Config template with an inline configTemplate
+ * **Example:** Config template with an inline schema
  * ```typescript
  * const v1 = yield* Azure.Edge.ConfigTemplateVersion("common-v1", {
  *   resourceGroup: group.resourceGroupName,
  *   configTemplate: template.configTemplateName,
  *   version: "1.0.0",
  *   configurations: [
- *     "configTemplate:",
+ *     "schema:",
  *     "  rules:",
  *     "    configs:",
  *     "      Endpoint:",
@@ -118,7 +118,12 @@ const toAttrs = (
 
 export const ConfigTemplateVersionProvider = () =>
   Provider.succeed(ConfigTemplateVersion, {
-    stables: ["version", "configTemplate", "resourceGroup", "configTemplateVersionId"],
+    stables: [
+      "version",
+      "configTemplate",
+      "resourceGroup",
+      "configTemplateVersionId",
+    ],
 
     // Versions vanish with their config template.
     list: Effect.fn(function* () {
@@ -130,7 +135,8 @@ export const ConfigTemplateVersionProvider = () =>
       const moved =
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||
-        news.configTemplate.toLowerCase() !== output.configTemplate.toLowerCase() ||
+        news.configTemplate.toLowerCase() !==
+          output.configTemplate.toLowerCase() ||
         news.version !== output.version;
       if (moved || news.configurations !== output.configurations) {
         // Same name, new payload: the old version must go first.
@@ -166,13 +172,21 @@ export const ConfigTemplateVersionProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Edge");
       const { resourceGroup, configTemplate, version } = news;
-      const get = getVersion(subscriptionId, resourceGroup, configTemplate, version);
+      const get = getVersion(
+        subscriptionId,
+        resourceGroup,
+        configTemplate,
+        version,
+      );
 
       // Observe.
       const observed = yield* get;
 
       // Ensure. The payload is the version's only aspect.
-      if (observed === undefined || observed.properties?.configurations !== news.configurations) {
+      if (
+        observed === undefined ||
+        observed.properties?.configurations !== news.configurations
+      ) {
         yield* edge.ConfigTemplateVersionsCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,

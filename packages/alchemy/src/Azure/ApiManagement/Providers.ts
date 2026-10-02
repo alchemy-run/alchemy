@@ -110,6 +110,119 @@ import {
 import { TagProductLink, TagProductLinkProvider } from "./TagProductLink.ts";
 import { User, UserProvider } from "./User.ts";
 import { Workspace, WorkspaceProvider } from "./Workspace.ts";
+import { WorkspaceApi, WorkspaceApiProvider } from "./WorkspaceApi.ts";
+import {
+  WorkspaceApiDiagnostic,
+  WorkspaceApiDiagnosticProvider,
+} from "./WorkspaceApiDiagnostic.ts";
+import {
+  WorkspaceApiOperation,
+  WorkspaceApiOperationProvider,
+} from "./WorkspaceApiOperation.ts";
+import {
+  WorkspaceApiOperationPolicy,
+  WorkspaceApiOperationPolicyProvider,
+} from "./WorkspaceApiOperationPolicy.ts";
+import {
+  WorkspaceApiPolicy,
+  WorkspaceApiPolicyProvider,
+} from "./WorkspaceApiPolicy.ts";
+import {
+  WorkspaceApiRelease,
+  WorkspaceApiReleaseProvider,
+} from "./WorkspaceApiRelease.ts";
+import {
+  WorkspaceApiSchema,
+  WorkspaceApiSchemaProvider,
+} from "./WorkspaceApiSchema.ts";
+import {
+  WorkspaceApiVersionSet,
+  WorkspaceApiVersionSetProvider,
+} from "./WorkspaceApiVersionSet.ts";
+import {
+  WorkspaceBackend,
+  WorkspaceBackendProvider,
+} from "./WorkspaceBackend.ts";
+import {
+  WorkspaceCertificate,
+  WorkspaceCertificateProvider,
+} from "./WorkspaceCertificate.ts";
+import {
+  WorkspaceDiagnostic,
+  WorkspaceDiagnosticProvider,
+} from "./WorkspaceDiagnostic.ts";
+import {
+  WorkspaceGateway,
+  WorkspaceGatewayProvider,
+} from "./WorkspaceGateway.ts";
+import {
+  WorkspaceGatewayConfigConnection,
+  WorkspaceGatewayConfigConnectionProvider,
+} from "./WorkspaceGatewayConfigConnection.ts";
+import {
+  WorkspaceGlobalSchema,
+  WorkspaceGlobalSchemaProvider,
+} from "./WorkspaceGlobalSchema.ts";
+import { WorkspaceGroup, WorkspaceGroupProvider } from "./WorkspaceGroup.ts";
+import {
+  WorkspaceGroupUser,
+  WorkspaceGroupUserProvider,
+} from "./WorkspaceGroupUser.ts";
+import { WorkspaceLogger, WorkspaceLoggerProvider } from "./WorkspaceLogger.ts";
+import {
+  WorkspaceNamedValue,
+  WorkspaceNamedValueProvider,
+} from "./WorkspaceNamedValue.ts";
+import {
+  WorkspaceNotification,
+  WorkspaceNotificationProvider,
+} from "./WorkspaceNotification.ts";
+import {
+  WorkspaceNotificationRecipientEmail,
+  WorkspaceNotificationRecipientEmailProvider,
+} from "./WorkspaceNotificationRecipientEmail.ts";
+import {
+  WorkspaceNotificationRecipientUser,
+  WorkspaceNotificationRecipientUserProvider,
+} from "./WorkspaceNotificationRecipientUser.ts";
+import { WorkspacePolicy, WorkspacePolicyProvider } from "./WorkspacePolicy.ts";
+import {
+  WorkspacePolicyFragment,
+  WorkspacePolicyFragmentProvider,
+} from "./WorkspacePolicyFragment.ts";
+import {
+  WorkspaceProduct,
+  WorkspaceProductProvider,
+} from "./WorkspaceProduct.ts";
+import {
+  WorkspaceProductApiLink,
+  WorkspaceProductApiLinkProvider,
+} from "./WorkspaceProductApiLink.ts";
+import {
+  WorkspaceProductGroupLink,
+  WorkspaceProductGroupLinkProvider,
+} from "./WorkspaceProductGroupLink.ts";
+import {
+  WorkspaceProductPolicy,
+  WorkspaceProductPolicyProvider,
+} from "./WorkspaceProductPolicy.ts";
+import {
+  WorkspaceSubscription,
+  WorkspaceSubscriptionProvider,
+} from "./WorkspaceSubscription.ts";
+import { WorkspaceTag, WorkspaceTagProvider } from "./WorkspaceTag.ts";
+import {
+  WorkspaceTagApiLink,
+  WorkspaceTagApiLinkProvider,
+} from "./WorkspaceTagApiLink.ts";
+import {
+  WorkspaceTagOperationLink,
+  WorkspaceTagOperationLinkProvider,
+} from "./WorkspaceTagOperationLink.ts";
+import {
+  WorkspaceTagProductLink,
+  WorkspaceTagProductLinkProvider,
+} from "./WorkspaceTagProductLink.ts";
 
 export const resources = [
   Api,
@@ -169,6 +282,38 @@ export const resources = [
   TagProductLink,
   User,
   Workspace,
+  WorkspaceApi,
+  WorkspaceApiDiagnostic,
+  WorkspaceApiOperation,
+  WorkspaceApiOperationPolicy,
+  WorkspaceApiPolicy,
+  WorkspaceApiRelease,
+  WorkspaceApiSchema,
+  WorkspaceApiVersionSet,
+  WorkspaceBackend,
+  WorkspaceCertificate,
+  WorkspaceDiagnostic,
+  WorkspaceGateway,
+  WorkspaceGatewayConfigConnection,
+  WorkspaceGlobalSchema,
+  WorkspaceGroup,
+  WorkspaceGroupUser,
+  WorkspaceLogger,
+  WorkspaceNamedValue,
+  WorkspaceNotification,
+  WorkspaceNotificationRecipientEmail,
+  WorkspaceNotificationRecipientUser,
+  WorkspacePolicy,
+  WorkspacePolicyFragment,
+  WorkspaceProduct,
+  WorkspaceProductApiLink,
+  WorkspaceProductGroupLink,
+  WorkspaceProductPolicy,
+  WorkspaceSubscription,
+  WorkspaceTag,
+  WorkspaceTagApiLink,
+  WorkspaceTagOperationLink,
+  WorkspaceTagProductLink,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -232,5 +377,39 @@ export const layers = () =>
       TagProductLinkProvider(),
       UserProvider(),
       WorkspaceProvider(),
+      WorkspaceApiProvider(),
+      WorkspaceApiDiagnosticProvider(),
+      WorkspaceApiOperationProvider(),
+      WorkspaceApiOperationPolicyProvider(),
+      WorkspaceApiPolicyProvider(),
+      WorkspaceApiReleaseProvider(),
+      WorkspaceApiSchemaProvider(),
+      WorkspaceApiVersionSetProvider(),
+      WorkspaceBackendProvider(),
+      WorkspaceCertificateProvider(),
+      WorkspaceDiagnosticProvider(),
+      WorkspaceGatewayProvider(),
+      WorkspaceGatewayConfigConnectionProvider(),
+      WorkspaceGlobalSchemaProvider(),
+      WorkspaceGroupProvider(),
+      WorkspaceGroupUserProvider(),
+      WorkspaceLoggerProvider(),
+      WorkspaceNamedValueProvider(),
+      WorkspaceNotificationProvider(),
+      WorkspaceNotificationRecipientEmailProvider(),
+      WorkspaceNotificationRecipientUserProvider(),
+      WorkspacePolicyProvider(),
+      WorkspacePolicyFragmentProvider(),
+    ),
+    Layer.mergeAll(
+      WorkspaceProductProvider(),
+      WorkspaceProductApiLinkProvider(),
+      WorkspaceProductGroupLinkProvider(),
+      WorkspaceProductPolicyProvider(),
+      WorkspaceSubscriptionProvider(),
+      WorkspaceTagProvider(),
+      WorkspaceTagApiLinkProvider(),
+      WorkspaceTagOperationLinkProvider(),
+      WorkspaceTagProductLinkProvider(),
     ),
   );

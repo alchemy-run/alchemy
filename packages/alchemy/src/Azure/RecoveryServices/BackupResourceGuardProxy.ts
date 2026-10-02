@@ -26,7 +26,9 @@ export interface BackupResourceGuardProxyProps {
   vault: string;
   /**
    * ARM ID of the `Microsoft.DataProtection/resourceGuards` resource that
-   * protects the vault. Changing it replaces the proxy.
+   * protects the vault. A vault has a single proxy that cannot be
+   * re-pointed, so changing it removes the old association before creating
+   * the new one.
    */
   resourceGuardResourceId: string;
   /**
@@ -34,7 +36,10 @@ export interface BackupResourceGuardProxyProps {
    * @default "VaultProxy"
    */
   name?: string;
-  /** Description of the association. */
+  /**
+   * Description of the association. Azure Backup does not return it, so a
+   * change is detected against the last deployed value.
+   */
   description?: string;
 }
 
@@ -52,8 +57,8 @@ export interface BackupResourceGuardProxy extends Resource<
     resourceGuardProxyId: string;
     /** ARM ID of the resource guard. */
     resourceGuardResourceId: string;
-    /** Description of the association. */
-    description: string | undefined;
+    /** When the association was last written. */
+    lastUpdatedTime: string | undefined;
   },
   never,
   Providers
@@ -77,9 +82,12 @@ export interface BackupResourceGuardProxy extends Resource<
  * ### Multi-User Authorization
  * **Example:** Protect a vault with a resource guard
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * yield* Azure.RecoveryServices.BackupResourceGuardProxy("vault-guard", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   resourceGuardResourceId: guardId,
  *   description: "Security team approval required",
  * });
@@ -126,7 +134,7 @@ const toAttrs = (
   resourceGroup,
   resourceGuardProxyId: observed.id ?? "",
   resourceGuardResourceId: observed.properties?.resourceGuardResourceId ?? "",
-  description: observed.properties?.description || undefined,
+  lastUpdatedTime: observed.properties?.lastUpdatedTime,
 });
 
 export const BackupResourceGuardProxyProvider = () =>
@@ -149,10 +157,16 @@ export const BackupResourceGuardProxyProvider = () =>
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||
         news.vault.toLowerCase() !== output.vault.toLowerCase() ||
-        !sameId(news.name ?? DEFAULT_NAME, output.resourceGuardProxyName) ||
-        !sameId(news.resourceGuardResourceId, output.resourceGuardResourceId)
+        !sameId(news.name ?? DEFAULT_NAME, output.resourceGuardProxyName)
       ) {
         return { action: "replace" } as const;
+      }
+      // One proxy per vault: a vault "already locked with another
+      // ResourceGuardResource" rejects a second association.
+      if (
+        !sameId(news.resourceGuardResourceId, output.resourceGuardResourceId)
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -162,8 +176,7 @@ export const BackupResourceGuardProxyProvider = () =>
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       const vault = output?.vault ?? olds?.vault;
       if (resourceGroup === undefined || vault === undefined) return undefined;
-      const name =
-        output?.resourceGuardProxyName ?? olds?.name ?? DEFAULT_NAME;
+      const name = output?.resourceGuardProxyName ?? olds?.name ?? DEFAULT_NAME;
       const observed = yield* getProxy(
         subscriptionId,
         resourceGroup,
@@ -178,7 +191,7 @@ export const BackupResourceGuardProxyProvider = () =>
         : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, RECOVERY_SERVICES_NAMESPACE);
       const { resourceGroup, vault, resourceGuardResourceId } = news;
@@ -188,11 +201,16 @@ export const BackupResourceGuardProxyProvider = () =>
       // Observe.
       const observed = yield* get;
 
-      // Ensure + sync the description (the guard ID is immutable).
+      // Ensure + sync the guard. The service does not echo the
+      // description; the last deployed value is the only hint of drift.
       if (
         observed === undefined ||
-        (news.description !== undefined &&
-          (observed.properties?.description ?? "") !== news.description)
+        !sameId(
+          observed.properties?.resourceGuardResourceId,
+          resourceGuardResourceId,
+        ) ||
+        (observed.properties?.description ?? olds?.description) !==
+          news.description
       ) {
         yield* backup.PutResourceGuardProxy({
           subscriptionId,
@@ -208,7 +226,16 @@ export const BackupResourceGuardProxyProvider = () =>
 
       const fresh = yield* waitForProvisioned(
         `resource guard proxy ${name}`,
-        get,
+        get.pipe(
+          Effect.map((proxy) =>
+            sameId(
+              proxy?.properties?.resourceGuardResourceId,
+              resourceGuardResourceId,
+            )
+              ? proxy
+              : undefined,
+          ),
+        ),
         () => undefined,
         { interval: "3 seconds", times: 20 },
       );

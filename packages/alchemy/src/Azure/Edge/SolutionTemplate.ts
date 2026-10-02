@@ -1,5 +1,6 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -130,7 +131,9 @@ export interface SolutionTemplate extends Resource<
  *
  * @resource
  */
-export const SolutionTemplate = Resource<SolutionTemplate>("Azure.Edge.SolutionTemplate");
+export const SolutionTemplate = Resource<SolutionTemplate>(
+  "Azure.Edge.SolutionTemplate",
+);
 
 const getSolutionTemplate = (
   subscriptionId: string,
@@ -138,7 +141,11 @@ const getSolutionTemplate = (
   solutionTemplateName: string,
 ) =>
   orUndefinedIfNotFound(
-    edge.GetSolutionTemplate({ subscriptionId, resourceGroupName, solutionTemplateName }),
+    edge.GetSolutionTemplate({
+      subscriptionId,
+      resourceGroupName,
+      solutionTemplateName,
+    }),
   );
 
 const toAttrs = (
@@ -160,11 +167,17 @@ const toAttrs = (
   tags: userTags(solutionTemplate.tags),
 });
 
-const solutionTemplateName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const solutionTemplateName = (id: string) =>
+  createPhysicalName({ id, maxLength: 61 });
 
 export const SolutionTemplateProvider = () =>
   Provider.succeed(SolutionTemplate, {
-    stables: ["solutionTemplateName", "resourceGroup", "solutionTemplateId", "location"],
+    stables: [
+      "solutionTemplateName",
+      "resourceGroup",
+      "solutionTemplateId",
+      "location",
+    ],
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
@@ -191,7 +204,8 @@ export const SolutionTemplateProvider = () =>
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||
         (news.name !== undefined &&
-          news.name.toLowerCase() !== output.solutionTemplateName.toLowerCase()) ||
+          news.name.toLowerCase() !==
+            output.solutionTemplateName.toLowerCase()) ||
         (news.location !== undefined &&
           news.location.toLowerCase() !== output.location.toLowerCase())
       ) {
@@ -204,8 +218,15 @@ export const SolutionTemplateProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name = output?.solutionTemplateName ?? olds?.name ?? (yield* solutionTemplateName(id));
-      const observed = yield* getSolutionTemplate(subscriptionId, resourceGroup, name);
+      const name =
+        output?.solutionTemplateName ??
+        olds?.name ??
+        (yield* solutionTemplateName(id));
+      const observed = yield* getSolutionTemplate(
+        subscriptionId,
+        resourceGroup,
+        name,
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
@@ -216,7 +237,10 @@ export const SolutionTemplateProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Edge");
       const resourceGroup = news.resourceGroup;
-      const name = news.name ?? output?.solutionTemplateName ?? (yield* solutionTemplateName(id));
+      const name =
+        news.name ??
+        output?.solutionTemplateName ??
+        (yield* solutionTemplateName(id));
       const tags = yield* desiredTags(id, news.tags);
       const get = getSolutionTemplate(subscriptionId, resourceGroup, name);
 
@@ -232,14 +256,23 @@ export const SolutionTemplateProvider = () =>
 
       // Ensure.
       if (observed === undefined) {
-        yield* edge.SolutionTemplatesCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          solutionTemplateName: name,
-          location: news.location ?? output?.location ?? env.location,
-          tags,
-          properties: desired,
-        });
+        yield* edge
+          .SolutionTemplatesCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            solutionTemplateName: name,
+            location: news.location ?? output?.location ?? env.location,
+            tags,
+            properties: desired,
+          })
+          .pipe(
+            // The capability check lags a just-created or updated context.
+            Effect.retry({
+              while: (e) => e._tag === "EdgeContextCapabilityMissing",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 24,
+            }),
+          );
       } else {
         // Sync: PATCH only the observed deltas.
         const props = observed.properties;
@@ -260,13 +293,22 @@ export const SolutionTemplateProvider = () =>
         };
         const tagsChanged = tagsDiffer(observed.tags, tags);
         if (tagsChanged || Object.keys(delta).length > 0) {
-          yield* edge.UpdateSolutionTemplate({
-            subscriptionId,
-            resourceGroupName: resourceGroup,
-            solutionTemplateName: name,
-            ...(tagsChanged ? { tags } : {}),
-            properties: delta,
-          });
+          yield* edge
+            .UpdateSolutionTemplate({
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              solutionTemplateName: name,
+              ...(tagsChanged ? { tags } : {}),
+              properties: delta,
+            })
+            .pipe(
+              // The capability check lags a just-updated context.
+              Effect.retry({
+                while: (e) => e._tag === "EdgeContextCapabilityMissing",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+            );
         }
       }
 
@@ -290,7 +332,11 @@ export const SolutionTemplateProvider = () =>
       );
       yield* waitUntilGone(
         `edge solution template ${output.solutionTemplateName}`,
-        getSolutionTemplate(subscriptionId, output.resourceGroup, output.solutionTemplateName),
+        getSolutionTemplate(
+          subscriptionId,
+          output.resourceGroup,
+          output.solutionTemplateName,
+        ),
         EDGE_WAIT,
       );
     }),

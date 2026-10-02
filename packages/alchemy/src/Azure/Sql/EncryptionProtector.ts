@@ -12,12 +12,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
-import {
-  retryInProgress,
-  serverPath,
-  type ServerScope,
-  syncSetting,
-} from "./setting.ts";
+import { serverPath, type ServerScope, syncSetting } from "./setting.ts";
 
 /** The protector is a singleton named `current`. */
 const SETTING_NAME = "current";
@@ -203,10 +198,19 @@ export const EncryptionProtectorProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql encryption protector on ${output.serverName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The protector cannot be removed; switch back to the service-managed key.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.EncryptionProtectorsCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, {
+              serverKeyType: "ServiceManaged",
+              serverKeyName: "ServiceManaged",
+            }),
+          put: sql.EncryptionProtectorsCreateOrUpdate({
             ...serverPath(subscriptionId, output),
             encryptionProtectorName: SETTING_NAME,
             properties: {
@@ -214,7 +218,7 @@ export const EncryptionProtectorProvider = () =>
               serverKeyName: "ServiceManaged",
             },
           }),
-        ),
+        }),
       );
     }),
 

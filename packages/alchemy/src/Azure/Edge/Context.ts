@@ -1,5 +1,6 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -101,7 +102,8 @@ export interface Context extends Resource<
  * solution templates.
  *
  * Azure allows only one context per subscription; creating a second one
- * fails with `Context ... already exists`.
+ * fails with `Context ... already exists`, so a replacement deletes the
+ * old context first.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
  *
@@ -169,7 +171,7 @@ const toAttrs = (
   tags: userTags(context.tags),
 });
 
-const contextName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const contextName = (id: string) => createPhysicalName({ id, maxLength: 61 });
 
 export const ContextProvider = () =>
   Provider.succeed(Context, {
@@ -204,7 +206,8 @@ export const ContextProvider = () =>
         (news.location !== undefined &&
           news.location.toLowerCase() !== output.location.toLowerCase())
       ) {
-        return { action: "replace" } as const;
+        // Azure allows one context per subscription.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -213,7 +216,8 @@ export const ContextProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name = output?.contextName ?? olds?.name ?? (yield* contextName(id));
+      const name =
+        output?.contextName ?? olds?.name ?? (yield* contextName(id));
       const observed = yield* getContext(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -239,14 +243,24 @@ export const ContextProvider = () =>
 
       // Ensure.
       if (observed === undefined) {
-        yield* edge.ContextsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          contextName: name,
-          location: news.location ?? output?.location ?? env.location,
-          tags,
-          properties: desired,
-        });
+        yield* edge
+          .ContextsCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            contextName: name,
+            location: news.location ?? output?.location ?? env.location,
+            tags,
+            properties: desired,
+          })
+          .pipe(
+            // The one-context-per-subscription check lags a just-deleted
+            // context (e.g. a delete-first replacement).
+            Effect.retry({
+              while: (e) => e._tag === "EdgeContextAlreadyExists",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 24,
+            }),
+          );
       } else {
         // Sync: PATCH only the observed deltas.
         const observedAttrs = toAttrs(resourceGroup, name, observed);

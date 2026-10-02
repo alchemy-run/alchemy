@@ -9,7 +9,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -45,7 +45,7 @@ const getType = (
 test.provider(
   "create, replace, and delete a connection type",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -54,9 +54,9 @@ test.provider(
           getType(where.resourceGroup, where.automationAccount, name);
         expect(type.fieldNames).toEqual(["Endpoint"]);
         const observed = yield* get(type.connectionTypeName);
-        expect(Object.keys(observed.properties?.fieldDefinitions ?? {})).toEqual(
-          ["Endpoint"],
-        );
+        expect(
+          Object.keys(observed.properties?.fieldDefinitions ?? {}),
+        ).toEqual(["Endpoint"]);
 
         // No-op redeploy keeps the type.
         const same = yield* stack.deploy(program(["Endpoint"]));

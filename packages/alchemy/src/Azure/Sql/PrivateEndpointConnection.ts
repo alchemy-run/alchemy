@@ -16,7 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isServerOwnedByStack, lower, sameId } from "./common.ts";
+import { isServerOwnedByStack, lower, readyState, sameId } from "./common.ts";
 
 export interface PrivateEndpointConnectionProps {
   /** Resource group of the SQL server. Changing it replaces the connection. */
@@ -68,7 +68,9 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * Connections are not created directly: a private endpoint that targets
  * the server with a *manual* connection leaves a `Pending` request on the
- * server. This resource approves or rejects that request. Destroying it
+ * server. This resource approves or rejects that request. Azure SQL
+ * treats the decision as final: changing `status` later fails, and
+ * `description` is only sent with the decision. Destroying the resource
  * removes the connection, which disconnects the private endpoint.
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/private-endpoint-overview
@@ -107,6 +109,10 @@ export interface PrivateEndpointConnection extends Resource<
 export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
   "Azure.Sql.PrivateEndpointConnection",
 );
+
+export class PrivateEndpointConnectionDecided extends Data.TaggedError(
+  "Azure.Sql.PrivateEndpointConnectionDecided",
+)<{ readonly message: string }> {}
 
 export class PrivateEndpointConnectionRequestMissing extends Data.TaggedError(
   "Azure.Sql.PrivateEndpointConnectionRequestMissing",
@@ -244,7 +250,7 @@ export const PrivateEndpointConnectionProvider = () =>
           found === undefined
             ? Effect.fail(
                 new PrivateEndpointConnectionRequestMissing({
-                  message: `no connection from private endpoint ${privateEndpointId} on key server ${server}`,
+                  message: `no connection from private endpoint ${privateEndpointId} on sql server ${server}`,
                 }),
               )
             : Effect.succeed(found),
@@ -259,12 +265,13 @@ export const PrivateEndpointConnectionProvider = () =>
       const name = observed.name ?? "";
       const get = getConnection(subscriptionId, resourceGroup, server, name);
 
-      // Sync the decision and its description.
+      // Sync the decision. Azure SQL only accepts decisions on `Pending`
+      // requests: an approval or rejection is final, so a later change
+      // surfaces Azure's error and a description-only change is skipped.
       const state = observed.properties?.privateLinkServiceConnectionState;
       if (
-        state?.status !== status ||
-        (news.description !== undefined &&
-          state?.description !== news.description)
+        state?.status !== status &&
+        (state?.status === "Pending" || state?.status === undefined)
       ) {
         yield* sql.PrivateEndpointConnectionsCreateOrUpdate({
           subscriptionId,
@@ -278,6 +285,12 @@ export const PrivateEndpointConnectionProvider = () =>
             },
           },
         });
+      } else if (state?.status !== status) {
+        return yield* Effect.fail(
+          new PrivateEndpointConnectionDecided({
+            message: `private endpoint connection ${name} on ${server} is already ${state?.status}; Azure SQL decisions are final (delete the private endpoint to start over)`,
+          }),
+        );
       }
       const fresh = yield* waitForProvisioned(
         `private endpoint connection ${name}`,
@@ -285,7 +298,7 @@ export const PrivateEndpointConnectionProvider = () =>
         (connection) =>
           connection.properties?.privateLinkServiceConnectionState?.status ===
           status
-            ? connection.properties.provisioningState
+            ? readyState(connection.properties.provisioningState)
             : "Updating",
         { interval: "3 seconds", times: 40 },
       );

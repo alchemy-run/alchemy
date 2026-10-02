@@ -48,6 +48,7 @@ export const createVault = (
   resourceGroupName: string,
   vaultName: string,
   owner: { stack: string; stage: string },
+  options: { systemAssignedIdentity?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const subscriptionId = yield* subscription;
@@ -58,6 +59,9 @@ export const createVault = (
       vaultName,
       location,
       sku: { name: "RS0", tier: "Standard" },
+      ...(options.systemAssignedIdentity
+        ? { identity: { type: "SystemAssigned" } }
+        : {}),
       tags: { "alchemy::stack": owner.stack, "alchemy::stage": owner.stage },
       properties: {
         publicNetworkAccess: "Enabled",

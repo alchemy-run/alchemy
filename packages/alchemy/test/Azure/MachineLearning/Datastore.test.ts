@@ -80,7 +80,11 @@ test.provider(
       // Replacement: Azure ignores updates, so a new description replaces
       // the datastore.
       const redescribed = yield* stack.deploy(
-        program({ container: "Raw", description: "raw v2", tags: { env: "prod" } }),
+        program({
+          container: "Raw",
+          description: "raw v2",
+          tags: { env: "prod" },
+        }),
       );
       expect(redescribed.datastore.datastoreName).not.toEqual(
         datastore.datastoreName,
@@ -105,9 +109,9 @@ test.provider(
       expect(replacedObserved.properties.containerName).toEqual(
         replaced.container.containerName,
       );
-      expect(
-        yield* waitGone(get(redescribed.datastore.datastoreName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(get(redescribed.datastore.datastoreName))).toEqual(
+        "gone",
+      );
 
       yield* stack.destroy();
       expect(yield* waitGone(get(replaced.datastore.datastoreName))).toEqual(

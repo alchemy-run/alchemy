@@ -215,7 +215,7 @@ export const getContainerApp = (
   );
 
 /** Whether tags carry the current stack and stage. */
-const taggedByStack = Effect.fn(function* (
+export const taggedByStack = Effect.fn(function* (
   tags: Record<string, string | undefined> | undefined,
 ) {
   const { stack, stage } = yield* stackAndStage;
@@ -268,3 +268,35 @@ export const nameOf = (armId: string | undefined) =>
     ?.split("/")
     .filter((part) => part.length > 0)
     .pop();
+
+/** Read a connected environment, `undefined` when missing. */
+export const getConnectedEnvironment = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  connectedEnvironmentName: string,
+) =>
+  orUndefinedIfNotFound(
+    app.GetConnectedEnvironment({
+      subscriptionId,
+      resourceGroupName,
+      connectedEnvironmentName,
+    }),
+  );
+
+/**
+ * Whether the connected environment is tagged as owned by the current
+ * stack and stage. Untagged children (storages, Dapr components) inherit
+ * ownership from it.
+ */
+export const isConnectedEnvironmentOwnedByStack = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  connectedEnvironmentName: string,
+) {
+  const env = yield* getConnectedEnvironment(
+    subscriptionId,
+    resourceGroupName,
+    connectedEnvironmentName,
+  );
+  return env !== undefined && (yield* taggedByStack(env.tags));
+});

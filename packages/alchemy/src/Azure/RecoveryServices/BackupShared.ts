@@ -44,7 +44,8 @@ export const createBackupName = Effect.fn(function* (
     .replace(/^[^A-Za-z]+|-+$/g, "");
 });
 
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+const ISO_DATE_TIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
 
 /**
  * Normalize a value for comparison. Azure Backup schedules only use the
@@ -63,7 +64,10 @@ const normalize = (value: unknown): unknown =>
  * `observed` (fields Azure fills in with defaults are ignored). Arrays must
  * match element-wise.
  */
-export const matchesDesired = (observed: unknown, desired: unknown): boolean => {
+export const matchesDesired = (
+  observed: unknown,
+  desired: unknown,
+): boolean => {
   if (desired === undefined) return true;
   if (Array.isArray(desired)) {
     return (

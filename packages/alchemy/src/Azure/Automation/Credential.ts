@@ -158,7 +158,11 @@ export const CredentialProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),
@@ -182,8 +186,7 @@ export const CredentialProvider = () =>
       // The password cannot be read back; the previous props are the only
       // hint of what was written.
       const passwordChanged =
-        olds === undefined ||
-        reveal(olds.password) !== reveal(news.password);
+        olds === undefined || reveal(olds.password) !== reveal(news.password);
 
       // Ensure + sync: the PUT is a synchronous upsert.
       if (

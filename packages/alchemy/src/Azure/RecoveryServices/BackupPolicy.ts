@@ -193,9 +193,12 @@ export interface BackupPolicy extends Resource<
  * ### Azure Files
  * **Example:** Daily Azure Files backup kept for 7 days
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("files-daily", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   backupManagementType: "AzureStorage",
  *   workLoadType: "AzureFileShare",
  *   schedulePolicy: {
@@ -218,7 +221,7 @@ export interface BackupPolicy extends Resource<
  * ```typescript
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("vm-hourly", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   backupManagementType: "AzureIaasVM",
  *   policyType: "V2",
  *   instantRpRetentionRangeInDays: 7,
@@ -265,7 +268,9 @@ const getPolicy = (
   );
 
 /** The policy body Alchemy sends (only fields the user set). */
-const desiredProperties = (news: BackupPolicyProps): backup.ProtectionPolicy => {
+const desiredProperties = (
+  news: BackupPolicyProps,
+): backup.ProtectionPolicy => {
   const body: Record<string, unknown> = {
     backupManagementType: news.backupManagementType,
     timeZone: news.timeZone ?? "UTC",

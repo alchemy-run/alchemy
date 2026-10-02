@@ -1,5 +1,6 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -271,8 +272,12 @@ const purgeDeletedService = Effect.fn(function* (
       serviceName,
     );
     if (deleted === undefined) return undefined;
+    // The purge is refused while the delete is still transitioning; the
+    // record stays, so the next poll purges again.
     yield* ignoreNotFound(
       apim.PurgeDeletedService({ subscriptionId, location, serviceName }),
+    ).pipe(
+      Effect.catchTag("ApiManagementServiceTransitioning", () => Effect.void),
     );
     return deleted;
   });
@@ -452,11 +457,18 @@ export const ServiceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const name = output.serviceName;
+      // A service that is still activating or updating refuses the delete.
       yield* ignoreNotFound(
         apim.DeleteApiManagementService({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           serviceName: name,
+        }),
+      ).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ApiManagementServiceTransitioning",
+          schedule: Schedule.spaced("15 seconds"),
+          times: 40,
         }),
       );
       yield* waitUntilGone(

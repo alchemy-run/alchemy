@@ -10,7 +10,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -51,7 +51,7 @@ const getCredential = (
 test.provider(
   "create, update, replace, and delete a credential",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -65,7 +65,11 @@ test.provider(
 
         // In-place: user name, password rotation, description.
         const updated = yield* stack.deploy(
-          program({ userName: "bob", password: "pw-2", description: "rotated" }),
+          program({
+            userName: "bob",
+            password: "pw-2",
+            description: "rotated",
+          }),
         );
         expect(updated.credential.credentialId).toEqual(
           credential.credentialId,

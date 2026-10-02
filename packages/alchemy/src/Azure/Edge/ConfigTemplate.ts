@@ -27,7 +27,8 @@ export interface ConfigTemplateProps {
   /** Resource group the config template is created in. Changing it replaces the config template. */
   resourceGroup: string;
   /**
-   * Name of the config template. If omitted, a unique name is generated from the
+   * Name of the config template: 3-24 letters, digits, and `-`. If
+   * omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the config template.
    */
   name?: string;
@@ -110,7 +111,9 @@ export interface ConfigTemplate extends Resource<
  *
  * @resource
  */
-export const ConfigTemplate = Resource<ConfigTemplate>("Azure.Edge.ConfigTemplate");
+export const ConfigTemplate = Resource<ConfigTemplate>(
+  "Azure.Edge.ConfigTemplate",
+);
 
 const getConfigTemplate = (
   subscriptionId: string,
@@ -118,7 +121,11 @@ const getConfigTemplate = (
   configTemplateName: string,
 ) =>
   orUndefinedIfNotFound(
-    edge.GetConfigTemplate({ subscriptionId, resourceGroupName, configTemplateName }),
+    edge.GetConfigTemplate({
+      subscriptionId,
+      resourceGroupName,
+      configTemplateName,
+    }),
   );
 
 const toAttrs = (
@@ -136,11 +143,17 @@ const toAttrs = (
   tags: userTags(configTemplate.tags),
 });
 
-const configTemplateName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const configTemplateName = (id: string) =>
+  createPhysicalName({ id, maxLength: 24 });
 
 export const ConfigTemplateProvider = () =>
   Provider.succeed(ConfigTemplate, {
-    stables: ["configTemplateName", "resourceGroup", "configTemplateId", "location"],
+    stables: [
+      "configTemplateName",
+      "resourceGroup",
+      "configTemplateId",
+      "location",
+    ],
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
@@ -167,7 +180,8 @@ export const ConfigTemplateProvider = () =>
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||
         (news.name !== undefined &&
-          news.name.toLowerCase() !== output.configTemplateName.toLowerCase()) ||
+          news.name.toLowerCase() !==
+            output.configTemplateName.toLowerCase()) ||
         (news.location !== undefined &&
           news.location.toLowerCase() !== output.location.toLowerCase())
       ) {
@@ -180,8 +194,15 @@ export const ConfigTemplateProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name = output?.configTemplateName ?? olds?.name ?? (yield* configTemplateName(id));
-      const observed = yield* getConfigTemplate(subscriptionId, resourceGroup, name);
+      const name =
+        output?.configTemplateName ??
+        olds?.name ??
+        (yield* configTemplateName(id));
+      const observed = yield* getConfigTemplate(
+        subscriptionId,
+        resourceGroup,
+        name,
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
@@ -192,7 +213,10 @@ export const ConfigTemplateProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Edge");
       const resourceGroup = news.resourceGroup;
-      const name = news.name ?? output?.configTemplateName ?? (yield* configTemplateName(id));
+      const name =
+        news.name ??
+        output?.configTemplateName ??
+        (yield* configTemplateName(id));
       const tags = yield* desiredTags(id, news.tags);
       const get = getConfigTemplate(subscriptionId, resourceGroup, name);
 
@@ -243,7 +267,11 @@ export const ConfigTemplateProvider = () =>
       );
       yield* waitUntilGone(
         `edge config template ${output.configTemplateName}`,
-        getConfigTemplate(subscriptionId, output.resourceGroup, output.configTemplateName),
+        getConfigTemplate(
+          subscriptionId,
+          output.resourceGroup,
+          output.configTemplateName,
+        ),
         EDGE_WAIT,
       );
     }),

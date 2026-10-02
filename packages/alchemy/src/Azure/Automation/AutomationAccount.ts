@@ -134,6 +134,11 @@ export interface AutomationAccount extends Resource<
  * shared assets (variables, credentials, certificates, connections),
  * modules, and hybrid worker groups.
  *
+ * Deleted accounts are soft-deleted for 30 days. Creating an account with
+ * the name and resource group of a soft-deleted one recovers it (with its
+ * runbooks and assets) instead of failing — free-trial subscriptions allow
+ * only one account per region and count soft-deleted accounts against it.
+ *
  * @see https://learn.microsoft.com/azure/automation/overview
  *
  * ### Creating an Automation Account
@@ -216,7 +221,9 @@ const identityMatches = (
   observed: automation.Identity | undefined,
 ) => {
   const observedType = (observed?.type ?? "None").replace(/\s/g, "");
-  if (observedType.toLowerCase() !== desired.type.replace(/\s/g, "").toLowerCase()) {
+  if (
+    observedType.toLowerCase() !== desired.type.replace(/\s/g, "").toLowerCase()
+  ) {
     return false;
   }
   const want = (desired.userAssignedIdentities ?? [])

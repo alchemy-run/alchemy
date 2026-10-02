@@ -98,9 +98,12 @@ export interface BackupProtectionIntent extends Resource<
  * ### SQL Server in Azure VMs
  * **Example:** Auto-protect a SQL instance
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * yield* Azure.RecoveryServices.BackupProtectionIntent("sql-auto", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   protectionIntentItemType: "AzureWorkloadSQLAutoProtectionIntent",
  *   sourceResourceId: vm.id,
  *   itemId: sqlInstanceItemId,

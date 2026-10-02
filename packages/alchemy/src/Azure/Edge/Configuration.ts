@@ -90,7 +90,9 @@ export interface Configuration extends Resource<
  *
  * @resource
  */
-export const Configuration = Resource<Configuration>("Azure.Edge.Configuration");
+export const Configuration = Resource<Configuration>(
+  "Azure.Edge.Configuration",
+);
 
 const getConfiguration = (
   subscriptionId: string,
@@ -98,7 +100,11 @@ const getConfiguration = (
   configurationName: string,
 ) =>
   orUndefinedIfNotFound(
-    edge.GetConfiguration({ subscriptionId, resourceGroupName, configurationName }),
+    edge.GetConfiguration({
+      subscriptionId,
+      resourceGroupName,
+      configurationName,
+    }),
   );
 
 const toAttrs = (
@@ -113,11 +119,17 @@ const toAttrs = (
   tags: userTags(configuration.tags),
 });
 
-const configurationName = (id: string) => createPhysicalName({ id, maxLength: 63 });
+const configurationName = (id: string) =>
+  createPhysicalName({ id, maxLength: 61 });
 
 export const ConfigurationProvider = () =>
   Provider.succeed(Configuration, {
-    stables: ["configurationName", "resourceGroup", "configurationId", "location"],
+    stables: [
+      "configurationName",
+      "resourceGroup",
+      "configurationId",
+      "location",
+    ],
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
@@ -157,8 +169,15 @@ export const ConfigurationProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name = output?.configurationName ?? olds?.name ?? (yield* configurationName(id));
-      const observed = yield* getConfiguration(subscriptionId, resourceGroup, name);
+      const name =
+        output?.configurationName ??
+        olds?.name ??
+        (yield* configurationName(id));
+      const observed = yield* getConfiguration(
+        subscriptionId,
+        resourceGroup,
+        name,
+      );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
@@ -169,7 +188,10 @@ export const ConfigurationProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Edge");
       const resourceGroup = news.resourceGroup;
-      const name = news.name ?? output?.configurationName ?? (yield* configurationName(id));
+      const name =
+        news.name ??
+        output?.configurationName ??
+        (yield* configurationName(id));
       const tags = yield* desiredTags(id, news.tags);
       const get = getConfiguration(subscriptionId, resourceGroup, name);
 
@@ -215,7 +237,11 @@ export const ConfigurationProvider = () =>
       );
       yield* waitUntilGone(
         `edge configuration ${output.configurationName}`,
-        getConfiguration(subscriptionId, output.resourceGroup, output.configurationName),
+        getConfiguration(
+          subscriptionId,
+          output.resourceGroup,
+          output.configurationName,
+        ),
         EDGE_WAIT,
       );
     }),

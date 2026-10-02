@@ -52,7 +52,7 @@ export interface LoadBalancerFrontendIpConfiguration {
   zones?: string[];
 }
 
-export interface LoadBalancerBackendAddressPool {
+export interface LoadBalancerBackendAddressPoolSpec {
   /** Name of the pool; rules reference it by this name. */
   name: string;
 }
@@ -185,7 +185,7 @@ export interface LoadBalancerProps {
    * `NetworkInterface.ipConfigurations[].loadBalancerBackendAddressPoolIds`
    * using the IDs in the `backendAddressPoolIds` attribute.
    */
-  backendAddressPools?: LoadBalancerBackendAddressPool[];
+  backendAddressPools?: LoadBalancerBackendAddressPoolSpec[];
   /** Health probes. */
   probes?: LoadBalancerProbe[];
   /** Load-balancing rules. */
@@ -611,15 +611,17 @@ export const LoadBalancerProvider = () =>
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news: declared, olds, output }) {
       const env = yield* AzureEnvironment.current;
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Network");
-      const resourceGroup = news.resourceGroup;
+      const resourceGroup = declared.resourceGroup;
       const name =
-        news.name ?? output?.loadBalancerName ?? (yield* createNetworkName(id));
-      const location = news.location ?? output?.location ?? env.location;
-      const tags = yield* desiredTags(id, news.tags);
+        declared.name ??
+        output?.loadBalancerName ??
+        (yield* createNetworkName(id));
+      const location = declared.location ?? output?.location ?? env.location;
+      const tags = yield* desiredTags(id, declared.tags);
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -635,6 +637,25 @@ export const LoadBalancerProvider = () =>
       // Observe.
       let observed = yield* get;
       const props = observed?.properties;
+
+      // Pools this LB never declared (e.g. LoadBalancerBackendAddressPool
+      // resources) are preserved; pools it used to declare are removed.
+      const ownedPools = [
+        ...(declared.backendAddressPools ?? []),
+        ...(olds?.backendAddressPools ?? []),
+      ].map((pool) => pool.name.toLowerCase());
+      const news: LoadBalancerProps = {
+        ...declared,
+        backendAddressPools: [
+          ...(declared.backendAddressPools ?? []),
+          ...(props?.backendAddressPools ?? []).flatMap((pool) =>
+            pool.name === undefined ||
+            ownedPools.includes(pool.name.toLowerCase())
+              ? []
+              : [{ name: pool.name }],
+          ),
+        ],
+      };
 
       // Ensure + sync. The PUT replaces every child collection, so it is
       // sent only on drift and carries observed inbound NAT rules and

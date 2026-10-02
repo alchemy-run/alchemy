@@ -181,7 +181,11 @@ export const CertificateProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

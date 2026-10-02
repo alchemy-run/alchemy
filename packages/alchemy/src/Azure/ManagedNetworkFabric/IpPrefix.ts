@@ -186,7 +186,8 @@ export const IpPrefixProvider = () =>
       if (
         !sameArm(news.resourceGroup, output.resourceGroup) ||
         (news.name !== undefined && !sameArm(news.name, output.ipPrefixName)) ||
-        (news.location !== undefined && !sameArm(news.location, output.location))
+        (news.location !== undefined &&
+          !sameArm(news.location, output.location))
       ) {
         return { action: "replace" } as const;
       }

@@ -12,7 +12,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
-import { retryInProgress, syncSetting } from "./setting.ts";
+import { syncSetting } from "./setting.ts";
 
 /** The setting is a singleton named `Default`. */
 const SETTING_NAME = "Default";
@@ -172,16 +172,26 @@ export const ServerAdvancedThreatProtectionSettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      // The setting cannot be removed; disable it.
+      const get = getSetting(
+        subscriptionId,
+        output.resourceGroup,
+        output.serverName,
+      );
+      if ((yield* get) === undefined) return;
+      // The setting cannot be removed; reset it.
       yield* ignoreNotFound(
-        retryInProgress(
-          putSetting(
+        syncSetting({
+          label: `sql threat protection on ${output.serverName}`,
+          get,
+          converged: (observed) =>
+            lower(observed.properties?.state) === lower("Disabled"),
+          put: putSetting(
             subscriptionId,
             output.resourceGroup,
             output.serverName,
             "Disabled",
           ),
-        ),
+        }),
       );
     }),
 

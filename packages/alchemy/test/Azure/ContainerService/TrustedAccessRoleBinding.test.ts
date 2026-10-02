@@ -36,7 +36,7 @@ const program = (withBinding: boolean) =>
       kind: "AIServices",
     });
     const binding = withBinding
-      ? yield* Azure.ContainerService.TrustedAccessRoleBinding("Foundry", {
+      ? yield* Azure.ContainerService.TrustedAccessRoleBinding("Binding", {
           resourceGroup: group.resourceGroupName,
           cluster: cluster.clusterName,
           sourceResourceId: account.accountId,

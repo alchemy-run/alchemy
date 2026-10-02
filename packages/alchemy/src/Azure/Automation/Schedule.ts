@@ -202,7 +202,12 @@ const sameJson = (a: unknown, b: unknown) =>
 
 export const ScheduleProvider = () =>
   Provider.succeed(Schedule, {
-    stables: ["scheduleName", "scheduleId", "automationAccount", "resourceGroup"],
+    stables: [
+      "scheduleName",
+      "scheduleId",
+      "automationAccount",
+      "resourceGroup",
+    ],
 
     // Schedules live inside an account; nuke removes them with it.
     list: Effect.fn(function* () {
@@ -214,7 +219,8 @@ export const ScheduleProvider = () =>
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.automationAccount, output.automationAccount) ||
-        (news.name !== undefined && !sameName(news.name, output.scheduleName)) ||
+        (news.name !== undefined &&
+          !sameName(news.name, output.scheduleName)) ||
         news.frequency !== output.frequency ||
         (olds !== undefined &&
           (news.startTime !== olds.startTime ||
@@ -245,7 +251,11 @@ export const ScheduleProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),
@@ -281,7 +291,8 @@ export const ScheduleProvider = () =>
           properties: {
             startTime: news.startTime,
             frequency: news.frequency,
-            interval: news.frequency === "OneTime" ? undefined : (news.interval ?? 1),
+            interval:
+              news.frequency === "OneTime" ? undefined : (news.interval ?? 1),
             timeZone: news.timeZone ?? "UTC",
             expiryTime: news.expiryTime,
             advancedSchedule: news.advancedSchedule,

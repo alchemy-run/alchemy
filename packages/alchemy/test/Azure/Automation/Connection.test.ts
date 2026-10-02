@@ -9,7 +9,7 @@ import {
   subscription,
   tags,
   waitGone,
-  withSharedAccount,
+  sharedAccountTest,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -53,7 +53,7 @@ const getConnection = (
 test.provider(
   "create, update, replace, and delete a connection",
   (stack) =>
-    withSharedAccount(
+    sharedAccountTest(stack)(
       Effect.gen(function* () {
         yield* stack.destroy();
 
@@ -72,7 +72,9 @@ test.provider(
         const updated = yield* stack.deploy(
           program({ endpoint: "https://b.example.com", description: "b" }),
         );
-        expect(updated.connection.connectionId).toEqual(connection.connectionId);
+        expect(updated.connection.connectionId).toEqual(
+          connection.connectionId,
+        );
         const reobserved = yield* get(connection.connectionName);
         expect(reobserved.properties?.fieldDefinitionValues?.Endpoint).toEqual(
           "https://b.example.com",

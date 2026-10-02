@@ -84,9 +84,12 @@ export interface BackupEncryptionConfig extends Resource<
  * ### Customer-Managed Keys
  * **Example:** Encrypt backups with a Key Vault key
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * yield* Azure.RecoveryServices.BackupEncryptionConfig("backup-cmk", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   keyUri: "https://my-kv.vault.azure.net/keys/backup-key",
  *   infrastructureEncryptionState: "Enabled",
  * });
@@ -211,7 +214,9 @@ export const BackupEncryptionConfigProvider = () =>
       // Key updates apply asynchronously; wait for the vault to report them.
       const fresh = yield* get.pipe(
         Effect.flatMap((config) => {
-          const status = (config?.properties?.lastUpdateStatus ?? "").toLowerCase();
+          const status = (
+            config?.properties?.lastUpdateStatus ?? ""
+          ).toLowerCase();
           if (status === "failed" || status === "partiallyfailed") {
             return Effect.fail(
               new ProvisioningFailed({

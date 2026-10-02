@@ -420,7 +420,12 @@ export const networkProvider =
         for (const parent of parents) path[parent] = o[parent] as string;
         yield* ignoreNotFound(
           spec.del(subscriptionId, path as NetworkPath),
-        ).pipe(Effect.retry(whileInUse(spec.inUseTags ?? [])));
+        ).pipe(
+          // `CannotDeleteResource`: nested children are still being removed.
+          Effect.retry(
+            whileInUse(["CannotDeleteResource", ...(spec.inUseTags ?? [])]),
+          ),
+        );
         yield* waitGone(
           describe(path as NetworkPath),
           spec.get(subscriptionId, path as NetworkPath),

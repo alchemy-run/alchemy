@@ -61,6 +61,17 @@ export const withSharedAccount = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> => sharedAccount.withPermits(1)(self);
 
+/**
+ * Like {@link withSharedAccount}, but destroys the stack when the body fails
+ * so the fixed-name resource group never blocks the next test file.
+ */
+export const sharedAccountTest =
+  <R2>(stack: { destroy: () => Effect.Effect<unknown, unknown, R2> }) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
+    withSharedAccount(
+      self.pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+    );
+
 /** Resource group + the shared Automation account every child test deploys. */
 export const account = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -71,6 +82,10 @@ export const account = Effect.gen(function* () {
     resourceGroup: group.resourceGroupName,
     name: SHARED.account,
     location: SHARED.location,
+    // The recovered account keeps the settings of its last life (the
+    // account test disables both), so pin them.
+    publicNetworkAccess: true,
+    disableLocalAuth: false,
   });
   return {
     group,

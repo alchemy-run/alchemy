@@ -1,23 +1,20 @@
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  stackAndStage,
-  type WaitBudget,
-  waitForProvisioned,
-} from "../Arm.ts";
+import { stackAndStage, type WaitBudget, waitForProvisioned } from "../Arm.ts";
 
 /** Resource provider namespace of Azure Operator Nexus Network Fabric. */
 export const FABRIC_NAMESPACE = "Microsoft.ManagedNetworkFabric";
 
 /**
- * Generate a Network Fabric resource name: up to 80 letters, digits, `_`,
- * and `-`, starting and ending with a letter or digit.
+ * Generate a Network Fabric resource name. The RP enforces
+ * `^[a-zA-Z][a-zA-Z0-9-_]{2,127}$`: 3-128 letters, digits, `_`, and `-`,
+ * starting with a letter.
  */
 export const createFabricName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({ id, maxLength: 80 });
   return name
     .replace(/[^a-zA-Z0-9_-]/g, "-")
-    .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "");
+    .replace(/^[^a-zA-Z]+|[^a-zA-Z0-9]+$/g, "");
 });
 
 /** ARM names, IDs, and locations compare case-insensitively. */

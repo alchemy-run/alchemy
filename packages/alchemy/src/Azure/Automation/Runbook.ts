@@ -302,9 +302,7 @@ export const RunbookProvider = () =>
       if (news.content !== undefined) {
         const published =
           observed.properties?.state === "Published"
-            ? yield* orUndefinedIfNotFound(
-                automation.GetRunbookContent(where),
-              )
+            ? yield* orUndefinedIfNotFound(automation.GetRunbookContent(where))
             : undefined;
         if (
           normalizeContent(published) !== normalizeContent(news.content) ||

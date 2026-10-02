@@ -11,13 +11,8 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isServerOwnedByStack, lower } from "./common.ts";
-import {
-  databasePath,
-  type DatabaseScope,
-  retryInProgress,
-  syncSetting,
-} from "./setting.ts";
+import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
+import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
 /** The setting is a singleton named `Default`. */
 const SETTING_NAME = "Default";
@@ -179,15 +174,21 @@ export const DatabaseAdvancedThreatProtectionSettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql an Azure SQL database threat protection on ${output.databaseName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The setting cannot be removed; disable it.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.DatabaseAdvancedThreatProtectionSettingsCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Disabled" }),
+          put: sql.DatabaseAdvancedThreatProtectionSettingsCreateOrUpdate({
             ...databasePath(subscriptionId, output),
             advancedThreatProtectionName: SETTING_NAME,
             properties: { state: "Disabled" },
           }),
-        ),
+        }),
       );
     }),
 

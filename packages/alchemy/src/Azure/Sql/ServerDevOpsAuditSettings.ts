@@ -19,7 +19,6 @@ import {
   sameSecret,
 } from "./common.ts";
 import {
-  retryInProgress,
   secretsFingerprint,
   serverPath,
   type ServerScope,
@@ -215,15 +214,21 @@ export const ServerDevOpsAuditSettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const label = `sql server devops audit settings on ${output.serverName}`;
+      if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The setting cannot be removed; disable it.
       yield* ignoreNotFound(
-        retryInProgress(
-          sql.ServerDevOpsAuditSettingsCreateOrUpdate({
+        syncSetting({
+          label,
+          get: getSetting(subscriptionId, output),
+          converged: (observed) =>
+            fieldsMatch(observed.properties, { state: "Disabled" }),
+          put: sql.ServerDevOpsAuditSettingsCreateOrUpdate({
             ...serverPath(subscriptionId, output),
             devOpsAuditingSettingsName: SETTING_NAME,
             properties: { state: "Disabled" },
           }),
-        ),
+        }),
       );
     }),
 

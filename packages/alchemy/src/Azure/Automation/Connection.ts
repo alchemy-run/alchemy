@@ -181,7 +181,11 @@ export const ConnectionProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),
@@ -230,7 +234,9 @@ export const ConnectionProvider = () =>
         // Sync. Encrypted values are not returned, so compare the observed
         // plain values and fall back to the previous props for the rest.
         const observedValues = Object.fromEntries(
-          Object.entries(observed.properties?.fieldDefinitionValues ?? {}).filter(
+          Object.entries(
+            observed.properties?.fieldDefinitionValues ?? {},
+          ).filter(
             (entry): entry is [string, string] => entry[1] !== undefined,
           ),
         );

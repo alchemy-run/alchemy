@@ -109,15 +109,19 @@ export interface BackupProtectedItem extends Resource<
  * Protected items cannot be tagged; Alchemy treats an item as owned when
  * its vault is tagged for the current stack and stage. Changing the policy
  * updates the item in place. Destroying the resource stops protection and
- * deletes the backup data; when soft delete is enabled on the vault the
- * data is kept in a soft-deleted state for the retention period (disable
- * it with {@link BackupVaultConfig} for disposable environments).
+ * deletes the backup data; when soft delete is on (new vaults default to
+ * the irreversible `AlwaysON`) the item is kept soft-deleted for the
+ * retention period (14 days by default) and the vault cannot be deleted
+ * until it expires.
  *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-file-share-rest-api
  *
  * ### Azure Files
  * **Example:** Back up a file share daily
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * const account = yield* Azure.Storage.StorageAccount("files", {
  *   resourceGroup: group.resourceGroupName,
  * });
@@ -129,13 +133,13 @@ export interface BackupProtectedItem extends Resource<
  *   "files-container",
  *   {
  *     resourceGroup: group.resourceGroupName,
- *     vault: "my-vault",
+ *     vault: vault.vaultName,
  *     sourceResourceId: account.storageAccountId,
  *   },
  * );
  * yield* Azure.RecoveryServices.BackupProtectedItem("share-backup", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   protectedItemType: "AzureFileShareProtectedItem",
  *   sourceResourceId: account.storageAccountId,
  *   containerName: container.containerName,
@@ -149,7 +153,7 @@ export interface BackupProtectedItem extends Resource<
  * ```typescript
  * yield* Azure.RecoveryServices.BackupProtectedItem("vm-backup", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   protectedItemType: "Microsoft.Compute/virtualMachines",
  *   sourceResourceId: vm.id,
  *   policyId: vmPolicy.policyId,
@@ -230,7 +234,8 @@ const discoverFileShareItemName = Effect.fn(function* (
   const protectedPage = yield* backup
     .ListBackupProtectedItems({
       ...where,
-      _filter: "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
+      _filter:
+        "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
     })
     .pipe(
       Effect.flatMap((page) =>
@@ -254,7 +259,8 @@ const discoverFileShareItemName = Effect.fn(function* (
   return yield* backup
     .ListBackupProtectableItems({
       ...where,
-      _filter: "backupManagementType eq 'AzureStorage' and workloadType eq 'AzureFileShare'",
+      _filter:
+        "backupManagementType eq 'AzureStorage' and workloadType eq 'AzureFileShare'",
     })
     .pipe(
       Effect.flatMap((page) =>
@@ -377,7 +383,8 @@ export const BackupProtectedItemProvider = () =>
             subscriptionId,
             resourceGroupName: resourceGroup,
             vaultName: vault,
-            _filter: "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
+            _filter:
+              "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
           }),
         );
         name = page?.value?.find(
@@ -396,7 +403,13 @@ export const BackupProtectedItemProvider = () =>
         name,
       );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, vault, containerName, name, observed);
+      const attrs = toAttrs(
+        resourceGroup,
+        vault,
+        containerName,
+        name,
+        observed,
+      );
       return output !== undefined ||
         (yield* isVaultOwnedByStack(subscriptionId, resourceGroup, vault))
         ? attrs
@@ -518,9 +531,6 @@ export const BackupProtectedItemProvider = () =>
     }),
 
     nuke: {
-      dependsOn: [
-        "Azure.Storage.*",
-        "Azure.Resources.ResourceGroup",
-      ],
+      dependsOn: ["Azure.Storage.*", "Azure.Resources.ResourceGroup"],
     },
   });

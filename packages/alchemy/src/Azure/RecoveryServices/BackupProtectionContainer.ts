@@ -104,6 +104,9 @@ export interface BackupProtectionContainer extends Resource<
  * ### Azure Files
  * **Example:** Register a storage account for Azure Files backup
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
+ *   resourceGroup: group.resourceGroupName,
+ * });
  * const account = yield* Azure.Storage.StorageAccount("files", {
  *   resourceGroup: group.resourceGroupName,
  * });
@@ -111,7 +114,7 @@ export interface BackupProtectionContainer extends Resource<
  *   "files-container",
  *   {
  *     resourceGroup: group.resourceGroupName,
- *     vault: "my-vault",
+ *     vault: vault.vaultName,
  *     sourceResourceId: account.storageAccountId,
  *   },
  * );
@@ -121,7 +124,7 @@ export interface BackupProtectionContainer extends Resource<
  * ```typescript
  * yield* Azure.RecoveryServices.BackupProtectionContainer("files-container", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: "my-vault",
+ *   vault: vault.vaultName,
  *   sourceResourceId: account.storageAccountId,
  *   acquireStorageAccountLock: "NotAcquire",
  * });
@@ -261,7 +264,7 @@ export const BackupProtectionContainerProvider = () =>
         : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, RECOVERY_SERVICES_NAMESPACE);
       const { resourceGroup, vault, sourceResourceId } = news;
@@ -284,10 +287,15 @@ export const BackupProtectionContainerProvider = () =>
 
       // Observe.
       const observed = yield* get;
+      // GET does not always echo the lock setting; fall back to the last
+      // applied value.
+      const observedLock =
+        observed?.properties?.acquireStorageAccountLock ??
+        olds?.acquireStorageAccountLock;
       const lockDrift =
         news.acquireStorageAccountLock !== undefined &&
-        observed?.properties?.acquireStorageAccountLock !== undefined &&
-        observed.properties.acquireStorageAccountLock.toLowerCase() !==
+        observedLock !== undefined &&
+        observedLock.toLowerCase() !==
           news.acquireStorageAccountLock.toLowerCase();
 
       if (!isRegistered(observed)) {
@@ -327,28 +335,27 @@ export const BackupProtectionContainerProvider = () =>
             ),
           );
       }
-      if (!isRegistered(observed) || lockDrift) {
-        // Ensure / sync: (re-)register with the desired settings.
-        yield* backup.RegisterProtectionContainer({
-          ...where,
-          fabricName: BACKUP_FABRIC,
-          containerName,
-          properties: {
-            containerType,
-            backupManagementType,
-            sourceResourceId,
-            friendlyName: nameOf(sourceResourceId),
-            workloadType: news.workloadType,
-            acquireStorageAccountLock: news.acquireStorageAccountLock,
-            ...(containerType === "VMAppContainer"
-              ? { operationType: isRegistered(observed) ? "Reregister" : "Register" }
-              : {}),
-          },
-        });
-      }
-
-      // Registration is asynchronous (202): wait until it is usable.
-      const fresh = yield* get.pipe(
+      const register = backup.RegisterProtectionContainer({
+        ...where,
+        fabricName: BACKUP_FABRIC,
+        containerName,
+        properties: {
+          containerType,
+          backupManagementType,
+          sourceResourceId,
+          friendlyName: nameOf(sourceResourceId),
+          workloadType: news.workloadType,
+          acquireStorageAccountLock: news.acquireStorageAccountLock,
+          ...(containerType === "VMAppContainer"
+            ? {
+                operationType: isRegistered(observed)
+                  ? "Reregister"
+                  : "Register",
+              }
+            : {}),
+        },
+      });
+      const untilRegistered = get.pipe(
         Effect.flatMap((container) =>
           container !== undefined && isRegistered(container)
             ? Effect.succeed(container)
@@ -357,8 +364,24 @@ export const BackupProtectionContainerProvider = () =>
         Effect.retry({
           while: (e) => e === "pending",
           schedule: Schedule.spaced("5 seconds"),
-          times: 48,
+          times: 15,
         }),
+      );
+      const fresh = yield* (
+        !isRegistered(observed) || lockDrift
+          ? // Ensure / sync: (re-)register with the desired settings. The
+            // asynchronous registration job intermittently fails with an
+            // internal error and leaves no container; registering again
+            // succeeds, so a registration that does not show up is retried.
+            register.pipe(
+              Effect.andThen(untilRegistered),
+              Effect.retry({
+                while: (e) => e === "pending",
+                times: 3,
+              }),
+            )
+          : untilRegistered
+      ).pipe(
         Effect.catchIf(
           (e): e is "pending" => e === "pending",
           () =>
@@ -366,7 +389,7 @@ export const BackupProtectionContainerProvider = () =>
               new ProvisioningTimedOut({
                 resource: `backup container ${containerName}`,
                 state: undefined,
-                message: `backup container ${containerName} was not registered after 4 minutes`,
+                message: `backup container ${containerName} was not registered after 4 attempts`,
               }),
             ),
         ),

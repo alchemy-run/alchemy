@@ -17,25 +17,29 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 const VAULT = "alchemy-test-rsv-policy";
 
-const filesPolicy = (days: number) =>
-  ({
-    backupManagementType: "AzureStorage",
-    workLoadType: "AzureFileShare",
-    schedulePolicy: {
-      schedulePolicyType: "SimpleSchedulePolicy",
-      scheduleRunFrequency: "Daily",
-      scheduleRunTimes: ["2026-01-01T23:00:00Z"],
-    },
-    retentionPolicy: {
-      retentionPolicyType: "LongTermRetentionPolicy",
-      dailySchedule: {
-        retentionTimes: ["2026-01-01T23:00:00Z"],
-        retentionDuration: { count: days, durationType: "Days" },
-      },
-    },
-  }) as const;
+type PolicySpec = Omit<
+  Azure.RecoveryServices.BackupPolicyProps,
+  "resourceGroup" | "vault"
+>;
 
-const vmPolicy = {
+const filesPolicy = (days: number): PolicySpec => ({
+  backupManagementType: "AzureStorage",
+  workLoadType: "AzureFileShare",
+  schedulePolicy: {
+    schedulePolicyType: "SimpleSchedulePolicy",
+    scheduleRunFrequency: "Daily",
+    scheduleRunTimes: ["2026-01-01T23:00:00Z"],
+  },
+  retentionPolicy: {
+    retentionPolicyType: "LongTermRetentionPolicy",
+    dailySchedule: {
+      retentionTimes: ["2026-01-01T23:00:00Z"],
+      retentionDuration: { count: days, durationType: "Days" },
+    },
+  },
+});
+
+const vmPolicy: PolicySpec = {
   backupManagementType: "AzureIaasVM",
   policyType: "V2",
   instantRpRetentionRangeInDays: 7,
@@ -55,11 +59,9 @@ const vmPolicy = {
       retentionDuration: { count: 30, durationType: "Days" },
     },
   },
-} as const;
+};
 
-const program = (
-  policy: ReturnType<typeof filesPolicy> | typeof vmPolicy,
-) =>
+const program = (policy: PolicySpec) =>
   Effect.gen(function* () {
     const { group, owner } = yield* groupOnly;
     const backupPolicy = yield* Azure.RecoveryServices.BackupPolicy("Policy", {
@@ -115,16 +117,14 @@ test.provider(
 
       // Replacement: the workload family is immutable.
       const replaced = yield* stack.deploy(program(vmPolicy));
-      expect(replaced.policy.policyName).not.toEqual(
-        created.policy.policyName,
-      );
+      expect(replaced.policy.policyName).not.toEqual(created.policy.policyName);
       const vm = yield* getPolicy(rg, replaced.policy.policyName);
       expect(vm.properties?.backupManagementType).toEqual("AzureIaasVM");
       expect(vm.properties?.policyType).toEqual("V2");
       expect(vm.properties?.instantRpRetentionRangeInDays).toEqual(7);
-      expect(
-        yield* waitGone(getPolicy(rg, created.policy.policyName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(getPolicy(rg, created.policy.policyName))).toEqual(
+        "gone",
+      );
 
       // Delete.
       yield* stack.deploy(groupOnly);

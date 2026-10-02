@@ -163,7 +163,11 @@ export const HybridRunbookWorkerGroupProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStage(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),
@@ -188,7 +192,9 @@ export const HybridRunbookWorkerGroupProvider = () =>
         automationAccount,
         name,
       );
-      const credential = news.credential ? { name: news.credential } : undefined;
+      const credential = news.credential
+        ? { name: news.credential }
+        : undefined;
 
       // Observe.
       let observed = yield* get;
@@ -210,8 +216,7 @@ export const HybridRunbookWorkerGroupProvider = () =>
 
       // Sync the Run As credential against observed.
       if (
-        (observed.properties?.credential?.name ?? undefined) !==
-        news.credential
+        (observed.properties?.credential?.name ?? undefined) !== news.credential
       ) {
         observed = yield* automation.UpdateHybridRunbookWorkerGroup({
           ...where,

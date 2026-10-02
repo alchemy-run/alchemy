@@ -20,7 +20,7 @@ const getSetting = (resourceGroupName: string, workspaceName: string) =>
     );
   });
 
-const program = (props: { version: "1.1" | "1.2" | "unset" }) =>
+const program = (props: { version: "1.2" | "unset" }) =>
   Effect.gen(function* () {
     const { group, workspace } = yield* lakeWorkspace();
     if (props.version === "unset") return { group, workspace };
@@ -32,30 +32,31 @@ const program = (props: { version: "1.1" | "1.2" | "unset" }) =>
     return { group, workspace, setting };
   });
 
-// Free; the workspace takes ~3-8 min.
+// Free; the workspace takes ~3-8 min. Azure retired TLS 1.0/1.1 (a PUT for
+// them is accepted but never applied), so `1.2` is the only value to set
+// and there is no in-place change to exercise.
 test.provider(
-  "set, change, and reset the synapse dedicated sql minimal tls version",
+  "set and reset the synapse dedicated sql minimal tls version",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(program({ version: "1.1" }));
+      const created = yield* stack.deploy(program({ version: "1.2" }));
       const rg = created.group.resourceGroupName;
       const ws = created.workspace.workspaceName;
-      expect(created.setting?.minimalTlsVersion).toEqual("1.1");
-      expect((yield* getSetting(rg, ws)).properties?.minimalTlsVersion).toEqual(
-        "1.1",
+      expect(created.setting?.minimalTlsVersion).toEqual("1.2");
+      expect(created.setting?.settingId.toLowerCase()).toContain(
+        "/dedicatedsqlminimaltlssettings/default",
       );
-
-      // In place: require TLS 1.2.
-      const updated = yield* stack.deploy(program({ version: "1.2" }));
-      expect(updated.setting?.settingId).toEqual(created.setting?.settingId);
       expect((yield* getSetting(rg, ws)).properties?.minimalTlsVersion).toEqual(
         "1.2",
       );
 
-      // Back to 1.1, then remove it from the stack: delete restores 1.2.
-      yield* stack.deploy(program({ version: "1.1" }));
+      // Re-deploying converges without a write and keeps the setting.
+      const again = yield* stack.deploy(program({ version: "1.2" }));
+      expect(again.setting?.settingId).toEqual(created.setting?.settingId);
+
+      // Removing it from the stack restores the default (1.2).
       yield* stack.deploy(program({ version: "unset" }));
       expect((yield* getSetting(rg, ws)).properties?.minimalTlsVersion).toEqual(
         "1.2",
