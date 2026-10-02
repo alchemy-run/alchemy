@@ -74,13 +74,15 @@ every Binding follows — see
 Sinks are typed by the element they accept, so the type system stops
 you from feeding the wrong shape in:
 
-| Sink                          | Element                  | Batch API          | IAM emitted                                    |
-| ----------------------------- | ------------------------ | ------------------ | ---------------------------------------------- |
-| `SQS.QueueSink(queue)`        | `string`                 | `SendMessageBatch` | `sqs:SendMessage`, `sqs:SendMessageBatch`      |
-| `SNS.TopicSink(topic)`        | `string`                 | `PublishBatch`     | `sns:Publish`                                  |
-| `Kinesis.StreamSink(stream)`  | `PutRecordsRequestEntry` | `PutRecords`       | `kinesis:PutRecords`                           |
+| Sink                                 | Element                       | Batch API          | Grants                                    |
+| ------------------------------------ | ----------------------------- | ------------------ | ----------------------------------------- |
+| `SQS.QueueSink(queue)`               | `string`                      | `SendMessageBatch` | `sqs:SendMessage`, `sqs:SendMessageBatch` |
+| `SNS.TopicSink(topic)`               | `string`                      | `PublishBatch`     | `sns:Publish`                             |
+| `Kinesis.StreamSink(stream)`         | `PutRecordsRequestEntry`      | `PutRecords`       | `kinesis:PutRecords`                      |
+| `Cloudflare.Queues.QueueSink(queue)` | message body (any JSON value) | `sendBatch`        | `queue` binding on the Worker             |
 
-Every policy is scoped to the exact resource ARN.
+Every AWS policy is scoped to the exact resource ARN; the Cloudflare
+sink binds only the one queue into the Worker.
 
 `QueueSink` and `TopicSink` take message bodies as `string`.
 `StreamSink` takes raw `PutRecordsRequestEntry` values, so you keep
@@ -178,6 +180,73 @@ event-source mapping.
 Drop in `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
 or `Stream.mapEffect` anywhere along the chain — they're all the
 same `Stream` you'd write in a plain Effect program.
+
+## Cloudflare Queues
+
+`Cloudflare.Queues.QueueSink(queue)` is the same shape on a Worker.
+Each element is one message body, and each stream chunk becomes one
+`sendBatch` call. Chunks over Cloudflare's batch limits (100
+messages / 256 KB) are split into consecutive batches, in order:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Clicks } from "./queues.ts";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sink = yield* Cloudflare.Queues.QueueSink(Clicks);
+    // → Sink<void, unknown, never, SendError, RuntimeContext>
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* Stream.fromIterable(events).pipe(Stream.run(sink));
+        return HttpServerResponse.empty({ status: 202 });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Queues.QueueSinkBinding)),
+);
+```
+
+`QueueSinkBinding` layers the sink over the native producer binding
+(`WriteQueueBinding`), so there is nothing else to provide. It also
+works under `alchemy dev`, where the binding targets the local queue
+broker. `QueueSinkHttp` (scoped API token) and `QueueSinkLocal`
+(current credentials, for Actions) layer it over the matching
+`WriteQueue` implementations.
+
+Paired with `consumeQueueMessages`, a queue-to-queue pipeline is one
+expression:
+
+```typescript
+Effect.gen(function* () {
+  const enriched = yield* Cloudflare.Queues.QueueSink(EnrichedClicks);
+
+  yield* Cloudflare.Queues.consumeQueueMessages<Click>(Clicks, (messages) =>
+    messages.pipe(
+      Stream.map((message) => message.body),
+      Stream.filter((click) => click.button === "buy"),
+      Stream.map((click) => ({ ...click, receivedAt: Date.now() })),
+      Stream.run(enriched),
+    ),
+  );
+}).pipe(
+  Effect.provide(
+    Layer.mergeAll(
+      Cloudflare.Queues.EventSourceLive,
+      Cloudflare.Queues.QueueSinkBinding,
+    ),
+  ),
+);
+```
+
+A failed `sendBatch` fails the handler, so Cloudflare retries the
+whole consumed batch. Messages already forwarded before the failure
+are sent again, which fits the queue's at-least-once delivery.
 
 ## Where next
 
