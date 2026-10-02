@@ -39,9 +39,30 @@ export namespace ContainerApplication {
   export type Label = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]["labels"]
   >[number];
-  export type Network = NonNullable<
-    Containers.CreateContainerApplicationRequest["configuration"]["network"]
-  >;
+  /**
+   * Declared here rather than inherited: the generated schema types this
+   * `unknown` (`network: S.optional(S.NullOr(S.Unknown))` in the distilled
+   * containers service), so a misspelled key compiles and is only rejected by
+   * the API. Same reason {@link Constraints} and {@link Affinities} below are
+   * spelled out rather than inherited.
+   *
+   * Keys are snake_case — the API accepts and echoes back `assign_ipv4`, and
+   * rejects `assignIpv4` with `unrecognized key: "assignipv4"`.
+   *
+   * `assign_ipv4` and `mode` are not independent. `"predefined"` requests
+   * public reachability, so the API infers `mode: "public"` when `mode` is
+   * omitted — and rejects it on an account that only permits private. Asking
+   * for an address *and* `mode: "private"` is refused outright
+   * (`assigning an IP with network mode private is not allowed`). A
+   * private-only account therefore sets `"none"` for both families and
+   * `mode: "private"`.
+   */
+  export type Network = {
+    /** `"predefined"` implies `mode: "public"` — see the note above. */
+    assign_ipv4?: "none" | "predefined";
+    assign_ipv6?: "none" | "predefined";
+    mode?: "private" | "public";
+  };
   export type Dns = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]["dns"]
   >;
@@ -649,7 +670,7 @@ export type ContainerShape = Main<ContainerServices>;
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   main: import.meta.url,
  *   ports: [{ name: "http", port: 8080 }],
- *   network: { assignIpv4: "predefined", mode: "public" },
+ *   network: { assign_ipv4: "none", assign_ipv6: "none", mode: "private" },
  *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
  *   checks: [{ name: "ready", type: "http", port: "8080", tls: false }],
  * }) {}
@@ -659,6 +680,14 @@ export type ContainerShape = Main<ContainerServices>;
  * assignment and public/private reachability, `dns` overrides resolver settings,
  * and `checks` tells Cloudflare how to probe the container before routing
  * traffic to it.
+ *
+ * The example above is the private shape, which deploys anywhere. Network keys
+ * are snake_case, and `assign_ipv4: "predefined"` is not a neutral "give it an
+ * address": it requests public reachability, so the API infers
+ * `mode: "public"` when `mode` is omitted and rejects the request on an account
+ * that only permits private. Combining it with `mode: "private"` is refused too
+ * (`assigning an IP with network mode private is not allowed`), so a
+ * private-only account sets `"none"` for both families.
  *
  * ### Observability & Access
  * Turn on log shipping with `observability` and install `sshPublicKeyIds` for
