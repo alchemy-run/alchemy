@@ -2478,3 +2478,44 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     }),
   { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"] },
 );
+
+// A pinned physical identity fails closed before any create: an instance
+// that is missing under the identifier is not the pinned database either, so
+// the deploy ends in seconds and provisions nothing.
+test.provider(
+  "expectedDbiResourceId refuses to create or mutate another instance",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-identity-probe-instance";
+      const pinned = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBInstance("IdentityProbeInstance", {
+              dbInstanceIdentifier: identifier,
+              expectedDbiResourceId: "db-ALCHEMYIDENTITYPROBE",
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              masterUsername: "alchemy",
+              manageMasterUserPassword: true,
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(pinned)).toBe(true);
+      expect(renderFailure(pinned)).toContain("DBInstanceIdentityChanged");
+      expect(renderFailure(pinned)).toContain("db-ALCHEMYIDENTITYPROBE");
+
+      // Nothing was provisioned under the pinned identifier.
+      const absent = yield* rds
+        .describeDBInstances({ DBInstanceIdentifier: identifier })
+        .pipe(Effect.result);
+      expect(Result.isFailure(absent)).toBe(true);
+      if (Result.isFailure(absent)) {
+        expect(absent.failure._tag).toBe("DBInstanceNotFoundFault");
+      }
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
+);
