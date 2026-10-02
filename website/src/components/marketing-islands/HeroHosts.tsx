@@ -47,6 +47,7 @@ export default function HeroHosts() {
   const [done, setDone] = useState(false);
 
   const cancelRef = useRef<{ aborted: boolean }>({ aborted: false });
+  const reelRef = useRef<HTMLOListElement>(null);
   // The values the code shows, across restarts.
   const valuesRef = useRef<readonly string[]>(HOSTS[0]!.values);
 
@@ -124,6 +125,18 @@ export default function HeroHosts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
+  // On phones the reel is one scrolling line: keep the current host in view.
+  // Scrolls the reel only, never the page.
+  useEffect(() => {
+    const reel = reelRef.current;
+    const item = reel?.children[host] as HTMLElement | undefined;
+    if (!reel || !item || reel.scrollWidth <= reel.clientWidth) return;
+    reel.scrollTo({
+      left: item.offsetLeft - (reel.clientWidth - item.offsetWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [host]);
+
   const spinner = useSpinner(rows.some((r) => r.status === "creating"));
   const h = HOSTS[host]!;
 
@@ -175,7 +188,7 @@ export default function HeroHosts() {
 
   return (
     <>
-      <ol className="v2-hero__reel hh-reel" aria-label="Hosts">
+      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Hosts">
         {HOSTS.map((x, i) => (
           <li key={x.label}>
             <button

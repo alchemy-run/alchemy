@@ -9,6 +9,31 @@
   flex-wrap: wrap;
   gap: 2px 14px;
 }
+/* Phones: one line that scrolls sideways (the active host is scrolled into
+   view, see HeroHosts.tsx), with the edges faded. */
+@media (max-width: 760px) {
+  .hh-reel {
+    position: relative;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-inline: 12px;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 18px,
+      #000 calc(100% - 18px),
+      transparent
+    );
+  }
+  .hh-reel::-webkit-scrollbar {
+    display: none;
+  }
+  .hh-reel li {
+    flex: none;
+  }
+}
+
 /* The deck's reel: muted labels, the current one lit and underlined. */
 .hh-reel__item {
   all: unset;

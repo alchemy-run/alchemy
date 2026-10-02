@@ -229,13 +229,45 @@
   }
 }
 
+/* Narrow screens: one line per row. Commit messages, the URL scheme and
+   wordier labels drop out; "Preview:" sits on its own line. */
+.pc-narrow {
+  display: none;
+}
+.pc-nowrap {
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .pc-wide {
+    display: none;
+  }
+  .pc-narrow {
+    display: inline;
+  }
+  .pc-push,
+  .pc-comment__head {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .pc-label {
+    display: block;
+  }
+  .pc-link {
+    white-space: nowrap;
+  }
+  .pc-title {
+    font-size: 16px;
+  }
+}
+
 .alc-motion-paused .pc *,
 .alc-motion-paused .pc *::before {
   animation-play-state: paused !important;
 }
 @media (max-width: 900px) {
+  /* The tallest phone frame, so the card keeps one height. */
   .pc-body {
-    min-height: 462px;
+    min-height: 370px;
   }
 }
 

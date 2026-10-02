@@ -80,10 +80,12 @@ export default function PreviewComment() {
   const status = (p: (typeof pushes)[number]) =>
     p.deploying ? (
       <span className="pc-status pc-status--run">
-        <span className="pc-spin" /> deploying pr-147
+        <span className="pc-spin" /> deploying<span className="pc-wide"> pr-147</span>
       </span>
     ) : p.deployed ? (
-      <span className="pc-status pc-status--ok">✓ preview deployed</span>
+      <span className="pc-status pc-status--ok">
+        ✓<span className="pc-wide"> preview</span> deployed
+      </span>
     ) : (
       <span className="pc-status">queued</span>
     );
@@ -121,7 +123,7 @@ export default function PreviewComment() {
               <span className="pc-push__who">you</span>
               <span>
                 pushed <code>{p.sha}</code>{" "}
-                <span className="pc-muted">{p.msg}</span>
+                <span className="pc-muted pc-wide">{p.msg}</span>
               </span>
               {status(p)}
             </li>
@@ -138,19 +140,27 @@ export default function PreviewComment() {
                 />
                 <strong>alchemy</strong>
                 <span className="pc-bot">bot</span>
-                <span className="pc-muted">commented</span>
+                <span className="pc-muted pc-wide">commented</span>
                 {revision > 1 && (
                   <span className="pc-edited">
-                    edited · revision {revision}
+                    edited · <span className="pc-wide">revision</span>
+                    <span className="pc-narrow">rev</span> {revision}
                   </span>
                 )}
               </div>
               <div className="pc-comment__body">
-                Preview: <span className="pc-link">{URL}</span> (
-                <span key={current.sha} className="pc-sha">
-                  {current.sha}
+                <span className="pc-label">Preview: </span>
+                <span className="pc-link">
+                  <span className="pc-wide">https://</span>
+                  {URL.replace("https://", "")}
+                </span>{" "}
+                <span className="pc-nowrap">
+                  (
+                  <span key={current.sha} className="pc-sha">
+                    {current.sha}
+                  </span>
+                  )
                 </span>
-                )
               </div>
               {deleting && (
                 <div className="pc-comment__gone">
@@ -170,7 +180,7 @@ export default function PreviewComment() {
               <span className="pc-push__who">you</span>
               <span>
                 pushed <code>{p.sha}</code>{" "}
-                <span className="pc-muted">{p.msg}</span>
+                <span className="pc-muted pc-wide">{p.msg}</span>
               </span>
               {status(p)}
             </li>
