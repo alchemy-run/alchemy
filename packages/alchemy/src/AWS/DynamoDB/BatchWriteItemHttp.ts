@@ -1,20 +1,17 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
-import { isBindingHost } from "../Lambda/Function.ts";
 import {
   BatchWriteItem,
   type BatchWriteItemRequest,
   type BatchWriteItemTables,
   sortBatchWriteItemTables,
 } from "./BatchWriteItem.ts";
+import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchWriteItemHttp = Layer.effect(
   BatchWriteItem,
   Effect.gen(function* () {
-    const batchWriteItem = yield* DynamoDB.batchWriteItem;
-
     return Effect.fn(function* (...tables: BatchWriteItemTables) {
       const sortedTables = sortBatchWriteItemTables(tables);
       const tableNames = new Map(
@@ -37,22 +34,17 @@ export const BatchWriteItemHttp = Layer.effect(
         return yield* TableName;
       });
 
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchWriteItem(${sortedTables}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["dynamodb:BatchWriteItem"],
-                  Resource: sortedTables.map((table) => table.tableArn),
-                },
-              ],
-            },
-          );
-        }
-      }
+      const access = yield* grantTables(
+        `AWS.DynamoDB.BatchWriteItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+        () => [
+          {
+            Effect: "Allow",
+            Action: ["dynamodb:BatchWriteItem"],
+            Resource: sortedTables.map((table) => table.tableArn),
+          },
+        ],
+      );
+      const region = yield* tablesRegion(access, sortedTables);
 
       return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(
         function* (request: BatchWriteItemRequest) {
@@ -64,10 +56,14 @@ export const BatchWriteItemHttp = Layer.effect(
               }),
           );
 
-          return yield* batchWriteItem({
-            ...request,
-            RequestItems: Object.fromEntries(requestItems),
-          });
+          return yield* signed(
+            access,
+            region,
+            DynamoDB.batchWriteItem({
+              ...request,
+              RequestItems: Object.fromEntries(requestItems),
+            }),
+          );
         },
       );
     });

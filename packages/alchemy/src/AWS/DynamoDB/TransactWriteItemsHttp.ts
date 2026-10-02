@@ -1,8 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
-import { isBindingHost } from "../Lambda/Function.ts";
+import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
 import {
   TransactWriteItems,
   type TransactWriteItemsRequest,
@@ -12,8 +11,6 @@ import {
 export const TransactWriteItemsHttp = Layer.effect(
   TransactWriteItems,
   Effect.gen(function* () {
-    const transactWriteItems = yield* DynamoDB.transactWriteItems;
-
     return Effect.fn(function* (...tables: TransactWriteItemsTables) {
       const sortedTables = sortTables(tables);
       const tableNames = new Map(
@@ -36,27 +33,22 @@ export const TransactWriteItemsHttp = Layer.effect(
         return yield* TableName;
       });
 
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.TransactWriteItems(${sortedTables}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "dynamodb:ConditionCheckItem",
-                    "dynamodb:DeleteItem",
-                    "dynamodb:PutItem",
-                    "dynamodb:UpdateItem",
-                  ],
-                  Resource: sortedTables.map((table) => table.tableArn),
-                },
-              ],
-            },
-          );
-        }
-      }
+      const access = yield* grantTables(
+        `AWS.DynamoDB.TransactWriteItems(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+        () => [
+          {
+            Effect: "Allow",
+            Action: [
+              "dynamodb:ConditionCheckItem",
+              "dynamodb:DeleteItem",
+              "dynamodb:PutItem",
+              "dynamodb:UpdateItem",
+            ],
+            Resource: sortedTables.map((table) => table.tableArn),
+          },
+        ],
+      );
+      const region = yield* tablesRegion(access, sortedTables);
 
       return Effect.fn(`AWS.DynamoDB.TransactWriteItems(${sortedTables})`)(
         function* (request: TransactWriteItemsRequest) {
@@ -104,10 +96,14 @@ export const TransactWriteItemsHttp = Layer.effect(
               }),
           );
 
-          return yield* transactWriteItems({
-            ...request,
-            TransactItems: transactItems,
-          });
+          return yield* signed(
+            access,
+            region,
+            DynamoDB.transactWriteItems({
+              ...request,
+              TransactItems: transactItems,
+            }),
+          );
         },
       );
     });

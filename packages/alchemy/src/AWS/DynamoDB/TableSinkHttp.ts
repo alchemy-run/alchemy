@@ -1,10 +1,9 @@
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import { makeBatchedSink } from "../internal/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import { BatchWriteItem } from "./BatchWriteItem.ts";
+import { grantTables } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 import { TableSink, type TableSinkEntry } from "./TableSink.ts";
 
@@ -55,20 +54,14 @@ export const TableSinkHttp = Layer.effect(
     const batchWriteItem = yield* BatchWriteItem;
 
     return Effect.fn(function* (table: Table) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.TableSink(${table}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["dynamodb:BatchWriteItem"],
-                Resource: [table.tableArn],
-              },
-            ],
-          });
-        }
-      }
+      // Requests are signed by the provided `BatchWriteItem` implementation.
+      yield* grantTables(`AWS.DynamoDB.TableSink(${table.LogicalId})`, () => [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:BatchWriteItem"],
+          Resource: [table.tableArn],
+        },
+      ]);
       const write = yield* batchWriteItem(table);
       return makeBatchedSink<
         TableSinkEntry,
