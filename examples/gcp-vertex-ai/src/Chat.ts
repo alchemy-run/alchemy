@@ -35,7 +35,6 @@ export default class Chat extends GCP.Function<Chat>()(
   "Chat",
   {
     main: import.meta.url,
-    location: "us-central1",
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {

@@ -9,15 +9,10 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deleteReferenceImage,
-  findOwnedReferenceImage,
-  getProduct,
   getReferenceImage,
   jsonEqual,
-  lastSegment,
-  listOwnedReferenceImages,
   normalizeLocation,
   parseResourceName,
-  productHasOwnershipMarker,
   productNameOf,
   referenceImageNameOf,
   replaceOnIdentity,
@@ -98,10 +93,11 @@ export type ProductsReferenceImage = Resource<
 /**
  * A Cloud Vision Product Search reference image attached to a product.
  *
- * Reference images have no labels or description, so Alchemy lists them
- * through alchemy-owned parent products for `list` / nuke. Parent,
- * image id, URI, and bounding polygons are identity — there is no update
- * API, so changing any of them replaces the image.
+ * Reference images have no labels or description, so ownership rests on
+ * the deterministic image id: an image found without prior state is
+ * reported as unowned and only taken over with `--adopt`. Parent, image
+ * id, URI, and bounding polygons are identity — there is no update API, so
+ * changing any of them replaces the image.
  *
  * ### Creating a Reference Image
  * **Example:** Image on a product
@@ -212,7 +208,7 @@ export const ProductsReferenceImageProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const parent = toParent(
@@ -220,30 +216,18 @@ export const ProductsReferenceImageProvider = () =>
         location,
         olds?.parent ?? output?.parent ?? "",
       );
-      const imageId = olds?.referenceImageId ?? output?.referenceImageId ?? "";
-      const existing = yield* findOwnedReferenceImage(
-        parent,
-        imageId,
-        output?.name,
-      );
+      const name =
+        output?.name ??
+        referenceImageNameOf(
+          parent,
+          olds?.referenceImageId ?? output?.referenceImageId ?? "",
+        );
+      const existing = yield* getReferenceImage(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const product = yield* getProduct(attrs.parent);
-      if (product !== undefined && productHasOwnershipMarker(product)) {
-        return attrs;
-      }
-      return lastSegment(attrs.referenceImageId) === lastSegment(id) ||
-        imageId.length > 0
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const images = yield* listOwnedReferenceImages(env.project);
-        return images.map((image) => toAttrs(image, env.project));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -258,13 +242,6 @@ export const ProductsReferenceImageProvider = () =>
         output?.name ?? referenceImageNameOf(parent, referenceImageId);
 
       let current = yield* getReferenceImage(name);
-      if (current === undefined) {
-        current = yield* findOwnedReferenceImage(
-          parent,
-          referenceImageId,
-          output?.name,
-        );
-      }
 
       if (current === undefined) {
         const created = yield* vision

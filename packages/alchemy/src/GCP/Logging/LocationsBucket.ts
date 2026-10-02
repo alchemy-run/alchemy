@@ -171,8 +171,7 @@ export type LocationsBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.LocationsBucket("AppLogs", {
- *   bucketId: existing.bucketId,
- *   location: existing.location,
+ *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });

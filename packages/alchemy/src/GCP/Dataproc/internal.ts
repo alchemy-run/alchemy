@@ -3,14 +3,22 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_ZONE = "us-central1-a";
 export const MAX_POLICY_ID_LENGTH = 50;
+// Cluster, batch, and session operations run for minutes; poll for up to ~10
+// minutes (at 5-8s spacing) before giving up.
+export const MAX_POLLS = 120;
 export const MAX_WORKLOAD_ID_LENGTH = 63;
 export const MIN_WORKLOAD_ID_LENGTH = 4;
+// Session template ids match `[a-zA-Z0-9][-_a-zA-Z0-9]{1,48}[a-zA-Z0-9]`.
+export const MAX_SESSION_TEMPLATE_ID_LENGTH = 50;
+// Managed cluster name prefixes match `[a-z]([-a-z0-9]{0,34}[a-z0-9])?`.
+export const MAX_MANAGED_CLUSTER_PREFIX_LENGTH = 36;
 
 export const LIST_LOCATIONS = [
   "us-central1",
@@ -31,19 +39,6 @@ export class DataprocStillExists extends Data.TaggedError(
   "GCP.Dataproc.ResourceStillExists",
 )<{
   name: string;
-}> {}
-
-export class DataprocOperationFailed extends Data.TaggedError(
-  "GCP.Dataproc.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DataprocOperationPending extends Data.TaggedError(
-  "GCP.Dataproc.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -183,78 +178,45 @@ export const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error) => error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound",
       () => Effect.succeed([] as A[]),
     ),
   );
 
+/**
+ * Wait for a Dataproc operation. Cluster creates and batch/session
+ * startups take several minutes (clusters up to ~20). An operation that
+ * finished with `ALREADY_EXISTS` (6) is a lost create race; `notFoundOk`
+ * also accepts `NOT_FOUND` (5).
+ */
 export const waitForOperation = (
   operation: dataproc.Operation,
-  options?: { notFoundOk?: boolean; interval?: `${number} seconds` },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && operation.error.code !== 6) {
-        return yield* new DataprocOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new DataprocOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = name.includes("/regions/")
-      ? dataproc.getProjectsRegionsOperations({ name })
-      : dataproc.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataproc.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DataprocOperationPending({ operation: name }),
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      (name.includes("/regions/")
+        ? dataproc.getProjectsRegionsOperations({ name })
+        : dataproc.getProjectsLocationsOperations({ name })
+      ).pipe(
+        Effect.catchTag("NotFound", (error) =>
+          options?.notFoundOk === true
+            ? Effect.succeed<dataproc.Operation>({ name, done: true })
+            : Effect.fail(error),
+        ),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error && error.code !== 6
-          ? Effect.fail(
-              new DataprocOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataproc.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced(options?.interval ?? "3 seconds"),
-      }),
-    );
-  });
+    { budget: "30 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    Effect.asVoid,
+  );
 
 export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -285,8 +247,8 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataproc.ResourceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("2 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 

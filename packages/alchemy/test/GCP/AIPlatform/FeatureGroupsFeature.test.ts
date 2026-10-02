@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { UsersSource } from "./fixtures/features.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -13,10 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsFeatureGroupsFeatures({ name }).pipe(
@@ -29,15 +26,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const groupPropsOf = (project: string) => ({
+const groupProps = {
   location: "us-central1" as const,
   description: "user features",
   labels: { env: "test" },
-  bigQuery: {
-    inputUri: `bq://${project}.alchemy_features.users`,
-    entityIdColumns: ["entity_id"],
-  },
-});
+};
 
 test.provider(
   "getProjectsLocationsFeatureGroupsFeatures on a missing feature fails with a typed tag",
@@ -48,10 +41,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsFeatureGroupsFeatures({
-          name: `projects/${project}/locations/us-central1/featureGroups/alchemy-missing/features/alchemy-missing`,
+          name: `projects/${project}/locations/us-central1/featureGroups/alchemy_missing/features/alchemy_missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -61,17 +54,19 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a feature group feature",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const groupProps = groupPropsOf(project);
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const group = yield* GCP.AIPlatform.FeatureGroup("Users", groupProps);
+          const inputUri = yield* UsersSource;
+          const group = yield* GCP.AIPlatform.FeatureGroup("Users", {
+            ...groupProps,
+            bigQuery: { inputUri, entityIdColumns: ["entity_id"] },
+          });
           const feature = yield* GCP.AIPlatform.FeatureGroupsFeature("Age", {
             featureGroup: group.name,
             location: "us-central1",
@@ -96,9 +91,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const inputUri = yield* UsersSource;
           const group = yield* GCP.AIPlatform.FeatureGroup("Users", {
             ...groupProps,
             featureGroupId: created.group.featureGroupId,
+            bigQuery: { inputUri, entityIdColumns: ["entity_id"] },
           });
           const feature = yield* GCP.AIPlatform.FeatureGroupsFeature("Age", {
             featureGroup: group.name,
@@ -122,6 +119,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

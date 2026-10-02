@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
-
 const waitUntilGone = (name: string) =>
   privateca.getProjectsLocationsCaPools({ name }).pipe(
     Effect.as("found" as const),
@@ -46,14 +44,16 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.caPools ?? [])).toEqual(true);
+      expect((page.caPools ?? []).map((pool) => pool.name)).not.toContain(
+        `projects/${project}/locations/us-central1/caPools/alchemy-capool-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:privateca", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a ca pool",
   (stack) =>
     Effect.gen(function* () {
@@ -97,7 +97,8 @@ test.provider.skipIf(!runLifecycle)(
         caPool: created.name,
         body: {},
       });
-      expect(Array.isArray(trust.caCerts ?? [])).toEqual(true);
+      // A pool without certificate authorities has no trust anchors.
+      expect(trust.caCerts ?? []).toEqual([]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

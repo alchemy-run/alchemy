@@ -241,7 +241,7 @@ const listAt = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.assignments ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag("NotFound", () =>
             Effect.succeed([] as bigqueryreservation.Assignment[]),
           ),
         );

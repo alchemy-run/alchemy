@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const DEFAULT_LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -322,13 +323,13 @@ export type Spoke = Resource<
  * **Example:** Description, labels, and export filters
  * ```typescript
  * const spoke = yield* GCP.NetworkConnectivity.Spoke("AppVpcSpoke", {
- *   spokeId: existing.spokeId,
+ *   spokeId: "app-vpc",
  *   location: "global",
- *   hub: existing.hub!,
+ *   hub: hub.name,
  *   description: "app vpc v2",
  *   labels: { env: "prod", role: "spoke" },
  *   linkedVpcNetwork: {
- *     uri: existing.linkedVpcNetwork!.uri,
+ *     uri: network.selfLink!,
  *     includeExportRanges: ["10.0.0.0/8", "192.168.0.0/16"],
  *   },
  * });
@@ -350,19 +351,6 @@ export class SpokeFailed extends Data.TaggedError(
 )<{
   name: string;
   state: string | undefined;
-}> {}
-
-export class SpokeOperationFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.SpokeOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class SpokeOperationPending extends Data.TaggedError(
-  "GCP.NetworkConnectivity.SpokeOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class SpokeStillExists extends Data.TaggedError(
@@ -793,94 +781,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsSpokes({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: networkconnectivity.GoogleRpcStatus | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: networkconnectivity.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new SpokeOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new SpokeOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = networkconnectivity.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies networkconnectivity.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new SpokeOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new SpokeOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.NetworkConnectivity.SpokeOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
-
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
   state === "UPDATING" ||
@@ -912,8 +812,8 @@ const waitUntilReady = (name: string) =>
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.NetworkConnectivity.SpokeNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("4 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -927,8 +827,8 @@ const waitUntilGone = (name: string) =>
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.NetworkConnectivity.SpokeStillExists",
-      times: 10,
-      schedule: Schedule.spaced("3 seconds"),
+      times: 60,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -959,7 +859,7 @@ const waitUntilHubDropsSpoke = (hub: string, spokeName: string) =>
         "GCP.NetworkConnectivity.SpokeStillExists",
         () => Effect.void,
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+      Effect.catchTag("NotFound", () => Effect.void),
     );
 
 const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
@@ -983,7 +883,7 @@ const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
       "GCP.NetworkConnectivity.SpokeStillExists",
       () => Effect.void,
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 };
 
@@ -1004,7 +904,6 @@ const listOwnedSpokes = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const rangeFieldsChanged = (

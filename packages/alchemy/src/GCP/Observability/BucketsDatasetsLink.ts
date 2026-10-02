@@ -126,11 +126,13 @@ export type BucketsDatasetsLink = Resource<
  * ```
  *
  * ### Updating a Link
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Change the description
  * ```typescript
  * const link = yield* GCP.Observability.BucketsDatasetsLink("Analytics", {
- *   dataset: existing.dataset,
- *   linkId: existing.linkId,
+ *   dataset:
+ *     "projects/my-project/locations/us-central1/buckets/_Trace/datasets/Spans",
  *   description: "updated analytics",
  * });
  * ```
@@ -370,10 +372,7 @@ export const BucketsDatasetsLinkProvider = () =>
             ),
           );
         yield* waitForOperation(created).pipe(
-          Effect.catchTag(
-            ["GCP.Observability.OperationPending", "NotFound"],
-            () => Effect.void,
-          ),
+          Effect.catchTag("NotFound", () => Effect.void),
         );
         current = yield* waitUntilPresent(name);
       }
@@ -402,10 +401,7 @@ export const BucketsDatasetsLinkProvider = () =>
             },
           });
         yield* waitForOperation(patched).pipe(
-          Effect.catchTag(
-            ["GCP.Observability.OperationPending", "NotFound"],
-            () => Effect.void,
-          ),
+          Effect.catchTag("NotFound", () => Effect.void),
         );
         current = (yield* getByName(current.name ?? name)) ?? current;
       }
@@ -440,16 +436,7 @@ export const BucketsDatasetsLinkProvider = () =>
             .deleteProjectsLocationsBucketsDatasetsLinks({ name })
             .pipe(
               Effect.flatMap((operation) =>
-                waitForOperation(operation, { notFoundOk: true }).pipe(
-                  Effect.catchTag(
-                    [
-                      "GCP.Observability.OperationPending",
-                      "GCP.Observability.OperationFailed",
-                      "NotFound",
-                    ],
-                    () => Effect.void,
-                  ),
-                ),
+                waitForOperation(operation, { notFoundOk: true }),
               ),
               Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
               Effect.flatMap(() => waitUntilDeleted(name)),

@@ -18,11 +18,12 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_CLUSTER_TYPE = "PRIMARY";
 const DEFAULT_NETWORK = "default";
-const MAX_NAME_LENGTH = 63;
+/** Cluster ids must match `^[a-z]([a-z0-9-]{0,53}[a-z0-9])?$`. */
+const MAX_NAME_LENGTH = 55;
 
 export type ClusterTimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`). */
@@ -687,8 +688,8 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -701,8 +702,8 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -910,11 +911,10 @@ export const ClusterProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, news.clusterId, output?.clusterId);
       const location = normalizeLocation(
@@ -978,8 +978,13 @@ export const ClusterProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
+      // AlloyDB has been observed to omit `displayName` from reads; when it
+      // does, compare against what was last applied instead of re-patching
+      // on every deploy.
+      const observedDisplayName =
+        current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+        (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
         fingerprint(stringMapOf(current.annotations)) !==
@@ -1058,15 +1063,20 @@ export const ClusterProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // When the read omits `displayName`, the desired value is what is
+      // deployed: it was sent on create, patched above, or observed equal.
+      return {
+        ...toAttrs(current, env.project),
+        displayName: current.displayName ?? news.displayName,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -1079,12 +1089,12 @@ export const ClusterProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

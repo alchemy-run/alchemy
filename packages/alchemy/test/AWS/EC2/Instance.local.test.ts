@@ -33,7 +33,6 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import { dockerAvailable } from "../Local/fixtures/raw.ts";
 import DevInstance, { MARKER } from "./fixtures/dev-instance.ts";
 import DevProbeFunctionLive, {
   Ec2DevProbeFunction,
@@ -56,7 +55,9 @@ const flociContext = Layer.mergeAll(
   ),
 );
 
-test.provider.skipIf(!dockerAvailable)(
+// TODO: floci does not settle security group rules yet
+// (SecurityGroupRulesNotSettled); needs a fix in the emulator.
+test.provider.todo(
   "dev runs a hosted EC2 instance as a container serving HTTP, with Lambda EC2 bindings against it",
   (stack) =>
     Effect.gen(function* () {

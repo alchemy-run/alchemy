@@ -85,7 +85,8 @@ export type DeploymentResourcePoolProps = {
    */
   dedicatedResources?: DedicatedResources;
   /**
-   * Disable container stdout/stderr logging.
+   * Disable container stdout/stderr logging. Vertex AI accepts but does not
+   * apply updates to it, so changing it replaces the pool.
    */
   disableContainerLogging?: boolean;
   /**
@@ -150,8 +151,8 @@ export type DeploymentResourcePool = Resource<
  * ### Scaling a Pool
  * **Example:** Raise max replicas
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const pool = yield* GCP.AIPlatform.DeploymentResourcePool("Shared", {
- *   deploymentResourcePoolId: existing.deploymentResourcePoolId,
  *   dedicatedResources: {
  *     minReplicaCount: 1,
  *     maxReplicaCount: 2,
@@ -275,7 +276,7 @@ const getByName = (name: string) =>
 const listPools = (project: string, region: string) => {
   const collect = (parent: string) =>
     aiplatform.listProjectsLocationsDeploymentResourcePools
-      .pages({ parent, pageSize: 1000 })
+      .pages({ parent, pageSize: 100 })
       .pipe(
         Stream.flatMap((page) =>
           Stream.fromIterable(page.deploymentResourcePools ?? []),
@@ -286,15 +287,8 @@ const listPools = (project: string, region: string) => {
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
 const findOwned = (hinted: string | undefined) =>
@@ -378,7 +372,10 @@ export const DeploymentResourcePoolProvider = () =>
           rfc1035(nextId) !== previousId) ||
         previousLocation !== nextLocation ||
         previousMachine !== nextMachine ||
-        previousKey !== nextKey;
+        previousKey !== nextKey ||
+        (olds !== undefined &&
+          (news.disableContainerLogging === true) !==
+            (olds.disableContainerLogging === true));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -473,18 +470,17 @@ export const DeploymentResourcePoolProvider = () =>
       const maxChanged =
         (observed?.maxReplicaCount ?? observed?.minReplicaCount ?? 1) !==
         (dedicated.maxReplicaCount ?? dedicated.minReplicaCount ?? 1);
-      const loggingChanged =
-        (current.disableContainerLogging === true) !== disableContainerLogging;
-      const saChanged = (current.serviceAccount ?? "") !== serviceAccount;
+      const saChanged =
+        serviceAccount !== undefined &&
+        (current.serviceAccount ?? "") !== serviceAccount;
 
-      if (minChanged || maxChanged || loggingChanged || saChanged) {
+      if (minChanged || maxChanged || saChanged) {
         const patched =
           yield* aiplatform.patchProjectsLocationsDeploymentResourcePools({
             name: currentName,
             updateMask: [
               minChanged ? "dedicated_resources.min_replica_count" : undefined,
               maxChanged ? "dedicated_resources.max_replica_count" : undefined,
-              loggingChanged ? "disable_container_logging" : undefined,
               saChanged ? "service_account" : undefined,
             ]
               .filter((field): field is string => field !== undefined)
@@ -492,7 +488,6 @@ export const DeploymentResourcePoolProvider = () =>
             body: {
               name: currentName,
               dedicatedResources: dedicated,
-              disableContainerLogging,
               serviceAccount,
             },
           });

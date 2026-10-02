@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Needs a Featurestore, whose online serving takes ~6 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsFeaturestoresEntityTypes({ name }).pipe(
@@ -38,10 +37,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsFeaturestoresEntityTypes({
-          name: `projects/${project}/locations/us-central1/featurestores/alchemy-missing/entityTypes/alchemy-missing`,
+          name: `projects/${project}/locations/us-central1/featurestores/alchemy_missing/entityTypes/alchemy_missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -112,6 +111,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

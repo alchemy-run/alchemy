@@ -14,7 +14,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_DATAPROC && !process.env.FAST;
+// Each serverless workload reserves 12 vCPUs and hundreds of GB of Hyperdisk;
+// next to the rest of the suite the testing project's quotas run out
+// (`Quota 'HDB_TOTAL_GB' exceeded. Limit: 500.0 in region us-central1`,
+// `Insufficient 'CPUS_ALL_REGIONS' quota`). Passes solo in ~2 minutes; set
+// GCP_TEST_DATAPROC_SERVERLESS=1 on a project with headroom.
+const runLifecycle =
+  !!process.env.GCP_TEST_DATAPROC_SERVERLESS && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   dataproc.getProjectsLocationsSessions({ name }).pipe(
@@ -28,7 +34,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsLocationsSessions on a missing session fails with NotFound or Forbidden",
+  "getProjectsLocationsSessions on a missing session fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -39,10 +45,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/sessions/alchemy-dataproc-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Dataproc API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -85,5 +88,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 600_000 },
 );

@@ -10,7 +10,6 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
-import { waitForOperation } from "./operations.ts";
 
 export const MAX_NAME_LENGTH = 100;
 export const DEFAULT_LOCATION = "global";
@@ -278,7 +277,7 @@ export const lookupProjectBillingAccountId = (project: string) =>
         ? billingAccountIdOf(info.billingAccountName)
         : undefined,
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 export const resolveBillingAccountId = (
@@ -302,7 +301,7 @@ export const lookupProjectFolderId = (project: string) =>
       const parent = resource.parent ?? "";
       return parent.startsWith("folders/") ? lastSegment(parent) : undefined;
     }),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 export const resolveFolderId = (
@@ -324,16 +323,12 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         )
       : Effect.succeed(undefined);
 
@@ -363,5 +358,3 @@ export const resolveOrganization = (
     }
     return resolved;
   });
-
-export const waitForBillingOperation = waitForOperation;

@@ -190,10 +190,7 @@ const findOwned = (parent: string, id: string, project: string) =>
         parent,
         pageSize: 100,
       }),
-    ).pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
     return pages
       .flatMap((page) => page.ragCorpora ?? [])
       .find((corpus) => {
@@ -269,10 +266,7 @@ export const RagCorporaProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.ragCorpora ?? [])

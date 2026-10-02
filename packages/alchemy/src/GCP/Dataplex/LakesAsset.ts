@@ -260,7 +260,8 @@ const waitUntilReady = (name: string) =>
         error._tag === "GCP.Dataplex.LakesAssetNotResolved" ||
         error._tag === "GCP.Dataplex.NotResolved" ||
         error._tag === "TooManyRequests",
-      times: 10,
+      // Asset discovery settles in 1-3 minutes, longer while the lake is busy.
+      times: 36,
       schedule: Schedule.spaced("10 seconds"),
     }),
   );
@@ -418,6 +419,9 @@ export const LakesAssetProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          yield* waitForOperation(created);
+        }
         current = yield* waitUntilReady(name);
       }
 
@@ -465,7 +469,7 @@ export const LakesAssetProvider = () =>
               discoverySpec,
             },
           });
-        yield* waitForOperation(operation, { interval: "5 seconds" });
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
 

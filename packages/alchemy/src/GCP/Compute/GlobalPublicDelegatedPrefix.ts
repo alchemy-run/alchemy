@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -125,14 +125,6 @@ export class GlobalPublicDelegatedPrefixNotResolved extends Data.TaggedError(
   prefixName: string;
 }> {}
 
-export class GlobalPublicDelegatedPrefixOperationFailed extends Data.TaggedError(
-  "GCP.Compute.GlobalPublicDelegatedPrefixOperationFailed",
-)<{
-  prefixName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const rfc1035 = (name: string): string => {
   let next = name
     .toLowerCase()
@@ -222,54 +214,6 @@ const getByName = (project: string, publicDelegatedPrefix: string) =>
   compute
     .getGlobalPublicDelegatedPrefixes({ project, publicDelegatedPrefix })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const failIfErrored = (prefixName: string, operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const text = errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new GlobalPublicDelegatedPrefixOperationFailed({
-        prefixName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  prefixName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations(
-        {
-          project,
-          operation: current.name,
-        },
-        { times: 20 },
-      );
-    }
-    return yield* failIfErrored(prefixName, current);
-  });
 
 const awaitResource = (project: string, prefixName: string) =>
   getByName(project, prefixName).pipe(
@@ -384,7 +328,9 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, prefixName, operation),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -409,7 +355,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, prefixName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, prefixName);
@@ -439,7 +385,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.prefixName, operation).pipe(
+        yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }

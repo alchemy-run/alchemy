@@ -1,5 +1,6 @@
+import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -158,14 +159,6 @@ export class NetworkFirewallPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.NetworkFirewallPolicyNotResolved",
 )<{
   networkFirewallPolicyName: string;
-}> {}
-
-export class NetworkFirewallPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NetworkFirewallPolicyOperationFailed",
-)<{
-  networkFirewallPolicyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 export class NetworkFirewallPolicyStillExists extends Data.TaggedError(
@@ -374,89 +367,10 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  networkFirewallPolicyName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new NetworkFirewallPolicyOperationFailed({
-        networkFirewallPolicyName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, firewallPolicy: string) =>
   compute
     .getNetworkFirewallPolicies({ project, firewallPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  networkFirewallPolicyName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new NetworkFirewallPolicyOperationFailed({
-        networkFirewallPolicyName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(networkFirewallPolicyName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, networkFirewallPolicyName: string) =>
   getByName(project, networkFirewallPolicyName).pipe(
@@ -508,7 +422,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, networkFirewallPolicyName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -710,7 +626,7 @@ export const NetworkFirewallPolicyProvider = () =>
             Stream.map((policy) => toAttrs(policy, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as NetworkFirewallPolicy["Attributes"][]),
             ),
           );
@@ -741,12 +657,9 @@ export const NetworkFirewallPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                operation,
-                networkFirewallPolicyName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
@@ -814,12 +727,9 @@ export const NetworkFirewallPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                project,
-                operation,
-                output.networkFirewallPolicyName,
-                { ignoreNotFound: true },
-              ),
+              waitGlobalOperation(project, operation, {
+                ignore: ["RESOURCE_NOT_FOUND"],
+              }),
             ),
             Effect.catchTag("NotFound", () => Effect.void),
           );
@@ -831,12 +741,9 @@ export const NetworkFirewallPolicyProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              operation,
-              output.networkFirewallPolicyName,
-              { ignoreNotFound: true },
-            ),
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

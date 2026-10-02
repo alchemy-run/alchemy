@@ -1,5 +1,1 @@
-export {
-  ConfigOperationFailed,
-  ConfigOperationPending,
-  waitForOperation,
-} from "./internal.ts";
+export { waitForOperation } from "./internal.ts";

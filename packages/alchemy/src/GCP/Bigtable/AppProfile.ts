@@ -16,6 +16,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type SingleClusterRouting = {
@@ -227,11 +228,7 @@ const toAttrs = (profile: bigtable.AppProfile, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesAppProfiles({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const toBody = (news: AppProfileProps): bigtable.AppProfile => {
   const body: bigtable.AppProfile = {
@@ -309,19 +306,14 @@ export const AppProfileProvider = () =>
             (instance) => instance.name ?? "",
           ),
         );
-        const page = yield* bigtable
-          .listProjectsInstancesAppProfiles({
+        const appProfiles = yield* collectPages(
+          bigtable.listProjectsInstancesAppProfiles.pages({
             parent: `projects/${env.project}/instances/-`,
             pageSize: 1000,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({
-                appProfiles: [] as bigtable.AppProfile[],
-              }),
-            ),
-          );
-        return (page.appProfiles ?? [])
+          }),
+          (page) => page.appProfiles,
+        );
+        return appProfiles
           .filter((profile) => {
             const parsed = parseResourceName(profile.name ?? "");
             return (
@@ -411,6 +403,6 @@ export const AppProfileProvider = () =>
           name: output.name,
           ignoreWarnings,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

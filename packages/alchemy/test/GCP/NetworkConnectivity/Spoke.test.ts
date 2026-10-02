@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -24,7 +25,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a vpc spoke",
   (stack) =>
     Effect.gen(function* () {
@@ -124,9 +125,9 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_NCC)(
 
       const gone = yield* waitUntilGone(created.spoke.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

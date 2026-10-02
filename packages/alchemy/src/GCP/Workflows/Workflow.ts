@@ -17,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 64;
@@ -190,17 +191,12 @@ export class WorkflowNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class WorkflowOperationFailed extends Data.TaggedError(
-  "GCP.Workflows.WorkflowOperationFailed",
+/** The deployed workflow is in state `UNAVAILABLE` (see `stateError`). */
+export class WorkflowUnavailable extends Data.TaggedError(
+  "GCP.Workflows.WorkflowUnavailable",
 )<{
-  operation: string;
+  name: string;
   message: string;
-}> {}
-
-export class WorkflowOperationPending extends Data.TaggedError(
-  "GCP.Workflows.WorkflowOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class WorkflowStillExists extends Data.TaggedError(
@@ -313,101 +309,29 @@ const getByName = (name: string) =>
     .getProjectsLocationsWorkflows({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: workflows.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: workflows.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: workflows.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait for a workflow operation. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
+ */
 const waitForOperation = (
   operation: workflows.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new WorkflowOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new WorkflowOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = workflows.getProjectsLocationsOperations({ name });
-    const resolved: Effect.Effect<
-      workflows.Operation,
-      workflows.GetProjectsLocationsOperationsError,
-      workflows.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies workflows.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      workflows.Operation,
-      | WorkflowOperationFailed
-      | WorkflowOperationPending
-      | workflows.GetProjectsLocationsOperationsError,
-      workflows.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new WorkflowOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new WorkflowOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Workflows.WorkflowOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => workflows.getProjectsLocationsOperations({ name }),
+    { budget: "5 minutes", interval: "2 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -418,8 +342,8 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (workflow) => workflow.state !== "UNAVAILABLE",
       (workflow) =>
-        new WorkflowOperationFailed({
-          operation: name,
+        new WorkflowUnavailable({
+          name,
           message: workflow.stateError?.details ?? "workflow is UNAVAILABLE",
         }),
     ),
@@ -514,7 +438,6 @@ export const WorkflowProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

@@ -29,6 +29,7 @@ import {
   resourceNameFromOperation,
   sameHierarchyParent,
   waitForOperation,
+  waitForCreate,
 } from "./internal.ts";
 
 export type ProjectProps = {
@@ -209,7 +210,7 @@ const getByName = (name: string) =>
   resourcemanager
     .getProjects({ name })
     .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ProjectNotFound"], () =>
         Effect.succeed(undefined),
       ),
     );
@@ -319,7 +320,7 @@ export const ProjectProvider = () =>
             )
             .map(toAttrs),
         ),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
       ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -349,9 +350,7 @@ export const ProjectProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const settled = yield* waitForOperation(created, {
-            allowAlreadyExists: true,
-          });
+          const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
             resourceNameFromOperation(settled, "projects/") ??
               resourceNameFromOperation(created, "projects/"),
@@ -430,7 +429,7 @@ export const ProjectProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "ProjectNotFound"], () =>
             Effect.succeed(undefined),
           ),
         );

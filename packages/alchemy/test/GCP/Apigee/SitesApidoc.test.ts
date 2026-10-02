@@ -17,16 +17,17 @@ const logLevel = Effect.provideService(
 const siteId = process.env.GCP_TEST_APIGEE_SITE ?? "";
 const apiProductName = process.env.GCP_TEST_APIGEE_PRODUCT ?? "";
 
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
 const runLifecycle =
-  !!process.env.GCP_TEST_APIGEE &&
-  !!siteId &&
-  !!apiProductName &&
-  !process.env.FAST;
+  !!process.env.GCP_TEST_APIGEE_ORG && !!siteId && !!apiProductName;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSitesApidocs({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -37,7 +38,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsSitesApidocs on a missing catalog item fails with NotFound or Forbidden",
+  "getOrganizationsSitesApidocs on a missing catalog item fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -49,7 +50,7 @@ test.provider(
           name: `organizations/${project}/sites/alchemy-missing-site/apidocs/alchemy-missing-doc`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -90,15 +91,13 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.data?.id).toEqual(created.apiDocId);
-      expect(fetched.data?.description).toContain("alchemy-id=");
-      expect(fetched.data?.description).toContain("place orders");
+      expect(fetched.data?.description).toEqual("place orders");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Apigee.SitesApidoc("Checkout", {
             siteId,
             apiProductName,
-            apiDocId: created.apiDocId,
             title: "Checkout API v2",
             description: "place and refund orders",
             published: true,
@@ -118,7 +117,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetchedUpdate.data?.description).toContain(
         "place and refund orders",
       );
-      expect(fetchedUpdate.data?.description).toContain("alchemy-id=");
       expect(fetchedUpdate.data?.published).toEqual(true);
 
       yield* stack.destroy();

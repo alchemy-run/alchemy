@@ -60,8 +60,7 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.schedule).toEqual("0 0 1 1 *");
       expect(fetched.state).toEqual("ENABLED");
-      expect(fetched.description).toContain("alchemy-id=");
-      expect(fetched.description).toContain("ping");
+      expect(fetched.description).toEqual("ping");
       expect(fetched.httpTarget?.uri).toEqual("https://example.com/");
 
       const updated = yield* stack.deploy(

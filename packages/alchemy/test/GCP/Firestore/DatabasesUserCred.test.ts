@@ -4,7 +4,6 @@ import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
 
@@ -85,12 +84,7 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
   if (existing !== undefined) {
     yield* firestore
       .deleteProjectsDatabases({ name: enterpriseDatabaseNameOf(project) })
-      .pipe(
-        Effect.catchTag(
-          ["NotFound", "Forbidden", "BadRequest", "Conflict"],
-          () => Effect.void,
-        ),
-      );
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
     yield* waitUntilDatabase(enterpriseDatabaseNameOf(project), "gone");
   }
 
@@ -135,7 +129,7 @@ test.provider(
 );
 
 test.provider.skipIf(!!process.env.FAST)(
-  "createProjectsDatabasesUserCreds on Standard edition fails with a typed error",
+  "createProjectsDatabasesUserCreds on Standard edition fails with EnterpriseDatabaseRequired",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -156,9 +150,7 @@ test.provider.skipIf(!!process.env.FAST)(
           body: {},
         }),
       );
-      expect(error._tag === "BadRequest" || error._tag === "Forbidden").toBe(
-        true,
-      );
+      expect(error._tag).toEqual("EnterpriseDatabaseRequired");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -173,22 +165,12 @@ test.provider.skipIf(!runLifecycle)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const ensured = yield* Effect.result(ensureEnterpriseDatabase);
-      if (Result.isFailure(ensured)) {
-        if (
-          ensured.failure._tag === "BadRequest" ||
-          ensured.failure._tag === "Forbidden"
-        ) {
-          return;
-        }
-        return yield* Effect.fail(ensured.failure);
-      }
-      const parent = ensured.success;
+      const parent = yield* ensureEnterpriseDatabase;
       yield* firestore
         .deleteProjectsDatabasesUserCreds({
           name: `${parent}/userCreds/appuser`,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

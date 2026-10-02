@@ -184,7 +184,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const DeveloperProvider = () =>
   Provider.succeed(Developer, {
@@ -239,7 +243,7 @@ export const DeveloperProvider = () =>
               count: "1000",
             })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                 Effect.succeed({
                   developer: [] as apigee.GoogleCloudApigeeV1Developer[],
                 }),
@@ -336,6 +340,11 @@ export const DeveloperProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDevelopers({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

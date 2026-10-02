@@ -2,7 +2,7 @@ import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { LOCATION, Shop, type Order } from "./resources.ts";
+import { Shop, type Order } from "./resources.ts";
 
 /**
  * The public front door: it writes orders and does nothing else.
@@ -17,7 +17,6 @@ export default class Api extends GCP.Function<Api>()(
   "Api",
   {
     main: import.meta.url,
-    location: LOCATION,
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {

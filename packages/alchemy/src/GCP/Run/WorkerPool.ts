@@ -30,6 +30,10 @@ import {
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
+import {
   retryActAs,
   type AppliedIamGrant,
   type GcpHostBinding,
@@ -391,19 +395,6 @@ export class WorkerPoolStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class WorkerPoolOperationFailed extends Data.TaggedError(
-  "GCP.Run.WorkerPoolOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class WorkerPoolOperationPending extends Data.TaggedError(
-  "GCP.Run.WorkerPoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -746,81 +737,39 @@ const getByName = (name: string) =>
     .getProjectsLocationsWorkerPools({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isNotFoundStatus = (error: cloudrun.GoogleRpcStatus | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
+/** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
   operation: cloudrun.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new WorkerPoolOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new WorkerPoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudrun.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
+  waitForLongRunningOperation(
+    operation,
+    (name) => {
+      const get = cloudrun.getProjectsLocationsOperations({ name });
+      return options?.notFoundOk === true
+        ? get.pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudrun.GoogleLongrunningOperation),
+              Effect.succeed<LongRunningOperation>({ name, done: true }),
             ),
           )
-        : getOperation.pipe(
+        : get.pipe(
+            // A just-returned operation can briefly 404 on read.
             Effect.retry({
               while: (error) => error._tag === "NotFound",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new WorkerPoolOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        const ignoreNotFound =
-          options?.notFoundOk === true && isNotFoundStatus(status);
-        return status && !ignoreNotFound
-          ? Effect.fail(
-              new WorkerPoolOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Run.WorkerPoolOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+    },
+    { budget: "10 minutes" },
+  ).pipe(
+    // google.rpc.Code NOT_FOUND: the resource was already gone.
+    Effect.catchTag("GCP.OperationFailed", (error) =>
+      options?.notFoundOk === true && error.code === 5
+        ? Effect.succeed<LongRunningOperation>(operation)
+        : Effect.fail(error),
+    ),
+  );
 
 const isPendingPool = (pool: cloudrun.GoogleCloudRunV2WorkerPool) => {
   const state = pool.terminalCondition?.state ?? "";
@@ -994,15 +943,13 @@ export const WorkerPoolProvider = () =>
         const env = yield* GcpEnvironment.current;
         // WorkerPools list rejects the `-` wildcard; Services/Jobs accept it.
         return yield* listAt(env.project, "-", env.region).pipe(
-          Effect.catchTag(
-            ["NotFound", "Forbidden", "LocationWildcardUnsupported"],
-            () =>
-              // `us-central1` was the default before `GCP.Region`; keep
-              // listing it so older pools are still found.
-              Effect.forEach(
-                [...new Set([env.region, "us-central1"])],
-                (location) => listAt(env.project, location, env.region),
-              ).pipe(Effect.map((groups) => groups.flat())),
+          Effect.catchTag("LocationWildcardUnsupported", () =>
+            // `us-central1` was the default before `GCP.Region`; keep
+            // listing it so older pools are still found.
+            Effect.forEach(
+              [...new Set([env.region, "us-central1"])],
+              (location) => listAt(env.project, location, env.region),
+            ).pipe(Effect.map((groups) => groups.flat())),
           ),
         );
       }),
@@ -1053,7 +1000,7 @@ export const WorkerPoolProvider = () =>
             bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
         const container = template.containers?.[0] ?? {};
         template.containers = [
@@ -1098,7 +1045,7 @@ export const WorkerPoolProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);

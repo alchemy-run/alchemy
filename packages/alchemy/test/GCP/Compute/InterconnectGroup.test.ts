@@ -52,49 +52,6 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
-test.provider(
-  "probe insertInterconnectGroups entitlement",
-  () =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInterconnectGroups({
-          project,
-          body: {
-            name: "alchemy-ixg-probe",
-            description: "alchemy entitlement probe",
-            intent: { topologyCapability: "NO_SLA" },
-          },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInterconnectGroups({
-            project,
-            interconnectGroup: "alchemy-ixg-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
-);
-
 test.provider.skipIf(!runLifecycle)(
   "create, update, and delete an interconnect group",
   (stack) =>

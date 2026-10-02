@@ -3411,6 +3411,21 @@ export const LiveWorkerProvider = () =>
               ignoreBaseConfig: true,
             })
             .pipe(
+              Effect.catchTag("PreviewAlreadyExists", () =>
+                workers
+                  .getPreview({
+                    accountId,
+                    workerId: parentName,
+                    previewId: previewName,
+                  })
+                  .pipe(
+                    Effect.retry({
+                      while: (error) => error._tag === "PreviewNotFound",
+                      schedule: Schedule.spaced("500 millis"),
+                      times: 8,
+                    }),
+                  ),
+              ),
               Effect.catchTag("WorkerNotFound", () =>
                 Effect.fail(
                   new WorkerPreviewConfigError({

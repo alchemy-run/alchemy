@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Config from "effect/Config";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -46,7 +47,13 @@ export default class UpgradeWorker extends Cloudflare.Worker<UpgradeWorker>()(
         const object = objects.getByName("persistent");
         if (request.method === "POST") yield* object.insert();
         return yield* HttpServerResponse.json(yield* object.inspect());
-      }),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+          ),
+        ),
+      ),
     };
   }),
 ) {}

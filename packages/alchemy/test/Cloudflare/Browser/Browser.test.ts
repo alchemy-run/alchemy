@@ -114,10 +114,10 @@ test(
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
     const body = (yield* readJson(`${effectWorkerUrl}/scrape`)) as {
-      heading: string | null;
+      text: string | null;
     };
 
-    expect(body.heading).toBe("Example Domain");
+    expect(body.text).toBe("Learn more");
   }),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],

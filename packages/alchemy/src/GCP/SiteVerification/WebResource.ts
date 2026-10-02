@@ -139,12 +139,15 @@ export type WebResource = Resource<
  * ```
  *
  * ### Updating Owners
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Delegate a co-owner
  * ```typescript
  * const site = yield* GCP.SiteVerification.WebResource("Docs", {
- *   identifier: existing.identifier,
+ *   identifier: "https://www.example.com/",
  *   siteType: "SITE",
- *   owners: [...existing.owners, "teammate@example.com"],
+ *   owners: ["admin@example.com", "teammate@example.com"],
  * });
  * ```
  *

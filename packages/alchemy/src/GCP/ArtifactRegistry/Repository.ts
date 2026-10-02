@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 const DEFAULT_FORMAT = "DOCKER";
 const DEFAULT_MODE = "STANDARD_REPOSITORY";
@@ -176,19 +177,6 @@ export class RepositoryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class RepositoryOperationFailed extends Data.TaggedError(
-  "GCP.ArtifactRegistry.RepositoryOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class RepositoryOperationPending extends Data.TaggedError(
-  "GCP.ArtifactRegistry.RepositoryOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryStillExists",
 )<{
@@ -297,77 +285,6 @@ const mavenKey = (config: RepositoryProps["mavenConfig"] | undefined) =>
 const cleanupPoliciesJson = (
   policies: artifactregistry.CleanupPolicyMap | undefined,
 ) => JSON.stringify(policies ?? {});
-
-const waitForOperation = (
-  operation: artifactregistry.Operation,
-  options?: { notFoundOk?: boolean },
-): Effect.Effect<
-  artifactregistry.Operation,
-  | RepositoryOperationFailed
-  | RepositoryOperationPending
-  | artifactregistry.GetProjectsLocationsOperationsError,
-  artifactregistry.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new RepositoryOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new RepositoryOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = artifactregistry.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies artifactregistry.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new RepositoryOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => current.error === undefined,
-        (current) =>
-          new RepositoryOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ArtifactRegistry.RepositoryOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -602,7 +519,7 @@ export const RepositoryProvider = () =>
         .deleteProjectsLocationsRepositories({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

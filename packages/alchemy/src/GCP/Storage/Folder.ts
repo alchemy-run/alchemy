@@ -112,9 +112,7 @@ const listOnBucket = (bucketName: string) =>
   storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as storage.Folder[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as storage.Folder[])),
   );
 
 const waitUntilGone = (bucketName: string, folderName: string) =>

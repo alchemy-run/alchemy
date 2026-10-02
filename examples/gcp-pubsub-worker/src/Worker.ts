@@ -44,7 +44,6 @@ export default class Worker extends GCP.Run.WorkerPool<Worker>()(
   "Worker",
   {
     main: import.meta.url,
-    location: "us-central1",
     scaling: { manualInstanceCount: 1 },
   },
   Effect.gen(function* () {

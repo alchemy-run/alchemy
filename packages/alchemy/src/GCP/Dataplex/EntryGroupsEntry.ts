@@ -170,10 +170,11 @@ export type EntryGroupsEntry = Resource<
  * ### Updating an Entry
  * **Example:** Fully qualified name and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const entry = yield* GCP.Dataplex.EntryGroupsEntry("Orders", {
  *   entryGroup: group.name,
- *   entryId: existing.entryId,
- *   entryType: existing.entryType,
+ *   entryType:
+ *     "projects/dataplex-types/locations/global/entryTypes/generic",
  *   fullyQualifiedName: "app.orders",
  *   labels: { env: "prod", team: "data" },
  * });
@@ -298,7 +299,6 @@ const listEntriesUnder = (parent: string, project: string) =>
         .map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const EntryGroupsEntryProvider = () =>

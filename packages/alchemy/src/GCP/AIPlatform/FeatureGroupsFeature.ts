@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -213,7 +214,6 @@ const listFeaturesUnder = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const FeatureGroupsFeatureProvider = () =>
@@ -267,11 +267,12 @@ export const FeatureGroupsFeatureProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = parentOf(
-        env.project,
-        location,
-        olds?.featureGroup ?? output?.featureGroup ?? "",
-      );
+      const parentRef = olds?.featureGroup ?? output?.featureGroup;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, parentRef ?? "");
       const featureId = yield* toPhysicalSnake(
         id,
         olds?.featureId,
@@ -290,11 +291,15 @@ export const FeatureGroupsFeatureProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* aiplatform.listProjectsLocationsFeatureGroups
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        const groups = yield* Stream.fromIterable(listLocations(env.region))
+          .pipe(
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureGroups.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
+            ),
+          )
           .pipe(
             Stream.flatMap((page) =>
               Stream.fromIterable(page.featureGroups ?? []),
@@ -303,7 +308,6 @@ export const FeatureGroupsFeatureProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
         const nested = yield* Effect.forEach(
           groups,

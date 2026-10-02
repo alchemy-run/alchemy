@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -232,25 +232,11 @@ export class InstanceTemplateNotResolved extends Data.TaggedError(
   templateName: string;
 }> {}
 
-export class InstanceTemplateOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstanceTemplateOperationFailed",
-)<{
-  templateName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class InstanceTemplateStillExists extends Data.TaggedError(
   "GCP.Compute.InstanceTemplateStillExists",
 )<{
   templateName: string;
 }> {}
-
-const lastSegment = (value: string | undefined): string => {
-  if (value === undefined || value.length === 0) return "";
-  const parts = value.split("/");
-  return parts[parts.length - 1] || value;
-};
 
 const DEFAULT_DISKS: InstanceTemplateDisk[] = [
   {
@@ -443,76 +429,6 @@ const getByName = (project: string, instanceTemplate: string) =>
     .getInstanceTemplates({ project, instanceTemplate })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const opCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((error) =>
-    (error.code ?? "").toUpperCase(),
-  );
-
-const opMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  "operation failed";
-
-const isAlreadyExists = (operation: compute.Operation) =>
-  opCodes(operation).some(
-    (code) => code === "RESOURCE_ALREADY_EXISTS" || code === "ALREADY_EXISTS",
-  ) || opMessage(operation).toLowerCase().includes("already exists");
-
-const isMissing = (operation: compute.Operation) =>
-  opCodes(operation).some(
-    (code) => code === "RESOURCE_NOT_FOUND" || code === "NOT_FOUND",
-  ) ||
-  operation.httpErrorStatusCode === 404 ||
-  opMessage(operation).toLowerCase().includes("was not found");
-
-const failIfErrored = (
-  templateName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  const httpFailed =
-    operation.httpErrorStatusCode !== undefined &&
-    operation.httpErrorStatusCode >= 400;
-  if (errors.length === 0 && !httpFailed) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreNotFound === true && isMissing(operation)) {
-    return Effect.succeed(operation);
-  }
-  return Effect.fail(
-    new InstanceTemplateOperationFailed({
-      templateName,
-      operation: operation.name ?? "",
-      message: opMessage(operation),
-    }),
-  );
-};
-
-const waitUntilDone = (
-  project: string,
-  templateName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(templateName, operation, options);
-    }
-    const name = lastSegment(operation.name);
-    if (name.length === 0) {
-      return yield* failIfErrored(templateName, operation, options);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name });
-    return yield* failIfErrored(templateName, done, options);
-  });
-
 const waitUntilPresent = (project: string, templateName: string) =>
   getByName(project, templateName).pipe(
     Effect.flatMap((template) =>
@@ -655,8 +571,8 @@ export const InstanceTemplateProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, templateName, operation, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -687,8 +603,8 @@ export const InstanceTemplateProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.templateName, operation, {
-          ignoreNotFound: true,
+        yield* waitGlobalOperation(env.project, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
         }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
       yield* waitUntilGone(env.project, output.templateName);

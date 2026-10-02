@@ -14,6 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Needs Cloud Armor Managed Protection Plus (GCP_TEST_CLOUD_ARMOR=1); without
+// it insert fails with `BadRequest: Network Security Policies require Cloud
+// Armor Managed Protection Plus tier and above to use.`
 const runLifecycle = !!process.env.GCP_TEST_CLOUD_ARMOR && !process.env.FAST;
 
 const region = "us-central1";
@@ -61,45 +64,21 @@ test.provider(
 );
 
 test.provider(
-  "probe insertNetworkEdgeSecurityServices entitlement",
+  "insertNetworkEdgeSecurityServices without Cloud Armor Enterprise fails with CloudArmorEnterpriseRequired",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertNetworkEdgeSecurityServices({
+      const error = yield* Effect.flip(
+        compute.insertNetworkEdgeSecurityServices({
           project,
           region,
           body: {
             name: "alchemy-ness-probe",
             description: "alchemy entitlement probe",
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteNetworkEdgeSecurityServices({
-            project,
-            region,
-            networkEdgeSecurityService: "alchemy-ness-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("CloudArmorEnterpriseRequired");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );

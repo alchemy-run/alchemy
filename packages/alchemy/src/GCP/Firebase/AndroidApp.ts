@@ -125,7 +125,11 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : firebase
         .getProjectsAndroidApps({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "AndroidAppNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
 
 const findOwned = (
   project: string,
@@ -306,10 +310,17 @@ export const AndroidAppProvider = () =>
           name: output.name,
           body: { immediate: true, allowMissing: true },
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "AndroidAppNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation) {
         yield* waitForOperation(operation).pipe(
-          Effect.catchTag("GCP.Firebase.OperationFailed", () => Effect.void),
+          Effect.catchIf(
+            (error) => error._tag === "GCP.OperationFailed" && error.code === 5,
+            () => Effect.void,
+          ),
         );
       }
     }),

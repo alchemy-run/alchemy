@@ -1,4 +1,5 @@
 import * as GCP from "@/GCP";
+import { quotaTolerant } from "./parent.ts";
 import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
@@ -14,8 +15,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
-const location = "us-central1";
+const runLifecycle = !process.env.FAST;
+// Non-global Dialogflow CX locations need the {region}-dialogflow host, which
+// distilled does not route to yet; the global location works everywhere.
+const location = "global";
 
 const waitUntilGone = (name: string) =>
   dialogflow.getProjectsLocationsSecuritySettings({ name }).pipe(
@@ -40,10 +43,10 @@ test.provider(
           name: `projects/${project}/locations/${location}/securitySettings/missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 90_000,
@@ -75,7 +78,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.displayName).toContain("alchemy-id=");
+      expect(fetched.displayName).toMatch(/^\[(alchemy|alc) /);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -95,7 +98,7 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 120_000,

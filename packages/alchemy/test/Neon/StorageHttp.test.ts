@@ -136,6 +136,6 @@ lambdaTest.provider(
       "provider:neon:project",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 240_000,
   },
 );

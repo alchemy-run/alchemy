@@ -20,6 +20,7 @@ import {
   sameJson,
   sameText,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type TransitionRoute = {
@@ -328,7 +329,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -337,5 +338,5 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

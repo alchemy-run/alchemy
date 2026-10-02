@@ -14,14 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesTables({ name, view: "NAME_ONLY" }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -30,7 +28,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesTables on a missing instance fails with Forbidden",
+  "getProjectsInstancesTables on a missing instance fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,7 +40,7 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/tables/missing`,
         }),
       );
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

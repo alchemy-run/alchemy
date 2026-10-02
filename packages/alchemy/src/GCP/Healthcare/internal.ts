@@ -231,8 +231,8 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -256,7 +256,6 @@ export const listDatasets = (parent: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () => emptyList<healthcare.Dataset>()),
-          Effect.catchTag("Forbidden", () => emptyList<healthcare.Dataset>()),
         );
 
 export const listHl7V2Stores = (parent: string) =>
@@ -269,9 +268,6 @@ export const listHl7V2Stores = (parent: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () => emptyList<healthcare.Hl7V2Store>()),
-          Effect.catchTag("Forbidden", () =>
-            emptyList<healthcare.Hl7V2Store>(),
-          ),
         );
 
 export const listMessages = (parent: string) =>
@@ -286,7 +282,6 @@ export const listMessages = (parent: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () => emptyList<healthcare.Message>()),
-          Effect.catchTag("Forbidden", () => emptyList<healthcare.Message>()),
         );
 
 // `us-central1` was the fixed default before `GCP.Region`; list paths keep

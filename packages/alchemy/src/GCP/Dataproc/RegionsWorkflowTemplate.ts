@@ -16,7 +16,9 @@ import {
 import type { Providers } from "../Providers.ts";
 import type { WorkflowTemplateProps } from "./WorkflowTemplate.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
+  MAX_MANAGED_CLUSTER_PREFIX_LENGTH,
   MAX_POLICY_ID_LENGTH,
   defaultWorkflowJobs,
   defaultWorkflowPlacement,
@@ -142,7 +144,9 @@ const desiredBody = (
   jobs: news.jobs ?? defaultWorkflowJobs(),
   placement:
     news.placement ??
-    defaultWorkflowPlacement(rfc1035(`${templateId}-c`, 50, "cluster")),
+    defaultWorkflowPlacement(
+      rfc1035(`${templateId}-c`, MAX_MANAGED_CLUSTER_PREFIX_LENGTH, "cluster"),
+    ),
   dagTimeout: news.dagTimeout,
   parameters: news.parameters,
   encryptionConfig: news.kmsKey ? { kmsKey: news.kmsKey } : undefined,
@@ -155,18 +159,19 @@ const getByName = (name: string) =>
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsRegionsWorkflowTemplates({
+    collectPages(
+      dataproc.listProjectsRegionsWorkflowTemplates.pages({
         parent: regionParent(project, region),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.templates ?? [])
-            .filter((template) => hasAlchemyLabelMap(template.labels))
-            .map((template) => toAttrs(template, project, region)),
-        ),
+      }),
+      (page) => page.templates,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((template) => hasAlchemyLabelMap(template.labels))
+          .map((template) => toAttrs(template, project, region)),
       ),
+    ),
   );
 
 const templateChanged = (

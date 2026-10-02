@@ -340,9 +340,10 @@ const waitUntilSynced = (
         ? Effect.succeed(value)
         : Effect.fail(new MetricDescriptorNotResolved({ name }));
     }),
+    // Descriptor writes take up to a minute to become readable.
     Effect.retry({
-      times: 10,
-      schedule: Schedule.spaced("500 millis"),
+      times: 30,
+      schedule: Schedule.spaced("2 seconds"),
       while: (error) =>
         error._tag === "GCP.Monitoring.MetricDescriptorNotResolved",
     }),
@@ -361,7 +362,7 @@ const listCustom = (project: string) =>
       ),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as monitoring.MetricDescriptor[]),
       ),
     );

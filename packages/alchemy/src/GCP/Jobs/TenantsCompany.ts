@@ -47,9 +47,7 @@ export type TenantsCompanyProps = {
    */
   externalId?: string;
   /**
-   * Display name, for example `"Google LLC"`. Cloud Talent companies
-   * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * Display name shown to job seekers, for example `"Google LLC"`.
    */
   displayName?: string;
   /**
@@ -133,8 +131,9 @@ export type TenantsCompany = Resource<
  * A Cloud Talent Solution company — the hiring entity that owns job
  * postings.
  *
- * Companies have no labels field, so Alchemy stamps ownership into
- * `displayName` and `externalId` for `list` / nuke. Parent tenant and
+ * Companies have no labels field, so Alchemy stamps ownership into the
+ * client-side `externalId` for `list` / nuke (never into the
+ * seeker-visible display name). Parent tenant and
  * company id are identity — changing either replaces the company.
  * Display name, URIs, size, and related fields update in place.
  *
@@ -150,11 +149,13 @@ export type TenantsCompany = Resource<
  * ```
  *
  * ### Updating a Company
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Rename and set headquarters
  * ```typescript
  * const company = yield* GCP.Jobs.TenantsCompany("Labs", {
  *   parent: tenant.name,
- *   companyId: existing.companyId,
  *   displayName: "Acme Research",
  *   headquartersAddress: "Mountain View, CA",
  * });
@@ -260,11 +261,8 @@ export const TenantsCompanyProvider = () =>
         clientId,
         MAX_EXTERNAL_ID_LENGTH,
       );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        display,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      // Shown to job seekers, so no ownership marker (externalId has it).
+      const displayName = display.slice(0, MAX_DISPLAY_NAME_LENGTH);
       const name = output?.name ?? companyNameOf(parent, news.companyId ?? "");
 
       let current = yield* getCompany(name);

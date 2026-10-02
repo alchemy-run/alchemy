@@ -615,6 +615,8 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
         Effect.orElseSucceed(() => ""),
       );
 
+// Railway builds can outlast a 50-second poll window. Allow up to 90 seconds
+// while bounding both the retry count and time spent in API requests.
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
     const instance = yield* getInstance(environmentId, serviceId);
@@ -640,7 +642,12 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
       times: 10,
-      schedule: Schedule.spaced("5 seconds"),
+      schedule: Schedule.spaced("8 seconds"),
+    }),
+    Effect.timeoutOrElse({
+      duration: "90 seconds",
+      orElse: () =>
+        Effect.fail(new ServiceDeployPending({ serviceId, status: "pending" })),
     }),
   );
 
@@ -742,7 +749,19 @@ const waitForDeploymentById = (input: {
     Effect.retry({
       while: (e) => e._tag === "Railway.ServiceDeployPending",
       times: 10,
-      schedule: Schedule.spaced("5 seconds"),
+      schedule: Schedule.spaced("8 seconds"),
+    }),
+    // Surface the budget as a pending deploy so the final check below still
+    // reports a ready instance, or a failed deploy with its logs.
+    Effect.timeoutOrElse({
+      duration: "90 seconds",
+      orElse: () =>
+        Effect.fail(
+          new ServiceDeployPending({
+            serviceId: input.serviceId,
+            status: "pending",
+          }),
+        ),
     }),
     Effect.catchTag("Railway.ServiceDeployPending", (pending) =>
       Effect.gen(function* () {
@@ -767,8 +786,19 @@ const waitForDeploymentById = (input: {
             logs,
           });
         }
-        return yield* pending;
-      }),
+        if (instance !== undefined && deployReady(status)) {
+          return instance;
+        }
+        return yield* new ServiceDeployPending({
+          serviceId: input.serviceId,
+          status: status ?? pending.status,
+        });
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "10 seconds",
+          orElse: () => Effect.fail(pending),
+        }),
+      ),
     ),
   );
 

@@ -14,7 +14,9 @@ export interface GetAuthStringRequest extends Omit<
  *
  * Bind this operation to an {@link Instance} in a Function/Action init
  * phase. Provide {@link GetAuthStringHttp}. If AUTH is not enabled the
- * response `authString` is empty.
+ * response `authString` is empty. `redis.instances.getAuthString` is only
+ * in `roles/redis.admin`, so the host is granted that role on the project
+ * under an IAM Condition matching the bound instance.
  *
  * ### Reading AUTH
  * **Example:** Fetch the AUTH string

@@ -14,12 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Infra Manager (config.googleapis.com) is entitlement-gated. Live create
-// returns Forbidden: "Infrastructure Manager API has not been used in
-// project … before or it is disabled." Set GCP_TEST_CONFIG=1 on an
-// entitled project to run the full lifecycle.
-const entitled = process.env.GCP_TEST_CONFIG === "1";
-const runLifecycle = entitled && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   config.getProjectsLocationsDeploymentGroups({ name }).pipe(
@@ -44,43 +39,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/deploymentGroups/alchemy-missing-group`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* config
-        .listProjectsLocationsDeploymentGroups({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ deploymentGroups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.deploymentGroups ?? [])).toEqual(true);
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:config", "live"], timeout: 90_000 },
-);
-
-test.provider.skipIf(entitled)(
-  "createProjectsLocationsDeploymentGroups is rejected with Forbidden when Infra Manager is disabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        config.createProjectsLocationsDeploymentGroups({
-          parent: `projects/${project}/locations/us-central1`,
-          deploymentGroupId: "alchemy-config-probe-group",
-          body: {
-            deploymentUnits: [{ id: "network", dependencies: [] }],
-          },
-        }),
-      );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain("config.googleapis.com");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

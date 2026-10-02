@@ -355,10 +355,8 @@ export const PrivateConnectionProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        yield* settleOperation(created, {
-          times: 10,
-          interval: "8 seconds",
-        });
+        // VPC peering takes 5-10 minutes.
+        yield* settleOperation(created);
         current = yield* waitUntilExists(
           getPrivateConnectionByName(name),
           name,
@@ -386,20 +384,11 @@ export const PrivateConnectionProvider = () =>
           }),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
-      yield* settleOperation(operation, {
-        notFoundOk: true,
-        times: 10,
-        interval: "8 seconds",
-      });
+      yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(
         getPrivateConnectionByName(output.name),
         output.name,
         { times: 8, interval: "4 seconds" },
-      ).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
       );
     }),
   });

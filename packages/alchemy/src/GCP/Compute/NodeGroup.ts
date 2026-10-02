@@ -1,5 +1,6 @@
+import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -170,14 +171,6 @@ export class NodeGroupNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class NodeGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NodeGroupOperationFailed",
-)<{
-  nodeGroupName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class NodeGroupStillExists extends Data.TaggedError(
   "GCP.Compute.NodeGroupStillExists",
 )<{
@@ -294,90 +287,10 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  nodeGroupName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new NodeGroupOperationFailed({
-        nodeGroupName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, zone: string, nodeGroup: string) =>
   compute
     .getNodeGroups({ project, zone, nodeGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-  nodeGroupName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new NodeGroupOperationFailed({
-        nodeGroupName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(nodeGroupName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, zone: string, nodeGroupName: string) =>
   getByName(project, zone, nodeGroupName).pipe(
@@ -417,7 +330,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, zone, operation, nodeGroupName, options),
+      waitZoneOperation(project, zone, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -529,8 +444,8 @@ export const NodeGroupProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, zone, operation, nodeGroupName, {
-                ignoreAlreadyExists: true,
+              waitZoneOperation(env.project, zone, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -611,8 +526,8 @@ export const NodeGroupProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, zone, operation, output.nodeGroupName, {
-              ignoreNotFound: true,
+            waitZoneOperation(project, zone, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),

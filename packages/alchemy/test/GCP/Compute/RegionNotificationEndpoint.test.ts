@@ -58,7 +58,11 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAS)(
+// Health Check as a Service is allowlisted; without it insert fails with
+// `BadRequest: Invalid resource usage: 'HealthCheck as a Service feature is
+// not available for this project.'`. Set GCP_TEST_HCAAS=1 on an allowlisted
+// project.
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_HCAAS)(
   "create, replace, and delete a regional notification endpoint",
   (stack) =>
     Effect.gen(function* () {

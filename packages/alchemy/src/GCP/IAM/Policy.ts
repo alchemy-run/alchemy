@@ -24,6 +24,7 @@ import {
   policyName,
   ResourceNotResolved,
   toPolicyId,
+  waitForDeleteOperation,
   waitForOperation,
 } from "./internal.ts";
 
@@ -226,7 +227,7 @@ const listAt = (parent: string) =>
     Stream.flatMap((page) => Stream.fromIterable(page.policies ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as iam.GoogleIamV2Policy[]),
     ),
   );
@@ -372,9 +373,7 @@ export const PolicyProvider = () =>
         .deletePolicies({ name: output.name, etag: output.etag })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag("GCP.IAM.OperationFailed", () => Effect.void),
-        );
+        yield* waitForDeleteOperation(operation);
       }
     }),
   });

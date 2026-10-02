@@ -7,7 +7,6 @@ import * as GCP from "alchemy/GCP";
  * rest of the bindings use.
  */
 export const Links = GCP.Firestore.Database("Links", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });
 

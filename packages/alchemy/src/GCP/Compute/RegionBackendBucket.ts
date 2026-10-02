@@ -156,14 +156,6 @@ export class RegionBackendBucketNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionBackendBucketOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionBackendBucketOperationFailed",
-)<{
-  name: string;
-  operation: string;
-  message: string;
-}> {}
-
 const DEFAULT_LOAD_BALANCING_SCHEME = "EXTERNAL_MANAGED" as const;
 
 const sameList = (
@@ -220,9 +212,6 @@ const awaitResource = (project: string, region: string, name: string) =>
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (name: string, operation: string, message: string) =>
-  new RegionBackendBucketOperationFailed({ name, operation, message });
 
 export const RegionBackendBucketProvider = () =>
   Provider.succeed(RegionBackendBucket, {
@@ -298,11 +287,8 @@ export const RegionBackendBucketProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.BackendBucketAggregatedList[],
@@ -366,7 +352,6 @@ export const RegionBackendBucketProvider = () =>
             region,
             body: insertBody,
           }),
-          (operation, message) => failOp(name, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, name);
@@ -433,7 +418,6 @@ export const RegionBackendBucketProvider = () =>
             backendBucket: name,
             body: patchBody,
           }),
-          (operation, message) => failOp(name, operation, message),
         );
         current = (yield* getByName(env.project, region, name)) ?? current;
       }
@@ -452,7 +436,6 @@ export const RegionBackendBucketProvider = () =>
           region,
           backendBucket: output.name,
         }),
-        (operation, message) => failOp(output.name, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

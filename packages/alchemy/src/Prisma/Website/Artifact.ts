@@ -231,7 +231,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const traceBase = path.parse(root).root;
   const trace =
     seeds.size === 0
-      ? { fileList: new Set<string>() }
+      ? undefined
       : yield* Effect.tryPromise({
           try: () =>
             import("@vercel/nft").then(({ nodeFileTrace }) =>
@@ -252,7 +252,21 @@ export const stageWebsiteArtifact = Effect.fn(function* (
               { cause },
             ),
         }).pipe(Effect.timeout("90 seconds"));
-  for (const file of trace.fileList) files.add(path.resolve(traceBase, file));
+  if (trace !== undefined) {
+    for (const file of trace.fileList) {
+      const source = path.resolve(traceBase, file);
+      // NFT records symlinks encountered while resolving optional imports,
+      // even when their targets are absent. They are lookup evidence, not
+      // runtime files. Explicit build/manifest files remain required.
+      if (
+        !files.has(source) &&
+        trace.reasons.get(file)?.type.every((type) => type === "resolve") &&
+        !(yield* fs.exists(source))
+      )
+        continue;
+      files.add(source);
+    }
+  }
   if (files.size > MAX_ENTRIES)
     return yield* fail(
       "Website dependency trace exceeds the 50,000-entry safety limit.",

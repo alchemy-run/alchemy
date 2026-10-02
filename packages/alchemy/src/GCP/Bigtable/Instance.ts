@@ -380,7 +380,8 @@ export const InstanceProvider = () =>
       const name = instanceName(env.project, instanceId);
       const type = normalizeType(news.type ?? output?.type);
       const edition = normalizeEdition(news.edition ?? output?.edition);
-      const displayName = news.displayName ?? instanceId;
+      // Bigtable display names must be 4-30 characters.
+      const displayName = news.displayName ?? instanceId.slice(0, 30);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -459,7 +460,7 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* bigtable
         .deleteProjectsInstances({ name: output.name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(output.name);
     }),
   });

@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -191,19 +192,6 @@ export class CaPoolNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class CaPoolOperationFailed extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CaPoolOperationPending extends Data.TaggedError(
-  "GCP.PrivateCA.CaPoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CaPoolStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CaPoolStillExists",
 )<{
@@ -361,86 +349,30 @@ const getByName = (name: string) =>
     .getProjectsLocationsCaPools({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: privateca.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: privateca.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: privateca.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait for a Certificate Authority Service operation; CA creation and
+ * activation take a few minutes. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
+ */
 const waitForOperation = (
   operation: privateca.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new CaPoolOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CaPoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = privateca.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies privateca.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CaPoolOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new CaPoolOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.PrivateCA.CaPoolOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => privateca.getProjectsLocationsOperations({ name }),
+    { budget: "15 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -487,7 +419,6 @@ const listOwnedCaPools = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toCreateBody = (

@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_LOCATION = "global";
 const DEFAULT_LIFETIME = "2592000s";
@@ -213,19 +214,6 @@ export class CertificateIssuanceConfigNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class CertificateIssuanceConfigOperationFailed extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateIssuanceConfigOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateIssuanceConfigOperationPending extends Data.TaggedError(
-  "GCP.CertificateManager.CertificateIssuanceConfigOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CertificateIssuanceConfigStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateIssuanceConfigStillExists",
 )<{
@@ -408,106 +396,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsCertificateIssuanceConfigs({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: certificatemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: certificatemanager.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
-
-const waitForOperation = (
-  operation: certificatemanager.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (isAlreadyExists(operation.error)) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new CertificateIssuanceConfigOperationFailed({
-          operation: name ?? "",
-          message: [
-            operation.error.code !== undefined
-              ? `code ${operation.error.code}`
-              : undefined,
-            operation.error.message ?? "operation failed",
-          ]
-            .filter((part): part is string => part !== undefined)
-            .join(": "),
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateIssuanceConfigOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = certificatemanager.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies certificatemanager.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () =>
-          new CertificateIssuanceConfigOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error || isAlreadyExists(error)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new CertificateIssuanceConfigOperationFailed({
-            operation: name,
-            message: [
-              error.code !== undefined ? `code ${error.code}` : undefined,
-              error.message ?? "operation failed",
-            ]
-              .filter((part): part is string => part !== undefined)
-              .join(": "),
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag ===
-          "GCP.CertificateManager.CertificateIssuanceConfigOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
@@ -559,7 +447,6 @@ const listOwnedIssuanceConfigs = (project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const desiredCaPool = (
@@ -726,10 +613,10 @@ export const CertificateIssuanceConfigProvider = () =>
           }
         }).pipe(
           Effect.retry({
+            // "config validation failed" (INVALID_ARGUMENT) while the CA
+            // pool grant for the Certificate Manager agent propagates.
             while: (error) =>
-              error._tag ===
-                "GCP.CertificateManager.CertificateIssuanceConfigOperationFailed" &&
-              error.message.toLowerCase().includes("config validation failed"),
+              error._tag === "GCP.OperationFailed" && error.code === 3,
             times: 8,
             schedule: Schedule.spaced("3 seconds"),
           }),

@@ -120,8 +120,7 @@ export type BucketsView = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const view = yield* GCP.Logging.BucketsView("Stdout", {
- *   bucket: existing.bucket,
- *   viewId: existing.viewId,
+ *   bucket: bucket.name,
  *   filter: 'LOG_ID("stderr")',
  *   description: "stderr only",
  * });
@@ -308,7 +307,7 @@ export const BucketsViewProvider = () =>
                 }),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                 ),
               ),

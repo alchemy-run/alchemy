@@ -6,21 +6,9 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
-
-export class ConfigOperationFailed extends Data.TaggedError(
-  "GCP.Config.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ConfigOperationPending extends Data.TaggedError(
-  "GCP.Config.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Config.ResourceNotResolved",
@@ -66,6 +54,7 @@ export const toPhysicalId = (
   explicit: string | undefined,
   existing: string | undefined,
   fallback = "config",
+  maxLength = MAX_NAME_LENGTH,
 ) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return rfc1035(explicit, fallback);
@@ -73,7 +62,7 @@ export const toPhysicalId = (
     return rfc1035(
       yield* createPhysicalName({
         id,
-        maxLength: MAX_NAME_LENGTH,
+        maxLength,
         lowercase: true,
       }),
       fallback,
@@ -198,114 +187,29 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const alreadyExists = (error: config.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: config.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: config.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const isTransientForbidden = (error: {
-  _tag: string;
-  message?: string;
-}) =>
-  error._tag === "Forbidden" &&
-  ((error.message ?? "").includes("has not been used") ||
-    (error.message ?? "").includes("wait a few minutes"));
-
-export const retryTransient = <
-  A,
-  E extends { _tag: string; message?: string },
-  R,
->(
-  effect: Effect.Effect<A, E, R>,
-) =>
-  effect.pipe(
-    Effect.retry({
-      while: (error) => isTransientForbidden(error),
-      times: 8,
-      schedule: Schedule.exponential("1 second"),
-    }),
-  );
-
+/**
+ * Wait for an Infrastructure Manager operation; previews and deployment
+ * groups run Terraform and can take several minutes. ALREADY_EXISTS
+ * (code 6) counts as success (create race); with `notFoundOk`, so does
+ * NOT_FOUND (code 5, delete race).
+ */
 export const waitForOperation = (
   operation: config.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new ConfigOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new ConfigOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = config.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<config.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ConfigOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new ConfigOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Config.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "2 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => config.getProjectsLocationsOperations({ name }),
+    { budget: "20 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 export const waitUntilExists = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -344,21 +248,21 @@ export const listAtLocation = <A, E, R>(
   project: string,
   region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
-): Effect.Effect<A[], never, R> =>
-  Effect.firstSuccessOf<Effect.Effect<A[], E, R>>([
-    list(`projects/${project}/locations/-`),
-    list(`projects/${project}/locations/${region}`),
-  ]).pipe(Effect.orElseSucceed((): A[] => []));
+): Effect.Effect<A[], E, R> =>
+  // Prefer the all-locations wildcard; fall back to the default region
+  // (whose error, if any, propagates).
+  list(`projects/${project}/locations/-`).pipe(
+    Effect.catch(() => list(`projects/${project}/locations/${region}`)),
+  );
 
 export const listLabeledPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly A[] | undefined,
   labelsOf: (item: A) => Record<string, string | undefined> | null | undefined,
-): Effect.Effect<A[], never, R> =>
+): Effect.Effect<A[], E, R> =>
   pages.pipe(
     Stream.flatMap((page) => Stream.fromIterable(items(page) ?? [])),
     Stream.filter((item) => hasAlchemyLabelMap(labelsOf(item))),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.orElseSucceed((): A[] => []),
   );

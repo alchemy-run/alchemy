@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { type WaitComputeOptions, waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +19,23 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+
+export type InstanceAttachedDisk = {
+  /**
+   * Disk URL or partial URL (`zones/{zone}/disks/{disk}`).
+   */
+  source: string;
+  /**
+   * Device name exposed to the guest as `/dev/disk/by-id/google-{deviceName}`.
+   * @default the disk name
+   */
+  deviceName?: string;
+  /**
+   * Attach mode.
+   * @default "READ_WRITE"
+   */
+  mode?: "READ_WRITE" | "READ_ONLY";
+};
 
 export type InstanceProps = {
   /**
@@ -80,6 +97,18 @@ export type InstanceProps = {
    */
   associatePublicIp?: boolean;
   /**
+   * Reserved static external IPv4 address to assign to the primary network
+   * interface (e.g. `GCP.Compute.Address(...).address`). Implies a public
+   * access config; takes precedence over `associatePublicIp`.
+   */
+  natIP?: string;
+  /**
+   * Additional (non-boot) persistent disks to attach, e.g.
+   * `GCP.Compute.Disk(...).selfLink`. The disks must be in the instance's
+   * zone. Disks attached out-of-band that are not listed here are detached.
+   */
+  attachedDisks?: InstanceAttachedDisk[];
+  /**
    * Create a preemptible VM. Immutable — changing it replaces the instance.
    * @default false
    */
@@ -132,6 +161,12 @@ export type Instance = Resource<
     networkIP: string | undefined;
     /** Ephemeral or reserved public IPv4, if any. */
     natIP: string | undefined;
+    /** Additional (non-boot) disks attached to the instance. */
+    attachedDisks: {
+      source: string;
+      deviceName: string | undefined;
+      mode: string | undefined;
+    }[];
     /** Compute Engine self-link. */
     selfLink: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -168,6 +203,25 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Static IPs and Extra Disks
+ * **Example:** Web server with a static IP and a data disk
+ * ```typescript
+ * const ip = yield* GCP.Compute.Address("web-ip", { region: "us-central1" });
+ * const data = yield* GCP.Compute.Disk("web-data", {
+ *   zone: "us-central1-a",
+ *   sizeGb: 10,
+ * });
+ * const vm = yield* GCP.Compute.Instance("web", {
+ *   zone: "us-central1-a",
+ *   natIP: ip.address,
+ *   attachedDisks: [{ source: data.selfLink, deviceName: "data" }],
+ *   tags: ["http-server"],
+ *   metadata: {
+ *     "startup-script": "#!/bin/bash\ncd /tmp && python3 -m http.server 80",
+ *   },
+ * });
+ * ```
+ *
  * ### Starting and Stopping
  * **Example:** Start a bound instance
  * ```typescript
@@ -185,14 +239,6 @@ export class InstanceNotResolved extends Data.TaggedError(
 )<{
   instanceName: string;
   zone: string;
-}> {}
-
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstanceOperationFailed",
-)<{
-  operation: string;
-  code: string;
-  message: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError(
@@ -286,6 +332,45 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
+const extraDisks = (instance: compute.Instance) =>
+  (instance.disks ?? []).filter((disk) => disk.boot !== true);
+
+/** Disks are zonal, so the disk name identifies a disk within the zone. */
+const diskKey = (source: string | undefined) => lastSegment(source);
+
+const desiredAttachedDisk = (
+  disk: InstanceAttachedDisk,
+): compute.AttachedDisk => ({
+  source: disk.source,
+  deviceName: disk.deviceName,
+  mode: disk.mode ?? "READ_WRITE",
+  type: "PERSISTENT",
+  autoDelete: false,
+});
+
+type DesiredAccess =
+  | { kind: "none" }
+  | { kind: "ephemeral" }
+  | { kind: "static"; natIP: string };
+
+const desiredAccess = (news: InstanceProps): DesiredAccess =>
+  news.natIP !== undefined
+    ? { kind: "static", natIP: news.natIP }
+    : news.associatePublicIp === true
+      ? { kind: "ephemeral" }
+      : { kind: "none" };
+
+const accessConfigsFor = (access: DesiredAccess): compute.AccessConfig[] =>
+  access.kind === "none"
+    ? []
+    : [
+        {
+          type: "ONE_TO_ONE_NAT",
+          name: "External NAT",
+          ...(access.kind === "static" ? { natIP: access.natIP } : {}),
+        },
+      ];
+
 const toAttrs = (instance: compute.Instance, project: string) => {
   const nic = instance.networkInterfaces?.[0];
   return {
@@ -302,6 +387,11 @@ const toAttrs = (instance: compute.Instance, project: string) => {
     canIpForward: instance.canIpForward === true,
     networkIP: nic?.networkIP,
     natIP: nic?.accessConfigs?.[0]?.natIP,
+    attachedDisks: extraDisks(instance).map((disk) => ({
+      source: disk.source ?? "",
+      deviceName: disk.deviceName,
+      mode: disk.mode,
+    })),
     selfLink: instance.selfLink,
     creationTimestamp: instance.creationTimestamp,
     cpuPlatform: instance.cpuPlatform,
@@ -379,98 +469,15 @@ const waitUntilSettled = (
     }),
   );
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const isAlreadyExistsCode = (code: string) =>
-  code === "alreadyExists" ||
-  code === "RESOURCE_ALREADY_EXISTS" ||
-  code === "ALREADY_EXISTS";
-
-const isNotFoundCode = (code: string) =>
-  code === "notFound" ||
-  code === "RESOURCE_NOT_FOUND" ||
-  code === "RESOURCE_NOT_FOUND_BY_NAME";
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(
-      operation.name ?? operation.id ?? operation.selfLink,
-    );
-    if (operationName.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        code: "UNKNOWN",
-        message: "zone operation is missing a name",
-      });
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 18,
-        }),
-      );
-    }
-
-    const errors = current.error?.errors ?? [];
-    const codes = operationCodes(current);
-    if (
-      codes.some(isAlreadyExistsCode) ||
-      current.httpErrorStatusCode === 409
-    ) {
-      return current;
-    }
-    if (codes.some(isNotFoundCode) || current.httpErrorStatusCode === 404) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new InstanceOperationFailed({
-        operation: operationName,
-        code: codes[0] ?? String(current.httpErrorStatusCode ?? "UNKNOWN"),
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-      });
-    }
-    return current;
-  });
-
 const applyZoneOp = <E, R>(
   project: string,
   zone: string,
   start: Effect.Effect<compute.Operation, E, R>,
+  options?: WaitComputeOptions,
 ) =>
   Effect.gen(function* () {
     const op = yield* start;
-    return yield* waitZoneOperation(project, zone, op);
+    return yield* waitZoneOperation(project, zone, op, options);
   });
 
 const insertBody = (
@@ -517,15 +524,13 @@ const insertBody = (
           diskSizeGb: String(news.diskSizeGb ?? DEFAULT_DISK_SIZE_GB),
         },
       },
+      ...(news.attachedDisks ?? []).map(desiredAttachedDisk),
     ],
     networkInterfaces: [
       {
         network: news.network ?? DEFAULT_NETWORK,
         subnetwork: news.subnetwork,
-        accessConfigs:
-          news.associatePublicIp === true
-            ? [{ type: "ONE_TO_ONE_NAT", name: "External NAT" }]
-            : [],
+        accessConfigs: accessConfigsFor(desiredAccess(news)),
       },
     ],
   };
@@ -641,6 +646,7 @@ export const InstanceProvider = () =>
             zone,
             body: insertBody(news, instanceName, zone, desiredLabels),
           }),
+          { ignore: ["RESOURCE_ALREADY_EXISTS"] },
         ).pipe(Effect.catchTag("Conflict", () => Effect.void));
         current = yield* getByName(env.project, zone, instanceName).pipe(
           Effect.flatMap((existing) =>
@@ -725,6 +731,89 @@ export const InstanceProvider = () =>
         }
       }
 
+      const nic = current.networkInterfaces?.[0];
+      const nicName = nic?.name ?? "nic0";
+      const observedAccess = nic?.accessConfigs?.[0];
+      const access = desiredAccess(news);
+      const accessMatches =
+        access.kind === "none"
+          ? observedAccess === undefined
+          : access.kind === "ephemeral"
+            ? observedAccess !== undefined
+            : observedAccess?.natIP === access.natIP;
+      if (!accessMatches) {
+        if (observedAccess !== undefined) {
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.deleteAccessConfigInstances({
+              project: env.project,
+              zone,
+              instance: instanceName,
+              networkInterface: nicName,
+              accessConfig: observedAccess.name ?? "External NAT",
+            }),
+          );
+        }
+        for (const config of accessConfigsFor(access)) {
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.addAccessConfigInstances({
+              project: env.project,
+              zone,
+              instance: instanceName,
+              networkInterface: nicName,
+              body: config,
+            }),
+          );
+        }
+        current =
+          (yield* getByName(env.project, zone, instanceName)) ?? current;
+      }
+
+      const desiredDisks = news.attachedDisks ?? [];
+      const observedDisks = extraDisks(current);
+      const desiredKeys = new Set(
+        desiredDisks.map((disk) => diskKey(disk.source)),
+      );
+      const observedKeys = new Set(
+        observedDisks.map((disk) => diskKey(disk.source)),
+      );
+      for (const disk of observedDisks) {
+        if (desiredKeys.has(diskKey(disk.source))) continue;
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.detachDiskInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            deviceName: disk.deviceName ?? diskKey(disk.source),
+          }),
+        );
+      }
+      for (const disk of desiredDisks) {
+        if (observedKeys.has(diskKey(disk.source))) continue;
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.attachDiskInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            body: desiredAttachedDisk(disk),
+          }),
+        );
+      }
+      if (
+        observedDisks.some((disk) => !desiredKeys.has(diskKey(disk.source))) ||
+        desiredDisks.some((disk) => !observedKeys.has(diskKey(disk.source)))
+      ) {
+        current =
+          (yield* getByName(env.project, zone, instanceName)) ?? current;
+      }
+
       const desiredProtection = news.deletionProtection === true;
       if ((current.deletionProtection === true) !== desiredProtection) {
         yield* applyZoneOp(
@@ -769,17 +858,17 @@ export const InstanceProvider = () =>
           zone,
           instance,
         }),
+        { ignore: ["RESOURCE_NOT_FOUND"] },
       ).pipe(
         Effect.retry({
           while: (error) =>
             error._tag === "Conflict" ||
-            error._tag === "GCP.Compute.InstanceOperationFailed" ||
-            error._tag === "GCP.Compute.OperationPending",
+            (error._tag === "GCP.OperationFailed" &&
+              error.reason === "RESOURCE_NOT_READY"),
           times: 8,
           schedule: Schedule.spaced("3 seconds"),
         }),
         Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
       );
       yield* waitUntilGone(env.project, zone, instance);
     }),

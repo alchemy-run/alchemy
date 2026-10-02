@@ -130,10 +130,7 @@ const listAtParent = (parent: string) =>
       pageSize: 100,
     }),
     (page) => page.dataDomainBindings,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 
 export const DataDomainsBindingProvider = () =>
   Provider.succeed(DataDomainsBinding, {

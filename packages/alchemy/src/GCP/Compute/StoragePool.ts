@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -164,14 +164,6 @@ export class StoragePoolNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class StoragePoolOperationFailed extends Data.TaggedError(
-  "GCP.Compute.StoragePoolOperationFailed",
-)<{
-  storagePoolName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class StoragePoolNotReady extends Data.TaggedError(
   "GCP.Compute.StoragePoolNotReady",
 )<{
@@ -256,85 +248,6 @@ const getByName = (project: string, zone: string, storagePool: string) =>
   compute
     .getStoragePools({ project, zone, storagePool })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (
-  storagePoolName: string,
-  operation: compute.Operation,
-) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new StoragePoolOperationFailed({
-        storagePoolName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-  storagePoolName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(storagePoolName, operation);
-      return operation;
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    yield* failIfErrored(storagePoolName, current);
-    return current;
-  });
 
 const waitPoolReady = (
   project: string,
@@ -534,12 +447,9 @@ export const StoragePoolProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitZoneOperation(
-            env.project,
-            zone,
-            inserted,
-            storagePoolName,
-          );
+          yield* waitZoneOperation(env.project, zone, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitPoolReady(env.project, zone, storagePoolName);
       }
@@ -605,7 +515,7 @@ export const StoragePoolProvider = () =>
             labelFingerprint: current.labelFingerprint,
           },
         });
-        yield* waitZoneOperation(env.project, zone, patched, storagePoolName);
+        yield* waitZoneOperation(env.project, zone, patched);
         current =
           (yield* getByName(env.project, zone, storagePoolName)) ??
           (yield* waitPoolReady(env.project, zone, storagePoolName));
@@ -640,19 +550,9 @@ export const StoragePoolProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitZoneOperation(
-          project,
-          zone,
-          deleted,
-          output.storagePoolName,
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof StoragePoolOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitZoneOperation(project, zone, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitPoolGone(project, zone, output.storagePoolName);
     }),

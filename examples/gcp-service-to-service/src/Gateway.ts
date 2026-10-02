@@ -19,7 +19,6 @@ export default class Gateway extends GCP.Function<Gateway>()(
   "Gateway",
   {
     main: import.meta.url,
-    location: "us-central1",
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {

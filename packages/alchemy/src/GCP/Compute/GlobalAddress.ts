@@ -18,7 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_ADDRESS_TYPE = "EXTERNAL";
 const DEFAULT_IP_VERSION = "IPV4";
@@ -186,14 +186,6 @@ export class GlobalAddressPending extends Data.TaggedError(
   status: string;
 }> {}
 
-export class GlobalAddressOperationFailed extends Data.TaggedError(
-  "GCP.Compute.GlobalAddressOperationFailed",
-)<{
-  addressName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
@@ -247,58 +239,10 @@ const resourceRefOf = (value: string | undefined) => {
   return parts[parts.length - 1] ?? value;
 };
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (operation: compute.Operation, addressName: string) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return new GlobalAddressOperationFailed({
-    addressName,
-    operation: operation.name ?? "",
-    message: errors
-      .map((error) => error.message ?? error.code ?? "unknown")
-      .join("; "),
-  });
-};
-
 const getByName = (project: string, address: string) =>
   compute
     .getGlobalAddresses({ project, address })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  addressName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      yield* failIfOpError(operation, addressName);
-      return;
-    }
-    const current =
-      operation.status === "DONE"
-        ? operation
-        : yield* waitGlobalOperations({ project, operation: name });
-    yield* failIfOpError(current, addressName);
-  });
 
 const waitUntilReady = (project: string, addressName: string) =>
   getByName(project, addressName).pipe(
@@ -475,7 +419,9 @@ export const GlobalAddressProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, addressName).pipe(
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() => getByName(env.project, addressName)),
               ),
             ),
@@ -508,7 +454,7 @@ export const GlobalAddressProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, addressName),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = (yield* getByName(env.project, addressName)) ?? current;
@@ -526,7 +472,9 @@ export const GlobalAddressProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(env.project, operation, output.addressName),
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

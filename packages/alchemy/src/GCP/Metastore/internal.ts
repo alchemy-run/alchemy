@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import {
@@ -14,19 +15,6 @@ import {
 
 export const DEFAULT_HIVE_VERSION = "3.1.2";
 export const MAX_NAME_LENGTH = 63;
-
-export class MetastoreOperationFailed extends Data.TaggedError(
-  "GCP.Metastore.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class MetastoreOperationPending extends Data.TaggedError(
-  "GCP.Metastore.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Metastore.ResourceNotResolved",
@@ -219,87 +207,16 @@ export const isReadyState = (state: string | undefined) =>
 export const isFailedState = (state: string | undefined) =>
   FAILED_STATES.has((state ?? "").toUpperCase());
 
-const alreadyExists = (error: metastore.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: metastore.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: metastore.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: metastore.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new MetastoreOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new MetastoreOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = metastore.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<metastore.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new MetastoreOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => !current.error || isIgnorable(current.error, options),
-        (current) =>
-          new MetastoreOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Metastore.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "8 seconds"),
-      }),
-    );
-  });
+/**
+ * Wait for a Dataproc Metastore long-running operation. Service creates
+ * and deletes take 20-30 minutes.
+ */
+export const waitForOperation = (operation: metastore.Operation) =>
+  waitForGcpOperation(
+    operation,
+    (name) => metastore.getProjectsLocationsOperations({ name }),
+    { budget: "40 minutes", interval: "10 seconds" },
+  );
 
 export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A, E, R>,
@@ -378,57 +295,36 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
+// Metastore accepts the `locations/-` wildcard, so one call covers every region.
 export const listAtLocation = <A, E, R>(
   project: string,
-  region: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
-): Effect.Effect<A[], never, R> =>
-  list(`projects/${project}/locations/-`).pipe(
-    Effect.catchIf(
-      () => true,
-      () => list(`projects/${project}/locations/${region}`),
-    ),
-    Effect.orElseSucceed((): A[] => []),
-  );
+): Effect.Effect<A[], E, R> => list(`projects/${project}/locations/-`);
 
 export const listAtNested = <A, E, R>(
   project: string,
-  region: string,
   nested: string,
   list: (parent: string) => Effect.Effect<A[], E, R>,
-): Effect.Effect<A[], never, R> =>
-  list(`projects/${project}/locations/-/${nested}`).pipe(
-    Effect.catchIf(
-      () => true,
-      () => list(`projects/${project}/locations/${region}/${nested}`),
-    ),
-    Effect.orElseSucceed((): A[] => []),
-  );
+): Effect.Effect<A[], E, R> =>
+  list(`projects/${project}/locations/-/${nested}`);
 
 export const listLabeledPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly A[] | undefined,
   labelsOf: (item: A) => Record<string, string | undefined> | null | undefined,
-): Effect.Effect<A[], never, R> =>
-  pages.pipe(
-    Stream.flatMap((page) => Stream.fromIterable(items(page) ?? [])),
-    Stream.filter((item) => hasAlchemyLabelMap(labelsOf(item))),
-    Stream.runCollect,
-    Effect.map((chunk) => Array.from(chunk)),
-    Effect.orElseSucceed((): A[] => []),
-  );
+): Effect.Effect<A[], E, R> =>
+  listOwnedPages(pages, items, (item) => hasAlchemyLabelMap(labelsOf(item)));
 
 export const listOwnedPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly A[] | undefined,
   owned: (item: A) => boolean,
-): Effect.Effect<A[], never, R> =>
+): Effect.Effect<A[], E, R> =>
   pages.pipe(
     Stream.flatMap((page) => Stream.fromIterable(items(page) ?? [])),
     Stream.filter(owned),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.orElseSucceed((): A[] => []),
   );
 
 const markerOf = (

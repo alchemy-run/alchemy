@@ -15,12 +15,16 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSharedflows({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -46,7 +50,7 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody) =>
   });
 
 test.provider(
-  "getOrganizationsSharedflows on a missing shared flow fails with NotFound or Forbidden",
+  "getOrganizationsSharedflows on a missing shared flow fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -58,7 +62,7 @@ test.provider(
           name: `organizations/${project}/sharedflows/alchemy-apigee-missing-flow`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

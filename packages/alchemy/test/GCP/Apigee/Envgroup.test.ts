@@ -14,13 +14,19 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsEnvgroups({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("ApigeeResourceNotFound", () =>
+      Effect.succeed("gone" as const),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -29,7 +35,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsEnvgroups on a missing group fails with NotFound or Forbidden",
+  "getOrganizationsEnvgroups on a missing group fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,7 +48,7 @@ test.provider(
           name: `${org}/envgroups/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -69,17 +75,11 @@ test.provider.skipIf(!runLifecycle)(
       const fetched = yield* apigee.getOrganizationsEnvgroups({
         name: created.name,
       });
-      expect(
-        (fetched.hostnames ?? []).some(
-          (hostname) =>
-            hostname.startsWith("alc-") && hostname.endsWith(".invalid"),
-        ),
-      ).toEqual(true);
+      expect(fetched.hostnames).toEqual(["api.example.com"]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Apigee.Envgroup("Api", {
-            envgroupId: created.envgroupId,
             hostnames: ["api.example.com", "api.example.net"],
           });
         }),

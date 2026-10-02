@@ -517,7 +517,7 @@ const listOwned = (project: string) =>
       Stream.map((config) => toAttrs(config, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 const findOwned = (project: string, id: string) =>
@@ -533,7 +533,7 @@ const findOwned = (project: string, id: string) =>
         ),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
       );
     for (const config of owned) {
       if (yield* hasAlchemyLabels(id, tagRecord(config.userLabels))) {

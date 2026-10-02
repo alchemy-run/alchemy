@@ -8,16 +8,9 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  MAX_DISPLAY_NAME_LENGTH,
   MAX_ID_LENGTH,
-  encodeOwnershipLine,
   expandCatalog,
-  listControls,
-  listProjectCatalogs,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   sameJson,
@@ -57,8 +50,7 @@ export type CatalogsControlProps = {
    */
   controlId?: string;
   /**
-   * Human-readable name (max 128 characters). Controls have no labels
-   * field, so Alchemy stamps ownership into this field for `list` / nuke.
+   * Human-readable name (max 128 characters).
    */
   displayName?: string;
   /**
@@ -125,7 +117,7 @@ export type CatalogsControl = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** Solution types. */
     solutionTypes: string[];
@@ -149,10 +141,11 @@ export type CatalogsControl = Resource<
 /**
  * A Retail serving control on a catalog.
  *
- * Controls have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Parent, control id, and solution types
- * are immutable. Display name and rule actions update in place unless the
- * action oneof changes, which replaces the control.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * Parent, control id, and solution types are immutable. Display name and rule
+ * actions update in place unless the action oneof changes, which replaces the
+ * control.
  *
  * ### Creating a Control
  * **Example:** Two-way synonym control
@@ -193,30 +186,19 @@ const actionKind = (input: {
   return "synonyms";
 };
 
-const observedActionKind = (
-  rule: retail.GoogleCloudRetailV2Rule | undefined,
-) => {
-  if (rule?.redirectAction) return "redirect";
-  if (rule?.filterAction) return "filter";
-  if (rule?.boostAction) return "boost";
-  if (rule?.ignoreAction) return "ignore";
-  return "synonyms";
-};
-
 const toAttrs = (
   control: retail.GoogleCloudRetailV2Control,
   project: string,
 ) => {
   const name = control.name ?? "";
   const parsed = parseResourceName(name, "controls");
-  const ownership = parseOwnership(control.displayName);
   return {
     name,
     controlId: parsed.id,
     catalog: parsed.catalog,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: ownership.text,
+    displayName: control.displayName,
     solutionTypes: [...(control.solutionTypes ?? [])],
     searchSolutionUseCase: [...(control.searchSolutionUseCase ?? [])],
     synonyms: [...(control.rule?.twowaySynonymsAction?.synonyms ?? [])],
@@ -268,19 +250,6 @@ const getByName = (name: string) =>
         .getProjectsLocationsCatalogsControls({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (id: string, catalog: string, hinted?: string) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const controls = yield* listControls(catalog);
-    for (const control of controls) {
-      if (yield* ownedByAlchemy(id, control.displayName)) return control;
-    }
-    return undefined as retail.GoogleCloudRetailV2Control | undefined;
-  });
-
 export const CatalogsControlProvider = () =>
   Provider.succeed(CatalogsControl, {
     stables: ["name", "controlId", "catalog", "project", "location"],
@@ -329,44 +298,32 @@ export const CatalogsControlProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const catalog = olds?.catalog ?? output?.catalog;
-      const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : catalog !== undefined
-            ? yield* findOwned(id, catalog)
-            : undefined;
+      const controlId = yield* toPhysical(
+        id,
+        olds?.controlId,
+        output?.controlId,
+        (name) => slugNoDigits(name, MAX_ID_LENGTH),
+        MAX_ID_LENGTH,
+      );
+      const name =
+        output?.name ??
+        (catalog !== undefined
+          ? resourceName(
+              expandCatalog(
+                catalog,
+                env.project,
+                normalizeLocation(output?.location),
+              ),
+              controlId,
+            )
+          : undefined);
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const catalogs = yield* listProjectCatalogs(env.project, env.region);
-        const pages = yield* Effect.forEach(
-          catalogs,
-          (catalog) =>
-            catalog.name
-              ? listControls(catalog.name).pipe(
-                  Effect.map((controls) =>
-                    controls
-                      .filter(
-                        (control) =>
-                          Object.keys(
-                            parseOwnership(control.displayName).labels,
-                          ).length > 0,
-                      )
-                      .map((control) => toAttrs(control, env.project)),
-                  ),
-                )
-              : Effect.succeed([]),
-          { concurrency: 4 },
-        );
-        return pages.flat();
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -380,18 +337,10 @@ export const CatalogsControlProvider = () =>
         MAX_ID_LENGTH,
       );
       const name = resourceName(catalog, controlId);
-      const ownership = yield* ownershipLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? controlId,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = news.displayName ?? controlId;
       const body = toBody(news, displayName);
 
-      let current = yield* findOwned(id, catalog, output?.name);
-      if (current === undefined) {
-        current = yield* getByName(name);
-      }
+      let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* retail

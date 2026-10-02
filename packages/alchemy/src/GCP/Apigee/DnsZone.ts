@@ -158,7 +158,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDnsZones({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const DnsZoneProvider = () =>
   Provider.succeed(DnsZone, {
@@ -225,7 +229,7 @@ export const DnsZoneProvider = () =>
             }),
             (page) => page.dnsZones,
           ).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as apigee.GoogleCloudApigeeV1DnsZone[]),
             ),
           );
@@ -281,7 +285,11 @@ export const DnsZoneProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsDnsZones({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

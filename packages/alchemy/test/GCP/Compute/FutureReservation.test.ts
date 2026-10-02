@@ -14,6 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Future reservations are gated on account history; the testing project gets
+// `FutureReservationsNotEligible` (HTTP 412: "Based on your service usage
+// history, you are not eligible for using the Future Reservations feature").
+// Set GCP_TEST_FUTURE_RESERVATION=1 on an eligible project.
 const runLifecycle =
   !!process.env.GCP_TEST_FUTURE_RESERVATION && !process.env.FAST;
 
@@ -49,48 +53,25 @@ const waitUntilGone = (
       }),
     );
 
-test.provider(
-  "probe insertFutureReservations entitlement",
+test.provider.skipIf(runLifecycle)(
+  "insertFutureReservations without eligibility fails with FutureReservationsNotEligible",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertFutureReservations({
+      const error = yield* Effect.flip(
+        compute.insertFutureReservations({
           project,
           zone,
           body: {
             name: "alchemy-fr-probe",
             description: "alchemy entitlement probe",
+            autoDeleteAutoCreatedReservations: false,
             ...draftProps,
             zone: undefined,
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteFutureReservations({
-            project,
-            zone,
-            futureReservation: "alchemy-fr-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("FutureReservationsNotEligible");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );

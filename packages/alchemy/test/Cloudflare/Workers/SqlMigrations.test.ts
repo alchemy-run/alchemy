@@ -6,7 +6,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
@@ -49,6 +48,7 @@ type AdoptionState = {
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
+  message: string;
 }> {}
 
 const migrationNames = ["20240101000000_init", "20240102000000_posts"];
@@ -93,12 +93,19 @@ for (const dev of [true, false]) {
             const body = yield* response.text;
             if (response.status !== 200 || body !== "sql-migrations:ready") {
               return yield* Effect.fail(
-                new WorkerNotReady({ status: response.status }),
+                new WorkerNotReady({
+                  status: response.status,
+                  message: `GET ${deployed.url}/health: ${response.status}: ${body}`,
+                }),
               );
             }
           }).pipe(
             Effect.timeout("2 seconds"),
-            Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+            Effect.tapError((error) =>
+              Effect.logWarning("SQL Worker readiness", error),
+            ),
+            Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+            Effect.timeout("45 seconds"),
           );
           return deployed;
         }),
@@ -110,12 +117,16 @@ for (const dev of [true, false]) {
         Effect.gen(function* () {
           const { url } = yield* stack;
           const client = yield* HttpClient.HttpClient;
-          const response = yield* (
-            method === "GET"
-              ? client.get(`${url}${path}`)
-              : client.post(`${url}${path}`)
-          ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-          expect(response.status).toBe(200);
+          const response = yield* method === "GET"
+            ? client.get(`${url}${path}`)
+            : client.post(`${url}${path}`);
+          if (response.status !== 200) {
+            return yield* Effect.fail(
+              new Error(
+                `${method} ${url}${path}: ${response.status}: ${yield* response.text}`,
+              ),
+            );
+          }
           return (yield* response.json) as A;
         });
       const read = (name: string) =>

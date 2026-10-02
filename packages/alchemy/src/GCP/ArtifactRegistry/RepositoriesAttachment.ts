@@ -28,6 +28,7 @@ import {
   sameText,
   sortedStrings,
   toPhysicalId,
+  waitForDeleteOperation,
   waitForOperation,
   waitUntilExists,
   waitUntilGone,
@@ -354,7 +355,7 @@ export const RepositoriesAttachmentProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

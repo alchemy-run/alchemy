@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -152,15 +152,6 @@ export class TargetInstanceNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class TargetInstanceOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetInstanceOperationFailed",
-)<{
-  targetInstanceName: string;
-  operation: string;
-  message: string;
-  code?: string;
-}> {}
-
 export class TargetInstanceStillExists extends Data.TaggedError(
   "GCP.Compute.TargetInstanceStillExists",
 )<{
@@ -284,104 +275,6 @@ const getByName = (project: string, zone: string, targetInstance: string) =>
   compute
     .getTargetInstances({ project, zone, targetInstance })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationName = (operation: compute.Operation) =>
-  lastSegment(operation.name ?? operation.id ?? operation.selfLink);
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const isAlreadyExistsCode = (code: string) =>
-  code === "alreadyExists" ||
-  code === "RESOURCE_ALREADY_EXISTS" ||
-  code === "ALREADY_EXISTS";
-
-const isNotFoundCode = (code: string) => {
-  const lower = code.toLowerCase();
-  return (
-    lower === "notfound" ||
-    lower === "resource_not_found" ||
-    lower === "resource_not_found_by_name"
-  );
-};
-
-const failIfErrored = (
-  targetInstanceName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  const codes = operationCodes(operation);
-  if (
-    codes.some(isAlreadyExistsCode) ||
-    operation.httpErrorStatusCode === 409
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (
-    options?.allowNotFound &&
-    (codes.some(isNotFoundCode) ||
-      operation.httpErrorStatusCode === 404 ||
-      (errors.length > 0 &&
-        errors.every((error) => {
-          const message = (error.message ?? "").toLowerCase();
-          return (
-            isNotFoundCode(error.code ?? "") ||
-            message.includes("was not found") ||
-            message.includes("not found")
-          );
-        })))
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new TargetInstanceOperationFailed({
-        targetInstanceName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-        code: codes[0],
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  zone: string,
-  targetInstanceName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetInstanceName, operation, options);
-    }
-    const name = operationName(operation);
-    if (name.length === 0) {
-      return yield* failIfErrored(targetInstanceName, operation, options);
-    }
-    const done = yield* waitZoneOperations({
-      project,
-      zone,
-      operation: name,
-    }).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "NotFound",
-        times: 5,
-        schedule: Schedule.exponential("250 millis"),
-      }),
-    );
-    return yield* failIfErrored(targetInstanceName, done, options);
-  });
 
 const waitTargetGone = (
   project: string,
@@ -559,7 +452,7 @@ export const TargetInstanceProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, zone, targetInstanceName, operation),
+              waitZoneOperation(env.project, zone, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -586,7 +479,7 @@ export const TargetInstanceProvider = () =>
             })
             .pipe(
               Effect.flatMap((operation) =>
-                waitUntilDone(env.project, zone, targetInstanceName, operation),
+                waitZoneOperation(env.project, zone, operation),
               ),
             );
           current = yield* requireTarget(env.project, zone, targetInstanceName);
@@ -614,13 +507,9 @@ export const TargetInstanceProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          zone,
-          output.targetInstanceName,
-          operation,
-          { allowNotFound: true },
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitZoneOperation(env.project, zone, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
       yield* waitTargetGone(env.project, zone, output.targetInstanceName);
     }),

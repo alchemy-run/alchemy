@@ -231,11 +231,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesDatabasesBackupSchedules({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const toBody = (
   news: InstancesDatabasesBackupScheduleProps,
@@ -353,7 +349,7 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
                 Stream.map((schedule) => toAttrs(schedule, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed(
                     [] as InstancesDatabasesBackupSchedule["Attributes"][],
                   ),
@@ -448,7 +444,7 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

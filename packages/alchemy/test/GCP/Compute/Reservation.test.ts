@@ -16,11 +16,7 @@ const logLevel = Effect.provideService(
 
 const zone = "us-central1-a";
 
-// Zone capacity for n1-standard-1 reservations is often exhausted
-// (`ZONE_RESOURCE_POOL_EXHAUSTED`). Set GCP_TEST_COMPUTE_RESERVATION=1
-// when the zone has spare committed-use inventory.
-const runLifecycle =
-  !!process.env.GCP_TEST_COMPUTE_RESERVATION && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (
   projectId: string,
@@ -61,7 +57,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 300_000 },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -107,9 +103,9 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.Compute.Reservation("Burst", {
             reservationName: created.reservationName,
             zone,
-            description: "updated burst capacity",
+            description: "burst capacity",
             specificReservation: {
-              count: 1,
+              count: 2,
               instanceProperties: { machineType: "n1-standard-1" },
             },
             specificReservationRequired: true,
@@ -118,14 +114,14 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.reservationName).toEqual(created.reservationName);
-      expect(updated.description).toEqual("updated burst capacity");
+      expect(updated.specificReservation?.count).toEqual("2");
 
       const fetchedUpdated = yield* compute.getReservations({
         project: updated.project,
         zone: updated.zone,
         reservation: updated.reservationName,
       });
-      expect(fetchedUpdated.description).toContain("updated burst capacity");
+      expect(fetchedUpdated.specificReservation?.count).toEqual("2");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(
@@ -135,5 +131,5 @@ test.provider.skipIf(!runLifecycle)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 300_000 },
 );

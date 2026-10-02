@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsCachedContents({ name }).pipe(
     Effect.as("found" as const),
@@ -42,23 +38,14 @@ test.provider(
           name: `${parent}/cachedContents/alchemy-aiplatform-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsCachedContents({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ cachedContents: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.cachedContents ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsCachedContents({
+        parent,
+        pageSize: 10,
+      });
+      expect(
+        (page.cachedContents ?? []).map((item) => item.name),
+      ).not.toContain(`${parent}/cachedContents/alchemy-aiplatform-missing`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,13 +55,20 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+// Explicit caching needs at least 1024 tokens of content.
+const styleGuide = Array.from(
+  { length: 400 },
+  (_, i) =>
+    `Rule ${i + 1}: answer question ${i + 1} in at most ${i + 2} words.`,
+).join("\n");
+
+test.provider(
   "create, update, and delete cached content",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       const parent = `projects/${project}/locations/us-central1`;
-      const model = `${parent}/publishers/google/models/gemini-2.0-flash-001`;
+      const model = `${parent}/publishers/google/models/gemini-2.5-flash`;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
@@ -87,7 +81,7 @@ test.provider.skipIf(!runLifecycle)(
             contents: [
               {
                 role: "user",
-                parts: [{ text: "You are a terse assistant. ".repeat(200) }],
+                parts: [{ text: styleGuide }],
               },
             ],
           });
@@ -113,7 +107,7 @@ test.provider.skipIf(!runLifecycle)(
             contents: [
               {
                 role: "user",
-                parts: [{ text: "You are a terse assistant. ".repeat(200) }],
+                parts: [{ text: styleGuide }],
               },
             ],
           });
@@ -129,6 +123,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 120_000,
+    timeout: 300_000,
   },
 );

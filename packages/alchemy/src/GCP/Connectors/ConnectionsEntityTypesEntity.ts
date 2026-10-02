@@ -1,25 +1,16 @@
 import * as connectors from "@distilled.cloud/gcp/connectors_v2";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   entityNameOf,
-  findOwnedEntity,
   getEntity,
-  listOwnedEntities,
-  ownedByAlchemy,
-  parentOf,
   parseEntityName,
   retryTransient,
   sameJson,
-  stampFields,
-  userFields,
   type EntityFields,
 } from "./internal.ts";
 
@@ -38,10 +29,7 @@ export type ConnectionsEntityTypesEntityProps = {
   entityId?: string;
   /**
    * Entity field values sent to the connected system. Keys are field
-   * names; values are JSON-compatible. Integration Connectors entities
-   * have no labels field, so Alchemy ownership is stored as
-   * `alchemy-stack` / `alchemy-stage` / `alchemy-id` fields (stripped
-   * from attributes). The entity type must accept these extra fields.
+   * names; values are JSON-compatible.
    */
   fields?: EntityFields;
 };
@@ -67,7 +55,7 @@ export type ConnectionsEntityTypesEntity = Resource<
     connection: string;
     /** Entity type id. */
     entityType: string;
-    /** User fields (Alchemy ownership fields stripped). */
+    /** Entity field values as reported by the connected system. */
     fields: EntityFields;
   },
   never,
@@ -80,7 +68,8 @@ export type ConnectionsEntityTypesEntity = Resource<
  * Entities live under a Connection entity type. The entity id is
  * assigned by the external system. Parent and entity id are identity —
  * changing either replaces the row. `fields` update in place via patch.
- * Ownership is stamped into `fields` so `list` / nuke can find rows.
+ * Entities have no labels, so nothing is written into the external row
+ * to mark ownership: Alchemy tracks the row by its server-assigned name.
  *
  * Creating an entity requires an ACTIVE Integration Connectors
  * connection whose entity type accepts the supplied fields.
@@ -101,11 +90,12 @@ export type ConnectionsEntityTypesEntity = Resource<
  * ### Updating an Entity
  * **Example:** Patch fields
  * ```typescript
+ * // Same logical id, changed fields: the engine keeps the row and patches it.
  * const account = yield* GCP.Connectors.ConnectionsEntityTypesEntity(
  *   "Account",
  *   {
- *     parent: existing.parent,
- *     entityId: existing.entityId,
+ *     parent:
+ *       "projects/my-project/locations/us-central1/connections/salesforce/entityTypes/Account",
  *     fields: { Name: "Acme Corp" },
  *   },
  * );
@@ -118,13 +108,6 @@ export const ConnectionsEntityTypesEntity =
   Resource<ConnectionsEntityTypesEntity>(
     "GCP.Connectors.ConnectionsEntityTypesEntity",
   );
-
-export class ConnectionsEntityTypesEntityNotResolved extends Data.TaggedError(
-  "GCP.Connectors.ConnectionsEntityTypesEntityNotResolved",
-)<{
-  parent: string;
-  entityId: string;
-}> {}
 
 const toAttrs = (
   entity: connectors.Entity,
@@ -141,7 +124,7 @@ const toAttrs = (
     location: parsed.location,
     connection: parsed.connection,
     entityType: parsed.entityType,
-    fields: userFields(entity.fields),
+    fields: entity.fields ?? {},
   };
 };
 
@@ -177,7 +160,9 @@ export const ConnectionsEntityTypesEntityProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    // Rows carry no ownership marker; only a known name (from state or an
+    // explicit `entityId`) identifies ours.
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent ?? output?.parent ?? "";
       const entityId = olds?.entityId ?? output?.entityId;
@@ -186,31 +171,15 @@ export const ConnectionsEntityTypesEntityProvider = () =>
         (entityId !== undefined && parent.length > 0
           ? entityNameOf(parent, entityId)
           : "");
-      let existing = yield* getEntity(name);
-      if (existing === undefined) {
-        existing = yield* findOwnedEntity(parent, id);
-      }
+      const existing = yield* getEntity(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, parent);
-      return (yield* ownedByAlchemy(id, existing.fields))
-        ? attrs
-        : Unowned(attrs);
+      return toAttrs(existing, env.project, parent);
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const entities = yield* listOwnedEntities(env.project, env.region);
-        return entities.map((entity) =>
-          toAttrs(entity, env.project, parentOf(entity.name ?? "")),
-        );
-      }),
-
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = news.parent;
-      const ownership = yield* createInternalLabels(id);
-      const desiredFields = stampFields(ownership, news.fields);
+      const desiredFields = news.fields ?? {};
       const name =
         output?.name ??
         (news.entityId !== undefined
@@ -218,31 +187,21 @@ export const ConnectionsEntityTypesEntityProvider = () =>
           : "");
 
       let current = yield* getEntity(name);
-      if (current === undefined) {
-        current = yield* findOwnedEntity(parent, id);
-      }
 
       if (current === undefined) {
-        const created = yield* retryTransient(
+        current = yield* retryTransient(
           connectors.createProjectsLocationsConnectionsEntityTypesEntities({
             parent,
             body: { fields: desiredFields },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => findOwnedEntity(parent, id)));
-        current = created ?? undefined;
-      }
-
-      if (current === undefined) {
-        return yield* new ConnectionsEntityTypesEntityNotResolved({
-          parent,
-          entityId: news.entityId ?? output?.entityId ?? "",
-        });
+        );
       }
 
       const currentName = current.name ?? name;
-      const fieldsChanged = !sameJson(
-        stampFields(ownership, userFields(current.fields)),
-        desiredFields,
+      // The connected system may report extra columns; only compare ours.
+      const observed = current.fields ?? {};
+      const fieldsChanged = Object.entries(desiredFields).some(
+        ([key, value]) => !sameJson(observed[key], value),
       );
 
       if (fieldsChanged && currentName.length > 0) {
@@ -264,6 +223,12 @@ export const ConnectionsEntityTypesEntityProvider = () =>
         connectors.deleteProjectsLocationsConnectionsEntityTypesEntities({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+      ).pipe(
+        // A missing connection answers 501, so its entities are gone too.
+        Effect.catchTag(
+          ["NotFound", "EntitiesNotImplemented"],
+          () => Effect.void,
+        ),
+      );
     }),
   });

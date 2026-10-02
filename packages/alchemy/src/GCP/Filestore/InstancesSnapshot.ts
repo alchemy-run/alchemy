@@ -134,11 +134,13 @@ export type InstancesSnapshot = Resource<
  * ```
  *
  * ### Updating a Snapshot
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Description and labels
  * ```typescript
  * const snap = yield* GCP.Filestore.InstancesSnapshot("Nightly", {
  *   instance: nfs.name,
- *   snapshotId: existing.snapshotId,
  *   description: "nightly snapshot v2",
  *   labels: { env: "prod", team: "storage" },
  * });
@@ -235,7 +237,6 @@ const listViaInstances = (project: string) =>
       Stream.filter((instance) => (instance.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.orElseSucceed(() => [] as file.Instance[]),
       Effect.flatMap((instances) =>
         Effect.forEach(
           instances,

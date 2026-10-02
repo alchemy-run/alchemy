@@ -115,8 +115,9 @@ test.provider(
         return { domain, https };
       }).pipe(
         Effect.repeat({
+          // Neon's background DNS check lands around 45-50s, so leave headroom.
           schedule: Schedule.spaced("5 seconds"),
-          times: 9,
+          times: 23,
           until: ({ domain, https }) =>
             domain?.status === "active" &&
             domain.dns_status === "ok" &&
@@ -124,7 +125,7 @@ test.provider(
             https.status === 200 &&
             https.body === "bare-v2",
         }),
-        Effect.timeout("90 seconds"),
+        Effect.timeout("150 seconds"),
       );
       expect(activation.domain?.status).toBe("active");
       expect(activation.domain?.dns_status).toBe("ok");
@@ -171,6 +172,6 @@ test.provider(
       "provider:neon:project",
       "live",
     ],
-    timeout: 180_000,
+    timeout: 240_000,
   },
 );

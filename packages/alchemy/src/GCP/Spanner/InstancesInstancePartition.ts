@@ -258,11 +258,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesInstancePartitions({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -435,7 +431,7 @@ export const InstancesInstancePartitionProvider = () =>
                 Stream.map((partition) => toAttrs(partition, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed(
                     [] as InstancesInstancePartition["Attributes"][],
                   ),
@@ -552,7 +548,7 @@ export const InstancesInstancePartitionProvider = () =>
       yield* spanner
         .deleteProjectsInstancesInstancePartitions({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

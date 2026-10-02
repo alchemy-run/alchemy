@@ -91,10 +91,15 @@ const purgeRepo = Effect.fn(function* (
   repo: string,
 ) {
   const admin = yield* makeClient(url, TEST_SECRET);
-  yield* admin.repos
-    .delete({ params: { owner, repo } })
-    .pipe(Effect.catchTag("RepoNotFound", () => Effect.void));
+  // edgeRetry on every step: a freshly deployed workers.dev route serves
+  // transient non-JSON 404s/5xx for a few seconds (typed 404s decode fine
+  // and are NOT retried).
+  yield* admin.repos.delete({ params: { owner, repo } }).pipe(
+    Effect.catchTag("RepoNotFound", () => Effect.void),
+    edgeRetry,
+  );
   yield* admin.repos.get({ params: { owner, repo } }).pipe(
+    edgeRetry,
     Effect.as(false),
     Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
     Effect.repeat({

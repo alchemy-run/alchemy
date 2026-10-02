@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -156,14 +156,6 @@ export class SslPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.SslPolicyNotResolved",
 )<{
   sslPolicyName: string;
-}> {}
-
-export class SslPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SslPolicyOperationFailed",
-)<{
-  sslPolicyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const DEFAULT_PROFILE: SslPolicyProfile = "COMPATIBLE";
@@ -333,58 +325,6 @@ const getByName = (project: string, sslPolicy: string) =>
     .getSslPolicies({ project, sslPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (sslPolicyName: string, operation: compute.Operation) => {
-  const errors = operation.error?.errors ?? [];
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new SslPolicyOperationFailed({
-        sslPolicyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  sslPolicyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: current.name,
-      });
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    return yield* failIfErrored(sslPolicyName, current);
-  });
-
 const awaitResource = (project: string, sslPolicyName: string) =>
   getByName(project, sslPolicyName).pipe(
     Effect.repeat({
@@ -470,7 +410,7 @@ export const SslPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, sslPolicyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -490,7 +430,7 @@ export const SslPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, sslPolicyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, sslPolicyName);
@@ -518,7 +458,7 @@ export const SslPolicyProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.sslPolicyName, operation).pipe(
+        yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }

@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import {
-  alchemyLabelKeys,
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
@@ -147,44 +146,6 @@ export const hasAlchemyLabelMap = (
 export const ownedLabels = (id: string, labels: Record<string, string>) =>
   hasAlchemyLabels(id, labels);
 
-const markerOf = (labels: Record<string, string>) =>
-  `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-
-export const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = markerOf(labels);
-  return description ? `${marker}\n${description}` : marker;
-};
-
-export const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseDescription(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
 export const createOwnership = (id: string) => createInternalLabels(id);
 
 export const canonical = (value: unknown): unknown => {
@@ -244,7 +205,7 @@ const emptyOnMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error) => error._tag === "NotFound" || error._tag === "Forbidden",
+      (error) => error._tag === "NotFound",
       () => Effect.succeed([] as A[]),
     ),
   );

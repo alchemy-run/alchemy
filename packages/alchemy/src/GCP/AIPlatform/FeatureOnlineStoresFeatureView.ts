@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -313,7 +314,6 @@ const listViewsUnder = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const FeatureOnlineStoresFeatureViewProvider = () =>
@@ -363,11 +363,12 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = parentOf(
-        env.project,
-        location,
-        olds?.featureOnlineStore ?? output?.featureOnlineStore ?? "",
-      );
+      const parentRef = olds?.featureOnlineStore ?? output?.featureOnlineStore;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, parentRef ?? "");
       const viewId = yield* toPhysicalSnake(
         id,
         olds?.featureViewId,
@@ -386,22 +387,24 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores =
-          yield* aiplatform.listProjectsLocationsFeatureOnlineStores
-            .pages({
-              parent: `projects/${env.project}/locations/-`,
-              pageSize: 100,
-            })
-            .pipe(
-              Stream.flatMap((page) =>
-                Stream.fromIterable(page.featureOnlineStores ?? []),
-              ),
-              Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            );
+        const stores = yield* Stream.fromIterable(listLocations(env.region))
+          .pipe(
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureOnlineStores.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
+            ),
+          )
+          .pipe(
+            Stream.flatMap((page) =>
+              Stream.fromIterable(page.featureOnlineStores ?? []),
+            ),
+            Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
+          );
         const nested = yield* Effect.forEach(
           stores,
           (store) =>

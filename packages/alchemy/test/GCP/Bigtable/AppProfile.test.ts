@@ -14,7 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const lastSegment = (value: string) => {
   const parts = value.replace(/\/+$/, "").split("/");
@@ -33,7 +33,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesAppProfiles on a missing instance fails with Forbidden",
+  "getProjectsInstancesAppProfiles on a missing instance fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -45,9 +45,7 @@ test.provider(
           name: `projects/${project}/instances/alchemy-bt-missing/appProfiles/missing`,
         }),
       );
-      // Typed `Forbidden` when the Admin API is disabled, and also when the
-      // instance does not exist (GCP hides unknown instances behind 403).
-      expect(error._tag).toBe("Forbidden");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

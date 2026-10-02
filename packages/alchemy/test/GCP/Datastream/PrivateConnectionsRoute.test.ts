@@ -10,6 +10,7 @@ import {
   runSlowLifecycle,
   waitUntilGone,
 } from "./common.ts";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -25,7 +26,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/privateConnections/alchemy-missing-pconn/routes/alchemy-missing-route`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -99,9 +100,9 @@ test.provider.skipIf(!runSlowLifecycle)(
         }),
       );
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:datastream", "live"],
-    timeout: 120_000,
+    timeout: 900_000,
   },
 );

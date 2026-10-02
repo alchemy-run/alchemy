@@ -23,7 +23,6 @@ export default class Orders extends GCP.Function<Orders>()(
   "Orders",
   {
     main: import.meta.url,
-    location: "us-central1",
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {

@@ -16,7 +16,7 @@ Firestore.
   Alchemy bundles it for Node.js 22, uploads the archive, and serves `fetch`
   through the Functions Framework. No Dockerfile, no local image build.
 - `src/resources.ts` — a named `FIRESTORE_NATIVE` `GCP.Firestore.Database` in
-  `us-central1`. Each note is a document at `notes/{id}`.
+  the stack's region. Each note is a document at `notes/{id}`.
 - `alchemy.run.ts` — the stack, plus a `GCP.IAM.Member` that makes the
   function public.
 
@@ -37,9 +37,10 @@ need a Google identity token.
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 ```sh
-export GOOGLE_PROJECT_ID=my-project
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 The first deploy takes a few minutes: Cloud Build builds the function and
@@ -55,17 +56,15 @@ curl "$url/notes"
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, drives the full CRUD cycle over HTTP, checks the
 document in Firestore directly, then destroys the stack and verifies the
-function and database are gone. Skipped without GCP credentials
-(`GOOGLE_PROJECT_ID` plus `GOOGLE_APPLICATION_CREDENTIALS` or
-`GOOGLE_ACCESS_TOKEN`).
+function and database are gone.
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```

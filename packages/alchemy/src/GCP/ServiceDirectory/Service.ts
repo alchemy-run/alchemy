@@ -246,7 +246,7 @@ const listServicesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
     const found: ReturnType<typeof toAttrs>[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response =
         yield* servicedirectory.listProjectsLocationsNamespacesServices({
           parent,
@@ -259,11 +259,10 @@ const listServicesAt = (parent: string, project: string, region: string) =>
         }
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as ReturnType<typeof toAttrs>[]),
     ),
   );
@@ -272,7 +271,7 @@ const listNamespaceNamesAt = (parent: string) =>
   Effect.gen(function* () {
     const found: string[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* servicedirectory.listProjectsLocationsNamespaces({
         parent,
         pageSize: 1000,
@@ -282,14 +281,9 @@ const listNamespaceNamesAt = (parent: string) =>
         if (namespace.name) found.push(namespace.name);
       }
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
-  }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as string[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as string[])));
 
 export const ServiceProvider = () =>
   Provider.succeed(Service, {
@@ -372,7 +366,7 @@ export const ServiceProvider = () =>
         const fallback = [locationParent(env.project, env.region)];
         const found: ReturnType<typeof toAttrs>[] = [];
         let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
+        do {
           const response = yield* servicedirectory
             .listProjectsLocations({
               name: `projects/${env.project}`,
@@ -380,7 +374,7 @@ export const ServiceProvider = () =>
               pageToken,
             })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed({
                   locations: [
                     {
@@ -410,8 +404,7 @@ export const ServiceProvider = () =>
             found.push(...services);
           }
           pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
+        } while (pageToken !== undefined && pageToken !== "");
         return found;
       }),
 

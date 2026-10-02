@@ -167,11 +167,13 @@ export type Backup = Resource<
  * ```
  *
  * ### Updating a Backup
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Description and labels
  * ```typescript
  * const backup = yield* GCP.Filestore.Backup("Nightly", {
  *   sourceInstance: nfs.name,
- *   backupId: existing.backupId,
  *   description: "nightly backup v2",
  *   labels: { env: "prod", team: "storage" },
  * });

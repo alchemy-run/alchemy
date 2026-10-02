@@ -146,14 +146,6 @@ export class RegionHealthAggregationPolicyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionHealthAggregationPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthAggregationPolicyOperationFailed",
-)<{
-  policyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const typeOf = (value: string | undefined) =>
   (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
 
@@ -208,13 +200,6 @@ const awaitResource = (project: string, region: string, policyName: string) =>
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const failOp = (policyName: string, operation: string, message: string) =>
-  new RegionHealthAggregationPolicyOperationFailed({
-    policyName,
-    operation,
-    message,
-  });
 
 export const RegionHealthAggregationPolicyProvider = () =>
   Provider.succeed(RegionHealthAggregationPolicy, {
@@ -289,11 +274,8 @@ export const RegionHealthAggregationPolicyProvider = () =>
               returnPartialSuccess: true,
             })
             .pipe(
-              Stream.take(8),
               Stream.runCollect,
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed([] as never[]),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
             );
         return Array.from(
           pages as readonly compute.HealthAggregationPolicyAggregatedList[],
@@ -340,7 +322,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
               healthyPercentThreshold,
             },
           }),
-          (operation, message) => failOp(policyName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, policyName);
@@ -385,7 +366,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
             healthAggregationPolicy: policyName,
             body: patch,
           }),
-          (operation, message) => failOp(policyName, operation, message),
         );
         current =
           (yield* getByName(env.project, region, policyName)) ?? current;
@@ -405,7 +385,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
           region,
           healthAggregationPolicy: output.policyName,
         }),
-        (operation, message) => failOp(output.policyName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

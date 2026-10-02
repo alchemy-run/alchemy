@@ -172,9 +172,6 @@ export type BillingSavedQuery = Resource<
  * **Example:** Change the filter and title
  * ```typescript
  * const query = yield* GCP.Logging.BillingSavedQuery("Errors", {
- *   billingAccountId: existing.billingAccountId,
- *   location: existing.location,
- *   savedQueryId: existing.savedQueryId,
  *   displayName: "billing warnings",
  *   loggingQuery: { filter: "severity>=WARNING" },
  *   description: "warnings and errors",
@@ -363,7 +360,7 @@ export const BillingSavedQueryProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as BillingSavedQuery["Attributes"][]),
             ),
           );

@@ -10,6 +10,10 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
+import {
+  waitForOperation as waitForLongRunning,
+  type LongRunningOperation,
+} from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 export const PAGE_SIZE = 1000;
@@ -24,19 +28,6 @@ export class ResourceStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.ResourceStillExists",
 )<{
   name: string;
-}> {}
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.ArtifactRegistry.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.ArtifactRegistry.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -238,91 +229,6 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     return yield* hasAlchemyLabels(id, labels);
   });
 
-const alreadyExists = (error: artifactregistry.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: artifactregistry.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: artifactregistry.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: artifactregistry.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = artifactregistry.getProjectsLocationsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<artifactregistry.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new OperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ArtifactRegistry.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 export const waitUntilExists = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
@@ -373,8 +279,8 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -460,3 +366,38 @@ export const missingGet =
             () => Effect.succeed(undefined),
           ),
         );
+
+/** Repository and package operations finish within a few minutes. */
+const OPERATION_BUDGET = "10 minutes";
+
+/**
+ * Wait for a long-running operation. ALREADY_EXISTS (code 6) means a
+ * concurrent create won the race; reconcile observes the resource next.
+ */
+export const waitForOperation = (operation: LongRunningOperation) =>
+  waitForLongRunning(
+    operation,
+    (name) => artifactregistry.getProjectsLocationsOperations({ name }),
+    {
+      budget: OPERATION_BUDGET,
+    },
+  ).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
+
+/**
+ * Wait for a delete operation. A vanished operation or NOT_FOUND (code 5)
+ * means the resource is already gone.
+ */
+export const waitForDeleteOperation = (operation: LongRunningOperation) =>
+  waitForOperation(operation).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "NotFound" ||
+        (error._tag === "GCP.OperationFailed" && error.code === 5),
+      () => Effect.succeed(operation),
+    ),
+  );

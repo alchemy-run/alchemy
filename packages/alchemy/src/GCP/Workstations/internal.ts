@@ -6,23 +6,19 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
+
+/**
+ * Generated ids are shorter than the 63-character id limit: GCP rejects a
+ * workstation's full resource name as "Malformed name" once it passes ~280
+ * characters, which three 63-character ids (cluster, config, workstation)
+ * exceed.
+ */
+const GENERATED_NAME_LENGTH = 50;
 export const DEFAULT_NETWORK = "default";
 export const DEFAULT_SUBNETWORK = "default";
-
-export class WorkstationsOperationFailed extends Data.TaggedError(
-  "GCP.Workstations.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class WorkstationsOperationPending extends Data.TaggedError(
-  "GCP.Workstations.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Workstations.ResourceNotResolved",
@@ -82,7 +78,7 @@ export const toPhysicalId = (
     return rfc1035(
       yield* createPhysicalName({
         id,
-        maxLength: MAX_NAME_LENGTH,
+        maxLength: GENERATED_NAME_LENGTH,
         lowercase: true,
       }),
       fallback,
@@ -235,91 +231,15 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const alreadyExists = (error: workstations.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: workstations.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: workstations.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: workstations.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new WorkstationsOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new WorkstationsOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = workstations.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<workstations.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new WorkstationsOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new WorkstationsOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Workstations.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "8 seconds"),
-      }),
-    );
-  });
+/**
+ * Wait for a Cloud Workstations long-running operation. Cluster creates and deletes take up to ~20 minutes.
+ */
+export const waitForOperation = (operation: workstations.Operation) =>
+  waitForGcpOperation(
+    operation,
+    (name) => workstations.getProjectsLocationsOperations({ name }),
+    { budget: "30 minutes" },
+  );
 
 export const waitUntilExists = <A, E extends object, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -361,13 +281,13 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () =>
         list(`projects/${project}/locations/${region}`).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-              error._tag === "NotFound" || error._tag === "Forbidden",
+            (error): error is E & { readonly _tag: "NotFound" } =>
+              error._tag === "NotFound",
             () => Effect.succeed([] as A[]),
           ),
         ),
@@ -382,13 +302,13 @@ export const listAtNested = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-/${nested}`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () =>
         list(`projects/${project}/locations/${region}/${nested}`).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-              error._tag === "NotFound" || error._tag === "Forbidden",
+            (error): error is E & { readonly _tag: "NotFound" } =>
+              error._tag === "NotFound",
             () => Effect.succeed([] as A[]),
           ),
         ),

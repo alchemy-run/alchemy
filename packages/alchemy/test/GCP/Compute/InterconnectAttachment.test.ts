@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,12 +63,12 @@ test.provider(
 );
 
 test.provider(
-  "probe insertInterconnectAttachments entitlement",
+  "insertInterconnectAttachments with a malformed router fails with BadRequest",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInterconnectAttachments({
+      const error = yield* Effect.flip(
+        compute.insertInterconnectAttachments({
           project,
           region,
           body: {
@@ -76,39 +77,9 @@ test.provider(
             router: "does-not-exist",
             type: "PARTNER",
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInterconnectAttachments({
-            project,
-            region,
-            interconnectAttachment: "alchemy-vlan-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
@@ -121,12 +92,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const router = yield* GCP.Compute.Router("Edge", {
             region,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             description: "interconnect router",
           });
           const attachment = yield* GCP.Compute.InterconnectAttachment("Vlan", {
@@ -135,7 +103,7 @@ test.provider.skipIf(!runLifecycle)(
             type: "PARTNER",
             description: "partner vlan",
           });
-          return { network, router, attachment };
+          return { router, attachment };
         }),
       );
 
@@ -157,14 +125,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const router = yield* GCP.Compute.Router("Edge", {
             routerName: created.router.routerName,
             region,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             description: "interconnect router",
           });
           return yield* GCP.Compute.InterconnectAttachment("Vlan", {

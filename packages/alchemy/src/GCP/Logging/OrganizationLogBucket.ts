@@ -165,9 +165,8 @@ export type OrganizationLogBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.OrganizationLogBucket("AppLogs", {
- *   bucketId: existing.bucketId,
- *   location: existing.location,
- *   organization: existing.organization,
+ *   location: "global",
+ *   organization: "organizations/123456789",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });
@@ -445,9 +444,7 @@ export const OrganizationLogBucketProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

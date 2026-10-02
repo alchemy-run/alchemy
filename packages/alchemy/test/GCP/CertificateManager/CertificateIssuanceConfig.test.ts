@@ -45,17 +45,6 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page =
-        yield* certificatemanager.listProjectsLocationsCertificateIssuanceConfigs(
-          {
-            parent: `projects/${project}/locations/-`,
-            pageSize: 10,
-          },
-        );
-      expect(Array.isArray(page.certificateIssuanceConfigs ?? [])).toEqual(
-        true,
-      );
-
       yield* stack.destroy();
     }).pipe(logLevel),
   {

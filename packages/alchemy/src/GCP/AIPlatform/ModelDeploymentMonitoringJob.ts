@@ -212,7 +212,7 @@ const listPage = (parent: string, filter?: string) =>
           (page) => page.modelDeploymentMonitoringJobs ?? [],
         ),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed(
           [] as aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob[],
         ),
@@ -471,7 +471,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict", "Forbidden"],
+            ["NotFound", "BadRequest", "Conflict"],
             () => Effect.void,
           ),
         );

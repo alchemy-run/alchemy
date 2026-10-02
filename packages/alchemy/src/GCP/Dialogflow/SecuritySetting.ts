@@ -25,6 +25,8 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
+  waitUntilReadable,
 } from "./internal.ts";
 
 export type RedactionStrategy =
@@ -171,11 +173,12 @@ export type SecuritySetting = Resource<
  * ```
  *
  * ### Updating Security Settings
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Switch to a 30-day window
  * ```typescript
  * const settings = yield* GCP.Dialogflow.SecuritySetting("Retention", {
  *   location: "us-central1",
- *   securitySettingsId: existing.securitySettingsId,
  *   displayName: "thirty-days",
  *   retentionWindowDays: 30,
  * });
@@ -267,7 +270,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -283,7 +285,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const SecuritySettingProvider = () =>
@@ -395,7 +396,10 @@ export const SecuritySettingProvider = () =>
               findByDisplayName(parent, displayName),
             ),
           );
-        current = created ?? undefined;
+        current =
+          created?.name !== undefined
+            ? yield* waitUntilReadable(created.name, getByName)
+            : created;
       }
 
       if (current === undefined) {
@@ -467,11 +471,11 @@ export const SecuritySettingProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsSecuritySettings({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

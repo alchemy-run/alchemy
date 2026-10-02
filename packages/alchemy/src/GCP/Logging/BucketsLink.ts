@@ -1,7 +1,6 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -12,7 +11,11 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listProjectBuckets, waitForOperation } from "./operations.ts";
+import {
+  listProjectBuckets,
+  waitForDeleteOperation,
+  waitForOperation,
+} from "./operations.ts";
 import {
   encodeDescription,
   hasOwnershipMarker,
@@ -385,7 +388,7 @@ export const BucketsLinkProvider = () =>
                 }),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                 ),
               ),
@@ -430,25 +433,9 @@ export const BucketsLinkProvider = () =>
             linkId,
             body: { description: desiredDescription },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<logging.Operation>({ done: true }),
-            ),
-            Effect.timeoutOption("40 seconds"),
-          );
-        if (Option.isSome(created)) {
-          yield* waitForOperation(created.value).pipe(
-            Effect.catchTag(
-              [
-                "GCP.Logging.OperationPending",
-                "GCP.Logging.OperationFailed",
-                "NotFound",
-              ],
-              () => Effect.void,
-            ),
-            Effect.timeoutOption("40 seconds"),
-            Effect.asVoid,
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilActive(name);
       }
@@ -477,18 +464,7 @@ export const BucketsLinkProvider = () =>
         names,
         (name) =>
           logging.deleteProjectsLocationsBucketsLinks({ name }).pipe(
-            Effect.flatMap((operation) =>
-              waitForOperation(operation, { notFoundOk: true }).pipe(
-                Effect.catchTag(
-                  [
-                    "GCP.Logging.OperationPending",
-                    "GCP.Logging.OperationFailed",
-                    "NotFound",
-                  ],
-                  () => Effect.void,
-                ),
-              ),
-            ),
+            Effect.flatMap((operation) => waitForDeleteOperation(operation)),
             Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
             Effect.flatMap(() => waitUntilDeleted(name)),
           ),

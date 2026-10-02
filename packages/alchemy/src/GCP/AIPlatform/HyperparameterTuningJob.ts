@@ -25,6 +25,7 @@ import {
   toLabels,
   userLabels,
 } from "./names.ts";
+import { isJobTerminal } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
 export type HyperparameterTuningJobProps = {
@@ -186,7 +187,7 @@ const listPage = (parent: string, filter?: string) =>
           (page) => page.hyperparameterTuningJobs ?? [],
         ),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed(
           [] as aiplatform.GoogleCloudAiplatformV1HyperparameterTuningJob[],
         ),
@@ -362,10 +363,18 @@ export const HyperparameterTuningJobProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict", "Forbidden"],
+            ["NotFound", "BadRequest", "Conflict"],
             () => Effect.void,
           ),
         );
+      // Running jobs reject deletes; wait for the cancel to land.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("4 seconds"),
+          until: (job) => job === undefined || isJobTerminal(job.state),
+          times: 45,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsHyperparameterTuningJobs({
           name: output.name,

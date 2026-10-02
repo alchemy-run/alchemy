@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
 
 const MAX_COMMON_NAME_LENGTH = 64;
 
@@ -110,20 +111,6 @@ export class SslCertNotResolved extends Data.TaggedError(
   sha1Fingerprint: string;
 }> {}
 
-export class SslCertOperationFailed extends Data.TaggedError(
-  "GCP.SQL.SslCertOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class SslCertOperationPending extends Data.TaggedError(
-  "GCP.SQL.SslCertOperationPending",
-)<{
-  operation: string;
-  status: string | undefined;
-}> {}
-
 export class SslCertStillExists extends Data.TaggedError(
   "GCP.SQL.SslCertStillExists",
 )<{
@@ -205,13 +192,10 @@ const getByFingerprint = (
 ) =>
   sha1Fingerprint.length === 0
     ? Effect.succeed(undefined)
-    : sqladmin
-        .getSslCerts({ project, instance, sha1Fingerprint })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+    : sqladmin.getSslCerts({ project, instance, sha1Fingerprint }).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        recoverIfInstanceMissing(project, instance, () => undefined),
+      );
 
 const findByCommonName = (
   project: string,
@@ -224,9 +208,8 @@ const findByCommonName = (
         Effect.map((page) =>
           (page.items ?? []).find((cert) => cert.commonName === commonName),
         ),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        recoverIfInstanceMissing(project, instance, () => undefined),
       );
 
 const observe = (
@@ -247,104 +230,14 @@ const observe = (
     return yield* findByCommonName(project, instance, commonName);
   });
 
-const operationNameOf = (operation: sqladmin.Operation) =>
-  lastSegment(operation.name ?? "") || lastSegment(operation.selfLink ?? "");
-
-const operationErrors = (operation: sqladmin.Operation) =>
-  operation.error?.errors ?? [];
-
-const isAlreadyExists = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return (
-      code.includes("ALREADY_EXISTS") || message.includes("already exists")
-    );
-  });
-
-const isNotFoundOp = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return code.includes("NOT_FOUND") || message.includes("not found");
-  });
-
-const assertOperationOk = (
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) => {
-  if (isAlreadyExists(operation)) return Effect.void;
-  if (options?.notFoundOk === true && isNotFoundOp(operation)) {
-    return Effect.void;
-  }
-  const errors = operationErrors(operation)
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((message) => message.length > 0);
-  if (errors.length > 0) {
-    return Effect.fail(
-      new SslCertOperationFailed({
-        operation: operationNameOf(operation),
-        message: errors.join("; "),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operationNameOf(operation);
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation, options);
-      return;
-    }
-    if (name.length === 0) {
-      if (operation.status === undefined) return;
-      return yield* new SslCertOperationFailed({
-        operation: "",
-        message: "sql operation is missing a name",
-      });
-    }
-
-    const getOperation = sqladmin.getOperations({ project, operation: name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                status: "DONE",
-              } satisfies sqladmin.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        (current) =>
-          new SslCertOperationPending({
-            operation: name,
-            status: current.status,
-          }),
-      ),
-      Effect.flatMap((current) => assertOperationOk(current, options)),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.SQL.SslCertOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
+  waitForSqlOperation(project, operation, {
+    budget: "10 minutes",
+    notFoundOk: options?.notFoundOk,
   });
 
 const waitUntilExists = (
@@ -454,7 +347,7 @@ export const SslCertProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as sqladmin.DatabaseInstance[]),
             ),
           );
@@ -476,8 +369,14 @@ export const SslCertProvider = () =>
                     toAttrs(cert, env.project, instanceName),
                   ),
                 ),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                // The instance may be deleted mid-listing.
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as SslCert["Attributes"][]),
+                ),
+                recoverIfInstanceMissing(
+                  env.project,
+                  instanceName,
+                  () => [] as SslCert["Attributes"][],
                 ),
               );
           },
@@ -595,7 +494,8 @@ export const SslCertProvider = () =>
           Effect.flatMap((operation) =>
             waitForOperation(project, operation, { notFoundOk: true }),
           ),
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
+          recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

@@ -163,7 +163,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const AppgroupProvider = () =>
   Provider.succeed(Appgroup, {
@@ -232,7 +236,7 @@ export const AppgroupProvider = () =>
             Stream.map((group) => toAttrs(group, env.project, organizationId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([]),
             ),
           );
@@ -306,6 +310,11 @@ export const AppgroupProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAppgroups({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

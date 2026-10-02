@@ -9,9 +9,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  encodeDescription,
   fromAttributes,
-  parseDescription,
   toAttributes,
   userAttributeList,
   type Attribute,
@@ -42,8 +40,7 @@ export type ApiproductProps = {
    */
   displayName?: string;
   /**
-   * Human-readable description. Alchemy also stores ownership as
-   * `alchemy-*` attributes so `list` / nuke can find the product.
+   * Human-readable description shown to portal developers.
    */
   description?: string;
   /**
@@ -104,7 +101,7 @@ export type Apiproduct = Resource<
     project: string;
     /** Display name. */
     displayName: string | undefined;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Human-readable description. */
     description: string | undefined;
     /** Bound environments. */
     environments: string[];
@@ -140,8 +137,8 @@ export type Apiproduct = Resource<
  * metadata delivered to developers.
  *
  * Products have no labels field. Alchemy stamps ownership into
- * attributes (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) and a
- * description prefix so `list` / nuke can find them. The internal name
+ * attributes (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) so
+ * `list` / nuke can find them. The internal name
  * is immutable.
  *
  * ### Creating an API Product
@@ -186,7 +183,6 @@ const toAttrs = (
   organizationId: string,
 ) => {
   const apiproductId = lastSegment(product.name ?? "");
-  const parsed = parseDescription(product.description);
   const attributes = userAttributeList(product.attributes);
   return {
     name: resourceName(organizationId, apiproductId),
@@ -194,7 +190,7 @@ const toAttrs = (
     organizationId,
     project,
     displayName: product.displayName,
-    description: parsed.description,
+    description: product.description,
     environments: sortedStrings(product.environments),
     proxies: sortedStrings(product.proxies),
     apiResources: sortedStrings(product.apiResources),
@@ -213,12 +209,16 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproducts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const toBody = (
   apiproductId: string,
   props: ApiproductProps,
-  description: string,
+  description: string | undefined,
   attributes: apigee.GoogleCloudApigeeV1Attribute[],
 ): apigee.GoogleCloudApigeeV1ApiProduct => ({
   name: apiproductId,
@@ -288,7 +288,7 @@ export const ApiproductProvider = () =>
             count: "1000",
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ apiProduct: [] }),
             ),
           );
@@ -315,7 +315,7 @@ export const ApiproductProvider = () =>
       );
       const name = resourceName(organizationId, apiproductId);
       const ownership = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(ownership, news.description);
+      const desiredDescription = news.description;
       const desiredAttributes = toAttributes(ownership, news.attributes);
       const body = toBody(
         apiproductId,
@@ -342,7 +342,7 @@ export const ApiproductProvider = () =>
 
       const needsUpdate =
         (current.displayName ?? "") !== (body.displayName ?? "") ||
-        (current.description ?? "") !== desiredDescription ||
+        (current.description ?? "") !== (desiredDescription ?? "") ||
         (current.approvalType ?? "") !== (news.approvalType ?? "") ||
         (current.quota ?? "") !== (news.quota ?? "") ||
         (current.quotaInterval ?? "") !== (news.quotaInterval ?? "") ||
@@ -376,6 +376,11 @@ export const ApiproductProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApiproducts({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

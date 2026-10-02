@@ -15,6 +15,11 @@ export interface GetUserRequest extends Omit<
  * Bind this operation to a {@link User} in a Function/Action init phase.
  * Provide {@link GetUserHttp}.
  *
+ * Grants `roles/cloudsql.viewer` on the project, unconditioned: Cloud SQL
+ * has no instance-level IAM policy, `cloudsql.users.get` is not matched by
+ * an IAM Condition on the instance name, and no narrower predefined role
+ * carries it.
+ *
  * ### Observing Users
  * **Example:** Read the bound user
  * ```typescript

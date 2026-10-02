@@ -146,8 +146,8 @@ export type Federation = Resource<
  * ### Updating a Federation
  * **Example:** Labels and backends
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const federation = yield* GCP.Metastore.Federation("Lakehouse", {
- *   federationId: existing.federationId,
  *   version: "3.1.2",
  *   backendMetastores: {
  *     "1": {
@@ -229,7 +229,7 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
-  listAtLocation(project, region, (parent) =>
+  listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsFederations.pages({
         parent,
@@ -340,7 +340,12 @@ export const FederationProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
         current = yield* waitUntilReady(
@@ -403,7 +408,12 @@ export const FederationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

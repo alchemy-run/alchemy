@@ -212,8 +212,8 @@ export type WorkstationCluster = Resource<
  * ### Updating a Cluster
  * **Example:** Display name and labels
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
- *   workstationClusterId: existing.workstationClusterId,
  *   displayName: "app-dev workstations v2",
  *   labels: { env: "prod", team: "platform" },
  * });
@@ -375,6 +375,10 @@ export const WorkstationClusterProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
+      // A resource we recorded is ours even while GCP hides its labels
+      // (clusters report none while `reconciling`), so destroy can still
+      // clean it up.
+      if (output !== undefined && output.name === existing.name) return attrs;
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
         ? attrs
         : Unowned(attrs);
@@ -431,7 +435,12 @@ export const WorkstationClusterProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -448,14 +457,20 @@ export const WorkstationClusterProvider = () =>
         !sameText(current.displayName, news.displayName) && "displayName",
         fingerprint(stringMap(current.annotations)) !==
           fingerprint(desiredAnnotations) && "annotations",
-        !sameText(current.workstationLaunchUrl, news.workstationLaunchUrl) &&
+        // Both URLs default server-side; only converge them when set.
+        news.workstationLaunchUrl !== undefined &&
+          !sameText(current.workstationLaunchUrl, news.workstationLaunchUrl) &&
           "workstationLaunchUrl",
-        !sameText(
-          current.workstationAuthorizationUrl,
-          news.workstationAuthorizationUrl,
-        ) && "workstationAuthorizationUrl",
-        fingerprint(toGateway(current.gatewayConfig)) !==
-          fingerprint(news.gatewayConfig) && "gatewayConfig",
+        news.workstationAuthorizationUrl !== undefined &&
+          !sameText(
+            current.workstationAuthorizationUrl,
+            news.workstationAuthorizationUrl,
+          ) &&
+          "workstationAuthorizationUrl",
+        news.gatewayConfig !== undefined &&
+          fingerprint(toGateway(current.gatewayConfig)) !==
+            fingerprint(toGateway(news.gatewayConfig)) &&
+          "gatewayConfig",
         fingerprint(observedPrivate?.allowedProjects) !==
           fingerprint(news.privateClusterConfig?.allowedProjects) &&
           "privateClusterConfig.allowedProjects",
@@ -511,7 +526,12 @@ export const WorkstationClusterProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

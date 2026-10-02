@@ -1,5 +1,6 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
+import { OperationFailed } from "../Operation.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -127,13 +128,6 @@ export class RegionInstantSnapshotNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionInstantSnapshotOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstantSnapshotOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionInstantSnapshotNotReady extends Data.TaggedError(
   "GCP.Compute.RegionInstantSnapshotNotReady",
 )<{
@@ -213,84 +207,6 @@ const getByName = (project: string, region: string, instantSnapshot: string) =>
   compute
     .getRegionInstantSnapshots({ project, region, instantSnapshot })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationMessage = (operation: compute.Operation): string => {
-  const errors = operation.error?.errors ?? [];
-  return (
-    errors.map((item) => item.message ?? item.code ?? "unknown").join("; ") ||
-    operation.httpErrorMessage ||
-    operation.statusMessage ||
-    "operation failed"
-  );
-};
-
-const operationCodes = (operation: compute.Operation): string[] =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.code)
-    .filter((code): code is string => code !== undefined);
-
-const isAlreadyExists = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_ALREADY_EXISTS" || code === "ALREADY_EXISTS",
-  );
-
-const isNotFound = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_NOT_FOUND" || code === "NOT_FOUND",
-  ) || /not found/i.test(operationMessage(operation));
-
-const waitOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      if (isAlreadyExists(operation) || isNotFound(operation)) {
-        return operation;
-      }
-      if (
-        (operation.error?.errors?.length ?? 0) > 0 ||
-        (operation.httpErrorStatusCode !== undefined &&
-          operation.httpErrorStatusCode >= 400)
-      ) {
-        return yield* new RegionInstantSnapshotOperationFailed({
-          operation: operation.name ?? "",
-          message: operationMessage(operation),
-        });
-      }
-      return operation;
-    }
-
-    const operationName = lastSegment(operation.name);
-    if (operationName === undefined) {
-      return yield* new RegionInstantSnapshotOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const current = yield* waitRegionOperations(
-      { project, region, operation: operationName },
-      { times: options?.times ?? 12 },
-    );
-
-    if (isAlreadyExists(current) || isNotFound(current)) {
-      return current;
-    }
-    if (
-      (current.error?.errors?.length ?? 0) > 0 ||
-      (current.httpErrorStatusCode !== undefined &&
-        current.httpErrorStatusCode >= 400)
-    ) {
-      return yield* new RegionInstantSnapshotOperationFailed({
-        operation: operationName,
-        message: operationMessage(current),
-      });
-    }
-    return current;
-  });
 
 const waitReady = (
   project: string,
@@ -438,7 +354,7 @@ export const RegionInstantSnapshotProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.instantSnapshots ?? [])
@@ -473,7 +389,14 @@ export const RegionInstantSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        const inserted = yield* compute
+        // A replacement snapshots the same disk again; Compute rejects a
+        // second instant snapshot within 30s of the previous one.
+        // "The previous instant snapshot is too recent" — one instant snapshot
+        // per disk every 30 seconds.
+        const tooRecent = (error: { readonly _tag: string }) =>
+          error instanceof OperationFailed &&
+          error.reason === "UNSUPPORTED_OPERATION";
+        yield* compute
           .insertRegionInstantSnapshots({
             project: env.project,
             region,
@@ -484,14 +407,21 @@ export const RegionInstantSnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (inserted !== undefined) {
-          yield* waitOperation(env.project, region, inserted, {
-            times: 12,
-          }).pipe(
-            Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.flatMap((inserted) =>
+              inserted === undefined
+                ? Effect.void
+                : waitRegionOperation(env.project, region, inserted, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }),
+            ),
+            Effect.retry({
+              while: tooRecent,
+              times: 3,
+              schedule: Schedule.spaced("30 seconds"),
+            }),
           );
-        }
         current = yield* waitReady(env.project, region, instantSnapshotName);
       }
 
@@ -525,7 +455,7 @@ export const RegionInstantSnapshotProvider = () =>
             labelFingerprint: current.labelFingerprint,
           },
         });
-        yield* waitOperation(env.project, region, labeled);
+        yield* waitRegionOperation(env.project, region, labeled);
         current = yield* getByName(env.project, region, instantSnapshotName);
       }
 
@@ -557,15 +487,9 @@ export const RegionInstantSnapshotProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitOperation(output.project, region, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RegionInstantSnapshotOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitRegionOperation(output.project, region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitGone(output.project, region, output.instantSnapshotName);
     }),

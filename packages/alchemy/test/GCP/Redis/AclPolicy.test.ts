@@ -1,5 +1,4 @@
 import { GcpEnvironment } from "@/GCP/Environment";
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
@@ -45,7 +44,9 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.aclPolicies ?? [])).toEqual(true);
+      expect(
+        (page.aclPolicies ?? []).map((policy) => policy.name?.split("/").pop()),
+      ).not.toContain("alchemy-acl-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -53,7 +54,7 @@ test.provider(
 );
 
 test.provider(
-  "create, update, delete, and GetAclPolicy an ACL policy",
+  "create, update, and delete an ACL policy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -64,17 +65,7 @@ test.provider(
             location: "us-central1",
             rules: [{ username: "app", rule: "on ~keys:* +get" }],
           });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* policy.name;
-              const getAclPolicy = yield* GCP.Redis.GetAclPolicy(policy);
-              return Effect.fn(function* () {
-                return yield* getAclPolicy();
-              });
-            }),
-          );
-          return { policy, live: yield* Probe({}) };
+          return { policy };
         }),
       );
 
@@ -84,28 +75,18 @@ test.provider(
       expect(created.policy.rules).toEqual([
         { username: "app", rule: "on ~keys:* +get" },
       ]);
-      expect(created.live.name).toEqual(created.policy.name);
-      expect(
-        (created.live.rules ?? []).some(
-          (rule) => rule.username === "alchemy-owner",
-        ),
-      ).toEqual(true);
 
       const fetched = yield* redis.getProjectsLocationsAclPolicies({
         name: created.policy.name,
       });
       expect(fetched.name).toEqual(created.policy.name);
-      expect(
-        (fetched.rules ?? []).some((rule) => rule.username === "app"),
-      ).toEqual(true);
-      expect(
-        (fetched.rules ?? []).some((rule) => rule.username === "alchemy-owner"),
-      ).toEqual(true);
+      expect(fetched.rules).toEqual([
+        { username: "app", rule: "on ~keys:* +get" },
+      ]);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Redis.AclPolicy("AppAcl", {
-            aclPolicyId: created.policy.aclPolicyId,
             location: "us-central1",
             rules: [
               { username: "app", rule: "on ~keys:* +get +set" },
@@ -132,11 +113,6 @@ test.provider(
       ).toEqual(true);
       expect(
         (refetched.rules ?? []).some((rule) => rule.username === "readonly"),
-      ).toEqual(true);
-      expect(
-        (refetched.rules ?? []).some(
-          (rule) => rule.username === "alchemy-owner",
-        ),
       ).toEqual(true);
 
       yield* stack.destroy();

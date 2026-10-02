@@ -14,8 +14,9 @@ export type ExecuteSqlError =
  * Runtime binding for Spanner `sessions.executeSql`.
  *
  * Bind this operation to a {@link Database} in a Function/Action init
- * phase. Provide {@link ExecuteSqlHttp}. Each call opens a session,
- * runs the statement, and deletes the session.
+ * phase. Provide {@link ExecuteSqlHttp}. Statements run on one
+ * multiplexed session per database, created on first use and reused for
+ * the life of the runtime instance.
  *
  * ### Executing SQL
  * **Example:** Run a query

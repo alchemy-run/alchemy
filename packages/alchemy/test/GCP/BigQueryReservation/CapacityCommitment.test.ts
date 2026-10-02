@@ -4,7 +4,6 @@ import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
 
@@ -15,6 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Flex commitments are end of sale (create fails with BadRequest, asserted
+// by the probe below) and any commitment bills slot-hours. Set
+// GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT=1 on a project that can still buy
+// flex slots.
 const runLifecycle =
   !process.env.FAST &&
   process.env.GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT === "1";
@@ -49,7 +52,11 @@ test.provider(
           parent: `projects/${project}/locations/us-central1`,
           pageSize: 10,
         });
-      expect(Array.isArray(page.capacityCommitments ?? [])).toEqual(true);
+      expect(
+        (page.capacityCommitments ?? []).map((item) =>
+          item.name?.split("/").pop(),
+        ),
+      ).not.toContain("alchemy-bq-capacity-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -66,7 +73,7 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const result = yield* Effect.result(
+      const error = yield* Effect.flip(
         bigqueryreservation.createProjectsLocationsCapacityCommitments({
           parent: `projects/${project}/locations/us-central1`,
           capacityCommitmentId: "alchemy-bq-capacity-probe",
@@ -77,29 +84,7 @@ test.provider(
           },
         }),
       );
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("BadRequest");
-        if (result.failure._tag === "BadRequest") {
-          expect(result.failure.message).toMatch(
-            /end of sale|Editions commitment|Plan must be/i,
-          );
-        }
-      } else if (result.success.name) {
-        yield* bigqueryreservation
-          .deleteProjectsLocationsCapacityCommitments({
-            name: result.success.name,
-            force: true,
-          })
-          .pipe(
-            Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || error._tag === "BadRequest",
-              times: 8,
-              schedule: Schedule.spaced("8 seconds"),
-            }),
-            Effect.catchTag("NotFound", () => Effect.void),
-          );
-      }
+      expect(error._tag).toEqual("CommitmentPlanNotSupported");
 
       yield* stack.destroy();
     }).pipe(logLevel),

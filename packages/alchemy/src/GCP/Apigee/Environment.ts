@@ -208,7 +208,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvironments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
@@ -292,7 +296,7 @@ export const EnvironmentProvider = () =>
           const org = yield* apigee
             .getOrganizations({ name: organization })
             .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                 Effect.succeed(undefined),
               ),
             );
@@ -401,7 +405,11 @@ export const EnvironmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvironments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

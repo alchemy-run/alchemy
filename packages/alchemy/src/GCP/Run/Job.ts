@@ -30,6 +30,10 @@ import {
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
+import {
   retryActAs,
   type AppliedIamGrant,
   type GcpHostBinding,
@@ -377,19 +381,6 @@ export class JobReconciling extends Data.TaggedError("GCP.Run.JobReconciling")<{
   state: string;
 }> {}
 
-export class JobOperationFailed extends Data.TaggedError(
-  "GCP.Run.JobOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class JobOperationPending extends Data.TaggedError(
-  "GCP.Run.JobOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class JobStillExists extends Data.TaggedError("GCP.Run.JobStillExists")<{
   name: string;
 }> {}
@@ -632,81 +623,39 @@ const desiredTemplate = (
   };
 };
 
-const isNotFoundStatus = (error: cloudrun.GoogleRpcStatus | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
+/** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
   operation: cloudrun.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new JobOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new JobOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudrun.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
+  waitForLongRunningOperation(
+    operation,
+    (name) => {
+      const get = cloudrun.getProjectsLocationsOperations({ name });
+      return options?.notFoundOk === true
+        ? get.pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudrun.GoogleLongrunningOperation),
+              Effect.succeed<LongRunningOperation>({ name, done: true }),
             ),
           )
-        : getOperation.pipe(
+        : get.pipe(
+            // A just-returned operation can briefly 404 on read.
             Effect.retry({
               while: (error) => error._tag === "NotFound",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new JobOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        const ignoreNotFound =
-          options?.notFoundOk === true && isNotFoundStatus(status);
-        return status && !ignoreNotFound
-          ? Effect.fail(
-              new JobOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Run.JobOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("3 seconds"),
-      }),
-    );
-  });
+    },
+    { budget: "10 minutes" },
+  ).pipe(
+    // google.rpc.Code NOT_FOUND: the resource was already gone.
+    Effect.catchTag("GCP.OperationFailed", (error) =>
+      options?.notFoundOk === true && error.code === 5
+        ? Effect.succeed<LongRunningOperation>(operation)
+        : Effect.fail(error),
+    ),
+  );
 
 const isPendingJob = (job: cloudrun.GoogleCloudRunV2Job) => {
   const state = job.terminalCondition?.state ?? "";
@@ -894,7 +843,7 @@ export const JobProvider = () =>
             bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
         const container = news.containers?.[0];
         containers = [
@@ -949,7 +898,7 @@ export const JobProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);

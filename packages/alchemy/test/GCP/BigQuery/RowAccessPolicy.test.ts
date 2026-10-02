@@ -76,8 +76,8 @@ test.provider(
       expect(fetched.rowAccessPolicyReference?.policyId).toEqual(
         created.policyId,
       );
-      expect(fetched.filterPredicate).toContain("nullable_field IS NOT NULL");
-      expect(fetched.filterPredicate).toContain("alchemy-id=");
+      // The predicate is sent verbatim — no ownership tautology.
+      expect(fetched.filterPredicate).toEqual("nullable_field IS NOT NULL");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -110,8 +110,7 @@ test.provider(
         tableId: created.tableId,
         policyId: created.policyId,
       });
-      expect(fetchedUpdate.filterPredicate).toContain("TRUE");
-      expect(fetchedUpdate.filterPredicate).toContain("alchemy-id=");
+      expect(fetchedUpdate.filterPredicate).toEqual("TRUE");
 
       yield* stack.destroy();
 

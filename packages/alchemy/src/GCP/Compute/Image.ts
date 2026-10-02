@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -204,14 +204,6 @@ export class ImageStillExists extends Data.TaggedError(
   status: string;
 }> {}
 
-export class ImageOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ImageOperationFailed",
-)<{
-  imageName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class ImageSourceRequired extends Data.TaggedError(
   "GCP.Compute.ImageSourceRequired",
 )<{
@@ -271,90 +263,6 @@ const getByName = (project: string, image: string) =>
   compute
     .getImages({ project, image })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationErrorMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  "operation failed";
-
-const isAlreadyExists = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).some((error) => {
-    const code = (error.code ?? "").toUpperCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "ALREADY_EXISTS" ||
-      code === "RESOURCE_ALREADY_EXISTS" ||
-      message.includes("already exists")
-    );
-  });
-
-const isNotFoundOperation = (operation: compute.Operation) =>
-  operation.httpErrorStatusCode === 404 ||
-  (operation.error?.errors ?? []).some((error) => {
-    const code = (error.code ?? "").toUpperCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "RESOURCE_NOT_FOUND" ||
-      code === "NOT_FOUND" ||
-      message.includes("not found")
-    );
-  });
-
-const failIfErrored = (
-  imageName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.succeed(operation);
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new ImageOperationFailed({
-        imageName,
-        operation: operation.name ?? "",
-        message: operationErrorMessage(operation),
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  imageName: string,
-  operation: compute.Operation,
-  options?: {
-    ignoreAlreadyExists?: boolean;
-    ignoreNotFound?: boolean;
-    times?: number;
-  },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(imageName, operation, options);
-    }
-    const name = lastSegment(operation.name) || operation.name;
-    if (name === undefined || name.length === 0) {
-      return yield* failIfErrored(imageName, operation, options);
-    }
-    const done = yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: options?.times ?? 24 },
-    );
-    return yield* failIfErrored(imageName, done, options);
-  });
 
 const waitUntilReady = (project: string, imageName: string) =>
   getByName(project, imageName).pipe(
@@ -574,9 +482,8 @@ export const ImageProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitUntilDone(env.project, imageName, inserted, {
-            ignoreAlreadyExists: true,
-            times: 45,
+          yield* waitGlobalOperation(env.project, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
         current = yield* waitUntilReady(env.project, imageName);
@@ -609,7 +516,7 @@ export const ImageProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, imageName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = (yield* getByName(env.project, imageName)) ?? current;
@@ -629,7 +536,7 @@ export const ImageProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, imageName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = (yield* getByName(env.project, imageName)) ?? current;
@@ -658,13 +565,9 @@ export const ImageProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.imageName, operation, {
-          ignoreNotFound: true,
-          times: 45,
-        }).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitGlobalOperation(env.project, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
       yield* waitUntilGone(env.project, output.imageName);
     }),

@@ -23,9 +23,8 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parentOf,
-  parseOwnership,
   projectOf,
-  updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type SessionEntityOverrideMode =
@@ -217,7 +216,6 @@ const listAt = (parent: string, project: string, agent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const AgentsSessionsEntityTypeProvider = () =>
@@ -334,18 +332,16 @@ export const AgentsSessionsEntityTypeProvider = () =>
 
       if (modeChanged || entitiesChanged) {
         current =
+          // The body always carries both fields; an `entities` update mask
+          // is silently ignored by the API, so replace the whole resource.
           yield* dialogflow.patchProjectsLocationsAgentsSessionsEntityTypes({
             name: currentName,
-            updateMask: updateMaskOf(
-              modeChanged ? "entity_override_mode" : undefined,
-              entitiesChanged ? "entities" : undefined,
-            ),
             body: { ...body, name: currentName },
           });
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -353,5 +349,5 @@ export const AgentsSessionsEntityTypeProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

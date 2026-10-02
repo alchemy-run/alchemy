@@ -230,9 +230,6 @@ const listMemories = (parent: string) =>
     Effect.catchTag("NotFound", () =>
       Effect.succeed<aiplatform.GoogleCloudAiplatformV1Memory[]>([]),
     ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed<aiplatform.GoogleCloudAiplatformV1Memory[]>([]),
-    ),
   );
 
 export const ReasoningEnginesMemoryProvider = () =>
@@ -289,11 +286,12 @@ export const ReasoningEnginesMemoryProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = engineNameOf(
-        env.project,
-        location,
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const engine = olds?.reasoningEngine ?? output?.reasoningEngine;
+      // A create interrupted before its engine resolved has nothing to find.
+      if (output?.name === undefined && typeof engine !== "string") {
+        return undefined;
+      }
+      const parent = engineNameOf(env.project, location, engine ?? "");
       const memoryId = yield* toPhysicalId(
         id,
         olds?.memoryId,

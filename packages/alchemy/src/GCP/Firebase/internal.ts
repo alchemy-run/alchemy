@@ -1,8 +1,8 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
   alchemyLabelKeys,
@@ -17,19 +17,6 @@ export class ResourceNotResolved extends Data.TaggedError(
   "GCP.Firebase.ResourceNotResolved",
 )<{
   name: string;
-}> {}
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.Firebase.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.Firebase.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -126,60 +113,36 @@ export const packageNameOf = (
     return `com.alchemy.test.${cleaned || "app"}`;
   });
 
-const isAlreadyExists = (error: firebase.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-export const waitForOperation = (
-  operation: firebase.Operation,
-): Effect.Effect<
-  firebase.Operation,
-  OperationFailed | OperationPending | firebase.GetOperationsError,
-  firebase.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (!name) {
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-    return yield* firebase.getOperations({ name }).pipe(
-      Effect.catchTag("NotFound", () =>
-        Effect.fail(new OperationPending({ operation: name })),
+/**
+ * Wait for a Firebase Management operation and return its final state
+ * (the created app name is in `response.name`). An operation that
+ * finished with `ALREADY_EXISTS` (6) is a lost create race. A freshly
+ * started operation can briefly read as NOT_FOUND; keep polling.
+ */
+export const waitForOperation = (operation: firebase.Operation) => {
+  let latest = operation;
+  return waitForGcpOperation(
+    operation,
+    (name) =>
+      firebase.getOperations({ name }).pipe(
+        Effect.catchTag("NotFound", () =>
+          Effect.succeed<firebase.Operation>({ name, done: false }),
+        ),
+        Effect.tap((current) =>
+          Effect.sync(() => {
+            latest = current;
+          }),
+        ),
       ),
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        if (current.error && !isAlreadyExists(current.error)) {
-          return Effect.fail(
-            new OperationFailed({
-              operation: name,
-              message: current.error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Firebase.OperationPending",
-        times: 8,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
+    { budget: "5 minutes" },
+  ).pipe(
+    Effect.map(() => latest),
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(latest),
+    ),
+  );
+};
 
 export const listAndroidApps = (project: string, showDeleted = false) =>
   firebase.listProjectsAndroidApps
@@ -192,7 +155,7 @@ export const listAndroidApps = (project: string, showDeleted = false) =>
       Stream.flatMap((page) => Stream.fromIterable(page.apps ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as firebase.AndroidApp[]),
       ),
     );

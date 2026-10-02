@@ -12,7 +12,6 @@ const waitUntilGone = (matterId: string, holdId: string) =>
   vault.getMattersHolds({ matterId, holdId }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,7 +31,7 @@ test.provider(
           holdId: "alchemy-missing-hold",
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -55,7 +54,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),

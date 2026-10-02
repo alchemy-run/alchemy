@@ -17,9 +17,7 @@ const logLevel = Effect.provideService(
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsProductsIntegrationsVersions({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -49,7 +47,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/products/IP/integrations/alchemy-missing/versions/00000000-0000-0000-0000-000000000000`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -59,7 +57,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
+test.provider(
   "create, update, and delete a product integration version",
   (stack) =>
     Effect.gen(function* () {

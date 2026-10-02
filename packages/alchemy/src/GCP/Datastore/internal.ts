@@ -4,25 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { alchemyLabelKeys, createInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DEFAULT_ANCESTOR = "NONE";
 export const DEFAULT_DIRECTION = "ASCENDING";
-export const OWNERSHIP_KIND = "AlchemyIndexOwnership";
 export const MAX_KIND_LENGTH = 63;
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.Datastore.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.Datastore.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class IndexNotResolved extends Data.TaggedError(
   "GCP.Datastore.IndexNotResolved",
@@ -163,11 +149,7 @@ export const toAttrs = (
 export const getById = (projectId: string, indexId: string) =>
   datastore
     .getProjectsIndexes({ projectId, indexId })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const listIndexes = (projectId: string) =>
   datastore.listProjectsIndexes
@@ -179,103 +161,29 @@ export const listIndexes = (projectId: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.indexes ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as datastore.GoogleDatastoreAdminV1Index[]),
-      ),
     );
 
-const alreadyExists = (error: datastore.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: datastore.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
+/** Wait for a Datastore admin operation (index builds can take minutes). */
 export const waitForOperation = (
   operation: datastore.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          alreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = datastore.getProjectsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies datastore.GoogleLongrunningOperation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        if (!status) {
-          return Effect.succeed(current);
-        }
-        if (options?.alreadyExistsOk === true && alreadyExists(status)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new OperationFailed({
-            operation: name,
-            message: status.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Datastore.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => datastore.getProjectsOperations({ name }),
+    { budget: "20 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): an identical index already exists.
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.void,
+    ),
+    // Re-read the finished operation for its typed response/metadata.
+    Effect.flatMap(() =>
+      operation.name === undefined || operation.name.length === 0
+        ? Effect.succeed(operation)
+        : datastore.getProjectsOperations({ name: operation.name }),
+    ),
+  );
 
 export const indexIdFromOperation = (
   operation: datastore.GoogleLongrunningOperation | undefined,
@@ -328,129 +236,3 @@ export const waitUntilDeletable = (projectId: string, indexId: string) =>
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
-
-const ownershipKey = (
-  projectId: string,
-  documentId: string,
-): datastore.Key => ({
-  partitionId: { projectId },
-  path: [{ kind: OWNERSHIP_KIND, name: documentId }],
-});
-
-const stringProp = (value: string): datastore.Value => ({
-  stringValue: value,
-  excludeFromIndexes: true,
-});
-
-export const stampOwnership = (
-  projectId: string,
-  labels: Record<string, string>,
-  indexId: string,
-) => {
-  const documentId = labels[alchemyLabelKeys.id] ?? "resource";
-  return datastore
-    .commitProjects({
-      projectId,
-      body: {
-        mode: "NON_TRANSACTIONAL",
-        mutations: [
-          {
-            upsert: {
-              key: ownershipKey(projectId, documentId),
-              properties: {
-                indexId: stringProp(indexId),
-                alchemy_stack: stringProp(labels[alchemyLabelKeys.stack] ?? ""),
-                alchemy_stage: stringProp(labels[alchemyLabelKeys.stage] ?? ""),
-                alchemy_id: stringProp(labels[alchemyLabelKeys.id] ?? ""),
-              },
-            },
-          },
-        ],
-      },
-    })
-    .pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "Conflict" || error._tag === "BadRequest",
-        times: 4,
-        schedule: Schedule.spaced("1 second"),
-      }),
-      Effect.catchTag(
-        ["NotFound", "Forbidden", "BadRequest", "Conflict"],
-        () => Effect.void,
-      ),
-      Effect.asVoid,
-    );
-};
-
-export const getOwnedIndexId = (
-  projectId: string,
-  labels: Record<string, string>,
-) => {
-  const documentId = labels[alchemyLabelKeys.id] ?? "resource";
-  return datastore
-    .lookupProjects({
-      projectId,
-      body: {
-        keys: [ownershipKey(projectId, documentId)],
-      },
-    })
-    .pipe(
-      Effect.map(
-        (response) =>
-          response.found?.[0]?.entity?.properties?.indexId?.stringValue,
-      ),
-      Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
-};
-
-export const listOwnedIndexIds = (projectId: string) =>
-  datastore
-    .runQueryProjects({
-      projectId,
-      body: {
-        query: {
-          kind: [{ name: OWNERSHIP_KIND }],
-        },
-      },
-    })
-    .pipe(
-      Effect.map((response) =>
-        (response.batch?.entityResults ?? [])
-          .map((row) => row.entity?.properties?.indexId?.stringValue)
-          .filter((indexId): indexId is string => typeof indexId === "string"),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden", "BadRequest"], () =>
-        Effect.succeed([] as string[]),
-      ),
-    );
-
-export const deleteOwnership = (
-  projectId: string,
-  labels: Record<string, string>,
-) => {
-  const documentId = labels[alchemyLabelKeys.id] ?? "resource";
-  return datastore
-    .commitProjects({
-      projectId,
-      body: {
-        mode: "NON_TRANSACTIONAL",
-        mutations: [
-          {
-            delete: ownershipKey(projectId, documentId),
-          },
-        ],
-      },
-    })
-    .pipe(
-      Effect.catchTag(
-        ["NotFound", "Forbidden", "BadRequest", "Conflict"],
-        () => Effect.void,
-      ),
-      Effect.asVoid,
-    );
-};
-
-export { alchemyLabelKeys, createInternalLabels };

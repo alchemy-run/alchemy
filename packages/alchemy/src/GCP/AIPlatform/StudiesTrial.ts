@@ -10,8 +10,8 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
+import { hasStudyOwnership } from "./Study.ts";
 import {
-  hasOwnershipMarker,
   lastSegment,
   locationOf,
   locationParent,
@@ -136,13 +136,12 @@ const getByName = (name: string) =>
 const listStudies = (parent: string) =>
   aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
     Stream.flatMap((page) => Stream.fromIterable(page.studies ?? [])),
-    Stream.filter((study) => hasOwnershipMarker(study.displayName)),
+    Stream.filter((study) => hasStudyOwnership(study.displayName)),
     Stream.map((study) => study.name ?? ""),
     Stream.filter((name) => name.length > 0),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
   );
 
 const listAtParent = (parent: string, project: string, clientId?: string) =>
@@ -157,7 +156,6 @@ const listAtParent = (parent: string, project: string, clientId?: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByClientId = (parent: string, clientId: string, project: string) =>
@@ -229,6 +227,9 @@ export const StudiesTrialProvider = () =>
             parent: news.parent,
             body: {
               clientId,
+              // Vizier rejects user trials without a status ("Can not add
+              // trial with status: UNKNOWN").
+              state: "ACTIVE",
               parameters: news.parameters?.map((parameter) => ({
                 parameterId: parameter.parameterId,
                 value: parameter.value,

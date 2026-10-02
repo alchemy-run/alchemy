@@ -25,19 +25,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/services/alchemy-missing-service/backups/alchemy-missing-backup`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* metastore
-        .listProjectsLocationsServicesBackups({
-          parent: `projects/${project}/locations/-/services/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ backups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.backups ?? [])).toEqual(true);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -61,15 +49,7 @@ test.provider(
           }),
         ),
       );
-      expect([
-        "BadRequest",
-        "NotFound",
-        "Forbidden",
-        "GCP.Metastore.OperationFailed",
-        "GCP.Metastore.ResourceFailed",
-        "GCP.Metastore.ResourceNotReady",
-        "GCP.Metastore.ResourceNotResolved",
-      ]).toContain(error._tag);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -180,7 +180,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>

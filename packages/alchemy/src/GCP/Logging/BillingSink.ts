@@ -162,9 +162,8 @@ export type BillingSink = Resource<
  * **Example:** Change the filter and add an exclusion
  * ```typescript
  * const sink = yield* GCP.Logging.BillingSink("Errors", {
- *   sinkId: existing.sinkId,
- *   billingAccountId: existing.billingAccountId,
- *   destination: existing.destination,
+ *   destination:
+ *     "logging.googleapis.com/billingAccounts/AAAAAA-BBBBBB-CCCCCC/locations/global/buckets/_Default",
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  *   exclusions: [
@@ -338,7 +337,7 @@ export const BillingSinkProvider = () =>
             Stream.map((sink) => toAttrs(sink, billingAccountId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as BillingSink["Attributes"][]),
             ),
           );

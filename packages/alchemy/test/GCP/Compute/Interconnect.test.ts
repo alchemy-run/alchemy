@@ -53,12 +53,12 @@ test.provider(
 );
 
 test.provider(
-  "probe insertInterconnects entitlement",
+  "insertInterconnects without customerName fails with BadRequest",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInterconnects({
+      const error = yield* Effect.flip(
+        compute.insertInterconnects({
           project,
           body: {
             name: "alchemy-ix-probe",
@@ -68,38 +68,9 @@ test.provider(
             linkType: "LINK_TYPE_ETHERNET_10G_LR",
             requestedLinkCount: 1,
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInterconnects({
-            project,
-            interconnect: "alchemy-ix-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );

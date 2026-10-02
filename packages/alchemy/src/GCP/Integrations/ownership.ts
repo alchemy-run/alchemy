@@ -30,6 +30,11 @@ export const projectOf = (name: string) => {
   return index >= 0 ? (parts[index + 1] ?? "") : "";
 };
 
+// Integrations returns names keyed by project number, which later get calls
+// reject ("Found zero or more than one active project"); key them by id.
+export const withProjectId = (name: string, project: string) =>
+  name.replace(/^projects\/[^/]+/, `projects/${project}`);
+
 export const productOf = (name: string, fallback = DEFAULT_PRODUCT) => {
   const parts = name.split("/");
   const index = parts.indexOf("products");

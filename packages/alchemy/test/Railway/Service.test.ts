@@ -453,7 +453,9 @@ test.provider(
       "provider:railway:service",
       "live",
     ],
-    timeout: 120_000,
+    // Multiple deployment cycles plus deletion need their own lifecycle budget.
+    // Leave 30 seconds before the 240-second process cap for failure cleanup.
+    timeout: 210_000,
   },
 );
 

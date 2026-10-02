@@ -15,10 +15,9 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { DataplexOperationFailed, waitForOperation } from "./operations.ts";
+import { waitForOperation } from "./operations.ts";
 import {
   DataplexNotResolved,
-  DataplexStillExists,
   hasAlchemyLabelMap,
   isPendingState,
   listLakes,
@@ -174,29 +173,9 @@ const getByName = (name: string) =>
     .getProjectsLocationsLakes({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitUntilReady = (
-  name: string,
-  operation?: dataplex.GoogleLongrunningOperation,
-) =>
+// Lakes provision a metastore-backed control plane for 2-5 minutes.
+const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
-    if (operation?.name) {
-      const currentOp = yield* dataplex
-        .getProjectsLocationsOperations({ name: operation.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(operation)),
-          Effect.catchTag("TooManyRequests", () => Effect.succeed(operation)),
-        );
-      if (
-        currentOp.done === true &&
-        currentOp.error &&
-        currentOp.error.code !== 6
-      ) {
-        return yield* new DataplexOperationFailed({
-          operation: currentOp.name ?? name,
-          message: currentOp.error.message ?? "operation failed",
-        });
-      }
-    }
     const lake = yield* getByName(name);
     if (lake === undefined) {
       return yield* new LakeNotResolved({ name });
@@ -211,7 +190,7 @@ const waitUntilReady = (
         error._tag === "GCP.Dataplex.LakeNotResolved" ||
         error._tag === "GCP.Dataplex.NotResolved" ||
         error._tag === "TooManyRequests",
-      times: 10,
+      times: 36,
       schedule: Schedule.spaced("10 seconds"),
     }),
   );
@@ -325,12 +304,10 @@ export const LakeProvider = () =>
             }),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        if (created?.error?.message) {
-          return yield* new LakeNotResolved({
-            name: `${name}: ${created.error.message}`,
-          });
+        if (created !== undefined) {
+          yield* waitForOperation(created);
         }
-        current = yield* waitUntilReady(name, created);
+        current = yield* waitUntilReady(name);
       }
 
       if (current === undefined) {
@@ -371,7 +348,7 @@ export const LakeProvider = () =>
               : undefined,
           },
         });
-        yield* waitForOperation(operation, { interval: "5 seconds" });
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }
 

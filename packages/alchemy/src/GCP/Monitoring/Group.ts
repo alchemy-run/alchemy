@@ -1,6 +1,7 @@
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -163,7 +164,7 @@ const listPages = (project: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.group ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 const listOwned = (project: string) =>
@@ -193,6 +194,22 @@ const observe = (project: string, id: string, name: string | undefined) =>
     }
     return yield* findOwned(project, id);
   });
+
+/**
+ * Monitoring answers 409 "Too many concurrent edits to the project
+ * configuration" while another write to the project's monitoring config is
+ * in flight; it clears within seconds.
+ */
+const retryConcurrentEdits = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Conflict",
+      times: 8,
+      schedule: Schedule.exponential("500 millis"),
+    }),
+  );
 
 export const GroupProvider = () =>
   Provider.succeed(Group, {
@@ -260,16 +277,18 @@ export const GroupProvider = () =>
         (current.isCluster === true) !== desiredCluster;
 
       if (needsUpdate) {
-        current = yield* monitoring.updateProjectsGroups({
-          name,
-          body: {
+        current = yield* monitoring
+          .updateProjectsGroups({
             name,
-            displayName: encodedDisplayName,
-            filter: news.filter,
-            parentName: desiredParent,
-            isCluster: desiredCluster,
-          },
-        });
+            body: {
+              name,
+              displayName: encodedDisplayName,
+              filter: news.filter,
+              parentName: desiredParent,
+              isCluster: desiredCluster,
+            },
+          })
+          .pipe(retryConcurrentEdits);
       }
 
       return toAttrs(current, env.project);
@@ -278,6 +297,9 @@ export const GroupProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* monitoring
         .deleteProjectsGroups({ name: output.name, recursive: true })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          retryConcurrentEdits,
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
     }),
   });

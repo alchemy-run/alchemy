@@ -1,6 +1,7 @@
 import * as GCP from "@/GCP";
 import { makeObjectMedia } from "@/GCP/Storage/ObjectMedia.ts";
 import * as Test from "@/Test/Alchemy";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -37,18 +38,33 @@ test.provider.skipIf(!dockerAvailable)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const service = yield* EventarcService;
-          const drops = yield* Drops;
-          const markers = yield* Markers;
-          return {
-            project: service.project,
-            drops: drops.bucketName,
-            markers: markers.bucketName,
-          };
-        }),
-      );
+      const program = Effect.gen(function* () {
+        const service = yield* EventarcService;
+        const drops = yield* Drops;
+        const markers = yield* Markers;
+        return {
+          project: service.project,
+          serviceAccount: service.serviceAccount,
+          drops: drops.bucketName,
+          markers: markers.bucketName,
+        };
+      });
+      yield* stack.deploy(program);
+      // A second deploy re-syncs the host's IAM; the event receiver grant
+      // must survive it (it once was revoked as out-of-band).
+      const out = yield* stack.deploy(program);
+      const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+        resource: `projects/${out.project}`,
+      });
+      expect(
+        (projectPolicy.bindings ?? []).some(
+          (binding) =>
+            binding.role === "roles/eventarc.eventReceiver" &&
+            (binding.members ?? []).includes(
+              `serviceAccount:${out.serviceAccount}`,
+            ),
+        ),
+      ).toEqual(true);
 
       const triggers = yield* eventarc.listProjectsLocationsTriggers({
         parent: `projects/${out.project}/locations/us-central1`,

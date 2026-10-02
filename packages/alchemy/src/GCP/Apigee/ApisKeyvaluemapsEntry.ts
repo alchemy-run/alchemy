@@ -128,7 +128,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const mapIsOwned = (parent: string) =>
   apigee
@@ -137,7 +141,9 @@ const mapIsOwned = (parent: string) =>
     })
     .pipe(
       Effect.map(() => true),
-      Effect.catchTag("NotFound", () => Effect.succeed(false)),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(false),
+      ),
     );
 
 export const ApisKeyvaluemapsEntryProvider = () =>
@@ -206,7 +212,7 @@ export const ApisKeyvaluemapsEntryProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ proxies: [] }),
             ),
           );
@@ -257,7 +263,7 @@ export const ApisKeyvaluemapsEntryProvider = () =>
               }),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                 Effect.succeed([]),
               ),
             );
@@ -313,6 +319,11 @@ export const ApisKeyvaluemapsEntryProvider = () =>
       if (output.entryId === OWNERSHIP_KEY) return;
       yield* apigee
         .deleteOrganizationsApisKeyvaluemapsEntries({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

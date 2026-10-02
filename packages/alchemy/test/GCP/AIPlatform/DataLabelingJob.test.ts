@@ -14,9 +14,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Vertex AI data labeling is shut down for new projects: create fails with
+// BadRequest "Vertex DataLabelingJob is deprecated, so new project ... will
+// not be able to use the service unless they opt-in to use Labelbox human
+// labelers." Set GCP_TEST_AIPLATFORM_DATA_LABELING=1 on an opted-in project.
 const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+  !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_DATA_LABELING;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsDataLabelingJobs({ name }).pipe(
@@ -39,26 +42,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsDataLabelingJobs({
-          name: `${parent}/dataLabelingJobs/alchemy-aiplatform-missing`,
+          name: `${parent}/dataLabelingJobs/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsDataLabelingJobs({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ dataLabelingJobs: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.dataLabelingJobs ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -109,8 +109,7 @@ export type FolderLogScope = Resource<
  * **Example:** Change the description
  * ```typescript
  * const scope = yield* GCP.Logging.FolderLogScope("App", {
- *   logScopeId: existing.logScopeId,
- *   resourceNames: existing.resourceNames,
+ *   resourceNames: ["projects/my-project"],
  *   description: "updated application logs",
  * });
  * ```

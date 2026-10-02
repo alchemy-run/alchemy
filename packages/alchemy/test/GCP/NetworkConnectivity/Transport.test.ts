@@ -7,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -15,7 +16,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_TRANSPORT;
+// Transports are Cross-Cloud Interconnect to a partner cloud: they need an
+// allowlisted remote profile and a real peer account (the probe asserts the
+// NotFound for a missing profile). Set GCP_TEST_TRANSPORT=1 on an entitled
+// project.
+const runLifecycle = !!process.env.GCP_TEST_TRANSPORT;
 
 const location = "us-east4";
 const remoteProfile = "aws-us-east-1";
@@ -27,7 +32,6 @@ const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsTransports({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -62,22 +66,15 @@ test.provider(
           name: transportName(project, "alchemy-tp-missing"),
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* networkconnectivity
-        .listProjectsLocationsTransports({
-          parent: `projects/${project}/locations/${location}`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ transports: [] as const }),
-          ),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed({ transports: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.transports ?? [])).toEqual(true);
+      const page = yield* networkconnectivity.listProjectsLocationsTransports({
+        parent: `projects/${project}/locations/${location}`,
+        pageSize: 10,
+      });
+      expect(
+        (page.transports ?? []).map((transport) => transport.name),
+      ).not.toContain(transportName(project, "alchemy-tp-missing"));
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -213,7 +210,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.transport.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
     timeout: 120_000,

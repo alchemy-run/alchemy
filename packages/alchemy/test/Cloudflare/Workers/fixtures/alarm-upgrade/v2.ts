@@ -247,9 +247,17 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
         }
         if (action === "reconstruct") {
           const aborted = yield* object.reconstruct().pipe(
-            Effect.matchCause({
-              onFailure: () => true,
-              onSuccess: () => false,
+            Effect.catchCause((cause) => {
+              // The method declares no application errors, but aborting the
+              // object rejects its RPC transport with RpcCallError.
+              const error = Cause.squash(cause);
+              if (
+                error instanceof Cloudflare.RpcCallError &&
+                error.cause instanceof Error &&
+                error.cause.message.includes("alarm upgrade reconstruction")
+              )
+                return Effect.succeed(true);
+              return Effect.failCause(cause);
             }),
           );
           return yield* HttpServerResponse.json({ aborted });
@@ -262,7 +270,13 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
         }
         const snapshot = yield* object.execute(action).pipe(Effect.orDie);
         return yield* HttpServerResponse.json(snapshot);
-      }),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+          ),
+        ),
+      ),
     };
   }),
 ) {}

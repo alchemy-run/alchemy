@@ -139,7 +139,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDatacollectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const DatacollectorProvider = () =>
   Provider.succeed(Datacollector, {
@@ -201,7 +205,7 @@ export const DatacollectorProvider = () =>
             }),
             (page) => page.dataCollectors,
           ).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as apigee.GoogleCloudApigeeV1DataCollector[]),
             ),
           );
@@ -262,6 +266,11 @@ export const DatacollectorProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDatacollectors({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

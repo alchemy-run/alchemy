@@ -14,6 +14,7 @@ import {
   type ResourceLike,
 } from "../Resource.ts";
 import {
+  hasIamMembership,
   projectRolesOf,
   revokeIamMembership,
   updateIamMembership,
@@ -45,7 +46,11 @@ export type GcpIamGrant = {
    */
   resource?: {
     kind: Exclude<GcpIamResourceKind, "project">;
-    /** Full resource name, e.g. `projects/p/topics/t` (a bucket name for `storage.bucket`). */
+    /**
+     * Full resource name, e.g. `projects/p/topics/t` (a bucket name for
+     * `storage.bucket`), or {@link HOST_SERVICE_ACCOUNT} with kind
+     * `iam.serviceAccount` for the host's own runtime service account.
+     */
     name: string;
   };
   /**
@@ -316,14 +321,29 @@ const groupByTarget = (grants: readonly AppliedIamGrant[]) => {
   return [...groups.values()];
 };
 
+/**
+ * Placeholder resource name (kind `iam.serviceAccount`) for the host's
+ * own runtime service account, e.g. to let it sign blobs as itself.
+ * Resolved when the host syncs IAM; dropped for hosts whose identity is
+ * not a service account (GKE Workload Identity principals).
+ */
+export const HOST_SERVICE_ACCOUNT = "@host";
+
 /** Desired grants for a host, deduplicated and resolved to concrete targets. */
 export const desiredHostGrants = (
   project: string,
   grants: readonly GcpIamGrant[],
+  serviceAccount?: string,
 ): AppliedIamGrant[] => {
+  const ownAccount =
+    serviceAccount !== undefined && !serviceAccount.includes(":")
+      ? `projects/-/serviceAccounts/${serviceAccount}`
+      : undefined;
   const unique = new Map<string, AppliedIamGrant>();
   for (const grant of grants) {
     if (grant.role.length === 0) continue;
+    const self = grant.resource?.name === HOST_SERVICE_ACCOUNT;
+    if (self && ownAccount === undefined) continue;
     const applied: AppliedIamGrant =
       grant.resource === undefined
         ? {
@@ -334,7 +354,7 @@ export const desiredHostGrants = (
           }
         : {
             kind: grant.resource.kind,
-            name: grant.resource.name,
+            name: self ? ownAccount! : grant.resource.name,
             role: grant.role,
           };
     unique.set(grantKey(applied), applied);
@@ -362,11 +382,36 @@ export const syncHostIam = Effect.fn(function* (options: {
   previous: readonly AppliedIamGrant[] | undefined;
 }) {
   const collected = collectHostBindings(options.bindings);
-  const desired = desiredHostGrants(options.project, collected.iam);
+  const desired = desiredHostGrants(
+    options.project,
+    collected.iam,
+    options.serviceAccount,
+  );
   const desiredKeys = new Set(desired.map(grantKey));
   const stale = (options.previous ?? []).filter(
     (grant) => !desiredKeys.has(grantKey(grant)),
   );
+
+  // A principal Alchemy doesn't own (user-supplied service account, GKE
+  // Workload Identity principal) may already hold a role for other
+  // reasons. Such a grant is used but never recorded as ours, so a later
+  // deploy or destroy never revokes it.
+  const previousKeys = new Set((options.previous ?? []).map(grantKey));
+  const preexisting = new Set<string>();
+  if (!options.managed) {
+    for (const grant of desired) {
+      if (previousKeys.has(grantKey(grant)) || grant.condition !== undefined) {
+        continue;
+      }
+      const held = yield* hasIamMembership({
+        kind: grant.kind,
+        name: grant.name,
+        member: options.serviceAccount,
+        role: grant.role,
+      });
+      if (held) preexisting.add(grantKey(grant));
+    }
+  }
 
   for (const group of groupByTarget(desired)) {
     yield* updateIamMembership({
@@ -416,7 +461,10 @@ export const syncHostIam = Effect.fn(function* (options: {
     });
   }
 
-  return { env: collected.env, grants: desired };
+  return {
+    env: collected.env,
+    grants: desired.filter((grant) => !preexisting.has(grantKey(grant))),
+  };
 });
 
 /** Revoke every recorded grant from the host's runtime service account. */
@@ -490,7 +538,7 @@ export const bindGcpHost = (options: {
   iam: Input<GcpIamGrant>[];
   env?: Record<string, any>;
   cloudSqlInstances?: Input<string>[];
-}): Effect.Effect<void> =>
+}) =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
     const host = yield* Binding.Host;
@@ -502,4 +550,4 @@ export const bindGcpHost = (options: {
         ? { cloudSqlInstances: options.cloudSqlInstances }
         : {}),
     });
-  }) as Effect.Effect<void>;
+  });

@@ -1,6 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -83,10 +84,12 @@ export type Schema = Resource<
  * ```
  *
  * ### Updating a Schema
+ * Change `definition` on the same logical id; the schema keeps its name and
+ * a new revision is committed.
+ *
  * **Example:** Commit a compatible Avro revision
  * ```typescript
  * const schema = yield* GCP.PubSub.Schema("Events", {
- *   schemaId: existing.schemaId,
  *   type: "AVRO",
  *   definition: JSON.stringify({
  *     type: "record",
@@ -205,14 +208,18 @@ export const SchemaProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const page = yield* pubsub.listProjectsSchemas({
-          parent: `projects/${env.project}`,
-          pageSize: 1000,
-          view: "FULL",
-        });
-        return (page.schemas ?? []).map((schema) =>
-          toAttrs(schema, env.project),
-        );
+        return yield* pubsub.listProjectsSchemas
+          .pages({
+            parent: `projects/${env.project}`,
+            pageSize: 1000,
+            view: "FULL",
+          })
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.schemas ?? [])),
+            Stream.map((schema) => toAttrs(schema, env.project)),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

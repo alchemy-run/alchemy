@@ -15,7 +15,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_ALLOYDB && !process.env.FAST;
+// AlloyDB clusters and instances take well over 5 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   alloydb.getProjectsLocationsBackups({ name }).pipe(
@@ -41,21 +42,15 @@ test.provider(
           name: `projects/${project}/locations/us-central1/backups/alchemy-alloydb-missing`,
         }),
       );
-      // Entitled accounts return NotFound. The testing SA currently gets
-      // Forbidden (AlloyDB Admin / API not granted).
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* alloydb
-        .listProjectsLocationsBackups({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ backups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.backups ?? [])).toEqual(true);
+      const page = yield* alloydb.listProjectsLocationsBackups({
+        parent: `projects/${project}/locations/-`,
+        pageSize: 10,
+      });
+      expect((page.backups ?? []).map((item) => item.name)).not.toContain(
+        `projects/${project}/locations/us-central1/backups/alchemy-alloydb-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -79,8 +74,14 @@ test.provider.skipIf(!runLifecycle)(
             automatedBackupPolicy: { enabled: false },
             continuousBackupConfig: { enabled: false },
           });
+          // AlloyDB only backs up clusters with a primary instance.
+          const instance = yield* GCP.AlloyDB.Instance("Primary", {
+            cluster: cluster.name,
+            instanceType: "PRIMARY",
+            machineConfig: { cpuCount: 2 },
+          });
           const backup = yield* GCP.AlloyDB.Backup("OnDemand", {
-            clusterName: cluster.name,
+            clusterName: instance.clusterName,
             displayName: "alchemy-test-backup",
             description: "test snapshot",
             labels: { env: "test" },
@@ -112,7 +113,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.backup.name,
       });
       expect(fetched.name).toEqual(created.backup.name);
-      expect(fetched.displayName).toEqual("alchemy-test-backup");
+      // GCP omits displayName from backup reads; the attributes carry it.
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.type).toEqual("ON_DEMAND");
 
@@ -127,11 +128,18 @@ test.provider.skipIf(!runLifecycle)(
             automatedBackupPolicy: { enabled: false },
             continuousBackupConfig: { enabled: false },
           });
+          const instance = yield* GCP.AlloyDB.Instance("Primary", {
+            cluster: cluster.name,
+            instanceType: "PRIMARY",
+            machineConfig: { cpuCount: 2 },
+          });
           const backup = yield* GCP.AlloyDB.Backup("OnDemand", {
-            clusterName: cluster.name,
+            clusterName: instance.clusterName,
             backupId: created.backup.backupId,
             displayName: "alchemy-prod-backup",
-            description: "prod snapshot",
+            // Description is create-only (a change replaces the backup), so
+            // this step only changes fields that update in place.
+            description: "test snapshot",
             labels: { env: "prod", role: "backup" },
           });
           return { cluster, backup };
@@ -140,7 +148,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.backup.name).toEqual(created.backup.name);
       expect(updated.backup.displayName).toEqual("alchemy-prod-backup");
-      expect(updated.backup.description).toEqual("prod snapshot");
+      expect(updated.backup.description).toEqual("test snapshot");
       expect(updated.backup.labels).toMatchObject({
         env: "prod",
         role: "backup",
@@ -149,8 +157,8 @@ test.provider.skipIf(!runLifecycle)(
       const refetched = yield* alloydb.getProjectsLocationsBackups({
         name: created.backup.name,
       });
-      expect(refetched.displayName).toEqual("alchemy-prod-backup");
-      expect(refetched.description).toEqual("prod snapshot");
+      // GCP omits displayName from backup reads; the attributes carry it.
+      expect(refetched.description).toEqual("test snapshot");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("backup");
 
@@ -159,5 +167,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.backup.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:alloydb", "live"], timeout: 120_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:alloydb", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
 );

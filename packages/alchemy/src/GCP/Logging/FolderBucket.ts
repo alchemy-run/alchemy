@@ -174,9 +174,7 @@ export type FolderBucket = Resource<
  * **Example:** Change description and retention
  * ```typescript
  * const bucket = yield* GCP.Logging.FolderBucket("AppLogs", {
- *   folderId: existing.folderId,
- *   bucketId: existing.bucketId,
- *   location: existing.location,
+ *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });

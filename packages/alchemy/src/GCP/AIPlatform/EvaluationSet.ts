@@ -86,8 +86,8 @@ export type EvaluationSet = Resource<
  * together.
  *
  * Evaluation Sets have no labels field, so Alchemy stamps ownership into
- * `metadata`. Display name, member items, agent configs, and metadata
- * update in place. Location is identity.
+ * `metadata`. Member items and agent configs update in place; display
+ * name, metadata, and location changes replace the set.
  *
  * ### Creating an Evaluation Set
  * **Example:** Group request items
@@ -100,8 +100,8 @@ export type EvaluationSet = Resource<
  * ### Updating an Evaluation Set
  * **Example:** Add items
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const set = yield* GCP.AIPlatform.EvaluationSet("Prompts", {
- *   evaluationSetId: existing.evaluationSetId,
  *   evaluationItems: [item.name, extra.name],
  * });
  * ```
@@ -206,7 +206,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>
@@ -252,11 +251,19 @@ export const EvaluationSetProvider = () =>
         news.location ?? output?.location,
         env.region,
       );
+      const displayNameChanged =
+        olds !== undefined && news.displayName !== olds.displayName;
+      const metadataChanged =
+        olds !== undefined &&
+        fingerprint(news.metadata ?? null) !==
+          fingerprint(olds.metadata ?? null);
       const replace =
         (previousId !== undefined &&
           nextId !== undefined &&
           nextId !== previousId) ||
-        previousLocation !== nextLocation;
+        previousLocation !== nextLocation ||
+        displayNameChanged ||
+        metadataChanged;
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -334,27 +341,19 @@ export const EvaluationSetProvider = () =>
       }
 
       const resolvedName = current.name ?? name ?? "";
-      const displayNameChanged = (current.displayName ?? "") !== displayName;
+      // Only `evaluation_items` and `agent_configs` are mutable; display
+      // name and metadata changes replace the set (see `diff`).
       const itemsChanged =
         fingerprint(sortedItems(current.evaluationItems)) !==
         fingerprint(evaluationItems);
       const agentChanged =
         news.agentConfigs !== undefined &&
         !specifiedEquals(news.agentConfigs, current.agentConfigs);
-      const metadataChanged =
-        fingerprint(current.metadata) !== fingerprint(desiredMetadata);
 
-      if (
-        displayNameChanged ||
-        itemsChanged ||
-        agentChanged ||
-        metadataChanged
-      ) {
+      if (itemsChanged || agentChanged) {
         const updateMask = [
-          displayNameChanged ? "display_name" : undefined,
           itemsChanged ? "evaluation_items" : undefined,
           agentChanged ? "agent_configs" : undefined,
-          metadataChanged ? "metadata" : undefined,
         ].filter((field): field is string => field !== undefined);
 
         current = yield* aiplatform
@@ -363,10 +362,8 @@ export const EvaluationSetProvider = () =>
             updateMask: updateMask.join(","),
             body: {
               name: resolvedName,
-              displayName,
               evaluationItems,
               agentConfigs: news.agentConfigs,
-              metadata: desiredMetadata,
             },
           })
           .pipe(

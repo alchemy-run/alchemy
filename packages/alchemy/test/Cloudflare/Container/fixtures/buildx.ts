@@ -10,14 +10,23 @@ export const withBuilder =
       const name = `${prefix}-${yield* Stage}`;
       const docker = yield* Docker;
       return yield* Effect.acquireUseRelease(
-        docker.run([
-          "buildx",
-          "create",
-          "--name",
-          name,
-          "--driver",
-          "docker-container",
-        ]),
+        // A killed run cannot release its builder. Remove any leftover first,
+        // so every invocation starts from an empty cache under the same name.
+        docker
+          .run(["buildx", "rm", "--force", name])
+          .pipe(
+            Effect.ignore,
+            Effect.andThen(
+              docker.run([
+                "buildx",
+                "create",
+                "--name",
+                name,
+                "--driver",
+                "docker-container",
+              ]),
+            ),
+          ),
         () =>
           Effect.acquireUseRelease(
             Effect.sync(() => {

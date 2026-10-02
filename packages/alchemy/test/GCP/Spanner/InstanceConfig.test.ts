@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST;
-
 const waitUntilGone = (name: string) =>
   spanner.getProjectsInstanceConfigs({ name }).pipe(
     Effect.as("found" as const),
@@ -51,14 +49,16 @@ test.provider(
         parent: `projects/${project}`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.instanceConfigs ?? [])).toEqual(true);
+      expect(
+        (page.instanceConfigs ?? []).map((item) => item.name?.split("/").pop()),
+      ).not.toContain("custom-alchemy-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:spanner", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a user-managed instance config",
   (stack) =>
     Effect.gen(function* () {

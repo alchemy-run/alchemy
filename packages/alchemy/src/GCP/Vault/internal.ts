@@ -161,8 +161,8 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -172,8 +172,8 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -189,7 +189,6 @@ export const listMatters = () =>
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => emptyList<vault.Matter>()),
-    Effect.catchTag("Forbidden", () => emptyList<vault.Matter>()),
   );
 
 export const listActiveMatters = () =>
@@ -221,14 +220,12 @@ export const closeThenDeleteMatter = (matterId: string) =>
     if (current.state === "OPEN") {
       yield* vault.closeMatters({ matterId, body: {} }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("Forbidden", () => Effect.void),
         Effect.catchTag("BadRequest", () => Effect.void),
         Effect.catchTag("Conflict", () => Effect.void),
       );
     }
     yield* vault.deleteMatters({ matterId }).pipe(
       Effect.catchTag("NotFound", () => Effect.void),
-      Effect.catchTag("Forbidden", () => Effect.void),
       Effect.catchTag("BadRequest", () => Effect.void),
       Effect.catchTag("Conflict", () => Effect.void),
     );
@@ -255,7 +252,6 @@ export const listHolds = (matterId: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () => emptyList<vault.Hold>()),
-          Effect.catchTag("Forbidden", () => emptyList<vault.Hold>()),
         );
 
 export const findHoldByName = (matterId: string, name: string) =>
@@ -294,7 +290,6 @@ export const listExports = (matterId: string) =>
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => emptyList<vault.Export>()),
-        Effect.catchTag("Forbidden", () => emptyList<vault.Export>()),
       );
 
 export const findExportByName = (matterId: string, name: string) =>
@@ -333,7 +328,6 @@ export const listSavedQueries = (matterId: string) =>
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => emptyList<vault.SavedQuery>()),
-        Effect.catchTag("Forbidden", () => emptyList<vault.SavedQuery>()),
       );
 
 export const findSavedQueryByName = (matterId: string, displayName: string) =>

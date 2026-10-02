@@ -142,7 +142,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApis({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const ApiProvider = () =>
   Provider.succeed(Api, {
@@ -196,7 +200,7 @@ export const ApiProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ proxies: [] }),
             ),
           );
@@ -264,6 +268,11 @@ export const ApiProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApis({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

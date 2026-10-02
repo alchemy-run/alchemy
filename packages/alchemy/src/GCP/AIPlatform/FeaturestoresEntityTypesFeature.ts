@@ -181,26 +181,26 @@ const getByName = (name: string) =>
 
 const listFeatures = (parent: string) =>
   aiplatform.listProjectsLocationsFeaturestoresEntityTypesFeatures
-    .pages({ parent, pageSize: 1000 })
+    .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.runCollect,
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.features ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Feature[]),
       ),
     );
 
 const listEntityTypes = (parent: string) =>
   aiplatform.listProjectsLocationsFeaturestoresEntityTypes
-    .pages({ parent, pageSize: 1000 })
+    .pages({ parent, pageSize: 100 })
     .pipe(
       Stream.runCollect,
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.entityTypes ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1EntityType[]),
       ),
     );
@@ -213,7 +213,7 @@ const listFeaturestores = (parent: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.featurestores ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Featurestore[]),
       ),
     );

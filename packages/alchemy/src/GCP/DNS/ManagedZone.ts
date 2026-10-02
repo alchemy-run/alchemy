@@ -1,7 +1,6 @@
 import * as dns from "@distilled.cloud/gcp/dns_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -17,6 +16,10 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunning,
+} from "../Operation.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_VISIBILITY = "public";
@@ -153,20 +156,6 @@ export class ManagedZoneNotResolved extends Data.TaggedError(
   zoneName: string;
 }> {}
 
-export class ManagedZoneOperationPending extends Data.TaggedError(
-  "GCP.DNS.ManagedZoneOperationPending",
-)<{
-  operation: string;
-  status: string | undefined;
-}> {}
-
-export class ManagedZoneChangePending extends Data.TaggedError(
-  "GCP.DNS.ManagedZoneChangePending",
-)<{
-  changeId: string;
-  status: string | undefined;
-}> {}
-
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
@@ -265,88 +254,42 @@ const getByName = (project: string, zoneName: string) =>
     .getManagedZones({ project, managedZone: zoneName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/** Cloud DNS operations and changes report `status: "pending" | "done"`. */
+const asLongRunning = (value: {
+  id?: string;
+  status?: string;
+}): LongRunningOperation => ({ name: value.id, done: isDone(value.status) });
+
+/** Zone updates and record changes propagate within a few minutes. */
+const DNS_BUDGET = "5 minutes";
+
 const waitForOperation = (
   project: string,
   zoneName: string,
   operation: dns.Operation,
 ) =>
-  Effect.gen(function* () {
-    const operationId = operation.id;
-    if (operationId === undefined || operationId.length === 0) {
-      return;
-    }
-    if (isDone(operation.status)) {
-      return;
-    }
-    yield* dns
-      .getManagedZoneOperations({
-        project,
-        managedZone: zoneName,
-        operation: operationId,
-      })
-      .pipe(
-        Effect.flatMap((current) =>
-          isDone(current.status)
-            ? Effect.void
-            : Effect.fail(
-                new ManagedZoneOperationPending({
-                  operation: operationId,
-                  status: current.status,
-                }),
-              ),
-        ),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "NotFound" ||
-            error._tag === "GCP.DNS.ManagedZoneOperationPending",
-          times: 10,
-          schedule: Schedule.spaced("1 second"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag(
-          "GCP.DNS.ManagedZoneOperationPending",
-          () => Effect.void,
-        ),
-      );
-  });
+  waitForLongRunning(
+    asLongRunning(operation),
+    (operationId) =>
+      dns
+        .getManagedZoneOperations({
+          project,
+          managedZone: zoneName,
+          operation: operationId,
+        })
+        .pipe(Effect.map(asLongRunning)),
+    { budget: DNS_BUDGET, interval: "1 second" },
+  );
 
 const waitForChange = (project: string, zoneName: string, change: dns.Change) =>
-  Effect.gen(function* () {
-    const changeId = change.id;
-    if (changeId === undefined || changeId.length === 0) {
-      return;
-    }
-    if (isDone(change.status)) {
-      return;
-    }
-    yield* dns
-      .getChanges({
-        project,
-        managedZone: zoneName,
-        changeId,
-      })
-      .pipe(
-        Effect.flatMap((current) =>
-          isDone(current.status)
-            ? Effect.void
-            : Effect.fail(
-                new ManagedZoneChangePending({
-                  changeId,
-                  status: current.status,
-                }),
-              ),
-        ),
-        Effect.retry({
-          while: (error) =>
-            error._tag === "NotFound" ||
-            error._tag === "GCP.DNS.ManagedZoneChangePending",
-          times: 10,
-          schedule: Schedule.spaced("1 second"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("GCP.DNS.ManagedZoneChangePending", () => Effect.void),
-      );
-  });
+  waitForLongRunning(
+    asLongRunning(change),
+    (changeId) =>
+      dns
+        .getChanges({ project, managedZone: zoneName, changeId })
+        .pipe(Effect.map(asLongRunning)),
+    { budget: DNS_BUDGET, interval: "1 second" },
+  );
 
 const listRrsets = (project: string, zoneName: string) =>
   Effect.gen(function* () {

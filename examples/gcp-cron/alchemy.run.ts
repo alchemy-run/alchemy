@@ -14,6 +14,7 @@ export default Alchemy.Stack(
     return {
       url: monitor.uri,
       project: monitor.project,
+      location: monitor.location,
       tableName: table.name,
       datasetId: table.datasetId,
       tableId: table.tableId,

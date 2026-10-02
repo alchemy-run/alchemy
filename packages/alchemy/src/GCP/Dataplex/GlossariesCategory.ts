@@ -127,9 +127,9 @@ export type GlossariesCategory = Resource<
  * ### Updating a Glossary Category
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const category = yield* GCP.Dataplex.GlossariesCategory("Finance", {
  *   glossary: glossary.name,
- *   categoryId: existing.categoryId,
  *   description: "finance terms",
  *   labels: { env: "prod", team: "data" },
  * });
@@ -209,7 +209,6 @@ const listCategoriesUnder = (parent: string, project: string) =>
         .map((item) => toAttrs(item, project)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const GlossariesCategoryProvider = () =>

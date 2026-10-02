@@ -145,8 +145,8 @@ export type MulticloudDataTransferConfig = Resource<
  * const config = yield* GCP.NetworkConnectivity.MulticloudDataTransferConfig(
  *   "Dte",
  *   {
- *     multicloudDataTransferConfigId: existing.multicloudDataTransferConfigId,
- *     location: existing.location,
+ *     multicloudDataTransferConfigId: "app-dte",
+ *     location: "us-central1",
  *     description: "dte metering v2",
  *     labels: { env: "prod", role: "dte" },
  *   },

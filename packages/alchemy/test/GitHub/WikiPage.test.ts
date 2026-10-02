@@ -101,7 +101,9 @@ const getPage = (repository: string, title: string, extension = "md") =>
     };
   }).pipe(Effect.scoped);
 
-test.provider(
+// TODO: GitHub requires the first wiki page to be saved in its web UI.
+// Repository hasWiki/autoInit cannot bootstrap the separate wiki Git repository.
+test.provider.todo(
   "create and update wiki page",
   (stack) =>
     Effect.gen(function* () {
@@ -153,7 +155,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.todo(
   "create page with custom format",
   (stack) =>
     Effect.gen(function* () {
@@ -207,7 +209,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.todo(
   "preserve page when allowDelete is false (default)",
   (stack) =>
     Effect.gen(function* () {
@@ -254,7 +256,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.todo(
   "replace page when title changes",
   (stack) =>
     Effect.gen(function* () {

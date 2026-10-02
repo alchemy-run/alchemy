@@ -3,9 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
@@ -19,19 +24,6 @@ export class EventarcStillExists extends Data.TaggedError(
   "GCP.Eventarc.StillExists",
 )<{
   name: string;
-}> {}
-
-export class EventarcOperationFailed extends Data.TaggedError(
-  "GCP.Eventarc.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class EventarcOperationPending extends Data.TaggedError(
-  "GCP.Eventarc.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export type LoggingConfig = {
@@ -209,91 +201,49 @@ export const compact = <T extends Record<string, unknown>>(value: T): T => {
   return next as T;
 };
 
-const alreadyExists = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
+/**
+ * Wait on an Eventarc long-running operation. Pipelines and enrollments
+ * routinely take ~4 minutes. `ALREADY_EXISTS` (a create race) counts as
+ * success; `NOT_FOUND` does too when `notFoundOk` (deletes).
+ */
 export const waitForOperation = (
   operation: eventarc.GoogleLongrunningOperation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    delay?: `${number} seconds`;
-  },
+  options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new EventarcOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new EventarcOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const fetched = eventarc.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? fetched.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<eventarc.GoogleLongrunningOperation>({
-                name,
-                done: true,
+  waitForLongRunningOperation(
+    operation,
+    (name) => {
+      const get = eventarc.getProjectsLocationsOperations({ name });
+      const observe: Effect.Effect<
+        LongRunningOperation,
+        eventarc.GetProjectsLocationsOperationsError,
+        GcpOpContext
+      > =
+        options?.notFoundOk === true
+          ? get.pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed<LongRunningOperation>({ name, done: true }),
+              ),
+            )
+          : get.pipe(
+              // A just-returned operation can briefly 404 on read.
+              Effect.retry({
+                while: (error) => error._tag === "NotFound",
+                times: 5,
+                schedule: Schedule.exponential("250 millis"),
               }),
-            ),
-          )
-        : fetched.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new EventarcOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error || alreadyExists(error)) {
-          return Effect.succeed(current);
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new EventarcOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Eventarc.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.delay ?? "5 seconds"),
-      }),
-    );
-  });
+            );
+      return observe;
+    },
+    { budget: "15 minutes" },
+  ).pipe(
+    // google.rpc.Code ALREADY_EXISTS = 6, NOT_FOUND = 5.
+    Effect.catchTag("GCP.OperationFailed", (error) =>
+      error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+        ? Effect.succeed<LongRunningOperation>(operation)
+        : Effect.fail(error),
+    ),
+  );
 
 export const retryOnTransient = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -301,8 +251,7 @@ export const retryOnTransient = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (error) =>
-        error._tag === "Conflict" ||
-        error._tag === "GCP.Eventarc.OperationFailed",
+        error._tag === "Conflict" || error._tag === "GCP.OperationFailed",
       times: 8,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -355,9 +304,10 @@ export const collectPages = <
     Stream.flatMap((page) => Stream.fromIterable(pick(page) ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
+    // A missing parent location lists as empty.
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } =>
+        error._tag === "NotFound",
       () => Effect.succeed<Item[]>([]),
     ),
   );

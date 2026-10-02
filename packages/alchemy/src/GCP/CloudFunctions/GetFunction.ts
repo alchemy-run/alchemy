@@ -13,7 +13,9 @@ export interface GetFunctionRequest extends Omit<
  * Runtime binding for Cloud Functions `functions.get`.
  *
  * Bind this operation to a {@link Function} in a Function/Action init phase.
- * Provide {@link GetFunctionHttp}.
+ * Provide {@link GetFunctionHttp}. Grants `roles/cloudfunctions.viewer` on
+ * the project under an IAM Condition naming only the bound function (2nd gen
+ * functions accept only invoker roles on their own IAM policy).
  *
  * ### Reading a Function
  * **Example:** Get the bound function

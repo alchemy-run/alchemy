@@ -11,7 +11,9 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  collectPages,
   LIST_LOCATIONS,
+  MAX_POLLS,
   MAX_WORKLOAD_ID_LENGTH,
   emptyOnMissing,
   hasAlchemyLabelMap,
@@ -184,10 +186,14 @@ const toAttrs = (
   };
 };
 
+// Dataproc rejects a session create whose body omits `name` with a bare
+// `INVALID_ARGUMENT`.
 const desiredBody = (
   news: SessionProps,
+  name: string,
   desiredLabels: Record<string, string>,
 ): dataproc.Session => ({
+  name,
   labels: desiredLabels,
   sessionTemplate: news.sessionTemplate,
   jupyterSession: defaultJupyter(news),
@@ -232,25 +238,26 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Dataproc.SessionNotReady" ||
         error._tag === "GCP.Dataproc.SessionNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(
-    dataproc
-      .listProjectsLocationsSessions({
+    collectPages(
+      dataproc.listProjectsLocationsSessions.pages({
         parent: locationParent(project, location),
         pageSize: 1000,
-      })
-      .pipe(
-        Effect.map((page) =>
-          (page.sessions ?? [])
-            .filter((session) => hasAlchemyLabelMap(session.labels))
-            .map((session) => toAttrs(session, project, location)),
-        ),
+      }),
+      (page) => page.sessions,
+    ).pipe(
+      Effect.map((items) =>
+        items
+          .filter((session) => hasAlchemyLabelMap(session.labels))
+          .map((session) => toAttrs(session, project, location)),
       ),
+    ),
   );
 
 export const SessionProvider = () =>
@@ -339,7 +346,7 @@ export const SessionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desired = desiredBody(news, desiredLabels);
+      const desired = desiredBody(news, name, desiredLabels);
 
       let current = yield* getByName(name);
 
@@ -352,7 +359,7 @@ export const SessionProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created) {
-          yield* waitForOperation(created, { interval: "5 seconds" });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(getByName(name), name);
         current = yield* waitUntilReady(name);
@@ -371,10 +378,7 @@ export const SessionProvider = () =>
         .deleteProjectsLocationsSessions({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, {
-          notFoundOk: true,
-          interval: "5 seconds",
-        });
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

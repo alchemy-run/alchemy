@@ -28,6 +28,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 type TransitionRoute = {
@@ -131,11 +132,12 @@ export type AgentsTransitionRouteGroup = Resource<
  * ```
  *
  * ### Updating a Route Group
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Rename
  * ```typescript
  * const group = yield* GCP.Dialogflow.AgentsTransitionRouteGroup("Fallback", {
  *   agent: agent.name,
- *   transitionRouteGroupId: existing.transitionRouteGroupId,
  *   displayName: "g2",
  *   transitionRoutes: [
  *     {
@@ -229,7 +231,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -245,7 +246,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsTransitionRouteGroupProvider = () =>
@@ -392,7 +392,7 @@ export const AgentsTransitionRouteGroupProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -401,5 +401,5 @@ export const AgentsTransitionRouteGroupProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

@@ -58,7 +58,6 @@ export default class Email extends GCP.Function<Email>()(
   "Email",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     const outbox = yield* GCP.Storage.WriteBucket(Outbox);

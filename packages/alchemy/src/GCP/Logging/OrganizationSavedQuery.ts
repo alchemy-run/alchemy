@@ -152,8 +152,6 @@ export type OrganizationSavedQuery = Resource<
  * **Example:** Change the filter and title
  * ```typescript
  * const query = yield* GCP.Logging.OrganizationSavedQuery("Errors", {
- *   savedQueryId: existing.savedQueryId,
- *   organization: existing.organization,
  *   displayName: "org warnings",
  *   loggingQuery: { filter: "severity>=WARNING" },
  *   description: "warnings and errors",
@@ -353,9 +351,7 @@ export const OrganizationSavedQueryProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

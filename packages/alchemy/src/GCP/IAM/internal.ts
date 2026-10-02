@@ -1,7 +1,6 @@
 import * as iam from "@distilled.cloud/gcp/iam_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import {
   alchemyLabelKeys,
@@ -10,6 +9,10 @@ import {
   sanitizeLabelValue,
   toLabels,
 } from "../Labels.ts";
+import {
+  waitForOperation as waitForLongRunning,
+  type LongRunningOperation,
+} from "../Operation.ts";
 
 export const MAX_POLICY_ID = 63;
 
@@ -17,19 +20,6 @@ export class ResourceNotResolved extends Data.TaggedError(
   "GCP.IAM.ResourceNotResolved",
 )<{
   name: string;
-}> {}
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.IAM.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.IAM.OperationPending",
-)<{
-  operation: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -131,70 +121,35 @@ export const userAnnotations = (
     ),
   ) as Record<string, string>;
 
-const isAlreadyExists = (error: iam.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFound = (error: iam.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-export const waitForOperation = (
-  operation: iam.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
-): Effect.Effect<
-  iam.GoogleLongrunningOperation,
-  OperationFailed | OperationPending | iam.GetPoliciesOperationsError,
-  iam.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (isAlreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFound(operation.error)) {
-          return operation;
-        }
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (!name) {
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-    return yield* iam.getPoliciesOperations({ name }).pipe(
-      Effect.catchTag("NotFound", () =>
-        Effect.fail(new OperationPending({ operation: name })),
-      ),
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        if (!current.error) return Effect.succeed(current);
-        if (isAlreadyExists(current.error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFound(current.error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new OperationFailed({
-            operation: name,
-            message: current.error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.IAM.OperationPending",
-        times: 8,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
-
 export { alchemyLabelKeys, sanitizeLabelValue };
+
+/** Deny policy operations finish within seconds. */
+const OPERATION_BUDGET = "5 minutes";
+
+/**
+ * Wait for a long-running operation. ALREADY_EXISTS (code 6) means a
+ * concurrent create won the race; reconcile observes the resource next.
+ */
+export const waitForOperation = (operation: LongRunningOperation) =>
+  waitForLongRunning(operation, (name) => iam.getPoliciesOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
+    Effect.catchIf(
+      (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
+      () => Effect.succeed(operation),
+    ),
+  );
+
+/**
+ * Wait for a delete operation. A vanished operation or NOT_FOUND (code 5)
+ * means the resource is already gone.
+ */
+export const waitForDeleteOperation = (operation: LongRunningOperation) =>
+  waitForOperation(operation).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "NotFound" ||
+        (error._tag === "GCP.OperationFailed" && error.code === 5),
+      () => Effect.succeed(operation),
+    ),
+  );

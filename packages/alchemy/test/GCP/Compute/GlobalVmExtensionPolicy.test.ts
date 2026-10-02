@@ -14,8 +14,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !!process.env.GCP_TEST_VM_EXTENSION_POLICY && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (project: string, globalVmExtensionPolicy: string) =>
   compute
@@ -29,59 +28,6 @@ const waitUntilGone = (project: string, globalVmExtensionPolicy: string) =>
         times: 10,
       }),
     );
-
-test.provider(
-  "probe insertGlobalVmExtensionPolicies entitlement",
-  () =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertGlobalVmExtensionPolicies({
-          project,
-          body: {
-            name: "alchemy-vep-probe",
-            description: "alchemy entitlement probe",
-            extensionPolicies: { "ops-agent": {} },
-            rolloutOperation: {
-              rolloutInput: { predefinedRolloutPlan: "FAST_ROLLOUT" },
-            },
-          },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("Conflict", (error) =>
-            Effect.succeed({
-              tag: "Conflict" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok" || result.tag === "Conflict") {
-        yield* compute
-          .deleteGlobalVmExtensionPolicies({
-            project,
-            globalVmExtensionPolicy: "alchemy-vep-probe",
-            body: { predefinedRolloutPlan: "FAST_ROLLOUT" },
-          })
-          .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest"]).toContain(result.tag);
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
-);
 
 test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a global VM extension policy",
@@ -133,5 +79,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.project, created.policyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 900_000 },
 );

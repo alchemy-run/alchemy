@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -199,15 +199,6 @@ export class RegionHealthCheckNotResolved extends Data.TaggedError(
 )<{
   healthCheckName: string;
   region: string;
-}> {}
-
-export class RegionHealthCheckOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionHealthCheckOperationFailed",
-)<{
-  healthCheckName: string;
-  region: string;
-  operation: string;
-  message: string;
 }> {}
 
 const lastSegment = (value: string | undefined): string => {
@@ -572,67 +563,6 @@ const getByName = (project: string, region: string, healthCheck: string) =>
     .getRegionHealthChecks({ project, region, healthCheck })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  healthCheckName: string,
-  region: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const failed =
-    operation.status !== "DONE" ||
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400);
-  if (failed) {
-    return Effect.fail(
-      new RegionHealthCheckOperationFailed({
-        healthCheckName,
-        region,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          `operation ${operation.status ?? "UNKNOWN"}`,
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  healthCheckName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    let current = operation;
-    if (current.status !== "DONE" && name.length > 0) {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      });
-    }
-    if (current.status !== "DONE" && name.length > 0) {
-      current = yield* compute
-        .getRegionOperations({
-          project,
-          region,
-          operation: name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    return yield* failIfErrored(healthCheckName, region, current);
-  });
-
 const awaitResource = (
   project: string,
   region: string,
@@ -724,7 +654,7 @@ export const RegionHealthCheckProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.healthChecks ?? [])
@@ -760,7 +690,7 @@ export const RegionHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, healthCheckName, operation),
+              waitRegionOperation(env.project, region, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -784,7 +714,7 @@ export const RegionHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, healthCheckName, operation),
+              waitRegionOperation(env.project, region, operation),
             ),
           );
         current = yield* getByName(env.project, region, healthCheckName);
@@ -817,12 +747,9 @@ export const RegionHealthCheckProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.healthCheckName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

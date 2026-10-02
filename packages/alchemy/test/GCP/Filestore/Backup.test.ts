@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { CAPACITY_REGION, CAPACITY_ZONE } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,8 +15,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Instance + backup each take several minutes; skip unless explicitly enabled.
-const runLifecycle = !!process.env.GCP_TEST_FILESTORE && !process.env.FAST;
+// Filestore instances take 5–20 minutes to provision and several to delete.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   file.getProjectsLocationsBackups({ name }).pipe(
@@ -41,19 +42,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/backups/alchemy-filestore-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* file
-        .listProjectsLocationsBackups({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ backups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.backups ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -69,7 +58,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const nfs = yield* GCP.Filestore.Instance("Nfs", {
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "BASIC_HDD",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -78,7 +67,7 @@ test.provider.skipIf(!runLifecycle)(
           const backup = yield* GCP.Filestore.Backup("Nightly", {
             sourceInstance: nfs.name,
             sourceFileShare: "share1",
-            location: "us-central1",
+            location: CAPACITY_REGION,
             description: "alchemy-test-backup",
             labels: { env: "test" },
           });
@@ -88,7 +77,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.backup.name).toContain("/backups/");
       expect(created.backup.backupId).toEqual(expect.any(String));
-      expect(created.backup.location).toEqual("us-central1");
+      expect(created.backup.location).toEqual(CAPACITY_REGION);
       expect(created.backup.sourceInstance).toEqual(created.nfs.name);
       expect(created.backup.sourceFileShare).toEqual("share1");
       expect(created.backup.description).toEqual("alchemy-test-backup");
@@ -107,7 +96,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const nfs = yield* GCP.Filestore.Instance("Nfs", {
             instanceId: created.nfs.instanceId,
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "BASIC_HDD",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -117,7 +106,7 @@ test.provider.skipIf(!runLifecycle)(
             sourceInstance: nfs.name,
             sourceFileShare: "share1",
             backupId: created.backup.backupId,
-            location: "us-central1",
+            location: CAPACITY_REGION,
             description: "alchemy-prod-backup",
             labels: { env: "prod", role: "backup" },
           });
@@ -146,6 +135,7 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:filestore", "live"],
-    timeout: 120_000,
+    timeout: 2_700_000,
+    retry: 0,
   },
 );

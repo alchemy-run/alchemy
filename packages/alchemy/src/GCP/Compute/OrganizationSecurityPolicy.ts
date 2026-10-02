@@ -2,15 +2,15 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import {
   encodeDescription,
-  failIfErrored,
+  ignoredCodes,
   hasOwnershipMarker,
   lastSegment,
   parseDescription,
   sameJson,
   sorted,
   toPhysicalName,
-  waitOrg,
 } from "./internal.ts";
+import { waitOrganizationOperation } from "./operations.ts";
 import type {
   SecurityPolicyAdaptiveProtectionConfig,
   SecurityPolicyAdvancedOptionsConfig,
@@ -203,14 +203,6 @@ export class OrganizationSecurityPolicyParentRequired extends Data.TaggedError(
   project: string;
 }> {}
 
-export class OrganizationSecurityPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.OrganizationSecurityPolicyOperationFailed",
-)<{
-  securityPolicyId: string;
-  operation: string;
-  message: string;
-}> {}
-
 const typeOf = (value: string | undefined) =>
   (value ?? DEFAULT_TYPE).toUpperCase();
 
@@ -229,22 +221,6 @@ const normalizeParent = (value: string): string => {
   return trimmed;
 };
 
-const envParent = () =>
-  Effect.sync(() => {
-    const explicit =
-      process.env.GCP_ORG_SECURITY_POLICY_PARENT ??
-      process.env.GCP_FIREWALL_POLICY_PARENT ??
-      process.env.GOOGLE_FIREWALL_POLICY_PARENT;
-    if (explicit !== undefined && explicit.length > 0) {
-      return normalizeParent(explicit);
-    }
-    const org = process.env.GOOGLE_ORGANIZATION_ID;
-    if (org !== undefined && org.length > 0) {
-      return normalizeParent(org);
-    }
-    return undefined;
-  });
-
 const projectParent = (project: string) =>
   resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
     Effect.map((resource) =>
@@ -252,7 +228,7 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const resolveParent = (
@@ -264,8 +240,6 @@ const resolveParent = (
     if (explicit !== undefined && explicit.length > 0) {
       return normalizeParent(explicit);
     }
-    const fromEnv = yield* envParent();
-    if (fromEnv !== undefined) return fromEnv;
     const env = yield* GcpEnvironment.current;
     const fromProject = yield* projectParent(env.project);
     if (fromProject !== undefined) return fromProject;
@@ -277,8 +251,6 @@ const resolveParent = (
 const listParents = (project: string) =>
   Effect.gen(function* () {
     const parents = new Set<string>();
-    const fromEnv = yield* envParent();
-    if (fromEnv !== undefined) parents.add(fromEnv);
     const fromProject = yield* projectParent(project);
     if (fromProject !== undefined) parents.add(fromProject);
     return [...parents];
@@ -434,9 +406,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
 const observe = (
@@ -452,13 +422,6 @@ const observe = (
     return yield* findByShortName(parentId, shortName);
   });
 
-const failOp = (securityPolicyId: string, operation: string, message: string) =>
-  new OrganizationSecurityPolicyOperationFailed({
-    securityPolicyId,
-    operation,
-    message,
-  });
-
 const runOp = <E extends { readonly _tag: string }, R>(
   securityPolicyId: string,
   parentId: string,
@@ -467,20 +430,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitOrg(operation, parentId).pipe(
-        Effect.flatMap((done) =>
-          failIfErrored(
-            done,
-            (message) =>
-              failOp(
-                securityPolicyId,
-                done.name ?? operation.name ?? "",
-                message,
-              ),
-            options,
-          ),
-        ),
-      ),
+      waitOrganizationOperation(operation, parentId, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -667,7 +619,7 @@ export const OrganizationSecurityPolicyProvider = () =>
               Stream.map((policy) => toAttrs(policy, env.project)),
               Stream.runCollect,
               Effect.map((items) => Array.from(items)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed(
                   [] as OrganizationSecurityPolicy["Attributes"][],
                 ),
@@ -826,16 +778,9 @@ export const OrganizationSecurityPolicyProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitOrg(operation, parentId).pipe(
-              Effect.flatMap((done) =>
-                failIfErrored(
-                  done,
-                  (message) =>
-                    failOp(securityPolicyId, done.name ?? "", message),
-                  { ignoreNotFound: true },
-                ),
-              ),
-            ),
+            waitOrganizationOperation(operation, parentId, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({

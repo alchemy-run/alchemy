@@ -19,7 +19,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/repositories/alchemy-missing-repo`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

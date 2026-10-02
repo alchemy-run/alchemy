@@ -8,18 +8,13 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  encodeOwnershipLine,
   lastSegment,
-  listSessionEntityTypes,
   MAX_SESSION_ID_LENGTH,
-  ownedByAlchemy,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
   sameJson,
   sameText,
   toResourceId,
-  updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type SessionEntity = {
@@ -43,9 +38,7 @@ export type AgentsEnvironmentsSessionsEntityTypeProps = {
   entityType: string;
   /**
    * Session id (at most 36 bytes). If omitted, a unique id is generated.
-   * Immutable — changing it replaces the session entity type. Session
-   * entity types have no labels field, so Alchemy stamps ownership into
-   * a sentinel entity synonym for `list` / nuke.
+   * Immutable — changing it replaces the session entity type.
    */
   sessionId?: string;
   /**
@@ -81,7 +74,7 @@ export type AgentsEnvironmentsSessionsEntityType = Resource<
     location: string;
     /** Override mode. */
     entityOverrideMode: string | undefined;
-    /** Session-scoped entity values (Alchemy sentinel stripped). */
+    /** Session-scoped entity values. */
     entities: SessionEntity[];
   },
   never,
@@ -91,8 +84,9 @@ export type AgentsEnvironmentsSessionsEntityType = Resource<
 /**
  * A Dialogflow CX session entity type under an environment session.
  *
- * Session entity types have no labels or description field, so Alchemy
- * stamps ownership into a sentinel entity value for `list` / nuke.
+ * Session entity types have no labels or description field; Alchemy
+ * identifies one by environment, session id, and entity type. Without
+ * state, one found under an explicit `sessionId` is reported as unowned.
  * Parent environment, session id, and entity type are immutable.
  * Override mode and entities update in place.
  *
@@ -124,7 +118,8 @@ export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.Tagged
   name: string;
 }> {}
 
-const SENTINEL_PREFIX = "__alchemy__";
+// Earlier versions stamped a `__alchemy__…` sentinel entity; drop it.
+const LEGACY_SENTINEL_PREFIX = "__alchemy__";
 
 const entitiesOf = (
   list:
@@ -133,47 +128,22 @@ const entitiesOf = (
 ): SessionEntity[] =>
   (list ?? [])
     .filter((entity) => (entity.value ?? "").length > 0)
-    .filter((entity) => !(entity.value ?? "").startsWith(SENTINEL_PREFIX))
+    .filter(
+      (entity) => !(entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX),
+    )
     .map((entity) => ({
       value: entity.value ?? "",
       synonyms: [...(entity.synonyms ?? [])],
     }));
 
-const ownershipFromEntities = (
+const hasLegacySentinel = (
   list:
     | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[]
     | undefined,
-) => {
-  for (const entity of list ?? []) {
-    const value = entity.value ?? "";
-    if (value.startsWith(SENTINEL_PREFIX)) {
-      const marker = value.slice(SENTINEL_PREFIX.length);
-      return parseOwnership(
-        marker.startsWith("[alchemy ") ? marker : undefined,
-      );
-    }
-    for (const synonym of entity.synonyms ?? []) {
-      if (synonym.startsWith("[alchemy ")) {
-        return parseOwnership(synonym);
-      }
-    }
-  }
-  return parseOwnership(undefined);
-};
-
-const withOwnership = (
-  entities: readonly SessionEntity[] | undefined,
-  marker: string,
-): dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[] => [
-  ...(entities ?? []).map((entity) => ({
-    value: entity.value,
-    synonyms: entity.synonyms,
-  })),
-  {
-    value: `${SENTINEL_PREFIX}${marker}`,
-    synonyms: [marker],
-  },
-];
+) =>
+  (list ?? []).some((entity) =>
+    (entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX),
+  );
 
 const toAttrs = (
   sessionEntityType: dialogflow.GoogleCloudDialogflowCxV3SessionEntityType,
@@ -208,52 +178,6 @@ const getByName = (name: string) =>
     : dialogflow
         .getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const findOwned = (
-  id: string,
-  environment: string,
-  sessionId: string | undefined,
-  entityTypeId: string | undefined,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    if (sessionId !== undefined && entityTypeId !== undefined) {
-      const named = yield* getByName(
-        resourceNameOf(environment, sessionId, entityTypeId),
-      );
-      if (named !== undefined) return named;
-    }
-    if (sessionId !== undefined) {
-      const listed = yield* listSessionEntityTypes(
-        `${environment}/sessions/${sessionId}`,
-      );
-      for (const item of listed) {
-        const ownership = ownershipFromEntities(item.entities);
-        if (
-          yield* ownedByAlchemy(
-            id,
-            ownership.labels["alchemy-id"]
-              ? `[alchemy ${Object.entries(ownership.labels)
-                  .map(([key, value]) => `${key}=${value}`)
-                  .join(" ")}]`
-              : undefined,
-          )
-        ) {
-          return item;
-        }
-      }
-    }
-    return undefined as
-      | dialogflow.GoogleCloudDialogflowCxV3SessionEntityType
-      | undefined;
-  });
-
-const listOwned = (_project: string) =>
-  Effect.succeed([] as ReturnType<typeof toAttrs>[]);
 
 export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
   Provider.succeed(AgentsEnvironmentsSessionsEntityType, {
@@ -292,29 +216,32 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(
+      if (output?.name !== undefined) {
+        const existing = yield* getByName(output.name);
+        return existing === undefined
+          ? undefined
+          : toAttrs(existing, env.project);
+      }
+      if (olds === undefined) return undefined;
+      const generated = yield* toResourceId(
         id,
-        olds?.environment ?? output?.environment ?? "",
-        olds?.sessionId ?? output?.sessionId,
-        lastSegment(olds?.entityType ?? output?.entityTypeId ?? ""),
-        output?.name,
+        undefined,
+        undefined,
+        MAX_SESSION_ID_LENGTH,
       );
-      if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
-      const ownership = ownershipFromEntities(existing.entities);
-      const marker = ownership.labels["alchemy-id"]
-        ? `[alchemy ${Object.entries(ownership.labels)
-            .map(([key, value]) => `${key}=${value}`)
-            .join(" ")}]`
-        : undefined;
-      return (yield* ownedByAlchemy(id, marker)) ? attrs : Unowned(attrs);
+      const sessionId = olds.sessionId ?? generated;
+      const found = yield* getByName(
+        resourceNameOf(
+          olds.environment,
+          sessionId,
+          entityTypeIdOf(olds.entityType),
+        ),
+      );
+      if (found === undefined) return undefined;
+      const attrs = toAttrs(found, env.project);
+      // A generated session id is unique to this stack, stage and id.
+      return sessionId === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        return yield* listOwned(env.project);
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -327,24 +254,19 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
         MAX_SESSION_ID_LENGTH,
       );
       const name = resourceNameOf(environment, sessionId, entityTypeId);
-      const ownership = yield* ownershipLabels(id);
-      const marker = encodeOwnershipLine(ownership, undefined, 8000);
       const entityOverrideMode =
         news.entityOverrideMode ?? "ENTITY_OVERRIDE_MODE_OVERRIDE";
-      const entities = withOwnership(news.entities, marker);
+      const entities = news.entities.map((entity) => ({
+        value: entity.value,
+        synonyms: entity.synonyms,
+      }));
       const body: dialogflow.GoogleCloudDialogflowCxV3SessionEntityType = {
         name,
         entityOverrideMode,
         entities,
       };
 
-      let current = yield* findOwned(
-        id,
-        environment,
-        sessionId,
-        entityTypeId,
-        output?.name,
-      );
+      let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* dialogflow
@@ -352,11 +274,7 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
             parent: `${environment}/sessions/${sessionId}`,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, environment, sessionId, entityTypeId, name),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 
@@ -375,27 +293,22 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
         entitiesOf(current.entities),
         entitiesOf(news.entities),
       );
-      const ownershipChanged = !sameText(
-        ownershipFromEntities(current.entities).labels["alchemy-id"],
-        parseOwnership(marker).labels["alchemy-id"],
-      );
+      const legacySentinel = hasLegacySentinel(current.entities);
 
-      if (modeChanged || entitiesChanged || ownershipChanged) {
+      if (modeChanged || entitiesChanged || legacySentinel) {
         current =
           yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsSessionsEntityTypes(
             {
+              // An `entities` update mask is silently ignored; the body is
+              // complete, so replace the whole resource.
               name: currentName,
-              updateMask: updateMaskOf(
-                modeChanged ? "entity_override_mode" : undefined,
-                entitiesChanged || ownershipChanged ? "entities" : undefined,
-              ),
               body: { ...body, name: currentName },
             },
           );
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -403,5 +316,5 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

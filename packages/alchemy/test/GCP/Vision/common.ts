@@ -7,10 +7,11 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Create is Forbidden: "Cloud Vision API has not been used in project … or
-// it is disabled." Set GCP_TEST_VISION=1 on an entitled project.
-export const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_VISION === "1";
+// Product Search is closed to new projects: creates fail with BadRequest
+// "Product Search doesn't onboard new projects. For image search, please use
+// Vision Warehouse". Set GCP_TEST_VISION_PRODUCT_SEARCH=1 on a project that was
+// onboarded before the cutoff to run the lifecycles.
+export const runLifecycle = !!process.env.GCP_TEST_VISION_PRODUCT_SEARCH;
 
 export const currentProject = GcpEnvironment.current.pipe(
   Effect.map((env) => env.project),

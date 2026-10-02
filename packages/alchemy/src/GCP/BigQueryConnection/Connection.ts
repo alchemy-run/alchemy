@@ -792,7 +792,6 @@ const listOwnedAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const ConnectionProvider = () =>

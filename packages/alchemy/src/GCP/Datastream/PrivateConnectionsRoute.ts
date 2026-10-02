@@ -166,11 +166,7 @@ const listRoutes = (parent: string) =>
       pageSize: 1000,
     }),
     (page) => page.routes,
-  ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as ds.Route[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as ds.Route[])));
 
 const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
@@ -232,11 +228,13 @@ export const PrivateConnectionsRouteProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = privateConnectionOf(
-        olds?.privateConnection ?? output?.privateConnection ?? "",
-        env.project,
-        location,
-      );
+      const parentId = olds?.privateConnection ?? output?.privateConnection;
+      // Recovering an interrupted create whose parent never resolved: no
+      // route can exist without its private connection.
+      if (typeof parentId !== "string" || parentId.length === 0) {
+        return undefined;
+      }
+      const parent = privateConnectionOf(parentId, env.project, location);
       const routeId = yield* toPhysicalId(
         id,
         olds?.routeId,
@@ -323,11 +321,6 @@ export const PrivateConnectionsRouteProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       yield* settleOperation(operation, { notFoundOk: true });
-      yield* waitUntilGone(getByName(output.name), output.name).pipe(
-        Effect.catchTag(
-          "GCP.Datastream.ResourceStillExists",
-          () => Effect.void,
-        ),
-      );
+      yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

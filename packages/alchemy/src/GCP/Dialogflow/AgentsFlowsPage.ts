@@ -20,6 +20,7 @@ import {
   sameJson,
   sameText,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type PageFulfillment = {
@@ -100,11 +101,12 @@ export type AgentsFlowsPage = Resource<
  * ```
  *
  * ### Updating a Page
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Rename
  * ```typescript
  * const page = yield* GCP.Dialogflow.AgentsFlowsPage("Greeting", {
  *   flow: flow.name,
- *   pageId: existing.pageId,
  *   displayName: "welcome",
  *   description: "welcome the user",
  * });
@@ -286,7 +288,7 @@ export const AgentsFlowsPageProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -295,5 +297,5 @@ export const AgentsFlowsPageProvider = () =>
           force: true,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

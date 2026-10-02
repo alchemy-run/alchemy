@@ -345,12 +345,11 @@ const paginate = <A, E, R>(
   Effect.gen(function* () {
     const found: A[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* fetch(pageToken);
       found.push(...response.items);
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   });
 
@@ -369,7 +368,7 @@ const listNamespacesAt = (parent: string) =>
           ),
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Namespace[],
             nextPageToken: undefined,
@@ -391,7 +390,7 @@ const listServicesAt = (parent: string) =>
           items: response.services ?? [],
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Service[],
             nextPageToken: undefined,
@@ -413,7 +412,7 @@ const listEndpointsAt = (parent: string) =>
           items: response.endpoints ?? [],
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as servicedirectory.Endpoint[],
             nextPageToken: undefined,
@@ -437,7 +436,7 @@ const listLocations = (project: string) =>
             .filter((name): name is string => !!name),
           nextPageToken: response.nextPageToken,
         })),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
+        Effect.catchTag("NotFound", () =>
           Effect.succeed({
             items: [] as string[],
             nextPageToken: undefined,

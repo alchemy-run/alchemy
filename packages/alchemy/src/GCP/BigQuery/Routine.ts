@@ -605,9 +605,6 @@ export const RoutineProvider = () =>
             Effect.catchTag("NotFound", () =>
               Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
-            ),
           );
         const pages = yield* Effect.forEach(
           datasets,
@@ -634,9 +631,6 @@ export const RoutineProvider = () =>
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-                ),
-                Effect.catchTag("Forbidden", () =>
                   Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                 ),
               );

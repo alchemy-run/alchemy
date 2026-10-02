@@ -479,10 +479,10 @@ export type WorkstationClustersWorkstationConfig = Resource<
  * ### Updating a Configuration
  * **Example:** Display name and idle timeout
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig(
  *   "Code",
  *   {
- *     workstationConfigId: existing.workstationConfigId,
  *     workstationCluster: cluster.name,
  *     displayName: "code v2",
  *     idleTimeout: "3600s",
@@ -545,6 +545,34 @@ const toHost = (
   value === undefined
     ? undefined
     : { gceInstance: toGceInstance(value.gceInstance) };
+
+// Reads omit proto3 defaults (`poolSize: 0`, `false`) and add server defaults
+// the user never set (scopes, disk size), so compare only the fields the user
+// declared, treating an omitted default as equal to its zero value.
+const isZero = (value: unknown) =>
+  value === undefined ||
+  value === null ||
+  value === 0 ||
+  value === false ||
+  value === "" ||
+  (Array.isArray(value) && value.length === 0) ||
+  (typeof value === "object" && Object.keys(value as object).length === 0);
+
+const hostMatches = (
+  observed: workstations.Host | undefined,
+  desired: Host,
+): boolean => {
+  const want = toGceInstance(desired.gceInstance);
+  if (want === undefined) return true;
+  const have = toGceInstance(observed?.gceInstance) ?? {};
+  return Object.entries(want).every(([key, value]) => {
+    if (value === undefined) return true;
+    const current = have[key as keyof GceInstance];
+    return isZero(value)
+      ? isZero(current)
+      : fingerprint(current) === fingerprint(value);
+  });
+};
 
 const toPersistent = (
   value: workstations.PersistentDirectory | PersistentDirectory,
@@ -667,6 +695,9 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const parent = olds?.workstationCluster ?? output?.workstationCluster;
+      // A config cannot exist before its cluster's name resolved.
+      if (output?.name === undefined && !parent) return undefined;
       const workstationConfigId = yield* toPhysicalId(
         id,
         olds?.workstationConfigId,
@@ -678,7 +709,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
         env.region,
       );
       const cluster = expandParent(
-        olds?.workstationCluster ?? output?.workstationCluster ?? "",
+        parent ?? "",
         env.project,
         location,
         "workstationClusters",
@@ -754,7 +785,12 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -775,8 +811,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             fingerprint(toContainer(news.container)) &&
           "container",
         news.host !== undefined &&
-          fingerprint(toHost(current.host)) !==
-            fingerprint(toHost(news.host)) &&
+          !hostMatches(current.host, news.host) &&
           "host",
         news.readinessChecks !== undefined &&
           fingerprint(current.readinessChecks) !==
@@ -880,7 +915,12 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

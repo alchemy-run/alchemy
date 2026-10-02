@@ -21,6 +21,8 @@ export const CreateJobHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.Transcoder.CreateJob",
         resource: template,
+        // Narrowest predefined role with transcoder.jobs.create; Transcoder
+        // has no resource-level IAM, so this is a project grant.
         iam: [{ role: "roles/transcoder.editor" }],
       });
       const name = yield* template.name;

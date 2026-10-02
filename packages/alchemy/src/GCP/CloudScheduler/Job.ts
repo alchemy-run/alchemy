@@ -9,11 +9,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TIME_ZONE = "UTC";
@@ -195,10 +190,7 @@ export type JobProps = {
    */
   timeZone?: string;
   /**
-   * Human-readable description (max 500 characters including Alchemy's
-   * ownership marker). Cloud Scheduler jobs have no labels field, so
-   * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `read` / `list` / nuke.
+   * Human-readable description (single line, max 499 characters).
    */
   description?: string;
   /**
@@ -245,7 +237,7 @@ export type Job = Resource<
     location: string;
     /** Project id. */
     project: string;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Job description. */
     description: string | undefined;
     /** Cron or english-like schedule. */
     schedule: string | undefined;
@@ -284,9 +276,10 @@ export type Job = Resource<
  * A Cloud Scheduler job that invokes an HTTP, Pub/Sub, or App Engine
  * target on a cron schedule.
  *
- * Jobs have no labels field — Alchemy stamps ownership into the
- * description so `read`, `list`, and `pnpm nuke:gcp` can find them. Name
- * and location are immutable; changing either replaces the job.
+ * Jobs have no labels field, so ownership rests on the deterministic job
+ * name: `read` reports a job it finds without prior state as unowned
+ * (adopt it with `--adopt`). Name and location are immutable; changing
+ * either replaces the job.
  *
  * ### Creating a Job
  * **Example:** Generated name, yearly HTTP GET
@@ -395,44 +388,6 @@ const parseName = (name: string, fallbackLocation: string) => {
   };
 };
 
-const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  // Cloud Scheduler descriptions are a single RE2 line (`^.{1,499}$`) —
-  // newlines are rejected even when the total length is well under 499.
-  const trimmed = description?.replace(/[\r\n]+/g, " ").trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker} ${trimmed}` : marker;
-  return combined.slice(0, 499);
-};
-
-const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^[\s\n]+/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-const hasOwnershipMarker = (description: string | undefined): boolean =>
-  (description ?? "").startsWith("[alchemy ");
-
 const toId = (id: string, jobId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
@@ -465,13 +420,12 @@ const compact = <T extends Record<string, unknown>>(value: T): T =>
 const toAttrs = (job: scheduler.Job, project: string, region: string) => {
   const name = job.name ?? "";
   const parsed = parseName(name, region);
-  const { description } = parseDescription(job.description);
   return {
     name,
     jobId: parsed.jobId,
     location: parsed.location,
     project: parsed.project || project,
-    description,
+    description: job.description,
     schedule: job.schedule,
     timeZone: job.timeZone,
     state: job.state,
@@ -650,34 +604,6 @@ const appEngineTargetDrift = (
   );
 };
 
-const listJobsAt = (parent: string, project: string, region: string) =>
-  Effect.gen(function* () {
-    const found: ReturnType<typeof toAttrs>[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* scheduler.listProjectsLocationsJobs({
-        parent,
-        pageSize: 500,
-        pageToken,
-      });
-      for (const job of response.jobs ?? []) {
-        if (hasOwnershipMarker(job.description)) {
-          found.push(toAttrs(job, project, region));
-        }
-      }
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-    ),
-  );
-
 const hasTarget = (news: JobProps) =>
   news.httpTarget !== undefined ||
   news.pubsubTarget !== undefined ||
@@ -775,55 +701,9 @@ export const JobProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state the job may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const found: ReturnType<typeof toAttrs>[] = [];
-        let pageToken: string | undefined;
-        for (let page = 0; page < 10; page++) {
-          const response = yield* scheduler
-            .listProjectsLocations({
-              name: `projects/${env.project}`,
-              pageSize: 100,
-              pageToken,
-            })
-            .pipe(
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
-                Effect.succeed({
-                  locations: [
-                    {
-                      name: parentOf(env.project, env.region),
-                      locationId: env.region,
-                    },
-                  ],
-                  nextPageToken: undefined as string | undefined,
-                }),
-              ),
-            );
-          const parents = (response.locations ?? [])
-            .map((location) => location.name)
-            .filter((name): name is string => !!name);
-          const pages = yield* Effect.forEach(
-            parents.length > 0 ? parents : [parentOf(env.project, env.region)],
-            (parent) => listJobsAt(parent, env.project, env.region),
-            { concurrency: 4 },
-          );
-          for (const jobs of pages) {
-            found.push(...jobs);
-          }
-          pageToken = response.nextPageToken;
-          if (pageToken === undefined || pageToken === "") break;
-        }
-        return found;
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -842,8 +722,12 @@ export const JobProvider = () =>
         });
       }
 
-      const ownership = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(ownership, news.description);
+      // Descriptions are a single RE2 line (`^.{1,499}$`).
+      const desiredDescription =
+        news.description
+          ?.replace(/[\r\n]+/g, " ")
+          .trim()
+          .slice(0, 499) || undefined;
       const desiredTimeZone = timeZoneOf(news.timeZone);
       const desiredPaused = news.paused === true;
       const httpTarget =
@@ -888,7 +772,7 @@ export const JobProvider = () =>
       }
 
       const mask: string[] = [];
-      if ((current.description ?? "") !== desiredDescription) {
+      if ((current.description ?? "") !== (desiredDescription ?? "")) {
         mask.push("description");
       }
       if ((current.schedule ?? "") !== news.schedule) {

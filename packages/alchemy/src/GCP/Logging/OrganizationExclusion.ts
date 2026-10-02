@@ -115,8 +115,7 @@ export type OrganizationExclusion = Resource<
  * **Example:** Change the filter and disable
  * ```typescript
  * const exclusion = yield* GCP.Logging.OrganizationExclusion("DropDebug", {
- *   exclusionId: existing.exclusionId,
- *   organization: existing.organization,
+ *   organization: "organizations/123456789",
  *   filter: "severity<ERROR",
  *   description: "drop non-errors",
  *   disabled: true,
@@ -242,9 +241,7 @@ export const OrganizationExclusionProvider = () =>
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 

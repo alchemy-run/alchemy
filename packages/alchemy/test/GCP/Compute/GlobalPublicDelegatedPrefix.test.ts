@@ -33,12 +33,12 @@ const waitUntilGone = (project: string, publicDelegatedPrefix: string) =>
     );
 
 test.provider(
-  "probe insertGlobalPublicDelegatedPrefixes entitlement",
+  "insertGlobalPublicDelegatedPrefixes with a malformed parentPrefix fails with BadRequest",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertGlobalPublicDelegatedPrefixes({
+      const error = yield* Effect.flip(
+        compute.insertGlobalPublicDelegatedPrefixes({
           project,
           body: {
             name: "alchemy-pdp-probe",
@@ -46,38 +46,9 @@ test.provider(
             parentPrefix: parentPrefix || "does-not-exist",
             ipCidrRange,
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteGlobalPublicDelegatedPrefixes({
-            project,
-            publicDelegatedPrefix: "alchemy-pdp-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );

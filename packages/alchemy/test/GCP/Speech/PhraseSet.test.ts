@@ -4,13 +4,7 @@ import * as speech from "@distilled.cloud/gcp/speech_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  location,
-  logLevel,
-  currentParent,
-  currentProject,
-  runLifecycle,
-} from "./common.ts";
+import { location, logLevel, currentParent, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -18,7 +12,6 @@ const waitUntilGone = (name: string) =>
   speech.getProjectsLocationsPhraseSets({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -38,42 +31,14 @@ test.provider(
           name: `${parent}/phraseSets/alchemy-missing-phrases`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:speech", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(process.env.GCP_TEST_SPEECH === "1")(
-  "createProjectsLocationsPhraseSets without Speech API fails with Forbidden",
-  (stack) =>
-    Effect.gen(function* () {
-      const parent = yield* currentParent;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        speech.createProjectsLocationsPhraseSets({
-          parent,
-          body: {
-            phraseSetId: "alchemy-speech-probe",
-            phraseSet: {
-              phrases: [{ value: "weather" }],
-            },
-          },
-        }),
-      );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain(
-        "Cloud Speech-to-Text API has not been used",
-      );
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:speech", "live"], timeout: 90_000 },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a phrase set",
   (stack) =>
     Effect.gen(function* () {
@@ -90,11 +55,9 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(
-        created.name.startsWith(
-          `projects/${project}/locations/${location}/phraseSets/`,
-        ),
-      ).toEqual(true);
+      expect(created.name).toMatch(
+        new RegExp(`^projects/[^/]+/locations/${location}/phraseSets/`),
+      );
       expect(created.phraseSetId.length).toBeGreaterThanOrEqual(4);
       expect(created.project).toEqual(project);
       expect(created.location).toEqual(location);
@@ -114,8 +77,9 @@ test.provider.skipIf(!runLifecycle)(
         (phrase) => phrase.value ?? "",
       );
       expect(fetchedValues).toContain("weather");
+      // Items steer recognition: Alchemy adds no ownership item.
       expect(fetchedValues.some((value) => value.startsWith("alc "))).toEqual(
-        true,
+        false,
       );
 
       const updated = yield* stack.deploy(

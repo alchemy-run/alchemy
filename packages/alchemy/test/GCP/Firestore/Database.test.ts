@@ -45,7 +45,9 @@ test.provider(
       const page = yield* firestore.listProjectsDatabases({
         parent: `projects/${project}`,
       });
-      expect(Array.isArray(page.databases ?? [])).toEqual(true);
+      expect(
+        (page.databases ?? []).map((database) => database.name),
+      ).not.toContain(`projects/${project}/databases/alchemy-missing-xxxx`);
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 90_000 },
 );
@@ -81,15 +83,13 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(fetched.locationId).toEqual("us-central1");
       expect(fetched.type).toEqual("FIRESTORE_NATIVE");
 
-      const ownership = yield* firestore.getProjectsDatabasesDocuments({
-        name: `${created.name}/documents/_alchemy/ownership`,
-      });
-      expect(ownership.fields?.alchemy_stack?.stringValue).toEqual(
-        expect.any(String),
-      );
-      expect(ownership.fields?.alchemy_id?.stringValue).toEqual(
-        expect.any(String),
-      );
+      // Alchemy writes no data into the database.
+      const collections =
+        yield* firestore.listCollectionIdsProjectsDatabasesDocuments({
+          parent: `${created.name}/documents`,
+          body: {},
+        });
+      expect(collections.collectionIds ?? []).toEqual([]);
 
       yield* firestore.patchProjectsDatabasesDocuments({
         name: `${created.name}/documents/users/alice`,

@@ -399,7 +399,16 @@ export const DatasetProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
+      if (removed.length > 0) {
+        // PATCH merges labels; removing one needs a JSON null the typed body
+        // cannot carry, so replace the labels with PUT (get-modify-put).
+        current = yield* bigquery.updateDatasets({
+          projectId: project,
+          datasetId,
+          body: { ...current, labels: desiredLabels },
+        });
+      }
+      const labelsChanged = removed.length === 0 && upsert.length > 0;
       const descriptionChanged = !sameString(
         current.description,
         news.description,
@@ -457,13 +466,9 @@ export const DatasetProvider = () =>
         encryptionChanged;
 
       if (metadataChanged || accessChanged) {
-        const nextLabels: Record<string, string | null> = { ...desiredLabels };
-        for (const key of removed) {
-          nextLabels[key] = null;
-        }
         const body: bigquery.Dataset = {};
         if (labelsChanged) {
-          body.labels = nextLabels as unknown as Record<string, string>;
+          body.labels = desiredLabels;
         }
         if (descriptionChanged) {
           body.description = news.description ?? "";

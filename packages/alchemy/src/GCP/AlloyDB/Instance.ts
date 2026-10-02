@@ -18,7 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_INSTANCE_TYPE = "PRIMARY";
 const DEFAULT_CPU_COUNT = 2;
@@ -567,8 +567,8 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -581,8 +581,8 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -748,11 +748,10 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
       const ref = parseClusterRef(
@@ -791,7 +790,7 @@ export const InstanceProvider = () =>
           machineConfig,
           readPoolConfig,
         );
-        const created = yield* (
+        yield* (
           instanceType === "SECONDARY"
             ? alloydb.createsecondaryProjectsLocationsClustersInstances({
                 parent,
@@ -803,10 +802,21 @@ export const InstanceProvider = () =>
                 instanceId,
                 body,
               })
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(created);
-        }
+        ).pipe(
+          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          Effect.tap((created) =>
+            created === undefined ? Effect.void : waitForOperation(created),
+          ),
+          // AlloyDB intermittently fails the create operation with INTERNAL
+          // ("an internal error has occurred") after a long provisioning wait;
+          // the failed instance is removed, so the create is retried.
+          Effect.retry({
+            while: (error) =>
+              error._tag === "GCP.OperationFailed" && error.code === 13,
+            times: 2,
+            schedule: Schedule.spaced("30 seconds"),
+          }),
+        );
         current = yield* waitUntilExists(name);
       }
 
@@ -821,8 +831,12 @@ export const InstanceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
+      // AlloyDB omits `displayName` from instance reads (as for clusters and
+      // backups); compare against the last applied value instead.
+      const observedDisplayName =
+        current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+        (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
         fingerprint(stringMapOf(current.annotations)) !==
@@ -941,15 +955,18 @@ export const InstanceProvider = () =>
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      return toAttrs(
+        { ...current, displayName: current.displayName ?? news.displayName },
+        env.project,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -959,12 +976,12 @@ export const InstanceProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

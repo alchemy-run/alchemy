@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,7 +42,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/serviceConnectionTokens/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -55,22 +56,20 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete a service connection token",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("SctVpc", {
-            autoCreateSubnetworks: false,
-          });
           const token = yield* GCP.NetworkConnectivity.ServiceConnectionToken(
             "Consumer",
             {
-              network: network.selfLink.as<string>(),
+              network: defaultNetworkSelfLink(project),
               description: "token a",
               labels: { env: "test" },
             },
           );
-          return { network, token };
+          return { token };
         }),
       );
 
@@ -101,6 +100,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

@@ -239,7 +239,6 @@ const lookupLinks = (locationParent: string, entry: string, project: string) =>
   ).pipe(
     Effect.map((items) => items.map((item) => toAttrs(item, project))),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const EntryGroupsEntryLinkProvider = () =>
@@ -338,10 +337,7 @@ export const EntryGroupsEntryLinkProvider = () =>
                   pageSize: 100,
                 }),
                 (page) => page.entries,
-              ).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed([])),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
-              );
+              ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
               const locationParent = `projects/${env.project}/locations/${parseName(group.name, "entryGroups").location}`;
               const pages = yield* Effect.forEach(
                 entries,

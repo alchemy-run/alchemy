@@ -1,6 +1,6 @@
 import { GcpEnvironment } from "@/GCP/Environment";
 import type { GcpOpError } from "@distilled.cloud/gcp/datastream_v1";
-import { Forbidden, NotFound } from "@distilled.cloud/gcp/datastream_v1";
+import { NotFound } from "@distilled.cloud/gcp/datastream_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -10,10 +10,13 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const runLifecycle = true;
+// Connection profiles and streams take 2-5 minutes end to end.
+export const runLifecycle = !process.env.FAST;
 
+// Private connections peer a dedicated VPC and take 5-10 minutes to create
+// and delete.
 export const runSlowLifecycle =
-  runLifecycle && !process.env.FAST && !!process.env.GCP_TEST_DATASTREAM;
+  !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 export const currentProject = GcpEnvironment.current.pipe(
   Effect.map((env) => env.project),
@@ -21,13 +24,14 @@ export const currentProject = GcpEnvironment.current.pipe(
 
 export const LOCATION = "us-central1";
 
-export const waitUntilGone = <A, R>(
-  get: Effect.Effect<A, NotFound | Forbidden | GcpOpError, R>,
+export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
+  get: Effect.Effect<A, E | NotFound | GcpOpError, R>,
 ) =>
   get.pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
+    Effect.catchIf(
+      (error): error is NotFound => error._tag === "NotFound",
+      () => Effect.succeed("gone" as const),
     ),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),

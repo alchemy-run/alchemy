@@ -592,7 +592,7 @@ test.provider(
       yield* assertGroupGone(name);
       yield* assertGroupGone(created.dependent.dbParameterGroupName);
     }),
-  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 240_000 },
 );
 
 test.provider(

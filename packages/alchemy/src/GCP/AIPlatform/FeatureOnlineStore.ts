@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -72,6 +73,7 @@ export type FeatureOnlineStoreProps = {
   /**
    * Bigtable storage. Mutually exclusive with `optimized`. Immutable
    * storage type — switching to Optimized replaces the store.
+   * @default { autoScaling: { minNodeCount: 1, maxNodeCount: 1 } } when `optimized` is unset
    */
   bigtable?: FeatureOnlineStoreBigtable;
   /**
@@ -141,13 +143,13 @@ export type FeatureOnlineStore = Resource<
  *
  * Id, location, storage type (Bigtable vs Optimized), Bigtable zone, and
  * encryption are identity. Labels and Bigtable autoscaling update in
- * place. Defaults to Optimized storage when neither backend is set.
+ * place. Defaults to a one-node Bigtable backend when neither backend is
+ * set (Vertex AI no longer creates new Optimized stores for most projects).
  *
  * ### Creating a Feature Online Store
- * **Example:** Optimized store
+ * **Example:** Default one-node Bigtable store
  * ```typescript
  * const store = yield* GCP.AIPlatform.FeatureOnlineStore("Serving", {
- *   optimized: true,
  *   labels: { env: "prod" },
  * });
  * ```
@@ -183,8 +185,19 @@ export class FeatureOnlineStoreStillExists extends Data.TaggedError(
 const resourceName = (project: string, location: string, storeId: string) =>
   `projects/${project}/locations/${location}/featureOnlineStores/${storeId}`;
 
+// Vertex no longer creates Optimized stores unless asked explicitly, so
+// the default backend is the smallest Bigtable one.
 const wantsOptimized = (news: FeatureOnlineStoreProps) =>
-  news.bigtable === undefined && news.optimized !== false;
+  news.bigtable === undefined &&
+  news.optimized !== undefined &&
+  news.optimized !== false;
+
+const DEFAULT_BIGTABLE: FeatureOnlineStoreBigtable = {
+  autoScaling: { minNodeCount: 1, maxNodeCount: 1 },
+};
+
+const bigtableOf = (news: FeatureOnlineStoreProps) =>
+  news.bigtable ?? DEFAULT_BIGTABLE;
 
 const toBigtable = (
   config:
@@ -389,11 +402,15 @@ export const FeatureOnlineStoreProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* aiplatform.listProjectsLocationsFeatureOnlineStores
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        return yield* Stream.fromIterable(listLocations(env.region))
+          .pipe(
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureOnlineStores.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
+            ),
+          )
           .pipe(
             Stream.flatMap((page) =>
               Stream.fromIterable(page.featureOnlineStores ?? []),
@@ -403,7 +420,6 @@ export const FeatureOnlineStoreProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
@@ -435,7 +451,7 @@ export const FeatureOnlineStoreProvider = () =>
             featureOnlineStoreId: storeId,
             body: {
               labels: desiredLabels,
-              bigtable: optimized ? undefined : news.bigtable,
+              bigtable: optimized ? undefined : bigtableOf(news),
               optimized: optimized ? {} : undefined,
               dedicatedServingEndpoint: news.dedicatedServingEndpoint,
               encryptionSpec: news.encryptionSpec,

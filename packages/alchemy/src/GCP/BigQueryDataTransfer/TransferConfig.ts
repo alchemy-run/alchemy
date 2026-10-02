@@ -549,11 +549,10 @@ const listAt = (parent: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.take(10),
       Stream.flatMap((page) => Stream.fromIterable(page.transferConfigs ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as bqdt.TransferConfig[]),
       ),
     );
@@ -619,13 +618,12 @@ const listLocationParents = (project: string, region: string) =>
       pageSize: 100,
     })
     .pipe(
-      Stream.take(10),
       Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
       Stream.map((location) => location.name),
       Stream.filter((name): name is string => !!name && name.length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([parentOf(project, region)]),
       ),
     );

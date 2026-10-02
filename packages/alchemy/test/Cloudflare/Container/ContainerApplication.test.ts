@@ -885,7 +885,17 @@ describe.concurrent(
           expect(changed.app.configuration.image).not.toBe(
             first.app.configuration.image,
           );
-          expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
+          // The registry keeps serving an overwritten tag's previous target
+          // for a while (observed ~25s), so wait for the new one.
+          expect(
+            yield* cacheDigest.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("4 seconds"),
+                until: (digest) => digest === changed.app.hash?.digest,
+                times: 10,
+              }),
+            ),
+          ).toBe(changed.app.hash?.digest);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const restored = yield* Effect.acquireUseRelease(
@@ -1005,17 +1015,29 @@ describe.concurrent(
           const username = credentials.username ?? credentials.user;
           assert(username);
           const http = yield* HttpClient.HttpClient;
-          const cached = yield* http.execute(
-            HttpClientRequest.head(
-              `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
-            ).pipe(
-              HttpClientRequest.basicAuth(username, credentials.password),
-              HttpClientRequest.setHeader(
-                "Accept",
-                "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+          // The registry keeps serving an overwritten tag's previous target
+          // for a while (observed ~25s), so wait for the new one.
+          const cached = yield* http
+            .execute(
+              HttpClientRequest.head(
+                `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
+              ).pipe(
+                HttpClientRequest.basicAuth(username, credentials.password),
+                HttpClientRequest.setHeader(
+                  "Accept",
+                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+                ),
               ),
-            ),
-          );
+            )
+            .pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("4 seconds"),
+                until: (response) =>
+                  response.headers["docker-content-digest"] ===
+                  first.app.hash?.digest,
+                times: 10,
+              }),
+            );
           expect(cached.status).toBe(200);
           expect(cached.headers["docker-content-digest"]).toBe(
             first.app.hash?.digest,
@@ -1075,7 +1097,7 @@ describe.concurrent(
           );
           expect(deleted).toBeUndefined();
         }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
-      { timeout: 120_000, exclusive: true },
+      { timeout: 180_000, exclusive: true },
     );
 
     test.provider(

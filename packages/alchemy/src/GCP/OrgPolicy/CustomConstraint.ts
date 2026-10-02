@@ -41,8 +41,7 @@ export type CustomConstraintProps = {
   constraintId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the constraint.
+   * id). Defaults to the project's Resource Manager ancestor. Immutable — changing it replaces the constraint.
    */
   organization?: string;
   /**
@@ -238,16 +237,12 @@ const parentOfResource = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         )
       : Effect.succeed(undefined);
 
@@ -256,8 +251,6 @@ const tryResolveOrganization = (explicit?: string) =>
     if (explicit !== undefined && explicit.length > 0) {
       return organizationParent(explicit);
     }
-    const fromEnv = process.env.GOOGLE_ORGANIZATION_ID;
-    if (fromEnv && fromEnv.length > 0) return organizationParent(fromEnv);
     const env = yield* GcpEnvironment.current;
     let current: string | undefined = `projects/${env.project}`;
     for (let i = 0; i < 8; i++) {
@@ -372,7 +365,7 @@ const listCustomConstraints = (parent: string) =>
   Effect.gen(function* () {
     const found: orgpolicy.GoogleCloudOrgpolicyV2CustomConstraint[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    do {
       const response = yield* orgpolicy.listOrganizationsCustomConstraints({
         parent,
         pageSize: 1000,
@@ -380,11 +373,10 @@ const listCustomConstraints = (parent: string) =>
       });
       found.push(...(response.customConstraints ?? []));
       pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
+    } while (pageToken !== undefined && pageToken !== "");
     return found;
   }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as orgpolicy.GoogleCloudOrgpolicyV2CustomConstraint[]),
     ),
   );

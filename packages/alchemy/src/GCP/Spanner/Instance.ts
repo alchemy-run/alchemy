@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_PROCESSING_UNITS = 100;
 const DEFAULT_INSTANCE_TYPE = "PROVISIONED";
@@ -220,19 +221,6 @@ export class InstanceNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Spanner.InstanceOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class InstanceOperationPending extends Data.TaggedError(
-  "GCP.Spanner.InstanceOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class InstanceStillExists extends Data.TaggedError(
   "GCP.Spanner.InstanceStillExists",
 )<{
@@ -397,100 +385,6 @@ const getByName = (name: string) =>
   spanner
     .getProjectsInstances({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const isAlreadyExists = (error: spanner.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").includes("ALREADY_EXISTS") ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: spanner.Status | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
-const waitForOperation = (
-  operation: spanner.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.alreadyExistsOk === true &&
-          isAlreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new InstanceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = name.includes("/databases/")
-      ? spanner.getProjectsInstancesDatabasesOperations({ name })
-      : spanner.getProjectsInstancesOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies spanner.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InstanceOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        if (status) {
-          if (options?.alreadyExistsOk === true && isAlreadyExists(status)) {
-            return Effect.succeed(current);
-          }
-          if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-            return Effect.succeed(current);
-          }
-          return Effect.fail(
-            new InstanceOperationFailed({
-              operation: name,
-              message: status.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Spanner.InstanceOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -662,7 +556,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

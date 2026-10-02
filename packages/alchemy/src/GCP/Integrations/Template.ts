@@ -20,7 +20,7 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parseOwnership,
-  projectOf,
+  withProjectId,
   replaceOnIdentity,
   sameText,
   toResourceId,
@@ -225,10 +225,12 @@ export const defaultTemplateBundle = (): TemplateBundle => ({
  * ```
  *
  * ### Updating a Template
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Rename and retag
  * ```typescript
  * const template = yield* GCP.Integrations.Template("Orders", {
- *   templateId: existing.templateId,
  *   displayName: "order-sync-v2",
  *   description: "sync orders v2",
  *   tags: ["orders", "v2"],
@@ -255,12 +257,12 @@ const toAttrs = (
   project: string,
   region: string,
 ) => {
-  const name = template.name ?? "";
+  const name = withProjectId(template.name ?? "", project);
   return {
     name,
     templateId: lastSegment(name),
     location: locationOf(name, region),
-    project: projectOf(name) || project,
+    project,
     displayName: template.displayName,
     description: parseOwnership(template.description).text,
     usageInfo: template.usageInfo,
@@ -414,7 +416,7 @@ export const TemplateProvider = () =>
         return yield* new TemplateNotResolved({ name });
       }
 
-      const currentName = current.name ?? name;
+      const currentName = withProjectId(current.name ?? name, env.project);
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const usageChanged = !sameText(current.usageInfo, news.usageInfo);

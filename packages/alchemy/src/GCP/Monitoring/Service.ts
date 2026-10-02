@@ -419,7 +419,7 @@ const listPages = (project: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.services ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 const listOwned = (project: string) =>

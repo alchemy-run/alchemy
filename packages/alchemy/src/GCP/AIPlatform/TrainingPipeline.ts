@@ -248,7 +248,6 @@ const listAt = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, parent: string) =>
@@ -272,8 +271,8 @@ const waitUntilGone = (name: string) =>
     Effect.retry({
       while: (error) =>
         error._tag === "GCP.AIPlatform.TrainingPipelineStillExists",
-      times: 10,
-      schedule: Schedule.spaced("2 seconds"),
+      times: 30,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
@@ -338,15 +337,17 @@ export const TrainingPipelineProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const trainingPipelineId = yield* toPhysicalId(
-        id,
-        olds?.trainingPipelineId,
-        output?.trainingPipelineId,
-      );
+      // Pipeline ids are server-assigned numbers, so only a recorded name
+      // or a caller-supplied id can be fetched directly.
+      const trainingPipelineId =
+        olds?.trainingPipelineId ?? output?.trainingPipelineId;
       const name =
-        output?.name ?? resourceName(env.project, location, trainingPipelineId);
+        output?.name ??
+        (trainingPipelineId !== undefined
+          ? resourceName(env.project, location, trainingPipelineId)
+          : undefined);
       const existing =
-        (yield* getByName(name)) ??
+        (name !== undefined ? yield* getByName(name) : undefined) ??
         (yield* findOwned(id, parentOf(env.project, location)));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -416,30 +417,53 @@ export const TrainingPipelineProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const name = output.name;
+      // Custom training runs in a backing CustomJob that outlives the
+      // pipeline; remember it so it can be deleted too.
+      const metadata = (yield* getByName(name))?.trainingTaskMetadata;
+      const backingJob =
+        metadata !== null &&
+        typeof metadata === "object" &&
+        "backingCustomJob" in metadata
+          ? (metadata as { backingCustomJob?: unknown }).backingCustomJob
+          : undefined;
       yield* aiplatform
         .cancelProjectsLocationsTrainingPipelines({ name, body: {} })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.catchTag("BadRequest", () => Effect.void),
           Effect.catchTag("Conflict", () => Effect.void),
-          Effect.catchTag("Forbidden", () => Effect.void),
         );
+      // Delete is rejected until the cancellation reaches a terminal state,
+      // which can take a couple of minutes.
       const operation = yield* aiplatform
         .deleteProjectsLocationsTrainingPipelines({ name })
         .pipe(
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" || error._tag === "BadRequest",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
+            times: 24,
+            schedule: Schedule.spaced("10 seconds"),
           }),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-          Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(name);
+      if (typeof backingJob === "string" && backingJob.length > 0) {
+        const jobDelete = yield* aiplatform
+          .deleteProjectsLocationsCustomJobs({ name: backingJob })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "BadRequest",
+              times: 8,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
+        if (jobDelete !== undefined) {
+          yield* waitForOperation(jobDelete, { notFoundOk: true });
+        }
+      }
     }),
   });

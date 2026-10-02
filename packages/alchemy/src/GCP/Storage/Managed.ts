@@ -113,7 +113,7 @@ const listOnBucket = (bucketName: string) =>
   storage.listManagedFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as storage.ManagedFolder[]),
     ),
   );

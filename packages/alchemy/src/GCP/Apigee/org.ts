@@ -25,7 +25,7 @@ export const listOwnedInstances = (organization: string) =>
       Stream.filter((instance) => hasOwnershipMarker(instance.description)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1Instance[]),
       ),
     );

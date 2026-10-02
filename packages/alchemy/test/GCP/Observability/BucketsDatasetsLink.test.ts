@@ -14,14 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Observability API is entitlement-gated on the default testing project.
-// Live create returns Forbidden: "Observability API has not been used in
-// project alchemy-gcp-testing-83661 before or it is disabled." Link
-// create is also an LRO that provisions a BigQuery linked dataset. Set
-// GCP_TEST_OBSERVABILITY=1 on an entitled project to run the lifecycle.
-const entitled = process.env.GCP_TEST_OBSERVABILITY === "1";
-const runLifecycle = entitled && !process.env.FAST;
-
 const waitUntilGone = (name: string) =>
   observability.getProjectsLocationsBucketsDatasetsLinks({ name }).pipe(
     Effect.as("found" as const),
@@ -33,44 +25,11 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const findSpansDataset = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
-  const defaultDataset = `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`;
-  const locations = ["us-central1", "global", "-"] as const;
-  for (const location of locations) {
-    const buckets = yield* observability
-      .listProjectsLocationsBuckets({
-        parent: `projects/${project}/locations/${location}`,
-        pageSize: 100,
-      })
-      .pipe(
-        Effect.map((page) => page.buckets ?? []),
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          Effect.succeed([] as observability.Bucket[]),
-        ),
-      );
-    for (const bucket of buckets) {
-      if (!bucket.name) continue;
-      const datasets = yield* observability
-        .listProjectsLocationsBucketsDatasets({
-          parent: bucket.name,
-          pageSize: 100,
-        })
-        .pipe(
-          Effect.map((page) => page.datasets ?? []),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed([] as observability.Dataset[]),
-          ),
-        );
-      const spans = datasets.find((dataset) =>
-        (dataset.name ?? "").endsWith("/datasets/Spans"),
-      );
-      if (spans?.name) return spans.name;
-      if (datasets[0]?.name) return datasets[0].name;
-    }
-  }
-  return defaultDataset;
-});
+// The `_Trace` bucket and its `Spans` dataset only exist once the project
+// stores trace data in Observability; until then create fails with
+// BadRequest ("Unable to create link; parent bucket of … is not found").
+// Set GCP_TEST_OBSERVABILITY_DATASET to an existing dataset name.
+const spansDataset = process.env.GCP_TEST_OBSERVABILITY_DATASET;
 
 test.provider(
   "getProjectsLocationsBucketsDatasetsLinks on a missing link fails with a typed tag",
@@ -85,10 +44,7 @@ test.provider(
           name: `${defaultDataset}/links/alchemy-missing-link`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Observability API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -98,14 +54,39 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!!spansDataset)(
+  "createProjectsLocationsBucketsDatasetsLinks without trace storage fails with BadRequest",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(
+        observability.createProjectsLocationsBucketsDatasetsLinks({
+          parent: `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`,
+          linkId: "alchemy_probe_link",
+          body: {},
+        }),
+      );
+      expect(error._tag).toEqual("BadRequest");
+      expect(error.message).toContain("parent bucket");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:observability", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider.skipIf(!spansDataset)(
   "create, update, and delete an observability dataset link",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const dataset = yield* findSpansDataset;
+      const dataset = spansDataset!;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

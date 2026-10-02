@@ -1,5 +1,6 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
+import { OperationFailed } from "../Operation.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -134,13 +135,6 @@ export class InstantSnapshotNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class InstantSnapshotOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InstantSnapshotOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class InstantSnapshotNotReady extends Data.TaggedError(
   "GCP.Compute.InstantSnapshotNotReady",
 )<{
@@ -233,63 +227,6 @@ const getByName = (project: string, zone: string, instantSnapshot: string) =>
   compute
     .getInstantSnapshots({ project, zone, instantSnapshot })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName === undefined) {
-      return yield* new InstantSnapshotOperationFailed({
-        operation: "",
-        message: "zone operation is missing a name",
-      });
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations({
-        project,
-        zone,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        {
-          project,
-          zone,
-          operation: operationName,
-        },
-        { times: 20 },
-      );
-    }
-    const errors = current.error?.errors ?? [];
-    const text = errors
-      .map((item) => `${item.code ?? ""} ${item.message ?? ""}`)
-      .join("; ")
-      .toLowerCase();
-    if (text.includes("already_exists") || text.includes("already exists")) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new InstantSnapshotOperationFailed({
-        operation: operationName,
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") || `operation ${current.status ?? "UNKNOWN"}`,
-      });
-    }
-    return current;
-  });
 
 const waitReady = (project: string, zone: string, name: string) =>
   getByName(project, zone, name).pipe(
@@ -457,10 +394,11 @@ export const InstantSnapshotProvider = () =>
       }
 
       if (current === undefined) {
-        const tooRecent = (error: { _tag: string; message?: string }) =>
-          (error._tag === "GCP.Compute.InstantSnapshotOperationFailed" ||
-            error._tag === "BadRequest") &&
-          (error.message ?? "").toLowerCase().includes("too recent");
+        // "The previous instant snapshot is too recent" — one instant snapshot
+        // per disk every 30 seconds.
+        const tooRecent = (error: { readonly _tag: string }) =>
+          error instanceof OperationFailed &&
+          error.reason === "UNSUPPORTED_OPERATION";
         yield* compute
           .insertInstantSnapshots({
             project: env.project,
@@ -477,12 +415,9 @@ export const InstantSnapshotProvider = () =>
             Effect.flatMap((inserted) =>
               inserted === undefined
                 ? Effect.void
-                : waitZoneOperation(env.project, zone, inserted).pipe(
-                    Effect.catchTag(
-                      "GCP.Compute.OperationPending",
-                      () => Effect.void,
-                    ),
-                  ),
+                : waitZoneOperation(env.project, zone, inserted, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }),
             ),
             Effect.retry({
               while: tooRecent,

@@ -395,13 +395,15 @@ const included = (
 };
 
 const isSkipped = (test: TestCase): "skip" | "todo" | undefined => {
-  if (test.mode === "todo" || test.body === undefined) return "todo";
+  if (test.mode === "todo") return "todo";
   let node: Suite | TestCase | undefined = test;
   while (node !== undefined) {
     if (node.mode === "skip") return "skip";
     node = node.parent;
   }
-  return undefined;
+  // Wrappers (e.g. alchemy's `test.skipIf`) drop the body of skipped tests,
+  // so a missing body only means "todo" once skip has been ruled out.
+  return test.body === undefined ? "todo" : undefined;
 };
 
 const hookChain = (
@@ -867,7 +869,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
 
   // Assign each case once, in phase/branch declaration order, before execution.
   const assigned = new Set<TestCase>();
-  const lastFilePhase = new Map<string, number>();
+  const remainingFileBranches = new Map<string, number>();
   const candidates: Array<{ file: string; test: TestCase }> = [];
   const candidateOptions = {
     ...options,
@@ -885,19 +887,26 @@ export const run = Effect.fn(function* (input: RunOptions) {
           candidates.push({ file: c.file, test });
       });
   }
-  const phases = (input.plan ?? [{ tags: [] }]).map((phase, phaseIndex) =>
+  const phases = (input.plan ?? [{ tags: [] }]).map((phase) =>
     (Array.isArray(phase) ? phase : [phase]).map((branch) => {
       const tagsFilter = compileTagsFilter([
         ...(input.tagsFilter ?? []),
         ...branch.tags,
       ]);
       const selectedTests = new Set<TestCase>();
+      const selectedFiles = new Set<string>();
       for (const { file, test } of candidates) {
         if (!assigned.has(test) && tagsFilter(test.tags, test.optInTags)) {
           assigned.add(test);
-          lastFilePhase.set(file, phaseIndex);
+          selectedFiles.add(file);
           selectedTests.add(test);
         }
+      }
+      for (const file of selectedFiles) {
+        remainingFileBranches.set(
+          file,
+          (remainingFileBranches.get(file) ?? 0) + 1,
+        );
       }
       return {
         ...options,
@@ -1058,13 +1067,36 @@ export const run = Effect.fn(function* (input: RunOptions) {
     if (fileError !== undefined) {
       fileFailures.push({ file: c.file, error: fileError });
     }
-    if (input.plan === undefined || c.suite === undefined)
-      yield* emit({
-        _tag: "FileEnd",
-        file: c.file,
-        logs: fileLogs,
-        error: fileError,
-      });
+    if (input.plan !== undefined && c.suite !== undefined) {
+      // Count completed visits rather than declaration order: branches in a
+      // phase run concurrently, and any of them may finish this file last.
+      const remaining = remainingFileBranches.get(c.file)! - 1;
+      remainingFileBranches.set(c.file, remaining);
+      if (remaining > 0) return;
+
+      // Keep scopes only while another selected branch still needs the file.
+      // Teardown stays inside its concurrency slot and per-file lock so new
+      // files cannot accumulate resources retained until the end of a phase.
+      const ctx = fileContexts.get(c.file)!;
+      for (const suite of [...ctx.suiteStates!.keys()].reverse())
+        yield* runAfterAll(suite, ctx);
+      if (ctx.fileErrors.length > 0)
+        fileFailures.push({
+          file: ctx.file,
+          error: ctx.fileErrors.join("\n\n"),
+        });
+      fileError =
+        fileFailures
+          .filter((failure) => failure.file === c.file)
+          .map((failure) => failure.error)
+          .join("\n\n") || undefined;
+    }
+    yield* emit({
+      _tag: "FileEnd",
+      file: c.file,
+      logs: fileLogs,
+      error: fileError,
+    });
   });
 
   // Import errors are reported once even if no branch selects that file.
@@ -1101,36 +1133,6 @@ export const run = Effect.fn(function* (input: RunOptions) {
         ),
       { concurrency: "unbounded", discard: true },
     );
-    if (input.plan !== undefined) {
-      // Keep cached scopes across phases, then close child suites before parents
-      // as soon as the file's final phase finishes (before starting the next phase).
-      yield* Effect.forEach(
-        [...fileContexts.values()].filter(
-          (ctx) => lastFilePhase.get(ctx.file) === index,
-        ),
-        (ctx) =>
-          Effect.gen(function* () {
-            for (const suite of [...ctx.suiteStates!.keys()].reverse())
-              yield* runAfterAll(suite, ctx);
-            if (ctx.fileErrors.length > 0)
-              fileFailures.push({
-                file: ctx.file,
-                error: ctx.fileErrors.join("\n\n"),
-              });
-            yield* emit({
-              _tag: "FileEnd",
-              file: ctx.file,
-              logs: ctx.fileLogs,
-              error:
-                fileFailures
-                  .filter((failure) => failure.file === ctx.file)
-                  .map((failure) => failure.error)
-                  .join("\n\n") || undefined,
-            });
-          }),
-        { concurrency: options.concurrency, discard: true },
-      );
-    }
   }
 
   const failures = allResults.filter((r) => r.result.status === "fail");

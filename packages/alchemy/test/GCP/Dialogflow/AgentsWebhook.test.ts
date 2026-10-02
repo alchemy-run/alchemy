@@ -5,7 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent } from "./parent.ts";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -15,8 +15,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
-const location = "us-central1";
+const runLifecycle = !process.env.FAST;
+// Non-global Dialogflow CX locations need the {region}-dialogflow host, which
+// distilled does not route to yet; the global location works everywhere.
+const location = "global";
 const agentDisplayName = "alch-df-wh";
 
 const waitUntilGone = (name: string) =>
@@ -42,10 +44,10 @@ test.provider(
           name: `projects/${project}/locations/${location}/agents/missing/webhooks/missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 90_000,
@@ -87,7 +89,7 @@ test.provider.skipIf(!runLifecycle)(
           name: created.name,
         });
         expect(fetched.name).toEqual(created.name);
-        expect(fetched.displayName).toContain("alchemy-id=");
+        expect(fetched.displayName).toMatch(/^\[(alchemy|alc) /);
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
@@ -115,7 +117,7 @@ test.provider.skipIf(!runLifecycle)(
         const gone = yield* waitUntilGone(created.name);
         expect(gone).toEqual("gone");
       }).pipe(Effect.ensuring(deleteAgent(agentName)));
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 120_000,

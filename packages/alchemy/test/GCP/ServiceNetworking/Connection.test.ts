@@ -7,6 +7,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -15,8 +16,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !!process.env.GCP_TEST_SERVICE_NETWORKING && !process.env.FAST;
 const parent = "services/servicenetworking.googleapis.com";
 
 const waitUntilGone = (consumerNetwork: string) =>
@@ -55,7 +54,6 @@ test.provider(
         parent,
         network: `projects/${projectNumber}/global/networks/alchemy-sn-missing`,
       });
-      expect(Array.isArray(page.connections ?? [])).toEqual(true);
       expect(page.connections ?? []).toEqual([]);
 
       yield* stack.destroy();
@@ -66,7 +64,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a service networking connection",
   (stack) =>
     Effect.gen(function* () {
@@ -172,9 +170,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.connection.network);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:servicenetworking", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

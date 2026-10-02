@@ -160,7 +160,7 @@ const getByEntity = (
 const listOnObject = (bucketName: string, object: string) =>
   storage.listObjectAccessControls({ bucket: bucketName, object }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as storage.ObjectAccessControl[]),
     ),
   );
@@ -169,7 +169,7 @@ const listObjectsOnBucket = (bucketName: string) =>
   storage.listObjects.items({ bucket: bucketName, maxResults: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as storage.Storage_Object[]),
     ),
   );
@@ -255,7 +255,12 @@ export const ObjectAccessControlProvider = () =>
           buckets,
           (bucket) => {
             const bucketName = bucket.name;
-            if (!bucketName) {
+            // Legacy ACL APIs reject uniform bucket-level access buckets.
+            if (
+              !bucketName ||
+              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
+                true
+            ) {
               return Effect.succeed(
                 [] as Array<ObjectAccessControl["Attributes"]>,
               );
@@ -363,7 +368,9 @@ export const ObjectAccessControlProvider = () =>
           Effect.as(true),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
           // GCS refuses to drop the last OWNER ACL on an object.
-          Effect.catchTag("Forbidden", () => Effect.succeed(false)),
+          Effect.catchTag("ObjectOwnerAclRequired", () =>
+            Effect.succeed(false),
+          ),
         );
       if (removed) {
         yield* waitUntilGone(bucketName, object, entity, output.generation);

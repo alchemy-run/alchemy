@@ -198,7 +198,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersApps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const listDeveloperEmails = (organization: string) =>
   apigee
@@ -213,7 +217,7 @@ const listDeveloperEmails = (organization: string) =>
           .map((developer) => developer.email ?? "")
           .filter((email) => email.length > 0),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as string[]),
       ),
     );
@@ -293,7 +297,7 @@ export const DevelopersAppProvider = () =>
                 count: "1000",
               })
               .pipe(
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                   Effect.succeed({
                     app: [] as apigee.GoogleCloudApigeeV1DeveloperApp[],
                   }),
@@ -394,6 +398,11 @@ export const DevelopersAppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsDevelopersApps({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

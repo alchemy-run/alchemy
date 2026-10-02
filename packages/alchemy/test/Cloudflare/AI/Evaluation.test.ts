@@ -96,15 +96,16 @@ test.provider(
         id: initial.evaluation.evaluationId,
       });
       expect(live.name).toEqual("alchemy-test-eval");
-      expect(live.datasets.map((d) => d.id)).toEqual([
-        initial.dataset.datasetId,
-      ]);
+      // The API returns an empty `datasets` list for a fresh evaluation, so
+      // there is nothing to assert on `live.datasets`.
 
       // Redeploying identical props is a no-op (still the same evaluation).
       const noop = yield* stack.deploy(program("alchemy-test-eval"));
       expect(noop.evaluation.evaluationId).toEqual(
         initial.evaluation.evaluationId,
       );
+      // The observed evaluation lists no datasets; state keeps the requested ids.
+      expect(noop.evaluation.datasetIds).toEqual([initial.dataset.datasetId]);
 
       // Evaluations are create-only — renaming is a replacement.
       const renamed = yield* stack.deploy(program("alchemy-test-eval-v2"));

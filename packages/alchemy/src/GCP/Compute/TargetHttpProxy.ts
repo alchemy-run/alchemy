@@ -1,8 +1,7 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -128,14 +127,6 @@ export class TargetHttpProxyNotResolved extends Data.TaggedError(
   targetHttpProxyName: string;
 }> {}
 
-export class TargetHttpProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetHttpProxyOperationFailed",
-)<{
-  targetHttpProxyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
@@ -210,53 +201,6 @@ const getByName = (project: string, targetHttpProxy: string) =>
   compute
     .getTargetHttpProxies({ project, targetHttpProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const failIfErrored = (
-  targetHttpProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new TargetHttpProxyOperationFailed({
-        targetHttpProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  targetHttpProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetHttpProxyName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(targetHttpProxyName, operation);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (op) => op.status === "DONE",
-        times: 8,
-      }),
-    );
-    return yield* failIfErrored(targetHttpProxyName, done);
-  });
 
 export const TargetHttpProxyProvider = () =>
   Provider.succeed(TargetHttpProxy, {
@@ -345,7 +289,7 @@ export const TargetHttpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpProxyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -365,7 +309,7 @@ export const TargetHttpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpProxyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, targetHttpProxyName);
@@ -404,7 +348,7 @@ export const TargetHttpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetHttpProxyName, operation),
+              waitGlobalOperation(env.project, operation),
             ),
           );
         current = yield* getByName(env.project, targetHttpProxyName);
@@ -427,11 +371,9 @@ export const TargetHttpProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.targetHttpProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

@@ -45,7 +45,9 @@ test.provider(
           pageSize: 10,
         },
       );
-      expect(Array.isArray(page.reservations ?? [])).toEqual(true);
+      expect(
+        (page.reservations ?? []).map((item) => item.name?.split("/").pop()),
+      ).not.toContain("alchemy-bq-reservation-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),

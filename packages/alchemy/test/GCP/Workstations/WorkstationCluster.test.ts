@@ -13,7 +13,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_WORKSTATIONS;
+// Workstation clusters take ~20 minutes to create and delete.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 test.provider(
   "getProjectsLocationsWorkstationClusters on a missing cluster fails with a typed tag",
@@ -27,19 +28,19 @@ test.provider(
           name: `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* workstations
-        .listProjectsLocationsWorkstationClusters({
+      const page = yield* workstations.listProjectsLocationsWorkstationClusters(
+        {
           parent: `projects/${project}/locations/-`,
           pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ workstationClusters: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.workstationClusters ?? [])).toEqual(true);
+        },
+      );
+      expect(
+        (page.workstationClusters ?? []).map((item) => item.name),
+      ).not.toContain(
+        `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -50,7 +51,7 @@ test.provider(
 );
 
 test.provider.skipIf(!runLifecycle)(
-  "create against a missing network is rejected with a typed tag",
+  "create against a missing network fails with GCP.OperationFailed",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -68,19 +69,18 @@ test.provider.skipIf(!runLifecycle)(
           }),
         ),
       );
-      expect([
-        "BadRequest",
-        "NotFound",
-        "Forbidden",
-        "GCP.Workstations.OperationFailed",
-        "GCP.Workstations.ResourceNotResolved",
-      ]).toContain(error._tag);
+      // The cluster is accepted and provisioned before the network is
+      // validated, so the create operation fails late (~50 minutes).
+      expect(error._tag).toEqual("GCP.OperationFailed");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:workstations", "live"],
-    timeout: 90_000,
+    // One attempt that outlasts GCP's late failure; a retry would restart
+    // the ~50-minute wait from scratch.
+    timeout: 4_500_000,
+    retry: 0,
   },
 );
 
@@ -205,6 +205,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:workstations", "live"],
-    timeout: 90_000,
+    timeout: 3_600_000,
   },
 );

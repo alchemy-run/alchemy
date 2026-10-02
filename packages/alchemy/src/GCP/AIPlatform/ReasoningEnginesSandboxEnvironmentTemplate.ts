@@ -8,7 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
+import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -17,6 +17,7 @@ import {
   lastSegment,
   normalizeLocation,
   parentOf,
+  ownsDisplayName,
   parseDisplayName,
   parseName,
   listLocations,
@@ -176,7 +177,6 @@ const getByName = (name: string) =>
         })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
           Effect.catchTag("SandboxEnvironmentsNotEnabled", () =>
             Effect.succeed(undefined),
           ),
@@ -193,7 +193,6 @@ const listAt = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, parent: string) =>
@@ -201,7 +200,7 @@ const findOwned = (id: string, parent: string) =>
     const templates = yield* listAt(parent);
     for (const template of templates) {
       const parsed = parseDisplayName(template.displayName);
-      if (yield* hasAlchemyLabels(id, parsed.labels)) {
+      if (yield* ownsDisplayName(id, template.displayName)) {
         return template;
       }
     }
@@ -239,7 +238,6 @@ const listEngines = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
@@ -283,11 +281,12 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
         olds?.location ?? output?.location,
         env.region,
       );
-      const parent = engineNameOf(
-        env.project,
-        location,
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const parentRef = olds?.reasoningEngine ?? output?.reasoningEngine;
+      // A create interrupted before its parent resolved has nothing to find.
+      if (output?.name === undefined && typeof parentRef !== "string") {
+        return undefined;
+      }
+      const parent = engineNameOf(env.project, location, parentRef ?? "");
       const existing =
         (output?.name !== undefined
           ? yield* getByName(output.name)
@@ -295,7 +294,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDisplayName(existing.displayName);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
+      return (yield* ownsDisplayName(id, existing.displayName))
         ? attrs
         : Unowned(attrs);
     }),
@@ -348,13 +347,12 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
             }),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
-        }
-        const createdName =
+        const done =
           created !== undefined
-            ? resourceNameFromOperation(created)
+            ? yield* waitForOperation(created, { alreadyExistsOk: true })
             : undefined;
+        const createdName =
+          done !== undefined ? resourceNameFromOperation(done) : undefined;
         current =
           createdName !== undefined
             ? yield* getByName(createdName)

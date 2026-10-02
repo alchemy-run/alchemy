@@ -193,7 +193,8 @@ test.provider.skipIf(!runLifecycle)(
           repository: created.name,
           refType: "BRANCH",
         });
-      expect(Array.isArray(refs.refNames ?? [])).toEqual(true);
+      // Every repository has at least its default branch.
+      expect(refs.refNames?.length ?? 0).toBeGreaterThan(0);
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {

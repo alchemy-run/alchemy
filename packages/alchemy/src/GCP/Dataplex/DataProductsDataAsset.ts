@@ -166,7 +166,6 @@ const listAtParent = (parent: string) =>
       items.filter((item) => hasAlchemyLabelMap(item.labels)),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([])),
   );
 
 export const DataProductsDataAssetProvider = () =>
@@ -308,9 +307,10 @@ export const DataProductsDataAssetProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* dataplex
+        // No etag: the recorded one goes stale as the server settles an
+        // update ("Provided etag is out of date"), and delete is unconditional.
         .deleteProjectsLocationsDataProductsDataAssets({
           name: output.name,
-          etag: output.etag,
         })
         .pipe(
           Effect.retry({

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -194,13 +194,6 @@ export class RegionDiskNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionDiskOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionDiskOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionDiskNotReady extends Data.TaggedError(
   "GCP.Compute.RegionDiskNotReady",
 )<{
@@ -304,79 +297,6 @@ const getByName = (project: string, region: string, disk: string) =>
   compute
     .getRegionDisks({ project, region, disk })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const waitRegionOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName === undefined) {
-      return yield* new RegionDiskOperationFailed({
-        operation: "",
-        message: "region operation is missing a name",
-      });
-    }
-
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations(
-        {
-          project,
-          region,
-          operation: operationName,
-        },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations(
-        {
-          project,
-          region,
-          operation: operationName,
-        },
-        { times: 10 },
-      ).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-
-    const errors = current.error?.errors ?? [];
-    const codes = operationCodes(current);
-    if (
-      codes.includes("alreadyExists") ||
-      codes.includes("RESOURCE_ALREADY_EXISTS")
-    ) {
-      return current;
-    }
-    if (errors.length > 0 || current.status !== "DONE") {
-      return yield* new RegionDiskOperationFailed({
-        operation: operationName,
-        message:
-          errors
-            .map((item) => item.message ?? item.code ?? "unknown")
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-      });
-    }
-    return current;
-  });
 
 const waitDiskReady = (project: string, region: string, diskName: string) =>
   getByName(project, region, diskName).pipe(
@@ -584,7 +504,9 @@ export const RegionDiskProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitRegionOperation(env.project, region, inserted);
+          yield* waitRegionOperation(env.project, region, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitDiskReady(env.project, region, diskName);
       }
@@ -683,14 +605,9 @@ export const RegionDiskProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (deleted !== undefined) {
-        yield* waitRegionOperation(output.project, output.region, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RegionDiskOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitRegionOperation(output.project, output.region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitDiskGone(output.project, output.region, output.diskName);
     }),

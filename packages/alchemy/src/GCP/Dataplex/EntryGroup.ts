@@ -120,8 +120,9 @@ export type EntryGroup = Resource<
  * ### Updating an Entry Group
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const group = yield* GCP.Dataplex.EntryGroup("Catalog", {
- *   entryGroupId: existing.entryGroupId,
+ *   entryGroupId: "app-catalog",
  *   description: "catalog v2",
  *   labels: { env: "prod", team: "data" },
  * });

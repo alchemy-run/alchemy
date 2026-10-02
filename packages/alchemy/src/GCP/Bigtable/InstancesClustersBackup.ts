@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  backupName,
   clusterIdOf,
   clusterNameOf,
   instanceIdOf,
@@ -20,6 +19,7 @@ import {
   tableNameOf,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 const DEFAULT_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -208,11 +208,7 @@ const toAttrs = (backup: bigtable.Backup, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClustersBackups({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -350,17 +346,17 @@ export const InstancesClustersBackupProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesClustersBackups({
+            collectPages(
+              bigtable.listProjectsInstancesClustersBackups.pages({
                 parent: `${instance.name}/clusters/-`,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.backups ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.Backup[]),
-                ),
+              }),
+              (page) => page.backups,
+            ).pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as bigtable.Backup[]),
               ),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((backup) => toAttrs(backup, env.project));
@@ -435,7 +431,7 @@ export const InstancesClustersBackupProvider = () =>
       yield* bigtable
         .deleteProjectsInstancesClustersBackups({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

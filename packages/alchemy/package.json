@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.79",
+  "version": "2.0.0-beta.80",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -256,6 +256,16 @@
         "types": "./lib/Axiom/index.d.ts",
         "bun": "./src/Axiom/index.ts",
         "default": "./lib/Axiom/index.js"
+      },
+      "./GCP": {
+        "types": "./lib/GCP/index.d.ts",
+        "bun": "./src/GCP/index.ts",
+        "default": "./lib/GCP/index.js"
+      },
+      "./GCP/*": {
+        "types": "./lib/GCP/*/index.d.ts",
+        "bun": "./src/GCP/*/index.ts",
+        "default": "./lib/GCP/*/index.js"
       },
       "./GitHub": {
         "types": "./lib/GitHub/index.d.ts",

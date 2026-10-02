@@ -10,7 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const OWNERSHIP_PREFIX = "alch-";
@@ -397,7 +397,7 @@ const listInstanceBackups = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.instanceBackups ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 const listOwned = (project: string, region: string) =>
@@ -411,20 +411,24 @@ const listOwned = (project: string, region: string) =>
       Stream.filter((instance) => (instance.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as looker.Instance[]),
       ),
       Effect.flatMap((instances) =>
         instances.length > 0
           ? Effect.succeed(instances)
-          : looker
-              .listProjectsLocationsInstances({
+          : looker.listProjectsLocationsInstances
+              .pages({
                 parent: `projects/${project}/locations/${region}`,
                 pageSize: 1000,
               })
               .pipe(
-                Effect.map((page) => page.instances ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Stream.flatMap((page) =>
+                  Stream.fromIterable(page.instances ?? []),
+                ),
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed([] as looker.Instance[]),
                 ),
               ),
@@ -563,12 +567,9 @@ export const InstancesBackupProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const done = yield* waitForOperation(created);
-          const createdName = resourceNameFromOperation(done) ?? name;
-          current = yield* waitUntilExists(createdName);
-        } else {
-          current = yield* waitUntilExists(output?.name ?? name);
+          yield* waitForOperation(created);
         }
+        current = yield* waitUntilExists(output?.name ?? name);
       }
 
       if (current === undefined) {

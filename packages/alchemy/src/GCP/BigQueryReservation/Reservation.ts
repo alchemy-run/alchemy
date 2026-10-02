@@ -363,7 +363,6 @@ const listOwnedAt = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const desiredAutoscale = (
@@ -481,7 +480,7 @@ export const ReservationProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
-          Array.from(new Set(["-", env.region, "US", "EU"])),
+          Array.from(new Set([env.region, "US", "EU"])),
           (location) => listOwnedAt(env.project, location),
           { concurrency: 4 },
         );

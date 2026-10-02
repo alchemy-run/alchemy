@@ -21,7 +21,7 @@ import {
   toPhysicalId,
   tryResolveOrganization,
 } from "./internal.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 export type OrganizationBucketsLinkProps = {
   /**
@@ -317,16 +317,13 @@ export const OrganizationBucketsLinkProvider = () =>
                           toAttrs(link, bucket.name ?? "", env.project),
                         ),
                         Stream.catchTag("NotFound", () => Stream.empty),
-                        Stream.catchTag("Forbidden", () => Stream.empty),
                       )
                   : Stream.empty,
               { concurrency: 4 },
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 
@@ -377,7 +374,7 @@ export const OrganizationBucketsLinkProvider = () =>
         .deleteOrganizationsLocationsBucketsLinks({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilDeleted(output.name);
     }),

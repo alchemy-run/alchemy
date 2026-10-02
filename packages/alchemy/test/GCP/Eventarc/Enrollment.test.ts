@@ -14,10 +14,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Enrollment depends on Pipeline, whose create/delete LROs take several
-// minutes (observed ~4m).
-const runLifecycle =
-  !process.env.FAST && process.env.GCP_TEST_EVENTARC_PIPELINE === "1";
+// Enrollment depends on a Pipeline, whose create/update/delete LROs take
+// over 15 minutes end to end.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 const LOCATION = "europe-west1";
 
 const waitUntilGone = (name: string) =>
@@ -43,7 +42,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/enrollments/alchemy-missing-enrollment`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -141,5 +140,8 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.enrollment.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:eventarc", "live"], timeout: 180_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+    timeout: 2_400_000,
+  },
 );

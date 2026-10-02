@@ -8,7 +8,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  hasOwnershipMarker,
   listChildResources,
   listEntities,
   listLakes,
@@ -16,6 +15,7 @@ import {
   listZones,
   parseResourceName,
   replaceIfChanged,
+  hasAlchemyLabelMap,
 } from "./shared.ts";
 
 export type LakesEntitiesPartitionProps = {
@@ -63,9 +63,9 @@ export type LakesEntitiesPartition = Resource<
 /**
  * A Dataplex metadata partition under a zone entity.
  *
- * Partitions have no labels or description field. Alchemy lists
- * partitions of entities that carry an ownership marker so `pnpm nuke`
- * can find them. Identity is the parent entity plus `values`; changing
+ * Partitions have no labels or description field: `read` reports a
+ * partition it finds without prior state as unowned, and `list` returns
+ * the partitions of entities in Alchemy-labeled lakes. Identity is the parent entity plus `values`; changing
  * `entity`, `values`, or `location` replaces the partition.
  *
  * ### Creating a Partition
@@ -120,14 +120,11 @@ const getByName = (name: string) =>
     .getProjectsLocationsLakesZonesEntitiesPartitions({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const getEntity = (name: string) =>
-  dataplex
-    .getProjectsLocationsLakesZonesEntities({ name, view: "BASIC" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
 const listOwnedEntityNames = (project: string, region: string) =>
   Effect.gen(function* () {
-    const lakes = yield* listLakes(project, region);
+    const lakes = (yield* listLakes(project, region)).filter((lake) =>
+      hasAlchemyLabelMap(lake.labels),
+    );
     const zones = yield* listChildResources(lakes, listZones);
     const named = zones.filter((zone) => (zone.name ?? "").length > 0);
     const tables = yield* Effect.forEach(
@@ -141,7 +138,6 @@ const listOwnedEntityNames = (project: string, region: string) =>
       { concurrency: 4 },
     );
     return [...tables.flat(), ...filesets.flat()]
-      .filter((entity) => hasOwnershipMarker(entity.description))
       .map((entity) => entity.name)
       .filter((name): name is string => (name ?? "").length > 0);
   });
@@ -188,10 +184,8 @@ export const LakesEntitiesPartitionProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, entity);
-      const parent = yield* getEntity(attrs.entity);
-      return parent !== undefined && hasOwnershipMarker(parent.description)
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state the partition may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>

@@ -14,7 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_REDIS && !process.env.FAST;
+// Memorystore instance create + update + delete runs well past 5 minutes.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   redis.getProjectsLocationsInstances({ name }).pipe(
@@ -46,7 +47,11 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.instances ?? [])).toEqual(true);
+      expect(
+        (page.instances ?? []).map((instance) =>
+          instance.name?.split("/").pop(),
+        ),
+      ).not.toContain("alchemy-redis-missing");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -118,5 +123,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:redis", "live"], timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:redis", "live"], timeout: 1_800_000 },
 );

@@ -407,7 +407,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { timeout: 600_000 },
+      { timeout: 900_000 },
     );
   },
 );

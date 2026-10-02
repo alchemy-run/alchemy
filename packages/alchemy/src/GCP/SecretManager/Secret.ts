@@ -500,7 +500,16 @@ export const SecretProvider = () =>
             secretId,
             body: toCreateBody(news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
+          .pipe(
+            // A just-deleted secret (replacement) keeps its id reserved for
+            // a few seconds after reads report it missing.
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
+            Effect.catchTag("Conflict", () => getByName(name)),
+          );
         current = created ?? undefined;
       }
 
@@ -592,5 +601,6 @@ export const SecretProvider = () =>
       yield* secretmanager
         .deleteProjectsSecrets({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* waitUntilMissing(output.name);
     }),
   });

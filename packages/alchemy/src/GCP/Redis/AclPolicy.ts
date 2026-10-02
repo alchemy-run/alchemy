@@ -2,28 +2,21 @@ import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 const MAX_NAME_LENGTH = 63;
-const OWNERSHIP_USERNAME = "alchemy-owner";
 
 export type AclRule = {
   /**
    * Redis ACL username. For IAM auth this is an IAM user or service
-   * account; otherwise any Redis ACL username. The username
-   * `alchemy-owner` is reserved for Alchemy ownership stamping.
+   * account; otherwise any Redis ACL username.
    */
   username?: string;
   /**
@@ -50,9 +43,7 @@ export type AclPolicyProps = {
    */
   location?: string;
   /**
-   * Redis ACL rules applied to clusters that attach this policy. Alchemy
-   * appends a disabled `alchemy-owner` sentinel used for `list` / nuke
-   * because ACL policies have no labels or description field.
+   * Redis ACL rules applied to clusters that attach this policy.
    */
   rules?: AclRule[];
 };
@@ -69,7 +60,7 @@ export type AclPolicy = Resource<
     project: string;
     /** Region id (`us-central1`, …). */
     location: string;
-    /** User ACL rules (Alchemy ownership sentinel stripped). */
+    /** ACL rules. */
     rules: AclRule[];
     /** Server-reported state (`ACTIVE`, `UPDATING`, `DELETING`, …). */
     state: string | undefined;
@@ -85,8 +76,9 @@ export type AclPolicy = Resource<
 /**
  * A Memorystore for Redis Cluster ACL policy.
  *
- * ACL policies have no labels field, so Alchemy stamps ownership into a
- * disabled `alchemy-owner` sentinel rule for `list` / `pnpm nuke:gcp`.
+ * ACL policies have no labels field, so Alchemy identifies a policy by
+ * its id: a policy found under the generated id is adopted, one found
+ * under an explicit `aclPolicyId` without state is reported as unowned.
  * `aclPolicyId` and `location` are identity — changing either replaces
  * the policy. `rules` update in place. Create is synchronous; patch and
  * delete return long-running operations.
@@ -115,10 +107,11 @@ export type AclPolicy = Resource<
  * ```
  *
  * ### Updating Rules
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Add a command to an existing user
  * ```typescript
  * const policy = yield* GCP.Redis.AclPolicy("AppAcl", {
- *   aclPolicyId: existing.aclPolicyId,
  *   location: "us-central1",
  *   rules: [{ username: "app", rule: "on ~keys:* +get +set" }],
  * });
@@ -140,19 +133,6 @@ export class AclPolicyNotReady extends Data.TaggedError(
 )<{
   name: string;
   state: string;
-}> {}
-
-export class AclPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Redis.AclPolicyOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class AclPolicyOperationPending extends Data.TaggedError(
-  "GCP.Redis.AclPolicyOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class AclPolicyStillExists extends Data.TaggedError(
@@ -225,55 +205,9 @@ const ruleOf = (rule: redis.AclRule | AclRule): AclRule => ({
   rule: rule.rule,
 });
 
-const isOwnershipRule = (rule: redis.AclRule | AclRule) =>
-  (rule.username ?? "") === OWNERSHIP_USERNAME;
-
-const encodeOwnershipRule = (
-  labels: Record<string, string>,
-): redis.AclRule => ({
-  username: OWNERSHIP_USERNAME,
-  rule: `off ~${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ~${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ~${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]} -@all`,
-});
-
-const parseOwnershipRule = (
-  rule: redis.AclRule | AclRule | undefined,
-): Record<string, string> => {
-  if (!isOwnershipRule(rule ?? {})) return {};
-  const labels: Record<string, string> = {};
-  for (const part of (rule?.rule ?? "").split(/\s+/)) {
-    if (!part.startsWith("~")) continue;
-    const body = part.slice(1);
-    const eq = body.indexOf("=");
-    if (eq > 0) {
-      labels[body.slice(0, eq)] = body.slice(eq + 1);
-    }
-  }
-  return labels;
-};
-
-const ownershipLabelsOf = (
-  rules: readonly (redis.AclRule | AclRule)[] | undefined,
-): Record<string, string> => {
-  for (const rule of rules ?? []) {
-    const labels = parseOwnershipRule(rule);
-    if (Object.keys(labels).some((key) => key.startsWith("alchemy-"))) {
-      return labels;
-    }
-  }
-  return {};
-};
-
-const hasOwnershipMarker = (
-  rules: readonly (redis.AclRule | AclRule)[] | undefined,
-) =>
-  Object.keys(ownershipLabelsOf(rules)).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
 const userRulesOf = (
   rules: readonly (redis.AclRule | AclRule)[] | undefined,
-): AclRule[] =>
-  (rules ?? []).filter((rule) => !isOwnershipRule(rule)).map(ruleOf);
+): AclRule[] => (rules ?? []).map(ruleOf);
 
 const rulesKey = (rules: readonly AclRule[]) =>
   JSON.stringify(
@@ -289,10 +223,8 @@ const rulesKey = (rules: readonly AclRule[]) =>
       ),
   );
 
-const desiredRules = (
-  news: AclPolicyProps,
-  labels: Record<string, string>,
-): redis.AclRule[] => [...userRulesOf(news.rules), encodeOwnershipRule(labels)];
+const desiredRules = (news: AclPolicyProps): redis.AclRule[] =>
+  userRulesOf(news.rules);
 
 const toAttrs = (policy: redis.AclPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
@@ -319,70 +251,35 @@ const getByName = (name: string) =>
     .getProjectsLocationsAclPolicies({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/** Wait for an operation through the shared GCP waiter. */
 const waitForOperation = (
   operation: redis.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new AclPolicyOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new AclPolicyOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = redis.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<redis.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new AclPolicyOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new AclPolicyOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Redis.AclPolicyOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("4 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      redis
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<redis.Operation>({ name, done: true })
+              : Effect.fail(error),
+          ),
+        ),
+    { budget: "10 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -481,34 +378,11 @@ export const AclPolicyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, ownershipLabelsOf(existing.rules)))
+      // No labels: state or the generated id proves ownership.
+      return output !== undefined || olds?.aclPolicyId === undefined
         ? attrs
         : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        return yield* redis.listProjectsLocationsAclPolicies
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 1000,
-          })
-          .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.aclPolicies ?? []),
-            ),
-            Stream.filter(
-              (policy) =>
-                !isPlaceholder(policy) && hasOwnershipMarker(policy.rules),
-            ),
-            Stream.map((policy) => toAttrs(policy, env.project, env.region)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-          );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -522,8 +396,7 @@ export const AclPolicyProvider = () =>
         env.region,
       );
       const name = resourceName(env.project, location, aclPolicyId);
-      const ownership = yield* createInternalLabels(id);
-      const bodyRules = desiredRules(news, ownership);
+      const bodyRules = desiredRules(news);
 
       let current = yield* getByName(output?.name ?? name);
       if (current !== undefined && (current.state ?? "") === "DELETING") {
@@ -556,9 +429,7 @@ export const AclPolicyProvider = () =>
 
       const rulesChanged =
         rulesKey(userRulesOf(current.rules)) !==
-          rulesKey(userRulesOf(news.rules)) ||
-        rulesKey([ruleOf(encodeOwnershipRule(ownership))]) !==
-          rulesKey((current.rules ?? []).filter(isOwnershipRule).map(ruleOf));
+        rulesKey(userRulesOf(news.rules));
 
       if (rulesChanged) {
         const patched = yield* redis
@@ -595,12 +466,7 @@ export const AclPolicyProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag(
-            "GCP.Redis.AclPolicyOperationPending",
-            () => Effect.void,
-          ),
-        );
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
     }),

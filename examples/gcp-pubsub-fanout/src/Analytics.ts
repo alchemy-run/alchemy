@@ -19,7 +19,6 @@ export default class Analytics extends GCP.Function<Analytics>()(
   "Analytics",
   {
     main: import.meta.url,
-    location: "us-central1",
   },
   Effect.gen(function* () {
     const table = yield* GCP.BigQuery.WriteTable(OrderEventsTable);

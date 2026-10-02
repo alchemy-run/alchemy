@@ -10,6 +10,24 @@ import {
   createInternalLabels,
   hasAlchemyLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
+
+/**
+ * Dialogflow's "All other requests per minute" quota is shared by the whole
+ * project and distilled's default backoff gives up within ~30s, before the
+ * minute window resets. Lifecycles are idempotent, so re-run them once the
+ * window has rolled over.
+ */
+export const retryQuota = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "TooManyRequests",
+      times: 6,
+      schedule: Schedule.spaced("20 seconds"),
+    }),
+  );
 
 export const DEFAULT_LOCATION = "global";
 export const DEFAULT_SESSION = "alchemy";
@@ -265,11 +283,15 @@ export const encodeOwnershipLine = (
   text: string | undefined,
   maxLength = MAX_DISPLAY_NAME_LENGTH,
 ): string => {
-  const marker =
-    maxLength < 54
-      ? fitCompactMarker(labels, maxLength)
-      : fitMarker(labels, maxLength);
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
+  // Reserve room for the user's text so the marker shrinks instead of the
+  // text being cut off (a compact marker keeps all three ownership fields).
+  const reserved = trimmed
+    ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 16))
+    : 0;
+  const room = maxLength - reserved;
+  const marker =
+    room < 54 ? fitCompactMarker(labels, room) : fitMarker(labels, room);
   if (!trimmed) return marker;
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -370,7 +392,6 @@ export const listPages = <A, E, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound" as never, () => Effect.succeed([] as A[])),
-    Effect.catchTag("Forbidden" as never, () => Effect.succeed([] as A[])),
   );
 
 const collect = <Page, Item, E extends { _tag: string }, R>(
@@ -382,8 +403,7 @@ const collect = <Page, Item, E extends { _tag: string }, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchIf(
-      (error): error is E =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E => error._tag === "NotFound",
       () => Effect.succeed([] as Item[]),
     ),
   );
@@ -399,7 +419,7 @@ export const listAgents = (project: string, location?: string) =>
         collect(
           dialogflow.listProjectsLocationsAgents.pages({
             parent: locationParent(project, loc),
-            pageSize: 1000,
+            pageSize: 100,
           }),
           (page) => page.agents,
         ),
@@ -424,7 +444,7 @@ export const listEntityTypes = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEntityTypes.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.entityTypes,
   );
@@ -433,7 +453,7 @@ export const listEnvironments = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEnvironments.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.environments,
   );
@@ -442,7 +462,7 @@ export const listExperiments = (environment: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsEnvironmentsExperiments.pages({
       parent: environment,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.experiments,
   );
@@ -452,7 +472,7 @@ export const listSessionEntityTypes = (session: string) =>
     dialogflow.listProjectsLocationsAgentsEnvironmentsSessionsEntityTypes.pages(
       {
         parent: session,
-        pageSize: 1000,
+        pageSize: 100,
       },
     ),
     (page) => page.sessionEntityTypes,
@@ -462,7 +482,7 @@ export const listFlows = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlows.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.flows,
   );
@@ -471,7 +491,7 @@ export const listPagesAt = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsPages.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.pages,
   );
@@ -480,7 +500,7 @@ export const listTransitionRouteGroups = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsTransitionRouteGroups.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.transitionRouteGroups,
   );
@@ -489,7 +509,7 @@ export const listAgentTransitionRouteGroups = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsTransitionRouteGroups.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.transitionRouteGroups,
   );
@@ -498,7 +518,7 @@ export const listWebhooks = (agent: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsWebhooks.pages({
       parent: agent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.webhooks,
   );
@@ -507,7 +527,7 @@ export const listVersions = (flow: string) =>
   collect(
     dialogflow.listProjectsLocationsAgentsFlowsVersions.pages({
       parent: flow,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.versions,
   );
@@ -516,18 +536,10 @@ export const listSecuritySettings = (parent: string) =>
   collect(
     dialogflow.listProjectsLocationsSecuritySettings.pages({
       parent,
-      pageSize: 1000,
+      pageSize: 100,
     }),
     (page) => page.securitySettings,
   );
-
-const alreadyExists = (error: dialogflow.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: dialogflow.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
 
 export const resourceNameFromOperation = (
   operation: dialogflow.GoogleLongrunningOperation,
@@ -549,78 +561,66 @@ export const resourceNameFromOperation = (
   return undefined;
 };
 
+/** Wait for an operation through the shared GCP waiter. */
 export const waitForOperation = (
   operation: dialogflow.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new DialogflowOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new DialogflowOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = dialogflow.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dialogflow.GoogleLongrunningOperation>({
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      dialogflow.getProjectsLocationsOperations({ name }).pipe(
+        Effect.catchTag("NotFound", (error) =>
+          options?.notFoundOk === true
+            ? Effect.succeed<dialogflow.GoogleLongrunningOperation>({
                 name,
                 done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new DialogflowOperationPending({ operation: name }),
+              })
+            : Effect.fail(error),
+        ),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error) return Effect.succeed(current);
-        if (alreadyExists(error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new DialogflowOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dialogflow.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("3 seconds"),
-      }),
-    );
-  });
+    { budget: "10 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk !== false && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    // Re-read the finished operation for its typed response and metadata.
+    Effect.flatMap(() =>
+      operation.name === undefined || operation.name.length === 0
+        ? Effect.succeed(operation)
+        : dialogflow
+            .getProjectsLocationsOperations({ name: operation.name })
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(operation))),
+    ),
+  );
+
+export class DialogflowNotYetReadable extends Data.TaggedError(
+  "GCP.Dialogflow.NotYetReadable",
+)<{ name: string }> {}
+
+/** Some Dialogflow creates are not readable for a few seconds afterwards. */
+export const waitUntilReadable = <A, E extends { readonly _tag: string }, R>(
+  name: string,
+  get: (name: string) => Effect.Effect<A | undefined, E, R>,
+) =>
+  get(name).pipe(
+    Effect.flatMap((value) =>
+      value === undefined
+        ? Effect.fail(new DialogflowNotYetReadable({ name }))
+        : Effect.succeed(value),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "GCP.Dialogflow.NotYetReadable",
+      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
 
 export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   name: string,

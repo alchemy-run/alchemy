@@ -35,7 +35,7 @@ const ruleAt = (
 ) => (rules ?? []).find((rule) => rule.priority === priority);
 
 test.provider(
-  "getOrganizationSecurityPolicies on a missing policy fails with NotFound",
+  "getOrganizationSecurityPolicies with an invalid id fails with BadRequest",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -45,7 +45,7 @@ test.provider(
           securityPolicy: "0",
         }),
       );
-      expect(["NotFound", "BadRequest", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -74,7 +74,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_SECURITY_POLICY)(
           },
         }),
       );
-      expect(["Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),

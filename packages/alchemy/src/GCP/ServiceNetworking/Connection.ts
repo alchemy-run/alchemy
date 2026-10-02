@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 
 const DEFAULT_SERVICE = "servicenetworking.googleapis.com";
 const DEFAULT_PEERING = "servicenetworking-googleapis-com";
@@ -145,19 +146,6 @@ export class ConnectionProjectNumberMissing extends Data.TaggedError(
   project: string;
 }> {}
 
-export class ConnectionOperationFailed extends Data.TaggedError(
-  "GCP.ServiceNetworking.ConnectionOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ConnectionOperationPending extends Data.TaggedError(
-  "GCP.ServiceNetworking.ConnectionOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ConnectionStillExists extends Data.TaggedError(
   "GCP.ServiceNetworking.ConnectionStillExists",
 )<{
@@ -198,28 +186,6 @@ const rangesKey = (ranges: readonly string[] | undefined) =>
 
 const isAlchemyNetwork = (network: compute.Network) =>
   (network.description ?? "").includes("alchemy-id=");
-
-const isAlreadyExists = (error: servicenetworking.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: servicenetworking.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isRangeConflict = (error: servicenetworking.Status | undefined) =>
-  error?.code === 9 ||
-  /cannot modify allocated ranges/i.test(error?.message ?? "");
-
-const isCreateRace = (error: {
-  readonly _tag: string;
-  readonly message?: string;
-}) =>
-  error._tag === "Conflict" ||
-  (error._tag === "BadRequest" &&
-    /cannot modify allocated ranges|already exists|already established/i.test(
-      error.message ?? "",
-    ));
 
 const toAttrs = (
   connection: servicenetworking.Connection,
@@ -267,9 +233,6 @@ const listForNetwork = (parent: string, consumerNetwork: string) =>
       Effect.catchTag("NotFound", () =>
         Effect.succeed([] as servicenetworking.Connection[]),
       ),
-      Effect.catchTag("Forbidden", () =>
-        Effect.succeed([] as servicenetworking.Connection[]),
-      ),
     );
 
 const getByNetwork = (parent: string, consumerNetwork: string) =>
@@ -287,73 +250,34 @@ const getByNetwork = (parent: string, consumerNetwork: string) =>
     }),
   );
 
+/**
+ * Wait for a Service Networking operation. Peering changes settle within a
+ * few minutes. `ALREADY_EXISTS` always succeeds; `notFoundOk` accepts
+ * `NOT_FOUND` (deletes) and `ignoreRangeConflict` accepts
+ * `FAILED_PRECONDITION` (another writer already changed the ranges).
+ */
 const waitForOperation = (
   operation: servicenetworking.Operation,
   options?: { notFoundOk?: boolean; ignoreRangeConflict?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    const ignorable = (error: servicenetworking.Status | undefined) =>
-      isAlreadyExists(error) ||
-      (options?.ignoreRangeConflict === true && isRangeConflict(error)) ||
-      (options?.notFoundOk === true && isNotFoundStatus(error));
-
-    if (operation.done === true) {
-      if (operation.error && !ignorable(operation.error)) {
-        return yield* new ConnectionOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ConnectionOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = servicenetworking.getOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies servicenetworking.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ConnectionOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => !current.error || ignorable(current.error),
-        (current) =>
-          new ConnectionOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.ServiceNetworking.ConnectionOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+  waitForLongRunning(
+    operation,
+    (name) => servicenetworking.getOperations({ name }),
+    { budget: "10 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5) ||
+          (options?.ignoreRangeConflict === true && error.code === 9)),
+      () => Effect.void,
+    ),
+    Effect.catchIf(
+      (error) => options?.notFoundOk === true && error._tag === "NotFound",
+      () => Effect.void,
+    ),
+  );
 
 const waitUntilPresent = (parent: string, consumerNetwork: string) =>
   getByNetwork(parent, consumerNetwork).pipe(
@@ -536,7 +460,11 @@ export const ConnectionProvider = () =>
               reservedPeeringRanges: [...desiredRanges],
             },
           })
-          .pipe(Effect.catchIf(isCreateRace, () => Effect.succeed(undefined)));
+          .pipe(
+            Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () =>
+              Effect.succeed(undefined),
+            ),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created, { ignoreRangeConflict: true });
         }
@@ -555,7 +483,12 @@ export const ConnectionProvider = () =>
             current.peering,
             consumerNetwork,
             desiredRanges,
-          ).pipe(Effect.catchIf(isCreateRace, () => Effect.void));
+          ).pipe(
+            Effect.catchTag(
+              ["Conflict", "ConnectionAlreadyExists"],
+              () => Effect.void,
+            ),
+          );
           current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
             Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
               Effect.succeed(undefined),
@@ -620,12 +553,7 @@ export const ConnectionProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag(
-            "GCP.ServiceNetworking.ConnectionOperationPending",
-            () => Effect.void,
-          ),
-        );
+        yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(parent, consumerNetwork);
     }),

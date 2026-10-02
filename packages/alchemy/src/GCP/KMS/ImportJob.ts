@@ -292,12 +292,6 @@ const listKeyRingsAt = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.KeyRing[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -315,12 +309,6 @@ const listImportJobsInRing = (parent: string) =>
           nextPageToken: response.nextPageToken,
         })),
         Effect.catchTag("NotFound", () =>
-          Effect.succeed({
-            items: [] as kms.ImportJob[],
-            nextPageToken: undefined,
-          }),
-        ),
-        Effect.catchTag("Forbidden", () =>
           Effect.succeed({
             items: [] as kms.ImportJob[],
             nextPageToken: undefined,

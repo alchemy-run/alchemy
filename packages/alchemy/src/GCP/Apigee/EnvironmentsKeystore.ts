@@ -66,7 +66,7 @@ export type EnvironmentsKeystore = Resource<
  * keystore in Apigee environments mapped to this GCP project for
  * `pnpm nuke:gcp`. Name is identity — changing `keystoreId`,
  * `organization`, or `environment` replaces the keystore. Aliases are
- * managed by `EnvironmentsKeystoresAliases`.
+ * managed by `EnvironmentsKeystoresAlias`.
  *
  * ### Creating a Keystore
  * **Example:** Generated name
@@ -241,6 +241,11 @@ export const EnvironmentsKeystoreProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsKeystores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

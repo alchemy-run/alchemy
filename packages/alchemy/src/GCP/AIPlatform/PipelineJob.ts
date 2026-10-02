@@ -187,6 +187,51 @@ const getByName = (name: string) =>
     .getProjectsLocationsPipelineJobs({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+const TERMINAL_STATES = new Set([
+  "PIPELINE_STATE_SUCCEEDED",
+  "PIPELINE_STATE_FAILED",
+  "PIPELINE_STATE_CANCELLED",
+]);
+
+class PipelineJobNotTerminal extends Data.TaggedError(
+  "GCP.AIPlatform.PipelineJobNotTerminal",
+)<{ name: string; state: string | undefined }> {}
+
+/**
+ * A pending or running job cannot be deleted: cancel it and wait until it
+ * settles (cancellation takes up to a few minutes).
+ */
+const cancelUntilTerminal = (name: string) =>
+  Effect.gen(function* () {
+    const job = yield* getByName(name);
+    if (job === undefined || TERMINAL_STATES.has(job.state ?? "")) return;
+    yield* aiplatform
+      .cancelProjectsLocationsPipelineJobs({ name, body: {} })
+      .pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        // The job can reach a terminal state between the read above and the
+        // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
+        // the wait below re-reads the state and still fails if it is not
+        // terminal.
+        Effect.catchTag("BadRequest", () => Effect.void),
+      );
+    yield* getByName(name).pipe(
+      Effect.flatMap((current) =>
+        current === undefined || TERMINAL_STATES.has(current.state ?? "")
+          ? Effect.void
+          : Effect.fail(
+              new PipelineJobNotTerminal({ name, state: current.state }),
+            ),
+      ),
+      Effect.retry({
+        while: (error) =>
+          error._tag === "GCP.AIPlatform.PipelineJobNotTerminal",
+        times: 36,
+        schedule: Schedule.spaced("5 seconds"),
+      }),
+    );
+  });
+
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
@@ -270,10 +315,7 @@ export const PipelineJobProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.pipelineJobs ?? [])
@@ -335,6 +377,7 @@ export const PipelineJobProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      yield* cancelUntilTerminal(output.name);
       const operation = yield* aiplatform
         .deleteProjectsLocationsPipelineJobs({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));

@@ -21,6 +21,7 @@ import {
   parseOwnership,
   projectOf,
   toResourceId,
+  retryQuota,
 } from "./internal.ts";
 
 export type AgentsPlaybooksVersionProps = {
@@ -138,7 +139,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const listPlaybooks = (agent: string) =>
@@ -149,7 +149,6 @@ const listPlaybooks = (agent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDescription = (parent: string, description: string) =>
@@ -165,7 +164,6 @@ const findByDescription = (parent: string, description: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsPlaybooksVersionProvider = () =>
@@ -199,14 +197,10 @@ export const AgentsPlaybooksVersionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const playbook = olds?.playbook ?? output?.playbook;
-      const versionId = yield* toResourceId(
-        id,
-        olds?.versionId,
-        output?.versionId,
-      );
       const name =
-        output?.name ??
-        (playbook !== undefined ? resourceName(playbook, versionId) : "");
+        // Version ids are assigned by the server, so only a recorded name can
+        // be fetched directly (a guessed id is rejected as malformed).
+        output?.name ?? "";
       let existing = yield* getByName(name);
       if (existing === undefined && playbook !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -258,7 +252,7 @@ export const AgentsPlaybooksVersionProvider = () =>
       const ownership = yield* internalLabels(id);
       const description = encodeOwnership(ownership, news.description);
 
-      let current = yield* getByName(output?.name ?? name);
+      let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
         current = yield* findByDescription(playbook, description);
       }
@@ -282,7 +276,7 @@ export const AgentsPlaybooksVersionProvider = () =>
       }
 
       return toAttrs(current, env.project, playbook);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
@@ -290,5 +284,5 @@ export const AgentsPlaybooksVersionProvider = () =>
           name: output.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

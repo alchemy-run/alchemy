@@ -15,6 +15,9 @@ export interface GetInstanceRequest extends Omit<
  * Bind this operation to an {@link Instance} in a Function/Action init
  * phase. Provide {@link GetInstanceHttp}.
  *
+ * Grants `roles/cloudsql.viewer` on the project under an IAM Condition
+ * naming only this instance (Cloud SQL has no instance-level IAM policy).
+ *
  * ### Observing Instances
  * **Example:** Read the bound instance
  * ```typescript

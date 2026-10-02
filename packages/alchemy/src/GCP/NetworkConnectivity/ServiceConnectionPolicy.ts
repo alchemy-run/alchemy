@@ -209,12 +209,13 @@ export type ServiceConnectionPolicy = Resource<
  * const policy = yield* GCP.NetworkConnectivity.ServiceConnectionPolicy(
  *   "Redis",
  *   {
- *     serviceConnectionPolicyId: existing.serviceConnectionPolicyId,
- *     location: existing.location,
- *     serviceClass: existing.serviceClass!,
- *     network: existing.network!,
+ *     serviceClass: "gcp-memorystore-redis",
+ *     network: network.selfLink ?? network.networkName,
  *     description: "redis psc v2",
- *     pscConfig: { ...existing.pscConfig, limit: "4" },
+ *     pscConfig: {
+ *       subnetworks: [subnet.selfLink ?? subnet.subnetworkName],
+ *       limit: "4",
+ *     },
  *     labels: { env: "prod", role: "psc" },
  *   },
  * );

@@ -3,7 +3,7 @@ import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
-import { expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -35,123 +35,117 @@ const currentProject = GCP.GcpEnvironment.current.pipe(
 );
 
 // The service is built from `main`, which needs a local image build.
-const dockerAvailable = (() => {
-  try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
+const dockerAvailable =
+  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status ===
+  0;
+
+// Deploy, tests and destroy all sit behind the same Docker guard.
+describe.skipIf(!dockerAvailable)("gcp-vertex-ai", () => {
+  const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+
+  const serviceState = (name: string) =>
+    cloudrun.getProjectsLocationsServices({ name }).pipe(
+      Effect.as("found" as const),
+      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+      Effect.orDie,
+      Effect.provide(GcpHttp),
     );
-  } catch {
-    return false;
-  }
-})();
 
-const skip = !dockerAvailable;
-
-const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
-
-const serviceState = (name: string) =>
-  cloudrun.getProjectsLocationsServices({ name }).pipe(
-    Effect.as("found" as const),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+  /** Members holding `roles/aiplatform.user` on the project. */
+  const aiplatformUsers = currentProject.pipe(
+    Effect.flatMap((project) =>
+      resourcemanager.getIamPolicyProjects({
+        resource: `projects/${project}`,
+        body: { options: { requestedPolicyVersion: 3 } },
+      }),
+    ),
+    Effect.map((policy) =>
+      (policy.bindings ?? [])
+        .filter((binding) => binding.role === "roles/aiplatform.user")
+        .flatMap((binding) => binding.members ?? []),
+    ),
     Effect.orDie,
     Effect.provide(GcpHttp),
   );
 
-/** Members holding `roles/aiplatform.user` on the project. */
-const aiplatformUsers = currentProject.pipe(
-  Effect.flatMap((project) =>
-    resourcemanager.getIamPolicyProjects({
-      resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
+  afterAll.skipIf(!!process.env.NO_DESTROY)(
+    Effect.gen(function* () {
+      const { serviceName, serviceAccount } = yield* stack;
+      yield* destroy(Stack);
+      // Nothing is left behind: the service is gone and its grant revoked.
+      expect(yield* serviceState(serviceName)).toEqual("gone");
+      expect(yield* aiplatformUsers).not.toContain(
+        `serviceAccount:${serviceAccount}`,
+      );
     }),
-  ),
-  Effect.map((policy) =>
-    (policy.bindings ?? [])
-      .filter((binding) => binding.role === "roles/aiplatform.user")
-      .flatMap((binding) => binding.members ?? []),
-  ),
-  Effect.orDie,
-  Effect.provide(GcpHttp),
-);
-
-afterAll.skipIf(!!process.env.NO_DESTROY)(
-  Effect.gen(function* () {
-    const { serviceName, serviceAccount } = yield* stack;
-    yield* destroy(Stack);
-    // Nothing is left behind: the service is gone and its grant revoked.
-    expect(yield* serviceState(serviceName)).toEqual("gone");
-    expect(yield* aiplatformUsers).not.toContain(
-      `serviceAccount:${serviceAccount}`,
-    );
-  }),
-  { timeout: 600_000 },
-);
-
-const baseUrlOf = (url: string | undefined) => {
-  if (url === undefined) throw new Error("the service has no URL");
-  return url.replace(/\/+$/, "");
-};
-
-const chat = (baseUrl: string, body: Record<string, unknown>) =>
-  HttpClient.execute(
-    HttpClientRequest.post(`${baseUrl}/chat`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    { timeout: 600_000 },
   );
 
-test.skipIf(skip)(
-  "grants the runtime service account roles/aiplatform.user",
-  Effect.gen(function* () {
-    const { serviceAccount } = yield* stack;
-    expect(yield* aiplatformUsers).toContain(
-      `serviceAccount:${serviceAccount}`,
+  const baseUrlOf = (url: string | undefined) => {
+    if (url === undefined) throw new Error("the service has no URL");
+    return url.replace(/\/+$/, "");
+  };
+
+  const chat = (baseUrl: string, body: Record<string, unknown>) =>
+    HttpClient.execute(
+      HttpClientRequest.post(`${baseUrl}/chat`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(body),
+      ),
     );
-  }),
-  { timeout: 60_000 },
-);
 
-test.skipIf(skip)(
-  "POST /chat answers with Gemini",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const baseUrl = baseUrlOf(url);
-    yield* getWhenReady(`${baseUrl}/`);
+  test(
+    "grants the runtime service account roles/aiplatform.user",
+    Effect.gen(function* () {
+      const { serviceAccount } = yield* stack;
+      expect(yield* aiplatformUsers).toContain(
+        `serviceAccount:${serviceAccount}`,
+      );
+    }),
+    { timeout: 60_000 },
+  );
 
-    // A fresh project-level grant can take a minute or two to reach
-    // Vertex AI; until then the service answers 500 (Forbidden).
-    const res = yield* chat(baseUrl, {
-      prompt: "Reply with exactly: pong",
-      temperature: 0,
-    }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("10 seconds"),
-        until: (response) => response.status !== 500,
-        times: 30,
-      }),
-    );
-    expect(res.status).toBe(200);
-    const body = (yield* res.json) as {
-      text: string;
-      modelVersion: string;
-      usage: { inputTokens: number };
-    };
-    expect(body.text.length).toBeGreaterThan(0);
-    expect(body.text.toLowerCase()).toContain("pong");
-    expect(body.modelVersion).toContain("gemini-2.5-flash");
-    expect(body.usage.inputTokens).toBeGreaterThan(0);
-  }),
-  { timeout: 420_000 },
-);
+  test(
+    "POST /chat answers with Gemini",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const baseUrl = baseUrlOf(url);
+      yield* getWhenReady(`${baseUrl}/`);
 
-test.skipIf(skip)(
-  "POST /chat rejects a missing prompt",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const baseUrl = baseUrlOf(url);
-    yield* getWhenReady(`${baseUrl}/`);
-    const res = yield* chat(baseUrl, {});
-    expect(res.status).toBe(400);
-  }),
-  { timeout: 120_000 },
-);
+      // A fresh project-level grant can take a minute or two to reach
+      // Vertex AI; until then the service answers 500 (Forbidden).
+      const res = yield* chat(baseUrl, {
+        prompt: "Reply with exactly: pong",
+        temperature: 0,
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (response) => response.status !== 500,
+          times: 30,
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = (yield* res.json) as {
+        text: string;
+        modelVersion: string;
+        usage: { inputTokens: number };
+      };
+      expect(body.text.length).toBeGreaterThan(0);
+      expect(body.text.toLowerCase()).toContain("pong");
+      expect(body.modelVersion).toContain("gemini-2.5-flash");
+      expect(body.usage.inputTokens).toBeGreaterThan(0);
+    }),
+    { timeout: 420_000 },
+  );
+
+  test(
+    "POST /chat rejects a missing prompt",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const baseUrl = baseUrlOf(url);
+      yield* getWhenReady(`${baseUrl}/`);
+      const res = yield* chat(baseUrl, {});
+      expect(res.status).toBe(400);
+    }),
+    { timeout: 120_000 },
+  );
+});

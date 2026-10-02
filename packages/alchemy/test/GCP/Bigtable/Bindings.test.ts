@@ -1,73 +1,147 @@
-import { Action } from "@/Action";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import * as Core from "@/Test/Core";
+import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
+import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import BigtableBindingsHost, {
+  Db,
+  Nodes,
+  Rows,
+} from "./fixtures/bindings-host.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "BigtableBindings");
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+let baseUrl: string;
+let hostAccount: string;
+let instanceName: string;
+let clusterName: string;
+let tableName: string;
 
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+const hostRoles = (policy: bigtable.Policy) =>
+  (policy.bindings ?? [])
+    .filter((binding) =>
+      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
+    )
+    .map((binding) => binding.role)
+    .sort();
 
-test.provider.skipIf(!runLifecycle)(
-  "GetInstance, GetCluster, and GetTable invoke HTTP bindings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+/** GetInstance and GetCluster grant bigtable.viewer on the instance only. */
+const expectInstanceGrants = Effect.gen(function* () {
+  const policy = yield* bigtable.getIamPolicyProjectsInstances({
+    resource: instanceName,
+    body: {},
+  });
+  expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
+});
 
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const instance = yield* GCP.Bigtable.Instance("Db", {
-            clusters: {
-              cluster: {
-                location: "us-central1-b",
-                serveNodes: 1,
-                defaultStorageType: "HDD",
-              },
-            },
-          });
-          const cluster = yield* GCP.Bigtable.Cluster("Nodes", {
-            instance: instance.name,
-            clusterId: "cluster",
-            location: "us-central1-b",
-            serveNodes: 1,
-            defaultStorageType: "HDD",
-          });
-          const table = yield* GCP.Bigtable.Table("Rows", {
-            instance: instance.name,
-            columnFamilies: {
-              cf: { gcRule: { maxNumVersions: 1 } },
-            },
-          });
-          const Probe = Action(
-            "Probe",
-            Effect.gen(function* () {
-              yield* table.name;
-              const getInstance = yield* GCP.Bigtable.GetInstance(instance);
-              const getCluster = yield* GCP.Bigtable.GetCluster(cluster);
-              const getTable = yield* GCP.Bigtable.GetTable(table);
-              return Effect.fn(function* () {
-                const liveInstance = yield* getInstance();
-                const liveCluster = yield* getCluster();
-                const liveTable = yield* getTable();
-                return { liveInstance, liveCluster, liveTable };
-              });
-            }),
-          );
-          return { instance, cluster, table, probe: yield* Probe({}) };
-        }),
+/** GetTable grants bigtable.viewer on the table only. */
+const expectTableGrants = Effect.gen(function* () {
+  const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
+    resource: tableName,
+    body: {},
+  });
+  expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
+});
+
+describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+  "Bigtable Bindings",
+  {
+    tags: ["provider:gcp", "provider:gcp:bigtable", "provider:gcp:run", "live"],
+  },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* sharedStack.destroy();
+        const out = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const host = yield* BigtableBindingsHost;
+            return {
+              uri: host.uri,
+              serviceAccount: host.serviceAccount,
+              instance: (yield* Db).name,
+              cluster: (yield* Nodes).name,
+              table: (yield* Rows).name,
+            };
+          }),
+        );
+        baseUrl = out.uri!;
+        hostAccount = out.serviceAccount!;
+        instanceName = out.instance;
+        clusterName = out.cluster;
+        tableName = out.table;
+      }),
+      { timeout: 900_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    describe("GetInstance", () => {
+      test.provider(
+        "reads the instance as the host's service account, granted on the instance only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<bigtable.Instance>(
+              baseUrl,
+              "getInstance",
+            );
+            const actual = yield* bigtable.getProjectsInstances({
+              name: instanceName,
+            });
+            expect(live.name).toEqual(instanceName);
+            expect(live.displayName).toEqual(actual.displayName);
+            expect(live.state).toEqual("READY");
+            yield* expectInstanceGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
       );
+    });
 
-      expect(out.probe.liveInstance.name).toEqual(out.instance.name);
-      expect(out.probe.liveCluster.name).toEqual(out.cluster.name);
-      expect(out.probe.liveTable.name).toEqual(out.table.name);
+    describe("GetCluster", () => {
+      test.provider(
+        "reads the cluster as the host's service account, granted on the instance only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<bigtable.Cluster>(
+              baseUrl,
+              "getCluster",
+            );
+            expect(live.name).toEqual(clusterName);
+            expect(live.serveNodes).toEqual(1);
+            expect(live.defaultStorageType).toEqual("HDD");
+            yield* expectInstanceGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 120_000 },
+    describe("GetTable", () => {
+      test.provider(
+        "reads the table as the host's service account, granted on the table only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* expectProbe<bigtable.Table>(
+              baseUrl,
+              "getTable",
+            );
+            expect(live.name).toEqual(tableName);
+            expect(Object.keys(live.columnFamilies ?? {})).toEqual(["cf"]);
+            yield* expectTableGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+  },
 );

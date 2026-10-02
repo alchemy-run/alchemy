@@ -23,8 +23,9 @@ export const StartManualRunsHttp = Layer.effect(
       yield* bindGcpHost({
         tag: "GCP.BigQueryDataTransfer.StartManualRuns",
         resource: config,
-        // bigquery.transfers.update is only in roles/bigquery.admin; transfer
-        // configs have no resource-level IAM.
+        // bigquery.transfers.update is in no narrower predefined role, and
+        // transfer configs have no resource-level IAM, so this is a project
+        // grant (see StartManualRuns JSDoc).
         iam: [{ role: "roles/bigquery.admin" }],
       });
       const name = yield* config.name;

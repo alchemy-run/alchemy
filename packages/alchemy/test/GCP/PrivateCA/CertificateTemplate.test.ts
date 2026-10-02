@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_PRIVATECA && !process.env.FAST;
-
 const waitUntilGone = (name: string) =>
   privateca.getProjectsLocationsCertificateTemplates({ name }).pipe(
     Effect.as("found" as const),
@@ -46,14 +44,18 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.certificateTemplates ?? [])).toEqual(true);
+      expect(
+        (page.certificateTemplates ?? []).map((template) => template.name),
+      ).not.toContain(
+        `projects/${project}/locations/us-central1/certificateTemplates/alchemy-template-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:privateca", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, replace, and delete a certificate template",
   (stack) =>
     Effect.gen(function* () {

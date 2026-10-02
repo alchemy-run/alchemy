@@ -76,6 +76,11 @@ interface ProviderFn {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     options?: TestOptions,
   ) => void;
+  todo: (
+    name: string,
+    fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
+    options?: TestOptions,
+  ) => void;
 }
 
 interface BeforeAllFn {
@@ -204,7 +209,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     opts: TestOptions | undefined,
-    mode: "run" | "skip",
+    mode: "run" | "skip" | "todo",
   ) => {
     // Captured at registration (module evaluation during collection) — the
     // collection context is gone by the time the body runs.
@@ -217,7 +222,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       timeout: timeoutOf(opts),
       tags: tagsOf(opts),
       optInTags: optInTagsOf(opts),
-      body: mode === "skip" ? undefined : () => wrapProvider(name, fn, file),
+      body: mode === "run" ? () => wrapProvider(name, fn, file) : undefined,
     });
   };
 
@@ -227,6 +232,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   provider.skip = (name, fn, opts) => addProvider(name, fn, opts, "skip");
   provider.skipIf = (condition) => (name, fn, opts) =>
     addProvider(name, fn, opts, condition ? "skip" : "run");
+  provider.todo = (name, fn, opts) => addProvider(name, fn, opts, "todo");
   test.provider = provider;
 
   const beforeAll: BeforeAllFn = <A>(

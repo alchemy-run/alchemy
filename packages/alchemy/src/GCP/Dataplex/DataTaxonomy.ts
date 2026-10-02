@@ -122,8 +122,9 @@ export type DataTaxonomy = Resource<
  * ### Updating a Data Taxonomy
  * **Example:** Description and labels
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const taxonomy = yield* GCP.Dataplex.DataTaxonomy("Pii", {
- *   dataTaxonomyId: existing.dataTaxonomyId,
+ *   dataTaxonomyId: "sensitive-data",
  *   description: "pii classes v2",
  *   labels: { env: "prod", team: "data" },
  * });

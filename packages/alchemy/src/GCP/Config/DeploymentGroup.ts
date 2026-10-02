@@ -25,7 +25,6 @@ import {
   parseName,
   replaceOnIdentity,
   ResourceNotResolved,
-  retryTransient,
   stringMap,
   toPhysicalId,
   userLabels,
@@ -148,8 +147,9 @@ export type DeploymentGroup = Resource<
  * ### Updating a Deployment Group
  * **Example:** Labels and units
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const group = yield* GCP.Config.DeploymentGroup("App", {
- *   deploymentGroupId: existing.deploymentGroupId,
+ *   deploymentGroupId: "app-group",
  *   deploymentUnits: [
  *     { id: "network", dependencies: [] },
  *     { id: "cluster", dependencies: ["network"] },
@@ -247,6 +247,9 @@ const listOwned = (project: string, region: string) =>
     ),
   );
 
+/** Deployment group ids are at most 40 characters. */
+const MAX_DEPLOYMENT_GROUP_ID_LENGTH = 40;
+
 export const DeploymentGroupProvider = () =>
   Provider.succeed(DeploymentGroup, {
     stables: ["name", "deploymentGroupId", "project", "location", "createTime"],
@@ -278,6 +281,7 @@ export const DeploymentGroupProvider = () =>
         olds?.deploymentGroupId,
         output?.deploymentGroupId,
         "deploymentgroup",
+        MAX_DEPLOYMENT_GROUP_ID_LENGTH,
       );
       const location = normalizeLocation(
         olds?.location ?? output?.location,
@@ -307,6 +311,7 @@ export const DeploymentGroupProvider = () =>
         news.deploymentGroupId,
         output?.deploymentGroupId,
         "deploymentgroup",
+        MAX_DEPLOYMENT_GROUP_ID_LENGTH,
       );
       const location = normalizeLocation(
         news.location ?? output?.location,
@@ -323,8 +328,8 @@ export const DeploymentGroupProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* retryTransient(
-          config.createProjectsLocationsDeploymentGroups({
+        const created = yield* config
+          .createProjectsLocationsDeploymentGroups({
             parent: parentOf(env.project, location),
             deploymentGroupId,
             body: {
@@ -332,8 +337,8 @@ export const DeploymentGroupProvider = () =>
               annotations: desiredAnnotations,
               labels: desiredLabels,
             },
-          }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          })
+          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -355,17 +360,15 @@ export const DeploymentGroupProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* retryTransient(
-          config.patchProjectsLocationsDeploymentGroups({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              labels: desiredLabels,
-              annotations: desiredAnnotations,
-              deploymentUnits: units,
-            },
-          }),
-        );
+        const operation = yield* config.patchProjectsLocationsDeploymentGroups({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            labels: desiredLabels,
+            annotations: desiredAnnotations,
+            deploymentUnits: units,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(
           getByName(current.name ?? name),
@@ -377,20 +380,20 @@ export const DeploymentGroupProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* retryTransient(
-        config.deleteProjectsLocationsDeploymentGroups({
+      const operation = yield* config
+        .deleteProjectsLocationsDeploymentGroups({
           name: output.name,
           force: true,
           deploymentReferencePolicy: "IGNORE_DEPLOYMENT_REFERENCES",
-        }),
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      );
+        })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "Conflict",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

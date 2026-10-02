@@ -25,6 +25,7 @@ import {
   toLabels,
   userLabels,
 } from "./names.ts";
+import { isJobTerminal } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
 export type NasJobProps = {
@@ -169,7 +170,7 @@ const listPage = (parent: string, filter?: string) =>
       Effect.map((pages) =>
         Array.from(pages).flatMap((page) => page.nasJobs ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag("NotFound", () =>
         Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1NasJob[]),
       ),
     );
@@ -322,10 +323,18 @@ export const NasJobProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict", "Forbidden"],
+            ["NotFound", "BadRequest", "Conflict"],
             () => Effect.void,
           ),
         );
+      // Running jobs reject deletes; wait for the cancel to land.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("4 seconds"),
+          until: (job) => job === undefined || isJobTerminal(job.state),
+          times: 45,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsNasJobs({ name: output.name })
         .pipe(

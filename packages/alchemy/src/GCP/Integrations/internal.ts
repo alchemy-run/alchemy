@@ -55,7 +55,7 @@ export const listSfdcInstances = (parent: string) =>
     }),
     (page) => page.sfdcInstances,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         [] as integrations.GoogleCloudIntegrationsV1alphaSfdcInstance[],
       ),
@@ -71,7 +71,7 @@ export const listSfdcChannels = (parent: string) =>
     }),
     (page) => page.sfdcChannels,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         [] as integrations.GoogleCloudIntegrationsV1alphaSfdcChannel[],
       ),
@@ -87,7 +87,7 @@ export const listTemplates = (parent: string) =>
     }),
     (page) => page.templates,
   ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed(
         [] as integrations.GoogleCloudIntegrationsV1alphaTemplate[],
       ),

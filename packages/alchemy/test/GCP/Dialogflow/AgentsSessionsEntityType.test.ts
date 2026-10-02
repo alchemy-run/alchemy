@@ -10,6 +10,7 @@ import {
   deleteEntityType,
   ensureAgent,
   ensureEntityType,
+  quotaTolerant,
 } from "./parent.ts";
 import { GcpEnvironment } from "@/GCP/Environment";
 
@@ -20,7 +21,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DIALOGFLOW;
+const runLifecycle = !process.env.FAST;
 const agentDisplayName = "alch-df-set";
 
 const waitUntilGone = (name: string) =>
@@ -46,10 +47,10 @@ test.provider(
           name: `projects/${project}/locations/global/agents/missing/sessions/alchemy/entityTypes/sys.color`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 90_000,
@@ -123,7 +124,7 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* deleteEntityType(entityType.name ?? "");
       yield* deleteAgent(agentName);
-    }).pipe(logLevel),
+    }).pipe(logLevel, quotaTolerant),
   {
     tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
     timeout: 120_000,

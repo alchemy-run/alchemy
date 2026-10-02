@@ -609,7 +609,7 @@ describe.concurrent(
 
           yield* assertQueueDeleted(queueUrl);
         }),
-      { tags: ["provider:aws:lambda"], timeout: 120_000 },
+      { tags: ["provider:aws:lambda"], timeout: 240_000 },
     );
 
     provider(

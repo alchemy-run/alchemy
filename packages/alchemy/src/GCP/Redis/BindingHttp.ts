@@ -18,11 +18,12 @@ export const makeRedisHttpBinding = <
   tag: string;
   operation: GcpHttpOp<I, A, E>;
 }) =>
-  // Memorystore has no resource-level IAM; viewer covers reads.
+  // Memorystore has no resource-level IAM; viewer under an IAM Condition on
+  // the policy name covers reads.
   makeNamedHttpBinding<AclPolicy, I, A, E>({
     tag: options.tag,
     operation: options.operation,
-    iam: { role: "roles/redis.viewer" },
+    iam: { role: "roles/redis.viewer", scopeByCondition: true },
     resourceName: (policy) => policy.name,
   });
 

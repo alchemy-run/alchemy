@@ -150,7 +150,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEndpointAttachments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const isAlchemyId = (endpointAttachmentId: string) =>
   endpointAttachmentId.startsWith("alc");
@@ -228,7 +232,7 @@ export const EndpointAttachmentProvider = () =>
             }),
             (page) => page.endpointAttachments,
           ).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed(
                 [] as apigee.GoogleCloudApigeeV1EndpointAttachment[],
               ),
@@ -287,7 +291,11 @@ export const EndpointAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEndpointAttachments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

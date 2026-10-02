@@ -27,7 +27,6 @@ export default class Summarize extends GCP.Run.Job<Summarize>()(
   "Summarize",
   {
     main: import.meta.url,
-    location: "us-central1",
     // A failed summary is retried once, then the execution fails and the
     // next trigger tries again.
     maxRetries: 1,

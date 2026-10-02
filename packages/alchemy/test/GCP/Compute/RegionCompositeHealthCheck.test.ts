@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -59,12 +60,12 @@ test.provider(
 );
 
 test.provider(
-  "probe insertRegionCompositeHealthChecks entitlement",
+  "insertRegionCompositeHealthChecks with a missing health source fails with NotFound",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertRegionCompositeHealthChecks({
+      const error = yield* Effect.flip(
+        compute.insertRegionCompositeHealthChecks({
           project,
           region,
           body: {
@@ -75,39 +76,9 @@ test.provider(
               `projects/${project}/regions/${region}/healthSources/does-not-exist`,
             ],
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteRegionCompositeHealthChecks({
-            project,
-            region,
-            compositeHealthCheck: "alchemy-chc-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("NotFound");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
@@ -116,17 +87,15 @@ test.provider(
   "create, update, and delete a regional composite health check",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.54.0.0/24",
+            ipCidrRange: "172.20.1.0/24",
           });
           const check = yield* GCP.Compute.RegionHealthCheck("Probe", {
             region,
@@ -140,7 +109,7 @@ test.provider(
               region,
               protocol: "TCP",
               loadBalancingScheme: "INTERNAL",
-              network: network.selfLink.as<string>(),
+              network: defaultNetworkSelfLink(project),
               healthChecks: [check.selfLink.as<string>()],
               description: "ilb backend",
             },
@@ -149,7 +118,7 @@ test.provider(
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: backend.selfLink.as<string>(),
-            network: network.selfLink.as<string>(),
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink.as<string>(),
             ipProtocol: "TCP",
             allPorts: true,
@@ -174,7 +143,6 @@ test.provider(
             },
           );
           return {
-            network,
             subnet,
             check,
             backend,
@@ -202,15 +170,11 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("IlbSubnet", {
             subnetworkName: created.subnet.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.54.0.0/24",
+            ipCidrRange: "172.20.1.0/24",
           });
           const check = yield* GCP.Compute.RegionHealthCheck("Probe", {
             healthCheckName: created.check.healthCheckName,
@@ -226,7 +190,7 @@ test.provider(
               region,
               protocol: "TCP",
               loadBalancingScheme: "INTERNAL",
-              network: network.selfLink.as<string>(),
+              network: defaultNetworkSelfLink(project),
               healthChecks: [check.selfLink.as<string>()],
               description: "ilb backend",
             },
@@ -236,7 +200,7 @@ test.provider(
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: backend.selfLink.as<string>(),
-            network: network.selfLink.as<string>(),
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink.as<string>(),
             ipProtocol: "TCP",
             allPorts: true,

@@ -8,12 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  ALCHEMY_LABEL_PREFIX,
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_POLICY_ID_LENGTH = 256;
@@ -41,9 +36,7 @@ export type RowAccessPolicyProps = {
   policyId?: string;
   /**
    * SQL boolean expression that selects the rows this policy covers,
-   * similar to a `WHERE` clause. Alchemy stamps ownership as a tautology
-   * (`AND ('[alchemy …]' IS NOT NULL)`) so `list` / nuke can find the
-   * policy; that suffix is stripped from the reported attribute.
+   * similar to a `WHERE` clause. Sent verbatim.
    */
   filterPredicate: string;
   /**
@@ -71,7 +64,7 @@ export type RowAccessPolicy = Resource<
     datasetId: string;
     /** Project id. */
     project: string;
-    /** User filter predicate (Alchemy ownership suffix stripped). */
+    /** Filter predicate (a legacy Alchemy ownership suffix is stripped). */
     filterPredicate: string;
     /** Server etag. */
     etag: string | undefined;
@@ -88,9 +81,10 @@ export type RowAccessPolicy = Resource<
  * A Google BigQuery row-access policy — a filter predicate plus IAM
  * members that together hide rows from unauthorized readers.
  *
- * Row-access policies have no labels; Alchemy stamps ownership into the
- * filter predicate so `list` / `pnpm nuke:gcp` can find them on tables
- * that carry `alchemy-*` labels. `datasetId`, `tableId`, and `policyId`
+ * Row-access policies have no labels, and Alchemy never edits the filter
+ * predicate: `list` / `pnpm nuke:gcp` return the policies on tables that
+ * carry `alchemy-*` labels, and `read` reports a policy with an explicit
+ * id that Alchemy has no state for as unowned. `datasetId`, `tableId`, and `policyId`
  * are immutable (changing them replaces the policy). `filterPredicate`
  * updates in place. `grantees` is create-only.
  *
@@ -167,9 +161,6 @@ const toId = (id: string, policyId: string | undefined, existing?: string) =>
     return generated.replaceAll("-", "_");
   });
 
-const markerOf = (labels: Record<string, string>) =>
-  `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-
 const MARKER_SUFFIX =
   /\s+AND\s+\('\[alchemy ([^\]]+)\]'\s+IS\s+NOT\s+NULL\)\s*$/i;
 
@@ -207,19 +198,6 @@ const parseFilter = (
     filterPredicate: user.length > 0 ? user : undefined,
   };
 };
-
-const encodeFilter = (
-  labels: Record<string, string>,
-  filterPredicate: string,
-): string => {
-  const user = parseFilter(filterPredicate).filterPredicate ?? filterPredicate;
-  return `(${user}) AND ('${markerOf(labels)}' IS NOT NULL)`;
-};
-
-const hasOwnershipMarker = (filterPredicate: string | undefined) =>
-  Object.keys(parseFilter(filterPredicate).labels).some((key) =>
-    key.startsWith(ALCHEMY_LABEL_PREFIX),
-  );
 
 const hasAlchemyDatasetLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -269,7 +247,7 @@ const toPolicyBody = (
   tableId: string,
   policyId: string,
   news: RowAccessPolicyProps,
-  encodedFilter: string,
+  filter: string,
   includeGrantees: boolean,
 ): bigquery.RowAccessPolicy => {
   const body: bigquery.RowAccessPolicy = {
@@ -279,7 +257,7 @@ const toPolicyBody = (
       tableId,
       policyId,
     },
-    filterPredicate: encodedFilter,
+    filterPredicate: filter,
   };
   if (includeGrantees && news.grantees !== undefined) {
     body.grantees = news.grantees;
@@ -350,10 +328,9 @@ export const RowAccessPolicyProvider = () =>
       );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseFilter(existing.filterPredicate).labels,
-      ))
+      // No labels: a generated id derives from this stack, stage, logical
+      // id and instance; an explicit id is only ours when state has it.
+      return output !== undefined || olds?.policyId === undefined
         ? attrs
         : Unowned(attrs);
     }),
@@ -373,9 +350,6 @@ export const RowAccessPolicyProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
-            ),
-            Effect.catchTag("Forbidden", () =>
               Effect.succeed([] as bigquery.DatasetListDatasetsItem[]),
             ),
           );
@@ -418,16 +392,10 @@ export const RowAccessPolicyProvider = () =>
                           Stream.flatMap((page) =>
                             Stream.fromIterable(page.rowAccessPolicies ?? []),
                           ),
-                          Stream.filter((policy) =>
-                            hasOwnershipMarker(policy.filterPredicate),
-                          ),
                           Stream.map((policy) => toAttrs(policy, env.project)),
                           Stream.runCollect,
                           Effect.map((chunk) => Array.from(chunk)),
                           Effect.catchTag("NotFound", () =>
-                            Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-                          ),
-                          Effect.catchTag("Forbidden", () =>
                             Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                           ),
                         ),
@@ -436,9 +404,6 @@ export const RowAccessPolicyProvider = () =>
                 ),
                 Effect.map((nested) => nested.flat()),
                 Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-                ),
-                Effect.catchTag("Forbidden", () =>
                   Effect.succeed([] as ReturnType<typeof toAttrs>[]),
                 ),
               );
@@ -454,8 +419,7 @@ export const RowAccessPolicyProvider = () =>
       const datasetId = datasetIdOf(news.datasetId);
       const tableId = tableIdOf(news.tableId);
       const name = resourceName(env.project, datasetId, tableId, policyId);
-      const internalLabels = yield* createInternalLabels(id);
-      const encodedFilter = encodeFilter(internalLabels, news.filterPredicate);
+      const filter = news.filterPredicate;
 
       let current = yield* getByRef(env.project, datasetId, tableId, policyId);
 
@@ -471,7 +435,7 @@ export const RowAccessPolicyProvider = () =>
               tableId,
               policyId,
               news,
-              encodedFilter,
+              filter,
               true,
             ),
           })
@@ -488,7 +452,7 @@ export const RowAccessPolicyProvider = () =>
       }
 
       const observedFilter = current.filterPredicate ?? "";
-      if (!sameFilter(observedFilter, encodedFilter)) {
+      if (!sameFilter(observedFilter, filter)) {
         current = yield* bigquery
           .updateRowAccessPolicies({
             projectId: env.project,
@@ -501,7 +465,7 @@ export const RowAccessPolicyProvider = () =>
               tableId,
               policyId,
               news,
-              encodedFilter,
+              filter,
               false,
             ),
           })
@@ -518,7 +482,7 @@ export const RowAccessPolicyProvider = () =>
                     tableId,
                     policyId,
                     news,
-                    encodedFilter,
+                    filter,
                     true,
                   ),
                 })

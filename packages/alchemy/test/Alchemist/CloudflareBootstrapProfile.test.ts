@@ -1,8 +1,8 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { resolveStateStoreScope } from "@/Alchemist/routes/cloudflare.ts";
-import { AuthError } from "@/Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
+import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
 import * as Interaction from "@/Interaction.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { expect, it } from "alchemy-test";
@@ -166,7 +166,7 @@ it.live(
         expect(Exit.isFailure(missing)).toBe(true);
         if (Exit.isFailure(missing)) {
           const error = Cause.squash(missing.cause);
-          expect(error).toBeInstanceOf(AuthError);
+          expect(error).toBeInstanceOf(CredentialsUnavailable);
           expect(String(error)).toContain("profile 'default'");
         }
       }),

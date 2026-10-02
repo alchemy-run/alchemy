@@ -187,7 +187,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAnalyticsDatastores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const AnalyticsDatastoreProvider = () =>
   Provider.succeed(AnalyticsDatastore, {
@@ -227,7 +231,7 @@ export const AnalyticsDatastoreProvider = () =>
             parent: orgParent(organizationId),
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ datastores: [] }),
             ),
           );
@@ -309,6 +313,11 @@ export const AnalyticsDatastoreProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAnalyticsDatastores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

@@ -1,16 +1,10 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
-export const FOLDER_DISPLAY_PREFIX = "az-";
 export const FOLDER_DISPLAY_MAX = 30;
 export const PROJECT_ID_MIN = 6;
 export const PROJECT_ID_MAX = 30;
@@ -22,19 +16,6 @@ export const DEFAULT_LIEN_ORIGIN = "alchemy.effect";
 export const DEFAULT_LIEN_RESTRICTIONS = [
   "resourcemanager.projects.delete",
 ] as const;
-
-export class OperationFailed extends Data.TaggedError(
-  "GCP.ResourceManager.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class OperationPending extends Data.TaggedError(
-  "GCP.ResourceManager.OperationPending",
-)<{
-  operation: string;
-}> {}
 
 export class ParentRequired extends Data.TaggedError(
   "GCP.ResourceManager.ParentRequired",
@@ -87,15 +68,6 @@ export const sameHierarchyParent = (
 export const isDeleteRequested = (state: string | undefined) =>
   state === "DELETE_REQUESTED";
 
-export const alreadyExists = (error: resourcemanager.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-export const isNotFoundStatus = (error: resourcemanager.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found") ||
-  (error?.message ?? "").toUpperCase().includes("PERMISSION_DENIED");
-
 export const resourceNameFromOperation = (
   operation: resourcemanager.Operation,
   prefix: string,
@@ -132,10 +104,6 @@ const parentOf = (name: string) =>
 
 export const tryResolveParent = () =>
   Effect.gen(function* () {
-    const folder = process.env.GOOGLE_FOLDER_ID;
-    if (folder && folder.length > 0) return folderParent(folder);
-    const org = process.env.GOOGLE_ORGANIZATION_ID;
-    if (org && org.length > 0) return organizationParent(org);
     const env = yield* GcpEnvironment.current;
     return yield* parentOf(`projects/${env.project}`).pipe(
       Effect.map((parent) => {
@@ -176,56 +144,8 @@ export const projectNumberOf = (project: string) =>
       const number = lastSegment(resource.name ?? "");
       return /^\d+$/.test(number) ? number : project;
     }),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(project)),
+    Effect.catchTag("NotFound", () => Effect.succeed(project)),
   );
-
-export const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-  maxLength: number,
-): string => {
-  const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  if (!description) return marker.slice(0, maxLength);
-  const sep = "\n";
-  const budget = maxLength - marker.length - sep.length;
-  if (budget <= 0) return marker.slice(0, maxLength);
-  return `${marker}${sep}${description.slice(0, budget)}`;
-};
-
-export const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
-export const ownedByAlchemy = (id: string, description: string | undefined) =>
-  Effect.gen(function* () {
-    const { labels } = parseDescription(description);
-    return yield* hasAlchemyLabels(id, labels);
-  });
-
-export const createOwnership = (id: string) => createInternalLabels(id);
 
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])].slice().sort();
@@ -246,69 +166,40 @@ export const collectPages = <Page, A, E, R>(
     Effect.map((chunk) => Array.from(chunk)),
   );
 
+/**
+ * Wait for a Resource Manager operation; project and folder operations
+ * settle within a minute or two. With `allowAlreadyExists`, ALREADY_EXISTS
+ * (code 6) counts as success (create race); with `notFoundOk`, so does
+ * NOT_FOUND (code 5, delete race) and an operation that is already gone.
+ */
 export const waitForOperation = (
   operation: resourcemanager.Operation,
   options?: { notFoundOk?: boolean; allowAlreadyExists?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    const ignorable = (error: resourcemanager.Status | undefined) =>
-      (options?.allowAlreadyExists === true && alreadyExists(error)) ||
-      (options?.notFoundOk === true && isNotFoundStatus(error));
+  waitForGcpOperation(
+    operation,
+    (name) => resourcemanager.getOperations({ name }),
+    { budget: "10 minutes" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          ((options?.allowAlreadyExists === true && error.code === 6) ||
+            (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
-    if (operation.done === true) {
-      if (operation.error && !ignorable(operation.error)) {
-        return yield* new OperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new OperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = resourcemanager.getOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies resourcemanager.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new OperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => !current.error || ignorable(current.error),
-        (current) =>
-          new OperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.ResourceManager.OperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
-  });
+/**
+ * Wait for a create operation, then re-read it for its typed `response`
+ * (the created resource's name / project id).
+ */
+export const waitForCreate = (operation: resourcemanager.Operation) =>
+  waitForOperation(operation, { allowAlreadyExists: true }).pipe(
+    Effect.andThen(() =>
+      operation.name === undefined || operation.name.length === 0
+        ? Effect.succeed(operation)
+        : resourcemanager.getOperations({ name: operation.name }),
+    ),
+  );

@@ -164,14 +164,6 @@ export class PublicDelegatedPrefixNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class PublicDelegatedPrefixOperationFailed extends Data.TaggedError(
-  "GCP.Compute.PublicDelegatedPrefixOperationFailed",
-)<{
-  prefixName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toAttrs = (
   prefix: compute.PublicDelegatedPrefix,
   project: string,
@@ -225,13 +217,6 @@ const awaitResource = (project: string, region: string, prefixName: string) =>
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (prefixName: string, operation: string, message: string) =>
-  new PublicDelegatedPrefixOperationFailed({
-    prefixName,
-    operation,
-    message,
-  });
 
 export const PublicDelegatedPrefixProvider = () =>
   Provider.succeed(PublicDelegatedPrefix, {
@@ -320,11 +305,8 @@ export const PublicDelegatedPrefixProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         return Array.from(
           pages as readonly compute.PublicDelegatedPrefixAggregatedList[],
@@ -369,7 +351,6 @@ export const PublicDelegatedPrefixProvider = () =>
               isLiveMigration: news.isLiveMigration,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, region, prefixName);
@@ -395,7 +376,6 @@ export const PublicDelegatedPrefixProvider = () =>
               fingerprint: current.fingerprint,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
         );
         current =
           (yield* getByName(env.project, region, prefixName)) ?? current;
@@ -415,7 +395,6 @@ export const PublicDelegatedPrefixProvider = () =>
           region,
           publicDelegatedPrefix: output.prefixName,
         }),
-        (operation, message) => failOp(output.prefixName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

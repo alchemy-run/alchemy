@@ -27,6 +27,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type PlaybookType = "PLAYBOOK_TYPE_UNSPECIFIED" | "TASK" | "ROUTINE";
@@ -172,11 +173,12 @@ export type AgentsPlaybook = Resource<
  * ```
  *
  * ### Updating a Playbook
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Narrow the goal
  * ```typescript
  * const playbook = yield* GCP.Dialogflow.AgentsPlaybook("Support", {
- *   agent: existing.agent,
- *   playbookId: existing.playbookId,
+ *   agent: agentName,
  *   displayName: "support",
  *   goal: "Reset the user's password.",
  * });
@@ -273,7 +275,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -287,7 +288,6 @@ const findByDisplayName = (parent: string, displayName: string) =>
         option._tag === "Some" ? option.value : undefined,
       ),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsPlaybookProvider = () =>
@@ -474,11 +474,11 @@ export const AgentsPlaybookProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsPlaybooks({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

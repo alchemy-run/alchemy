@@ -14,10 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
-
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsStudiesTrials({ name }).pipe(
     Effect.as("found" as const),
@@ -49,10 +45,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsStudiesTrials({
-          name: `projects/${project}/locations/us-central1/studies/missing/trials/missing`,
+          name: `projects/${project}/locations/us-central1/studies/1234567890123456789/trials/1`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -62,7 +58,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a user-provided vizier trial",
   (stack) =>
     Effect.gen(function* () {
@@ -72,7 +68,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const study = yield* GCP.AIPlatform.Study("Tune", {
             location: "us-central1",
-            displayName: "trial-search",
+            displayName: "trial_search",
             studySpec,
           });
           return yield* GCP.AIPlatform.StudiesTrial("Seed", {

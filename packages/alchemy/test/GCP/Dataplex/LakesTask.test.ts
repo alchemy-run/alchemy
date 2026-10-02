@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -31,7 +32,7 @@ const serviceAccountOf = GcpEnvironment.current.pipe(
   ),
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a lake task",
   (stack) =>
     Effect.gen(function* () {
@@ -104,6 +105,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.task.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

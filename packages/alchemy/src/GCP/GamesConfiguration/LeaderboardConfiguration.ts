@@ -11,21 +11,15 @@ import {
   defaultScoreFormat,
   DEFAULT_LOCALE,
   DEFAULT_SCORE_ORDER,
-  findOwnedLeaderboard,
   getLeaderboard,
-  hasOwnershipMarker,
   ignoreMissing,
   jsonEqual,
-  leaderboardOwnedByAlchemy,
-  leaderboardOwnershipText,
-  listOwnedLeaderboards,
   MAX_LEADERBOARD_NAME_LENGTH,
-  ownershipLabels,
-  publicText,
   sameBundle,
   sameText,
-  stampBundle,
   toDisplayName,
+  translationValue,
+  withTranslation,
 } from "./internal.ts";
 
 export type LeaderboardConfigurationProps = {
@@ -55,9 +49,7 @@ export type LeaderboardConfigurationProps = {
    */
   scoreMax?: string;
   /**
-   * Default-locale display name. Leaderboards have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix on this name
-   * and stripped from attributes. If omitted, a unique name is generated.
+   * Default-locale display name. If omitted, a unique name is generated.
    */
   name?: string;
   /**
@@ -112,12 +104,10 @@ export type LeaderboardConfiguration = Resource<
 /**
  * A Play Games Services leaderboard configuration.
  *
- * Leaderboard configurations have no labels field, so Alchemy stamps
- * ownership into the default-locale draft name for `list` / nuke.
- * `applicationId` and `leaderboardId` are identity — changing either
+ * Leaderboard configurations have no labels field and a server-assigned
+ * id, so only a recorded leaderboard can be read back. `applicationId` and `leaderboardId` are identity — changing either
  * replaces the configuration. Score order, bounds, name, and format
- * update in place. `list` scans application ids from
- * `GCP_GAMESCONFIGURATION_APPLICATION_ID` (or `GCP_GAMES_APPLICATION_ID`).
+ * update in place.
  *
  * ### Creating a Leaderboard
  * **Example:** High-score board
@@ -148,11 +138,11 @@ export type LeaderboardConfiguration = Resource<
  * ### Updating a Leaderboard
  * **Example:** Change the name
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const board = yield* GCP.GamesConfiguration.LeaderboardConfiguration(
  *   "HighScore",
  *   {
- *     applicationId: existing.applicationId,
- *     leaderboardId: existing.leaderboardId,
+ *     applicationId: "123456789012",
  *     name: "All-time High Score",
  *   },
  * );
@@ -192,7 +182,7 @@ const toAttrs = (
   scoreOrder: leaderboard.scoreOrder,
   scoreMin: leaderboard.scoreMin,
   scoreMax: leaderboard.scoreMax,
-  name: publicText(leaderboard.draft?.name, locale),
+  name: translationValue(leaderboard.draft?.name, locale),
   locale,
   scoreFormat: leaderboard.draft?.scoreFormat,
   token: leaderboard.token,
@@ -201,21 +191,13 @@ const toAttrs = (
 });
 
 const desiredBody = (input: {
-  labels: Record<string, string>;
   locale: string;
   name: string;
   news: LeaderboardConfigurationProps;
   current?: gamesConfiguration.LeaderboardConfiguration;
 }): gamesConfiguration.LeaderboardConfiguration => {
   const draft = input.news.draft ?? {};
-  const name = stampBundle(
-    input.labels,
-    draft.name,
-    input.name,
-    input.locale,
-    MAX_LEADERBOARD_NAME_LENGTH,
-    true,
-  );
+  const name = withTranslation(draft.name, input.locale, input.name);
   return {
     scoreOrder:
       input.news.scoreOrder ?? input.current?.scoreOrder ?? DEFAULT_SCORE_ORDER,
@@ -266,46 +248,27 @@ export const LeaderboardConfigurationProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const applicationId = olds?.applicationId ?? output?.applicationId ?? "";
+      // Server-assigned id: only a recorded leaderboard can be observed.
       const leaderboardId = olds?.leaderboardId ?? output?.leaderboardId ?? "";
-      let existing = yield* getLeaderboard(leaderboardId);
-      if (existing === undefined) {
-        existing = yield* findOwnedLeaderboard(id, applicationId);
-      }
+      const existing = yield* getLeaderboard(leaderboardId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(
         existing,
-        applicationId,
+        olds?.applicationId ?? output?.applicationId ?? "",
         env.project,
         olds?.locale ?? output?.locale,
       );
-      return (yield* leaderboardOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const leaderboards = yield* listOwnedLeaderboards();
-        return leaderboards
-          .filter((leaderboard) =>
-            hasOwnershipMarker(leaderboardOwnershipText(leaderboard)),
-          )
-          .map((leaderboard) =>
-            toAttrs(leaderboard, leaderboard.applicationId, env.project),
-          );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const applicationId = news.applicationId;
-      const labels = yield* ownershipLabels(id);
       const name = yield* toDisplayName(
         id,
-        news.name ?? publicText(news.draft?.name, news.locale),
+        news.name ?? translationValue(news.draft?.name, news.locale),
         output?.name,
         MAX_LEADERBOARD_NAME_LENGTH,
       );
@@ -313,13 +276,9 @@ export const LeaderboardConfigurationProvider = () =>
       let current = yield* getLeaderboard(
         news.leaderboardId ?? output?.leaderboardId ?? "",
       );
-      if (current === undefined) {
-        current = yield* findOwnedLeaderboard(id, applicationId);
-      }
 
       const locale = localeOf(news, current);
       const desired = desiredBody({
-        labels,
         locale,
         name,
         news,
@@ -327,17 +286,10 @@ export const LeaderboardConfigurationProvider = () =>
       });
 
       if (current === undefined) {
-        const created = yield* gamesConfiguration
-          .insertLeaderboardConfigurations({
-            applicationId,
-            body: desired,
-          })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedLeaderboard(id, applicationId),
-            ),
-          );
-        current = created ?? undefined;
+        current = yield* gamesConfiguration.insertLeaderboardConfigurations({
+          applicationId,
+          body: desired,
+        });
       }
 
       if (current === undefined) {
@@ -348,7 +300,6 @@ export const LeaderboardConfigurationProvider = () =>
       }
 
       const synced = desiredBody({
-        labels,
         locale,
         name,
         news,

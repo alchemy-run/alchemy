@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { CAPACITY_ZONE } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,8 +15,13 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Zonal instance + snapshot each take several minutes; skip unless enabled.
-const runLifecycle = !!process.env.GCP_TEST_FILESTORE && !process.env.FAST;
+// Snapshots need a ZONAL/REGIONAL/ENTERPRISE instance, which draws on the
+// `EnterpriseStorageGibPerRegion` quota. The testing project has none (limit
+// 0), so the lifecycle is entitlement-gated; the probe below pins the typed
+// rejection. Instances also take 5–20 minutes to provision.
+const hasEnterpriseQuota = !!process.env.GCP_TEST_FILESTORE_ENTERPRISE;
+const runLifecycle =
+  hasEnterpriseQuota && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   file.getProjectsLocationsInstancesSnapshots({ name }).pipe(
@@ -41,24 +47,42 @@ test.provider(
           name: `projects/${project}/locations/us-central1-a/instances/alchemy-filestore-missing/snapshots/alchemy-snap-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* file
-        .listProjectsLocationsInstancesSnapshots({
-          parent: `projects/${project}/locations/-/instances/-`,
-          pageSize: 10,
-          returnPartialSuccess: true,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ snapshots: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.snapshots ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:filestore", "live"], timeout: 90_000 },
+);
+
+test.provider.skipIf(hasEnterpriseQuota || !!process.env.FAST)(
+  "a snapshot-capable instance without enterprise quota fails with StorageQuotaExceeded",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* GCP.Filestore.Instance("Nfs", {
+              location: CAPACITY_ZONE,
+              tier: "ZONAL",
+              fileShares: [{ name: "share1", capacityGb: 1024 }],
+              networks: [{ network: "default", modes: ["MODE_IPV4"] }],
+            });
+          }),
+        ),
+      );
+      expect(error._tag).toEqual("StorageQuotaExceeded");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  // If quota is ever granted the deploy creates a real instance; the budget
+  // lets the final destroy remove it instead of abandoning teardown.
+  {
+    tags: ["provider:gcp", "provider:gcp:filestore", "live"],
+    timeout: 2_700_000,
+    retry: 0,
+  },
 );
 
 test.provider.skipIf(!runLifecycle)(
@@ -70,7 +94,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const nfs = yield* GCP.Filestore.Instance("Nfs", {
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "ZONAL",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -103,7 +127,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const nfs = yield* GCP.Filestore.Instance("Nfs", {
             instanceId: created.nfs.instanceId,
-            location: "us-central1-a",
+            location: CAPACITY_ZONE,
             tier: "ZONAL",
             fileShares: [{ name: "share1", capacityGb: 1024 }],
             networks: [{ network: "default", modes: ["MODE_IPV4"] }],
@@ -140,6 +164,7 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:filestore", "live"],
-    timeout: 120_000,
+    timeout: 2_700_000,
+    retry: 0,
   },
 );

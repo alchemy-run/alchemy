@@ -199,10 +199,7 @@ export const RepositoriesWorkspaceProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),

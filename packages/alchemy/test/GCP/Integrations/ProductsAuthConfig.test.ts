@@ -9,6 +9,14 @@ import { GcpEnvironment } from "@/GCP/Environment";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
+// Product-scoped (`products/IP`) auth configs are rejected on a standard
+// project with Forbidden ("User is not authorized to create AuthConfig with
+// name … as they don't have membership of project {number}"), and product
+// Salesforce instances need one. Set GCP_TEST_INTEGRATIONS_PRODUCT_AUTH=1 on a
+// project entitled to the legacy product surface.
+const runProductAuthLifecycle =
+  !!process.env.GCP_TEST_INTEGRATIONS_PRODUCT_AUTH;
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -17,9 +25,7 @@ const logLevel = Effect.provideService(
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsProductsAuthConfigs({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -44,7 +50,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/products/IP/authConfigs/alchemy-missing-auth`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -54,7 +60,34 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_INTEGRATIONS)(
+test.provider.skipIf(runProductAuthLifecycle)(
+  "createProjectsLocationsProductsAuthConfigs without product membership is Forbidden",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+
+      const error = yield* Effect.flip(
+        integrations.createProjectsLocationsProductsAuthConfigs({
+          parent: `projects/${project}/locations/us-central1/products/IP`,
+          body: {
+            displayName: "alchemy-product-probe",
+            decryptedCredential: credential,
+          },
+        }),
+      );
+      expect(error._tag).toEqual("Forbidden");
+      expect(error.message).toContain("membership of project");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+    timeout: 90_000,
+  },
+);
+
+test.provider.skipIf(!runProductAuthLifecycle)(
   "create, update, and delete a product auth config",
   (stack) =>
     Effect.gen(function* () {

@@ -208,7 +208,7 @@ const listAtRevision = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
             Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[]),
           ),
         );
@@ -229,7 +229,7 @@ const listApiSessions = (apiName: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
         Effect.succeed([] as apigee.GoogleCloudApigeeV1ApiDebugSession[]),
       ),
     );
@@ -426,6 +426,11 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
         .deleteDataOrganizationsEnvironmentsApisRevisionsDebugsessions({
           name: output.name,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

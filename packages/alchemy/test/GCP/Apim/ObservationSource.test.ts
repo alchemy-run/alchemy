@@ -6,6 +6,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,14 +15,17 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST;
+// The API Management API is not enabled in the testing project: every call
+// answers 403 SERVICE_DISABLED (typed `ServiceDisabled`). Set GCP_TEST_APIM=1
+// on a project with the API enabled to run the lifecycle.
+const apimEnabled = !!process.env.GCP_TEST_APIM;
+const runLifecycle = !process.env.FAST && apimEnabled;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
   apim.getProjectsLocationsObservationSources({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -29,22 +33,8 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeAccess = GcpEnvironment.current.pipe(
-  Effect.flatMap(({ project }) =>
-    apim.listProjectsLocationsObservationSources({
-      parent: `projects/${project}/locations/${location}`,
-      pageSize: 1,
-    }),
-  ),
-
-  Effect.as("ok" as const),
-  Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-    Effect.succeed(error._tag),
-  ),
-);
-
 test.provider(
-  "getProjectsLocationsObservationSources on a missing source fails with a typed tag",
+  "getProjectsLocationsObservationSources on a missing source fails with ServiceDisabled while the API is disabled",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -57,10 +47,7 @@ test.provider(
           name: `${parent}/observationSources/alchemy-missing-src`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("API Management API has not been used");
-      }
+      expect(error._tag).toEqual(apimEnabled ? "NotFound" : "ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -76,34 +63,12 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
 
-      const access = yield* probeAccess;
-      if (access !== "ok") {
-        expect(access).toEqual("Forbidden");
-        const listed = yield* Effect.flip(
-          apim.listProjectsLocationsObservationSources({
-            parent,
-            pageSize: 1,
-          }),
-        );
-        expect(listed._tag).toEqual("Forbidden");
-        if (listed._tag === "Forbidden") {
-          expect(listed.message).toContain(
-            "API Management API has not been used",
-          );
-        }
-        yield* stack.destroy();
-        return;
-      }
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("ApimSrcVpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ApimSrcSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region: location,
-            ipCidrRange: "10.48.0.0/24",
+            ipCidrRange: "172.20.12.0/24",
             privateIpGoogleAccess: true,
           });
           const source = yield* GCP.Apim.ObservationSource("Edge", {
@@ -111,13 +76,13 @@ test.provider.skipIf(!runLifecycle)(
             gclbObservationSource: {
               pscNetworkConfigs: [
                 {
-                  network: network.networkName,
+                  network: DEFAULT_NETWORK,
                   subnetwork: subnet.subnetworkName,
                 },
               ],
             },
           });
-          return { network, subnet, source };
+          return { subnet, source };
         }),
       );
 

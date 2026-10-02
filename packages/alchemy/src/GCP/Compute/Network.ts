@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { lastSegment, operationMessage, waitGlobal } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -176,14 +176,6 @@ export class NetworkNotResolved extends Data.TaggedError(
   networkName: string;
 }> {}
 
-export class NetworkOperationFailed extends Data.TaggedError(
-  "GCP.Compute.NetworkOperationFailed",
-)<{
-  operation: string;
-  errors: ReadonlyArray<{ code?: string; message?: string }>;
-  message: string;
-}> {}
-
 const DEFAULT_AUTO_CREATE = false;
 const DEFAULT_MTU = 1460;
 const DEFAULT_ROUTING_MODE = "REGIONAL";
@@ -288,107 +280,6 @@ const getByName = (project: string, networkName: string) =>
     .getNetworks({ project, network: networkName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.length > 0 &&
-  errors.every((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "notfound" ||
-      code === "resource_not_found" ||
-      message.includes("was not found") ||
-      message.includes("not found")
-    );
-  });
-
-const isInUseOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.some((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code.includes("resource_in_use") ||
-      code.includes("resourceinusebyanotherresource") ||
-      message.includes("is used by") ||
-      message.includes("in use")
-    );
-  });
-
-const isDeletingOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.some((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code.includes("resource_not_ready") ||
-      code.includes("resourcenotready") ||
-      message.includes("not ready") ||
-      message.includes("being deleted") ||
-      message.includes("resource is not ready")
-    );
-  });
-
-const operationErrors = (operation: compute.Operation) => {
-  const errors = (operation.error?.errors ?? [])
-    .map((error) => ({
-      code: error.code,
-      message: error.message,
-    }))
-    .filter(
-      (error) =>
-        (error.code !== undefined && error.code.length > 0) ||
-        (error.message !== undefined && error.message.length > 0),
-    );
-  if (errors.length > 0) return errors;
-  const status = operation.httpErrorStatusCode;
-  if (status !== undefined && status >= 400) {
-    return [
-      {
-        code: String(status),
-        message: operationMessage(operation),
-      },
-    ];
-  }
-  return errors;
-};
-
-const failOp = (operation: compute.Operation, message?: string) =>
-  new NetworkOperationFailed({
-    operation: lastSegment(operation.name ?? operation.id),
-    errors: operationErrors(operation),
-    message: message ?? operationMessage(operation),
-  });
-
-const assertOperationOk = (operation: compute.Operation) => {
-  const errors = operationErrors(operation);
-  if (errors.length === 0 || isNotFoundOp(errors)) {
-    return Effect.void;
-  }
-  return Effect.fail(failOp(operation));
-};
-
-const waitForGlobalOperation = (
-  project: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const waited = yield* waitGlobal(project, operation, { times: 30 }).pipe(
-      Effect.catchTag("GCP.Compute.OperationPending", (error) =>
-        Effect.fail(
-          failOp(
-            operation,
-            `Timed out waiting for operation (status=${error.status})`,
-          ),
-        ),
-      ),
-    );
-    yield* assertOperationOk(waited);
-  });
-
 const waitInsertedNetwork = (
   project: string,
   networkName: string,
@@ -396,8 +287,10 @@ const waitInsertedNetwork = (
 ) =>
   Effect.gen(function* () {
     if (operation === undefined) return;
-    yield* waitForGlobalOperation(project, operation).pipe(
-      Effect.catchTag("GCP.Compute.NetworkOperationFailed", (error) =>
+    yield* waitGlobalOperation(project, operation, {
+      ignore: ["RESOURCE_NOT_FOUND"],
+    }).pipe(
+      Effect.catchTag("GCP.OperationFailed", (error) =>
         getByName(project, networkName).pipe(
           Effect.flatMap((network) =>
             network !== undefined ? Effect.void : Effect.fail(error),
@@ -564,7 +457,7 @@ export const NetworkProvider = () =>
             Effect.retry({
               while: (error) =>
                 error._tag === "NotFound" ||
-                error._tag === "GCP.Compute.NetworkOperationFailed",
+                error._tag === "GCP.OperationFailed",
               times: 6,
               schedule: Schedule.spaced("5 seconds"),
             }),
@@ -583,7 +476,7 @@ export const NetworkProvider = () =>
             network: networkName,
             body,
           });
-          yield* waitForGlobalOperation(env.project, patched);
+          yield* waitGlobalOperation(env.project, patched);
           return yield* requireNetwork(env.project, networkName);
         });
 
@@ -647,14 +540,17 @@ export const NetworkProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForGlobalOperation(env.project, operation),
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" ||
-              (error._tag === "GCP.Compute.NetworkOperationFailed" &&
-                (isInUseOp(error.errors) || isDeletingOp(error.errors))),
+              (error._tag === "GCP.OperationFailed" &&
+                (error.reason === "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE" ||
+                  error.reason === "RESOURCE_NOT_READY")),
             times: 20,
             schedule: Schedule.spaced("3 seconds"),
           }),

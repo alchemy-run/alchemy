@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,8 +15,12 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_AUTOMATED_DNS_RECORD;
+// Consumer-created DNS records need `networkconnectivity.serviceClasses.use` on
+// the Google producer's service class, which the testing project lacks
+// (Forbidden "Permission 'networkconnectivity.serviceClasses.use' denied on
+// 'projects/708115875642/.../serviceClasses/gcp-memorystore-redis'"). Set
+// GCP_TEST_NCC_AUTOMATED_DNS_RECORD=1 on an entitled project.
+const runLifecycle = !!process.env.GCP_TEST_NCC_AUTOMATED_DNS_RECORD;
 
 const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsAutomatedDnsRecords({ name }).pipe(
@@ -40,7 +45,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/automatedDnsRecords/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -116,9 +121,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.record.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

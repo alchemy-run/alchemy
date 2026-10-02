@@ -18,6 +18,7 @@ import {
   tableNameOf,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type InstancesTablesSchemaBundleProps = {
@@ -150,11 +151,7 @@ const toAttrs = (bundle: bigtable.SchemaBundle, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesSchemaBundles({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -251,17 +248,17 @@ export const InstancesTablesSchemaBundleProvider = () =>
         const pages = yield* Effect.forEach(
           tables,
           (table) =>
-            bigtable
-              .listProjectsInstancesTablesSchemaBundles({
+            collectPages(
+              bigtable.listProjectsInstancesTablesSchemaBundles.pages({
                 parent: table.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.schemaBundles ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.SchemaBundle[]),
-                ),
+              }),
+              (page) => page.schemaBundles,
+            ).pipe(
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as bigtable.SchemaBundle[]),
               ),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((bundle) => toAttrs(bundle, env.project));
@@ -326,7 +323,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

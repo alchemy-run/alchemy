@@ -9,9 +9,9 @@ import {
 
 export const MAX_NAME_LENGTH = 64;
 
-/** Locations swept by `list`: every location, the stack region, and the multi-regions. */
+/** Locations swept by `list`: the stack region and the multi-regions (the API has no `locations/-` wildcard). */
 export const listLocations = (region: string) =>
-  Array.from(new Set(["-", region, "US", "EU"]));
+  Array.from(new Set([region, "US", "EU"]));
 const OWNER_PREFIX = "alch---";
 
 export const lastSegment = (value: string) => {

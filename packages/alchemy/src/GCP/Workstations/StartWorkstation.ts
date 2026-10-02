@@ -15,6 +15,7 @@ export interface StartWorkstationRequest extends Omit<
  * Bind this operation to a
  * {@link WorkstationClustersWorkstationConfigsWorkstation} in a
  * Function/Action init phase. Provide {@link StartWorkstationHttp}.
+ * Grants `roles/workstations.user` on the workstation only.
  *
  * ### Starting a Workstation
  * **Example:** Start the bound workstation

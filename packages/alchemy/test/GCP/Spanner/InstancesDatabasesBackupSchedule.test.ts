@@ -14,8 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !process.env.FAST;
-
 const waitUntilGone = (name: string) =>
   spanner.getProjectsInstancesDatabasesBackupSchedules({ name }).pipe(
     Effect.as("found" as const),
@@ -46,7 +44,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:spanner", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a spanner backup schedule",
   (stack) =>
     Effect.gen(function* () {

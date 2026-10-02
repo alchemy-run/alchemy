@@ -1,6 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const DEFAULT_CONTENT_TYPE = "application/json";
 const MAX_NAME_LENGTH = 63;
@@ -309,14 +309,23 @@ export type Trigger = Resource<
  * ```
  *
  * ### Updating a Trigger
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical trigger and patches it in place.
+ *
  * **Example:** Change labels and the CloudEvent content type
  * ```typescript
  * const trigger = yield* GCP.Eventarc.Trigger("orders", {
- *   triggerId: existing.triggerId,
- *   location: existing.location,
- *   eventFilters: existing.eventFilters,
- *   destination: existing.destination!,
- *   transport: { pubsub: { topic: existing.transport?.pubsub?.topic } },
+ *   eventFilters: [
+ *     {
+ *       attribute: "type",
+ *       value: "google.cloud.pubsub.topic.v1.messagePublished",
+ *     },
+ *   ],
+ *   destination: {
+ *     workflow:
+ *       "projects/my-project/locations/us-central1/workflows/orders",
+ *   },
+ *   transport: { pubsub: { topic: topic.name } },
  *   eventDataContentType: "application/json",
  *   labels: { env: "prod", role: "events" },
  * });
@@ -335,19 +344,6 @@ export class TriggerNotResolved extends Data.TaggedError(
   "GCP.Eventarc.TriggerNotResolved",
 )<{
   name: string;
-}> {}
-
-export class TriggerOperationFailed extends Data.TaggedError(
-  "GCP.Eventarc.TriggerOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class TriggerOperationPending extends Data.TaggedError(
-  "GCP.Eventarc.TriggerOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class TriggerStillExists extends Data.TaggedError(
@@ -568,14 +564,6 @@ const contentTypeKey = (value: string | undefined) =>
 const retryKey = (policy: RetryPolicy | undefined) =>
   JSON.stringify({ maxAttempts: policy?.maxAttempts ?? null });
 
-const alreadyExists = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
 const toAttrs = (
   trigger: eventarc.Trigger,
   project: string,
@@ -611,113 +599,6 @@ const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsTriggers({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  operation: eventarc.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; allowAlreadyExists?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.allowAlreadyExists === true &&
-          alreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new TriggerOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    // Eventarc `allowMissing` delete of a missing trigger returns `{}`
-    // (no name, done unset). Treat that as already-gone.
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new TriggerOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const fetched = eventarc.getProjectsLocationsOperations({ name });
-    const observe: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > =
-      options?.notFoundOk === true
-        ? fetched.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<eventarc.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : fetched.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    const wait: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      | TriggerOperationFailed
-      | TriggerOperationPending
-      | eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > = observe.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        (): TriggerOperationPending =>
-          new TriggerOperationPending({ operation: name }),
-      ),
-      Effect.flatMap(
-        (
-          current,
-        ): Effect.Effect<
-          eventarc.GoogleLongrunningOperation,
-          TriggerOperationFailed
-        > => {
-          const status = current.error;
-          if (status) {
-            if (options?.allowAlreadyExists === true && alreadyExists(status)) {
-              return Effect.succeed(current);
-            }
-            if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-              return Effect.succeed(current);
-            }
-            return Effect.fail(
-              new TriggerOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            );
-          }
-          return Effect.succeed(current);
-        },
-      ),
-    );
-
-    return yield* wait.pipe(
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Eventarc.TriggerOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
 
 /**
  * Block until Eventarc reports every trigger condition healthy (`OK`), so
@@ -968,7 +849,7 @@ export const TriggerProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { allowAlreadyExists: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }

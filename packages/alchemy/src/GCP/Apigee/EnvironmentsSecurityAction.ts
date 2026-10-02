@@ -366,7 +366,7 @@ export const EnvironmentsSecurityActionProvider = () =>
                 ),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
                   Effect.succeed(
                     [] as EnvironmentsSecurityAction["Attributes"][],
                   ),
@@ -463,6 +463,11 @@ export const EnvironmentsSecurityActionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsSecurityActions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

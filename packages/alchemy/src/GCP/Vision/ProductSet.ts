@@ -9,17 +9,10 @@ import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deleteProductSet,
-  encodeOwnershipLine,
-  findOwnedProductSet,
   getProductSet,
-  listOwnedProductSets,
   listProductsInSet,
   locationParent,
-  MAX_DISPLAY_NAME_LENGTH,
   normalizeLocation,
-  ownedByAlchemy,
-  ownershipLabels,
-  parseOwnership,
   parseResourceName,
   productSetNameOf,
   replaceOnIdentity,
@@ -43,9 +36,8 @@ export type ProductSetProps = {
    */
   productSetId?: string;
   /**
-   * User-facing name (max 4096 characters). Product sets have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
-   * stripped from attributes.
+   * User-facing name (max 4096 characters).
+   * @default the product set id
    */
   displayName?: string;
   /**
@@ -67,7 +59,7 @@ export type ProductSet = Resource<
     project: string;
     /** Product Search location. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** User-facing display name. */
     displayName: string | undefined;
     /** Product resource names currently in this set. */
     products: string[];
@@ -88,10 +80,11 @@ export type ProductSet = Resource<
 /**
  * A Cloud Vision Product Search product set.
  *
- * Product sets have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Location and product set id are
- * identity — changing either replaces the set. Display name and product
- * membership update in place.
+ * Product sets have no labels field, so ownership rests on the
+ * deterministic product set id: a set found without prior state is
+ * reported as unowned and only taken over with `--adopt`. Location and
+ * product set id are identity — changing either replaces the set. Display
+ * name and product membership update in place.
  *
  * ### Creating a Product Set
  * **Example:** Generated id
@@ -113,9 +106,10 @@ export type ProductSet = Resource<
  * ### Updating a Product Set
  * **Example:** Rename and attach products
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const set = yield* GCP.Vision.ProductSet("Catalog", {
  *   location: "us-west1",
- *   productSetId: existing.productSetId,
+ *   productSetId: "summer-catalog",
  *   displayName: "Fall",
  *   products: [shoe.name],
  * });
@@ -144,7 +138,7 @@ const toAttrs = (
     productSetId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: parseOwnership(set.displayName).text,
+    displayName: set.displayName,
     products,
     indexTime: set.indexTime,
     indexError:
@@ -187,7 +181,7 @@ export const ProductSetProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
@@ -197,53 +191,27 @@ export const ProductSetProvider = () =>
           location,
           olds?.productSetId ?? output?.productSetId ?? "",
         );
-      let existing = yield* getProductSet(name);
-      if (existing === undefined) {
-        existing = yield* findOwnedProductSet(env.project, location, id);
-      }
+      const existing = yield* getProductSet(name);
       if (existing === undefined) return undefined;
       const products = yield* productsOf(existing.name ?? name);
       const attrs = toAttrs(existing, env.project, products);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const sets = yield* listOwnedProductSets(env.project);
-        return yield* Effect.forEach(
-          sets,
-          (set) =>
-            productsOf(set.name ?? "").pipe(
-              Effect.map((products) => toAttrs(set, env.project, products)),
-            ),
-          { concurrency: 4 },
-        );
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const ownership = yield* ownershipLabels(id);
       const productSetId = yield* toResourceId(
         id,
         news.productSetId,
         output?.productSetId,
       );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? productSetId,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = news.displayName ?? productSetId;
       const name =
         output?.name ?? productSetNameOf(env.project, location, productSetId);
 
       let current = yield* getProductSet(name);
-      if (current === undefined) {
-        current = yield* findOwnedProductSet(env.project, location, id);
-      }
 
       if (current === undefined) {
         const created = yield* vision

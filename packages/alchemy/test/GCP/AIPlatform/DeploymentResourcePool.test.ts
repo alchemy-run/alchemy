@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+// Pool create + update + delete takes ~1.5 minutes.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsDeploymentResourcePools({ name }).pipe(
@@ -42,23 +41,17 @@ test.provider(
           name: `${parent}/deploymentResourcePools/alchemy-aiplatform-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsDeploymentResourcePools({
+      expect(error._tag).toEqual("NotFound");
+      const page =
+        yield* aiplatform.listProjectsLocationsDeploymentResourcePools({
           parent,
           pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ deploymentResourcePools: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.deploymentResourcePools ?? [])).toEqual(true);
+        });
+      expect(
+        (page.deploymentResourcePools ?? []).map((item) => item.name),
+      ).not.toContain(
+        `${parent}/deploymentResourcePools/alchemy-aiplatform-missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -109,13 +102,12 @@ test.provider.skipIf(!runLifecycle)(
               maxReplicaCount: 2,
               machineSpec: { machineType: "n1-standard-2" },
             },
-            disableContainerLogging: true,
           });
         }),
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.disableContainerLogging).toEqual(true);
+      expect(updated.dedicatedResources?.maxReplicaCount).toEqual(2);
 
       yield* stack.destroy();
 

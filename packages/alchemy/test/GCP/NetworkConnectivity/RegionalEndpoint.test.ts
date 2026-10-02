@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,8 +15,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_REGIONAL_ENDPOINT;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsRegionalEndpoints({ name }).pipe(
@@ -40,7 +40,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/regionalEndpoints/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -54,16 +54,14 @@ test.provider.skipIf(!runLifecycle)(
   "create and delete a regional endpoint",
   (stack) =>
     Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("RepVpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("RepSubnet", {
-            network: network.networkName,
-            ipCidrRange: "10.21.0.0/24",
+            network: DEFAULT_NETWORK,
+            ipCidrRange: "172.20.11.0/24",
             privateIpGoogleAccess: true,
           });
           const endpoint = yield* GCP.NetworkConnectivity.RegionalEndpoint(
@@ -71,13 +69,13 @@ test.provider.skipIf(!runLifecycle)(
             {
               targetGoogleApi: "storage.us-central1.p.rep.googleapis.com",
               accessType: "REGIONAL",
-              network: network.selfLink.as<string>(),
+              network: defaultNetworkSelfLink(project),
               subnetwork: subnet.selfLink.as<string>(),
               description: "rep a",
               labels: { env: "test" },
             },
           );
-          return { network, subnet, endpoint };
+          return { subnet, endpoint };
         }),
       );
 
@@ -111,6 +109,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

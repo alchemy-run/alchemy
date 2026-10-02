@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperations } from "./operations.ts";
+import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -78,7 +78,8 @@ export type ReservationProps = {
   /**
    * Optional description. Compute reservations have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * is stored in a `[alchemy …]` prefix for `list` / nuke. Changing it
+   * replaces the reservation.
    */
   description?: string;
   /**
@@ -243,14 +244,6 @@ export class ReservationNotResolved extends Data.TaggedError(
   zone: string;
 }> {}
 
-export class ReservationOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ReservationOperationFailed",
-)<{
-  reservationName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class ReservationNotReady extends Data.TaggedError(
   "GCP.Compute.ReservationNotReady",
 )<{
@@ -398,85 +391,6 @@ const getByName = (project: string, zone: string, reservation: string) =>
     .getReservations({ project, zone, reservation })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (
-  reservationName: string,
-  operation: compute.Operation,
-) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new ReservationOperationFailed({
-        reservationName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitZoneOperation = (
-  project: string,
-  zone: string,
-  operation: compute.Operation,
-  reservationName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(reservationName, operation);
-      return operation;
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitZoneOperations(
-        { project, zone, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    yield* failIfErrored(reservationName, current);
-    return current;
-  });
-
 const waitReservationReady = (
   project: string,
   zone: string,
@@ -504,7 +418,7 @@ const waitReservationReady = (
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.ReservationNotReady",
-      times: 10,
+      times: 150,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
@@ -527,7 +441,7 @@ const waitReservationGone = (
     ),
     Effect.retry({
       while: (error) => error instanceof ReservationStillExists,
-      times: 10,
+      times: 150,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
@@ -596,6 +510,12 @@ export const ReservationProvider = () =>
         news.deploymentType !== undefined &&
         olds.deploymentType !== news.deploymentType;
 
+      // `reservations.update` accepts a description mask but leaves the
+      // stored description unchanged, so a new description replaces.
+      const descriptionChanged =
+        olds !== undefined &&
+        (olds.description ?? "") !== (news.description ?? "");
+
       if (
         nameChanged ||
         zoneChanged ||
@@ -603,7 +523,8 @@ export const ReservationProvider = () =>
         machineChanged ||
         templateChanged ||
         kindChanged ||
-        deploymentChanged
+        deploymentChanged ||
+        descriptionChanged
       ) {
         return {
           action: "replace" as const,
@@ -678,12 +599,9 @@ export const ReservationProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitZoneOperation(
-            env.project,
-            zone,
-            inserted,
-            reservationName,
-          );
+          yield* waitZoneOperation(env.project, zone, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitReservationReady(
           env.project,
@@ -716,10 +634,10 @@ export const ReservationProvider = () =>
 
       const descriptionChanged =
         (current.description ?? "") !== (desired.description ?? "");
-      const shareChanged = !sameJson(
-        current.shareSettings,
-        desired.shareSettings,
-      );
+      // Compute echoes a default `{ shareType: "LOCAL" }` when unset.
+      const shareChanged =
+        desired.shareSettings !== undefined &&
+        !sameJson(current.shareSettings, desired.shareSettings);
       const emergentChanged =
         (current.enableEmergentMaintenance ?? false) !==
         (desired.enableEmergentMaintenance ?? false);
@@ -736,13 +654,15 @@ export const ReservationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
+          // `reservations.update` rejects a body without `name`.
           body: {
+            name: reservationName,
             description: desired.description,
             shareSettings: desired.shareSettings,
             enableEmergentMaintenance: desired.enableEmergentMaintenance,
           },
         });
-        yield* waitZoneOperation(env.project, zone, patched, reservationName);
+        yield* waitZoneOperation(env.project, zone, patched);
         current =
           (yield* getByName(env.project, zone, reservationName)) ??
           (yield* waitReservationReady(env.project, zone, reservationName));
@@ -768,7 +688,7 @@ export const ReservationProvider = () =>
           reservation: reservationName,
           body: { specificSkuCount: desiredCount },
         });
-        yield* waitZoneOperation(env.project, zone, resized, reservationName);
+        yield* waitZoneOperation(env.project, zone, resized);
         current = yield* waitReservationReady(
           env.project,
           zone,
@@ -805,19 +725,9 @@ export const ReservationProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitZoneOperation(
-          project,
-          zone,
-          deleted,
-          output.reservationName,
-        ).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof ReservationOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitZoneOperation(project, zone, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitReservationGone(project, zone, output.reservationName);
     }),

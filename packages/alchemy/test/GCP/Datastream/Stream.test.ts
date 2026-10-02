@@ -7,7 +7,7 @@ import {
   LOCATION,
   logLevel,
   currentProject,
-  runSlowLifecycle,
+  runLifecycle,
   waitUntilGone,
 } from "./common.ts";
 
@@ -25,7 +25,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/streams/alchemy-missing-stream`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -35,7 +35,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runSlowLifecycle)(
+test.provider.skipIf(!runLifecycle)(
   "create and delete a mysql-to-bigquery stream",
   (stack) =>
     Effect.gen(function* () {
@@ -120,6 +120,6 @@ test.provider.skipIf(!runSlowLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:datastream", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

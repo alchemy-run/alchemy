@@ -1,18 +1,11 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  parseDescription,
-} from "./ownership.ts";
 import {
   lastSegment,
   orgParent,
@@ -44,11 +37,11 @@ export type ApiproductsRateplanProps = {
   apiproduct: string;
   /**
    * Display name of the rate plan. If omitted, a unique name is
-   * generated. Alchemy ownership is stored in the description prefix.
+   * generated.
    */
   displayName?: string;
   /**
-   * Human-readable description.
+   * Human-readable description shown to portal developers.
    */
   description?: string;
   /**
@@ -150,9 +143,9 @@ export type ApiproductsRateplan = Resource<
 /**
  * An Apigee rate plan attached to an API product for monetization.
  *
- * Rate plans have no labels field. Alchemy stamps ownership into the
- * description so `list` / nuke can find them. The rate plan id is
- * server-assigned. Only one plan per product can be `PUBLISHED`.
+ * Rate plans have no labels field and their text is shown to portal
+ * developers, so Alchemy tracks a plan only by the server-assigned id in
+ * its state; nuke cannot discover plans. Only one plan per product can be `PUBLISHED`.
  *
  * ### Creating a Rate Plan
  * **Example:** Draft monthly plan
@@ -190,7 +183,6 @@ const toAttrs = (
   organizationId: string,
 ) => {
   const name = plan.name ?? "";
-  const parsed = parseDescription(plan.description);
   return {
     name,
     rateplanId: lastSegment(name),
@@ -198,7 +190,7 @@ const toAttrs = (
     organizationId,
     project,
     displayName: plan.displayName,
-    description: parsed.description,
+    description: plan.description,
     billingPeriod: plan.billingPeriod,
     currencyCode: plan.currencyCode,
     state: plan.state,
@@ -217,7 +209,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproductsRateplans({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 export const ApiproductsRateplanProvider = () =>
   Provider.succeed(ApiproductsRateplan, {
@@ -248,7 +244,7 @@ export const ApiproductsRateplanProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
         olds?.organizationId ??
@@ -258,30 +254,8 @@ export const ApiproductsRateplanProvider = () =>
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project, organizationId);
-      const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return toAttrs(existing, env.project, organizationId);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const organizationId = yield* resolveOrgId(env.project);
-        const page = yield* apigee
-          .listOrganizationsApiproductsRateplans({
-            parent: `${orgParent(organizationId)}/apiproducts/-`,
-            expand: true,
-            count: 1000,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({ ratePlans: [] }),
-            ),
-          );
-        return (page.ratePlans ?? [])
-          .filter((plan) => hasOwnershipMarker(plan.description))
-          .map((plan) => toAttrs(plan, env.project, organizationId));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
@@ -290,14 +264,13 @@ export const ApiproductsRateplanProvider = () =>
         output?.organizationId ??
         (yield* resolveOrgId(env.project));
       const parent = productParent(organizationId, news.apiproduct);
-      const ownership = yield* createInternalLabels(id);
       const generated = yield* toPhysicalId(
         id,
         news.displayName,
         output?.displayName,
         MAX_NAME_LENGTH,
       );
-      const desiredDescription = encodeDescription(ownership, news.description);
+      const desiredDescription = news.description;
       const body: apigee.GoogleCloudApigeeV1RatePlan = {
         displayName: generated,
         description: desiredDescription,
@@ -334,7 +307,7 @@ export const ApiproductsRateplanProvider = () =>
 
       const needsUpdate =
         (current.displayName ?? "") !== (body.displayName ?? "") ||
-        (current.description ?? "") !== desiredDescription ||
+        (current.description ?? "") !== (desiredDescription ?? "") ||
         (current.billingPeriod ?? "") !== (news.billingPeriod ?? "") ||
         (current.currencyCode ?? "") !== (news.currencyCode ?? "") ||
         (current.state ?? "") !== (body.state ?? "") ||
@@ -363,6 +336,11 @@ export const ApiproductsRateplanProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApiproductsRateplans({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "ApigeeResourceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });

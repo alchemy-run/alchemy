@@ -143,14 +143,6 @@ export class PublicAdvertisedPrefixNotResolved extends Data.TaggedError(
   prefixName: string;
 }> {}
 
-export class PublicAdvertisedPrefixOperationFailed extends Data.TaggedError(
-  "GCP.Compute.PublicAdvertisedPrefixOperationFailed",
-)<{
-  prefixName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const toAttrs = (
   prefix: compute.PublicAdvertisedPrefix,
   project: string,
@@ -195,13 +187,6 @@ const awaitResource = (project: string, prefixName: string) =>
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (prefixName: string, operation: string, message: string) =>
-  new PublicAdvertisedPrefixOperationFailed({
-    prefixName,
-    operation,
-    message,
-  });
 
 export const PublicAdvertisedPrefixProvider = () =>
   Provider.succeed(PublicAdvertisedPrefix, {
@@ -273,7 +258,7 @@ export const PublicAdvertisedPrefixProvider = () =>
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as PublicAdvertisedPrefix["Attributes"][]),
             ),
           );
@@ -306,7 +291,6 @@ export const PublicAdvertisedPrefixProvider = () =>
               ipv6AccessType: news.ipv6AccessType,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(env.project, prefixName);
@@ -327,7 +311,6 @@ export const PublicAdvertisedPrefixProvider = () =>
               fingerprint: current.fingerprint,
             },
           }),
-          (operation, message) => failOp(prefixName, operation, message),
         );
         current = (yield* getByName(env.project, prefixName)) ?? current;
       }
@@ -343,7 +326,6 @@ export const PublicAdvertisedPrefixProvider = () =>
           project: env.project,
           publicAdvertisedPrefix: output.prefixName,
         }),
-        (operation, message) => failOp(output.prefixName, operation, message),
         { ignoreNotFound: true },
       ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     }),

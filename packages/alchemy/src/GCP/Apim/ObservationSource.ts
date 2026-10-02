@@ -152,11 +152,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : apim
         .getProjectsLocationsObservationSources({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>

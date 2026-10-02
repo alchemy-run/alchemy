@@ -63,9 +63,7 @@ test.provider(
       expect(fetched.id).toEqual(created.notificationId);
       expect(fetched.payload_format).toEqual("JSON_API_V1");
       expect(fetched.custom_attributes?.env).toEqual("test");
-      expect(fetched.custom_attributes?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.custom_attributes).toEqual({ env: "test" });
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

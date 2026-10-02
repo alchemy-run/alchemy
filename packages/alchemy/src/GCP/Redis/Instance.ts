@@ -18,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 const DEFAULT_TIER = "BASIC";
 const DEFAULT_CONNECT_MODE = "DIRECT_PEERING";
@@ -297,7 +298,7 @@ export type Instance = Resource<
  * ```
  *
  * ### Binding from a Function
- * **Example:** ReadWriteRedis over REDIS_URL
+ * **Example:** ReadWriteRedis from a Function
  * ```typescript
  * export class Api extends GCP.Function<Api>()(
  *   "Api",
@@ -349,13 +350,6 @@ export class InstanceNotReady extends Data.TaggedError(
 )<{
   name: string;
   state: string;
-}> {}
-
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Redis.InstanceOperationFailed",
-)<{
-  operation: string;
-  message: string;
 }> {}
 
 export class InstanceOperationPending extends Data.TaggedError(
@@ -573,69 +567,35 @@ const getByName = (name: string) =>
     .getProjectsLocationsInstances({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/** Wait for an operation through the shared GCP waiter. */
 const waitForOperation = (
   operation: redis.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new InstanceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = redis.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<redis.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InstanceOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new InstanceOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Redis.InstanceOperationPending",
-        ...LONG_POLL,
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      redis
+        .getProjectsLocationsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<redis.Operation>({ name, done: true })
+              : Effect.fail(error),
+          ),
+        ),
+    { budget: "30 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        (error.code === 6 ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -841,7 +801,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

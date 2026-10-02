@@ -81,10 +81,12 @@ export type Tenant = Resource<
  * ```
  *
  * ### Updating a Tenant
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Change the client identifier
  * ```typescript
  * const tenant = yield* GCP.Jobs.Tenant("Acme", {
- *   tenantId: existing.tenantId,
  *   externalId: "acme-holdings",
  * });
  * ```

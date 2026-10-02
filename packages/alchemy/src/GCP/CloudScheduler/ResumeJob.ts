@@ -15,6 +15,10 @@ export interface ResumeJobRequest extends Omit<
  * Bind this operation to a {@link Job} in a Function/Action init phase.
  * Provide {@link ResumeJobHttp}.
  *
+ * Grants `roles/cloudscheduler.admin` on the project: it is the only
+ * predefined role with `cloudscheduler.jobs.enable`, and Cloud Scheduler has
+ * neither per-job IAM policies nor IAM Conditions on `resource.name`.
+ *
  * ### Resuming Jobs
  * **Example:** Resume the bound job
  * ```typescript

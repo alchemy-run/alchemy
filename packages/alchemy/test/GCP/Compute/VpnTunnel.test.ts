@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -38,16 +39,13 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.VpnGateway("Gateway", {
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
           });
           const router = yield* GCP.Compute.Router("Edge", {
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             bgp: { asn: 64514 },
           });
           const peer = yield* GCP.Compute.ExternalVpnGateway("Peer", {
@@ -65,7 +63,7 @@ test.provider(
             description: "ha vpn tunnel",
             labels: { env: "test" },
           });
-          return { network, gateway, router, peer, tunnel };
+          return { gateway, router, peer, tunnel };
         }),
       );
 
@@ -110,19 +108,15 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const gateway = yield* GCP.Compute.VpnGateway("Gateway", {
             vpnGatewayName: created.gateway.vpnGatewayName,
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
           });
           const router = yield* GCP.Compute.Router("Edge", {
             routerName: created.router.routerName,
             region: "us-central1",
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             bgp: { asn: 64514 },
           });
           const peer = yield* GCP.Compute.ExternalVpnGateway("Peer", {
@@ -142,7 +136,7 @@ test.provider(
             description: "ha vpn tunnel",
             labels: { env: "prod", role: "vpn" },
           });
-          return { network, gateway, router, peer, tunnel };
+          return { gateway, router, peer, tunnel };
         }),
       );
 

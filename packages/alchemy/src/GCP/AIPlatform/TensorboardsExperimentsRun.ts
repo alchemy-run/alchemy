@@ -156,7 +156,6 @@ const listTensorboards = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listExperiments = (parent: string) =>
@@ -171,7 +170,6 @@ const listExperiments = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listAtParent = (parent: string, project: string) =>
@@ -186,7 +184,6 @@ const listAtParent = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const TensorboardsExperimentsRunProvider = () =>

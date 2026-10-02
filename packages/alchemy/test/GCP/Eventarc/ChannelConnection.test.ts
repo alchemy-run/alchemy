@@ -44,7 +44,7 @@ test.provider(
           name: `projects/${project}/locations/${LOCATION}/channelConnections/alchemy-missing-connection`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

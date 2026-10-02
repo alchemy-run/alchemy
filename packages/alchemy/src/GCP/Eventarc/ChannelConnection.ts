@@ -318,7 +318,7 @@ export const ChannelConnectionProvider = () =>
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
             Effect.flatMap((current) =>
               current === undefined ? Effect.void : Effect.fail(error),

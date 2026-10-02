@@ -123,10 +123,8 @@ export type BillingBucketsView = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const view = yield* GCP.Logging.BillingBucketsView("Gce", {
- *   billingAccountId: existing.billingAccountId,
- *   location: existing.location,
- *   bucketId: existing.bucketId,
- *   viewId: existing.viewId,
+ *   bucketId: bucket.bucketId,
+ *   location: "global",
  *   filter: 'resource.type = "gce_instance" AND severity>=ERROR',
  *   description: "compute errors",
  * });
@@ -273,7 +271,7 @@ export const BillingBucketsViewProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as logging.LogBucket[]),
             ),
           );
@@ -295,7 +293,7 @@ export const BillingBucketsViewProvider = () =>
               ),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["NotFound", "Forbidden"], () =>
+              Effect.catchTag("NotFound", () =>
                 Effect.succeed([] as BillingBucketsView["Attributes"][]),
               ),
             );

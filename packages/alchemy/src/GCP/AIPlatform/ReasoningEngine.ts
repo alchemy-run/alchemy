@@ -183,10 +183,9 @@ const toAttrs = (
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : aiplatform.getProjectsLocationsReasoningEngines({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+    : aiplatform
+        .getProjectsLocationsReasoningEngines({ name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsReasoningEngines
@@ -199,7 +198,6 @@ const listAt = (parent: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const listAlchemyReasoningEngines = (
@@ -239,6 +237,19 @@ const waitUntilGone = (name: string) =>
         error._tag === "GCP.AIPlatform.ReasoningEngineStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
+    }),
+  );
+
+// Engine writes share a small per-minute regional quota ("Reasoning Engine
+// Write Requests per minute per region"); wait out the window.
+const retryWriteQuota = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "TooManyRequests",
+      times: 8,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -338,8 +349,8 @@ export const ReasoningEngineProvider = () =>
           : undefined) ?? (yield* findOwned(id, parent));
 
       if (current === undefined) {
-        const created = yield* aiplatform
-          .createProjectsLocationsReasoningEngines({
+        const created = yield* retryWriteQuota(
+          aiplatform.createProjectsLocationsReasoningEngines({
             parent,
             body: compact({
               displayName,
@@ -349,8 +360,8 @@ export const ReasoningEngineProvider = () =>
               contextSpec: news.contextSpec,
               encryptionSpec: news.encryptionSpec,
             }),
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          }),
+        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -389,8 +400,8 @@ export const ReasoningEngineProvider = () =>
           descriptionChanged ? "description" : undefined,
           specChanged ? "spec" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const patched =
-          yield* aiplatform.patchProjectsLocationsReasoningEngines({
+        const patched = yield* retryWriteQuota(
+          aiplatform.patchProjectsLocationsReasoningEngines({
             name: observedName,
             updateMask: updateMask.join(","),
             body: compact({
@@ -401,7 +412,8 @@ export const ReasoningEngineProvider = () =>
               spec: news.spec,
               etag: current.etag,
             }),
-          });
+          }),
+        );
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
       }
@@ -413,15 +425,15 @@ export const ReasoningEngineProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* aiplatform
-        .deleteProjectsLocationsReasoningEngines({
+      const operation = yield* retryWriteQuota(
+        aiplatform.deleteProjectsLocationsReasoningEngines({
           name: output.name,
           force: true,
-        })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-        );
+        }),
+      ).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

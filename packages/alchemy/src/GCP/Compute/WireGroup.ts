@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
+import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -136,14 +136,6 @@ export class WireGroupNotResolved extends Data.TaggedError(
   crossSiteNetwork: string;
 }> {}
 
-export class WireGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.WireGroupOperationFailed",
-)<{
-  wireGroupName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class WireGroupStillExists extends Data.TaggedError(
   "GCP.Compute.WireGroupStillExists",
 )<{
@@ -251,81 +243,6 @@ const getByName = (
     .getWireGroups({ project, crossSiteNetwork, wireGroup })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) => item.code ?? "");
-
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.message ?? item.code ?? "unknown")
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const failIfErrored = (wireGroupName: string, operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationMessage(operation).toLowerCase();
-  if (
-    codes.includes("alreadyExists") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    text.includes("already exists")
-  ) {
-    return Effect.void;
-  }
-  if (
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400) ||
-    operation.status !== "DONE"
-  ) {
-    return Effect.fail(
-      new WireGroupOperationFailed({
-        wireGroupName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const waitGlobalOperation = (
-  project: string,
-  operation: compute.Operation,
-  wireGroupName: string,
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name ?? operation.id);
-    if (operationName.length === 0) {
-      yield* failIfErrored(wireGroupName, operation);
-      return operation;
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitGlobalOperations(
-        { project, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    yield* failIfErrored(wireGroupName, current);
-    return current;
-  });
-
 const waitGroupGone = (
   project: string,
   crossSiteNetwork: string,
@@ -354,7 +271,7 @@ const listParents = (project: string) =>
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 export const WireGroupProvider = () =>
@@ -462,9 +379,7 @@ export const WireGroupProvider = () =>
                 ),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([])),
               );
           },
           { concurrency: 8 },
@@ -500,7 +415,9 @@ export const WireGroupProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitGlobalOperation(env.project, inserted, wireGroupName);
+          yield* waitGlobalOperation(env.project, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* getByName(
           env.project,
@@ -560,7 +477,7 @@ export const WireGroupProvider = () =>
             .join(","),
           body: desired,
         });
-        yield* waitGlobalOperation(env.project, patched, wireGroupName);
+        yield* waitGlobalOperation(env.project, patched);
         current =
           (yield* getByName(env.project, crossSiteNetwork, wireGroupName)) ??
           current;
@@ -588,14 +505,9 @@ export const WireGroupProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitGlobalOperation(project, deleted, output.wireGroupName).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof WireGroupOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-        );
+        yield* waitGlobalOperation(project, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitGroupGone(project, crossSiteNetwork, output.wireGroupName);
     }),

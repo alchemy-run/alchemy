@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { defaultComputeServiceAccount } from "./serviceAccount.ts";
+import { CAPACITY_REGION } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -14,10 +16,11 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const runLifecycle = !!process.env.GCP_TEST_COMPOSER && !process.env.FAST;
+// Composer environments take 20-45 minutes to provision.
+const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const missingParentOf = (project: string) =>
-  `projects/${project}/locations/us-central1/environments/alchemy-composer-missing`;
+  `projects/${project}/locations/${CAPACITY_REGION}/environments/alchemy-composer-missing`;
 
 const waitUntilGone = (name: string) =>
   composer
@@ -45,7 +48,7 @@ test.provider(
           name: `${missingParent}/userWorkloadsConfigMaps/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       const created = yield* Effect.flip(
         composer.createProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
@@ -56,7 +59,7 @@ test.provider(
           },
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(created._tag);
+      expect(created._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -67,14 +70,16 @@ test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a user workloads config map",
   (stack) =>
     Effect.gen(function* () {
+      const serviceAccount = yield* defaultComputeServiceAccount;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const airflow = yield* GCP.Composer.Environment("Airflow", {
-            location: "us-central1",
+            location: CAPACITY_REGION,
             config: {
               environmentSize: "ENVIRONMENT_SIZE_SMALL",
+              nodeConfig: { serviceAccount },
               softwareConfig: { imageVersion: "composer-3-airflow-2" },
             },
           });
@@ -100,15 +105,16 @@ test.provider.skipIf(!runLifecycle)(
         );
       expect(fetched.name).toEqual(created.config.name);
       expect(fetched.data?.LOG_LEVEL).toEqual("INFO");
-      expect(fetched.data?.["alchemy-id"]).toEqual(expect.any(String));
+      expect(fetched.data?.["alchemy-id"]).toBeUndefined();
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const airflow = yield* GCP.Composer.Environment("Airflow", {
             environmentId: created.airflow.environmentId,
-            location: "us-central1",
+            location: CAPACITY_REGION,
             config: {
               environmentSize: "ENVIRONMENT_SIZE_SMALL",
+              nodeConfig: { serviceAccount },
               softwareConfig: { imageVersion: "composer-3-airflow-2" },
             },
           });
@@ -142,5 +148,10 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.config.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:composer", "live"], timeout: 120_000 },
+  // Create (~45 min) + update + delete; a timed-out lifecycle is not retried.
+  {
+    tags: ["provider:gcp", "provider:gcp:composer", "live"],
+    timeout: 5_400_000,
+    retry: 0,
+  },
 );

@@ -1,5 +1,6 @@
 import * as file from "@distilled.cloud/gcp/file_v1";
 import * as Data from "effect/Data";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 
 const DEFAULT_ZONAL_LOCATION = "us-central1-a";
 const DEFAULT_TIER = "BASIC_HDD";
@@ -416,19 +418,6 @@ export class InstanceFailed extends Data.TaggedError(
   name: string;
   state: string;
   statusMessage: string | undefined;
-}> {}
-
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Filestore.InstanceOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class InstanceOperationPending extends Data.TaggedError(
-  "GCP.Filestore.InstanceOperationPending",
-)<{
-  operation: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError(
@@ -834,88 +823,57 @@ const getByName = (name: string) =>
     .getProjectsLocationsInstances({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: file.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: file.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: file.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  isAlreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
+/**
+ * Wait on a Filestore instance long-running operation (5–20 minutes).
+ * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
+ * when `notFoundOk` (deletes). Returns the final operation.
+ */
 const waitForOperation = (
   operation: file.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new InstanceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = file.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<file.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
+  Effect.suspend(() => {
+    let latest = operation;
+    return waitForLongRunningOperation(
+      operation,
+      (name) => {
+        const get = file.getProjectsLocationsOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
             }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InstanceOperationPending({ operation: name }),
+          ),
+        );
+        const observe: Effect.Effect<
+          file.Operation,
+          file.GetProjectsLocationsOperationsError,
+          GcpOpContext
+        > =
+          options?.notFoundOk === true
+            ? get.pipe(
+                Effect.catchTag("NotFound", () =>
+                  Effect.succeed<file.Operation>({ name, done: true }),
+                ),
+              )
+            : get.pipe(
+                // A just-returned operation can briefly 404 on read.
+                Effect.retry({
+                  while: (error) => error._tag === "NotFound",
+                  times: 5,
+                  schedule: Schedule.exponential("250 millis"),
+                }),
+              );
+        return observe;
+      },
+      { budget: "30 minutes", interval: "10 seconds" },
+    ).pipe(
+      Effect.map(() => latest),
+      // google.rpc.Code ALREADY_EXISTS = 6, NOT_FOUND = 5.
+      Effect.catchTag("GCP.OperationFailed", (error) =>
+        error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+          ? Effect.succeed(latest)
+          : Effect.fail(error),
       ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorableOperationError(error, options)) {
-          return Effect.fail(
-            new InstanceOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Filestore.InstanceOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
     );
   });
 
@@ -960,8 +918,9 @@ const waitUntilReady = (name: string) =>
       while: (error) =>
         error._tag === "GCP.Filestore.InstanceNotReady" ||
         error._tag === "GCP.Filestore.InstanceNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Instances take 5–20 minutes to provision.
+      times: 120,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -974,8 +933,9 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.InstanceStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      // Instance deletion takes several minutes.
+      times: 120,
+      schedule: Schedule.spaced("10 seconds"),
     }),
   );
 
@@ -1174,7 +1134,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

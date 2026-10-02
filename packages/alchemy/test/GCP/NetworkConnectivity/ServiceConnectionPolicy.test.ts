@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,7 +42,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/serviceConnectionPolicies/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -145,9 +146,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.policy.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

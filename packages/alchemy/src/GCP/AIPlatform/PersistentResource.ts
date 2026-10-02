@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
@@ -92,15 +87,19 @@ export type PersistentResourceProps = {
   location?: string;
   /**
    * Display name (max 128 UTF-8 characters). Defaults to the resource id.
+   * Changing it replaces the resource.
    */
   displayName?: string;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Changing them replaces the resource.
    */
   labels?: Record<string, string>;
   /**
    * Resource pools. At least one pool is required. Pool machine specs
-   * are immutable — changing them replaces the resource.
+   * are immutable — changing them replaces the resource. Replica counts
+   * update in place only for Ray clusters (`raySpec`); GCP rejects updates
+   * to other persistent resources, so a replica change replaces them.
    */
   resourcePools?: ResourcePool[];
   /**
@@ -278,7 +277,8 @@ const waitUntilGone = (name: string) =>
     Effect.asVoid,
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.StillExists",
-      times: 10,
+      // Tearing down the cluster takes several minutes.
+      times: 75,
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
@@ -312,13 +312,36 @@ export const PersistentResourceProvider = () =>
       const machineChanged =
         olds !== undefined &&
         machineKey(news.resourcePools) !== machineKey(olds.resourcePools);
+      // PATCH only accepts `resource_pools.replica_count`; `display_name` and
+      // `labels` are rejected ("Unrecognized path"), so changing them
+      // replaces the resource.
+      const displayNameChanged =
+        olds !== undefined &&
+        (news.displayName ?? "") !== (olds.displayName ?? "");
+      const labelsChanged =
+        olds !== undefined &&
+        JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
+          JSON.stringify(Object.entries(olds.labels ?? {}).sort());
+      // GCP only updates Ray-cluster persistent resources ("Currently we only
+      // support the update function on Ray cluster"); any other resource is
+      // replaced when its replica counts change.
+      const replicasChanged =
+        olds !== undefined &&
+        news.raySpec === undefined &&
+        JSON.stringify(
+          (news.resourcePools ?? []).map((p) => p.replicaCount),
+        ) !==
+          JSON.stringify((olds.resourcePools ?? []).map((p) => p.replicaCount));
       const replace =
+        replicasChanged ||
         (previousId !== undefined &&
           nextId !== undefined &&
           nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (olds !== undefined && networkChanged) ||
-        machineChanged;
+        machineChanged ||
+        displayNameChanged ||
+        labelsChanged;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -361,10 +384,7 @@ export const PersistentResourceProvider = () =>
                 parent: locationParent(env.project, location),
                 pageSize: 100,
               }),
-            ).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.persistentResources ?? [])
@@ -446,28 +466,34 @@ export const PersistentResourceProvider = () =>
       }
 
       const observedName = current.name ?? name;
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayChanged = (current.displayName ?? "") !== displayName;
-      const poolsChanged = !jsonEqual(current.resourcePools, resourcePools);
+      // Reads fill in server defaults (disk spec, used replicas), and a pool's
+      // machine spec is immutable (a change replaces), so only replica counts
+      // are compared and patched.
+      const replicaCounts = (
+        pools:
+          | ReadonlyArray<{ id?: string; replicaCount?: string }>
+          | undefined,
+      ) =>
+        Object.fromEntries(
+          (pools ?? []).map((pool, index) => [
+            pool.id ?? String(index),
+            String(pool.replicaCount ?? ""),
+          ]),
+        );
+      const poolsChanged = !jsonEqual(
+        replicaCounts(current.resourcePools),
+        replicaCounts(resourcePools),
+      );
 
-      if (labelsChanged || displayChanged || poolsChanged) {
-        const updateMask = [
-          labelsChanged ? "labels" : undefined,
-          displayChanged ? "display_name" : undefined,
-          poolsChanged ? "resource_pools" : undefined,
-        ].filter((field): field is string => field !== undefined);
+      // Display name and labels are create-only; `diff` replaces the resource
+      // when they change.
+      // Only Ray clusters accept updates; `diff` replaces other resources.
+      if (poolsChanged && news.raySpec !== undefined) {
         const patched =
           yield* aiplatform.patchProjectsLocationsPersistentResources({
             name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              displayName,
-              labels: desiredLabels,
-              resourcePools,
-            },
+            updateMask: "resource_pools.replica_count",
+            body: { name: observedName, resourcePools },
           });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
@@ -480,6 +506,15 @@ export const PersistentResourceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // A PROVISIONING resource rejects deletes ("is being created thus can
+      // not be deleted now"), so wait for provisioning to settle first.
+      yield* getByName(output.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (resource) => resource?.state !== "PROVISIONING",
+          times: 60,
+        }),
+      );
       const operation = yield* aiplatform
         .deleteProjectsLocationsPersistentResources({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));

@@ -343,33 +343,21 @@ export const getTenant = (name: string) =>
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenants({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const getCompany = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenantsCompanies({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const getJob = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : jobs
         .getProjectsTenantsJobs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const listTenants = (project: string) =>
   collectPages(
@@ -378,9 +366,7 @@ export const listTenants = (project: string) =>
       pageSize: 100,
     }),
     (page) => page.tenants,
-  ).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () => emptyList<jobs.Tenant>()),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Tenant>()));
 
 export const listCompanies = (parent: string) =>
   parent.length === 0
@@ -391,11 +377,7 @@ export const listCompanies = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.companies,
-      ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () =>
-          emptyList<jobs.Company>(),
-        ),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Company>()));
 
 export const listJobs = (parent: string, companyName: string) =>
   parent.length === 0 || companyName.length === 0
@@ -408,9 +390,7 @@ export const listJobs = (parent: string, companyName: string) =>
           jobView: "JOB_VIEW_FULL",
         }),
         (page) => page.jobs,
-      ).pipe(
-        Effect.catchTag(["NotFound", "Forbidden"], () => emptyList<jobs.Job>()),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<jobs.Job>()));
 
 export const listOwnedTenants = (project: string) =>
   listTenants(project).pipe(
@@ -514,7 +494,7 @@ export const deleteJob = (name: string) =>
     ? Effect.void
     : jobs
         .deleteProjectsTenantsJobs({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 export const deleteCompany = (name: string) =>
   Effect.gen(function* () {
@@ -529,7 +509,7 @@ export const deleteCompany = (name: string) =>
     yield* retryTransient(
       jobs
         .deleteProjectsTenantsCompanies({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void)),
+        .pipe(Effect.catchTag("NotFound", () => Effect.void)),
     );
   });
 
@@ -545,6 +525,6 @@ export const deleteTenant = (name: string) =>
     yield* retryTransient(
       jobs
         .deleteProjectsTenants({ name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void)),
+        .pipe(Effect.catchTag("NotFound", () => Effect.void)),
     );
   });

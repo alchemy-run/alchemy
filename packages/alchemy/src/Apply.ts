@@ -15,6 +15,7 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 import type { AuthError, NeedsReauth } from "./Auth/AuthProvider.ts";
 import {
   type CredentialsRequired,
+  failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
@@ -97,18 +98,17 @@ interface ResourceTracker {
 
 const provideLifecycleScope =
   (fqn: string, instanceId: string) =>
-  <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
+          failCredentialsRequired(fqn),
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
         ),
       ),
-    ) as Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>>;
+    );
 
 /**
  * Instruments a single provider lifecycle call with an OTel span
@@ -128,9 +128,7 @@ const instrumentLifecycle =
     logicalId: string,
     instanceId: string,
   ) =>
-  <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       provideLifecycleScope(fqn, instanceId),
       recordResourceOp(resourceType, op),
@@ -429,7 +427,7 @@ const executePlan = Effect.fn(function* (
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
     );
 
-  const waitForDeps = (fqns: string[]) =>
+  const waitForDeps = (downstreamFqn: string, fqns: string[]) =>
     Effect.all(
       fqns
         .filter((fqn) => fqn in ready)
@@ -446,8 +444,10 @@ const executePlan = Effect.fn(function* (
           // Cycle members are the exception: peers in an SCC depend on each
           // other, so they must rendezvous on the early `ready`/precreate
           // signal to break the deadlock. Phase 3 (`converge`) re-runs them
-          // against final outputs once the cycle settles.
-          plan.cycleMembers.has(fqn)
+          // against final outputs once the cycle settles. A downstream
+          // outside the cycle must still wait for reconcile: e.g. a queue
+          // consumer cannot attach to a Worker's fetch-only precreate stub.
+          plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
             ? Deferred.await(ready[fqn])
             : Deferred.await(readyStable[fqn]),
         ),
@@ -494,7 +494,7 @@ const executePlan = Effect.fn(function* (
             stackName,
             stage,
             getOutputs,
-            waitForDeps,
+            (fqns) => waitForDeps(fqn, fqns),
             failures,
             plan.cycleMembers.has(fqn),
           ),

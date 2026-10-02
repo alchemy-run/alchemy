@@ -1,6 +1,7 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -134,9 +135,14 @@ export type CachedContent = Resource<
  * ### Updating expiry
  * **Example:** Extend TTL
  * ```typescript
+ * // Same logical id, changed TTL: the engine updates it in place.
  * const cache = yield* GCP.AIPlatform.CachedContent("Style", {
- *   model: existing.model ?? "",
+ *   model:
+ *     "projects/my-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-001",
  *   ttl: "7200s",
+ *   contents: [
+ *     { role: "user", parts: [{ text: "You are a terse assistant." }] },
+ *   ],
  * });
  * ```
  *
@@ -195,7 +201,7 @@ const getByName = (name: string) =>
 const listCaches = (project: string, region: string) => {
   const collect = (parent: string) =>
     aiplatform.listProjectsLocationsCachedContents
-      .pages({ parent, pageSize: 1000 })
+      .pages({ parent, pageSize: 100 })
       .pipe(
         Stream.flatMap((page) =>
           Stream.fromIterable(page.cachedContents ?? []),
@@ -206,15 +212,8 @@ const listCaches = (project: string, region: string) => {
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
 const findOwned = (
@@ -338,6 +337,12 @@ export const CachedContentProvider = () =>
             },
           })
           .pipe(
+            // Vertex AI intermittently counts large content as "1 tokens".
+            Effect.retry({
+              while: (error) => error._tag === "CachedContentTooFewTokens",
+              times: 4,
+              schedule: Schedule.spaced("3 seconds"),
+            }),
             Effect.catchTag("Conflict", () =>
               findOwned(id, env.project, env.region),
             ),

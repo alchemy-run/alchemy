@@ -275,7 +275,10 @@ test.provider.skipIf(!dockerAvailable)(
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 420_000 },
 );
 
-test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_REDIS)(
+// Memorystore Redis provisioning takes 5-10 minutes.
+test.provider.skipIf(
+  !dockerAvailable || !process.env.GCP_TEST_SLOW || !!process.env.FAST,
+)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {

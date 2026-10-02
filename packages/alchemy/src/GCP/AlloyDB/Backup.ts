@@ -19,7 +19,7 @@ import {
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { EncryptionConfig } from "./Cluster.ts";
-import { waitForOperation } from "./operations.ts";
+import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_BACKUP_TYPE = "ON_DEMAND";
 const MAX_NAME_LENGTH = 63;
@@ -52,7 +52,7 @@ export type BackupProps = {
    */
   displayName?: string;
   /**
-   * User-provided description.
+   * User-provided description. Changing it replaces the backup.
    */
   description?: string;
   /**
@@ -138,8 +138,8 @@ export type Backup = Resource<
  * An on-demand AlloyDB backup of a cluster.
  *
  * Changing `backupId`, `location`, `clusterName`, `type`,
- * `encryptionConfig`, or `tags` replaces the backup. `displayName`,
- * `description`, `labels`, and `annotations` update in place.
+ * `encryptionConfig`, `tags`, or `description` replaces the backup.
+ * `displayName`, `labels`, and `annotations` update in place.
  *
  * Creating a backup typically takes several minutes and is skipIf-gated
  * in live tests behind `GCP_TEST_ALLOYDB`.
@@ -428,8 +428,8 @@ const waitUntilReady = (name: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupNotReady",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -442,8 +442,8 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: 120,
+      schedule: Schedule.spaced("15 seconds"),
     }),
   );
 
@@ -524,7 +524,11 @@ export const BackupProvider = () =>
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousKey !== nextKey ||
-        (news.tags !== undefined && previousTags !== nextTags);
+        (news.tags !== undefined && previousTags !== nextTags) ||
+        // PATCH accepts `description` but leaves it unchanged (observed live),
+        // so a new description replaces the backup.
+        (olds !== undefined &&
+          (news.description ?? "") !== (olds.description ?? ""));
 
       if (!replace) return undefined;
       return {
@@ -586,11 +590,10 @@ export const BackupProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toId(id, news.backupId, output?.backupId);
       const ref = parseClusterRef(
@@ -627,7 +630,16 @@ export const BackupProvider = () =>
               backupType,
             ),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            // The cluster only accepts backups a few minutes after its
+            // primary instance is created.
+            Effect.retry({
+              while: (error) => error._tag === "ClusterNotReadyForBackup",
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -645,26 +657,19 @@ export const BackupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
+      const observedDisplayName =
+        current.displayName ?? output?.displayName ?? olds?.displayName;
       const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        news.description !== undefined &&
-        (current.description ?? "") !== news.description;
+        (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
         fingerprint(stringMapOf(current.annotations)) !==
           fingerprint(news.annotations);
 
-      if (
-        labelsChanged ||
-        displayNameChanged ||
-        descriptionChanged ||
-        annotationsChanged
-      ) {
+      if (labelsChanged || displayNameChanged || annotationsChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayNameChanged ? "displayName" : undefined,
-          descriptionChanged ? "description" : undefined,
           annotationsChanged ? "annotations" : undefined,
         ].filter((field): field is string => field !== undefined);
 
@@ -676,22 +681,26 @@ export const BackupProvider = () =>
               name,
               labels: desiredLabels,
               displayName: news.displayName,
-              description: news.description,
               annotations: news.annotations,
             },
           })
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              times: 40,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // AlloyDB omits `displayName` from backup reads (like clusters); the
+      // desired value is what was applied.
+      return toAttrs(
+        { ...current, displayName: current.displayName ?? news.displayName },
+        env.project,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -701,12 +710,12 @@ export const BackupProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForDeleteOperation(operation);
       }
       yield* waitUntilGone(output.name);
     }),

@@ -199,7 +199,7 @@ export const LicenseAssignmentProvider = () =>
       const skuId = olds?.skuId ?? output?.skuId ?? "";
       const userId = olds?.userId ?? output?.userId ?? "";
       const customerId = normalizeCustomerId(
-        olds?.customerId ?? output?.customerId ?? listCustomerId(),
+        olds?.customerId ?? output?.customerId ?? (yield* listCustomerId()),
       );
       const existing = yield* observeAssignment({
         productId,
@@ -215,9 +215,9 @@ export const LicenseAssignmentProvider = () =>
 
     list: () =>
       Effect.gen(function* () {
-        const customerId = listCustomerId();
-        const productId = listProductId();
-        const userId = listUserId();
+        const customerId = yield* listCustomerId();
+        const productId = yield* listProductId();
+        const userId = yield* listUserId();
         if (
           customerId === undefined ||
           productId === undefined ||
@@ -229,7 +229,7 @@ export const LicenseAssignmentProvider = () =>
         const items = yield* listAssignments(
           productId,
           customerId,
-          listSkuId(),
+          yield* listSkuId(),
         );
         return items
           .filter((item) => sameUser(item.userId, userId))
@@ -242,7 +242,7 @@ export const LicenseAssignmentProvider = () =>
       const skuId = news.skuId;
       const userId = news.userId;
       const customerId = normalizeCustomerId(
-        news.customerId ?? output?.customerId ?? listCustomerId(),
+        news.customerId ?? output?.customerId ?? (yield* listCustomerId()),
       );
 
       let current = yield* observeAssignment({

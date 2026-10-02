@@ -39,8 +39,8 @@ class ScopedService extends GCP.Function<ScopedService>()(
     template: { containers: [{ image: HELLO_IMAGE }] },
   },
   Effect.gen(function* () {
-    yield* GCP.BigQuery.Query(yield* Warehouse);
-    yield* GCP.Firestore.ReadWriteDatabase(yield* Docs);
+    yield* GCP.BigQuery.Query(Warehouse);
+    yield* GCP.Firestore.ReadWriteDatabase(Docs);
     return {};
   }).pipe(
     Effect.provide(GCP.BigQuery.QueryHttp),

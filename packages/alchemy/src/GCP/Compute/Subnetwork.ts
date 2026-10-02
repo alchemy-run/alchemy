@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
+import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -214,13 +214,6 @@ export class SubnetworkNotResolved extends Data.TaggedError(
   subnetworkName: string;
 }> {}
 
-export class SubnetworkOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SubnetworkOperationFailed",
-)<{
-  operation: string;
-  errors: ReadonlyArray<{ code?: string; message?: string }>;
-}> {}
-
 const DEFAULT_STACK_TYPE = "IPV4_ONLY";
 const DEFAULT_PRIVATE_GOOGLE_ACCESS = false;
 
@@ -408,95 +401,6 @@ const getByName = (project: string, region: string, subnetworkName: string) =>
     .getSubnetworks({ project, region, subnetwork: subnetworkName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationErrors = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const operationText = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase())
-    .join(" ");
-
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return (
-    errors.length > 0 &&
-    (text.includes("not_found") ||
-      text.includes("notfound") ||
-      text.includes("was not found") ||
-      text.includes("not found"))
-  );
-};
-
-const isAlreadyExistsOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return text.includes("already_exists") || text.includes("already exists");
-};
-
-const isInUseOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) => {
-  const text = operationText(errors);
-  return text.includes("resource_in_use") || text.includes("in use");
-};
-
-const assertOperationOk = (
-  operation: compute.Operation,
-  options?: { allowMissing?: boolean; allowExists?: boolean },
-) => {
-  const errors = operationErrors(operation);
-  if (errors.length === 0) return Effect.void;
-  if (options?.allowMissing === true && isNotFoundOp(errors)) {
-    return Effect.void;
-  }
-  if (options?.allowExists === true && isAlreadyExistsOp(errors)) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new SubnetworkOperationFailed({
-      operation: operation.name ?? "",
-      errors,
-    }),
-  );
-};
-
-const waitForRegionOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { allowMissing?: boolean; allowExists?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id ?? "");
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* assertOperationOk(operation, options);
-        return;
-      }
-      return yield* new SubnetworkOperationFailed({
-        operation: "",
-        errors: [{ message: "compute operation is missing a name" }],
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation, options);
-      return;
-    }
-    const waited = yield* waitRegionOperations(
-      { project, region, operation: name },
-      { times: 20 },
-    );
-    yield* assertOperationOk(waited, options);
-  });
-
 const requireSubnetwork = (
   project: string,
   region: string,
@@ -670,8 +574,8 @@ export const SubnetworkProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForRegionOperation(env.project, region, operation, {
-                allowExists: true,
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -686,7 +590,7 @@ export const SubnetworkProvider = () =>
           subnetwork: subnetworkName,
           body: { privateIpGoogleAccess },
         });
-        yield* waitForRegionOperation(env.project, region, updated);
+        yield* waitRegionOperation(env.project, region, updated);
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
       }
 
@@ -739,7 +643,7 @@ export const SubnetworkProvider = () =>
           subnetwork: subnetworkName,
           body: patchBody,
         });
-        yield* waitForRegionOperation(env.project, region, patched);
+        yield* waitRegionOperation(env.project, region, patched);
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
       }
 
@@ -760,18 +664,26 @@ export const SubnetworkProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForRegionOperation(project, region, operation, {
-              allowMissing: true,
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" ||
-              (error._tag === "GCP.Compute.SubnetworkOperationFailed" &&
-                isInUseOp(error.errors)),
+              (error._tag === "GCP.OperationFailed" &&
+                error.reason === "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE"),
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
+          }),
+          // Compute rejects the delete while another operation is still in
+          // flight on the subnet (e.g. load balancer or packet-mirroring
+          // teardown on resources inside it).
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotReady",
+            times: 20,
+            schedule: Schedule.spaced("10 seconds"),
           }),
         );
     }),

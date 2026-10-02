@@ -4,6 +4,7 @@ import { tagRecord } from "../../Tags.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels as createInternalLabelsImpl,
+  hasAlchemyLabels,
   stripInternalLabels,
   toLabels as toLabelsImpl,
 } from "../Labels.ts";
@@ -149,16 +150,58 @@ export const labelsDiffer = (
 const markerOf = (labels: Record<string, string>) =>
   `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
 
+/** 64-bit FNV-1a, hex. Deterministic and dependency-free. */
+const fnv1a64 = (input: string): string => {
+  let hash = 0xcbf29ce484222325n;
+  for (let index = 0; index < input.length; index++) {
+    hash ^= BigInt(input.charCodeAt(index));
+    hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16, "0");
+};
+
+const HASH_KEY = "alchemy-hash";
+
+const ownershipHash = (labels: Record<string, string>) =>
+  fnv1a64(
+    JSON.stringify([
+      labels[alchemyLabelKeys.stack],
+      labels[alchemyLabelKeys.stage],
+      labels[alchemyLabelKeys.id],
+    ]),
+  );
+
+/**
+ * Prefix `displayName` with the ownership marker. When the full
+ * `[alchemy stack=… stage=… id=…]` marker would push the name past
+ * Vertex AI's 128-character limit (long stack names), a fixed-width
+ * `[alchemy alchemy-hash=…]` marker is used instead so it is never cut.
+ */
 export const encodeDisplayName = (
   labels: Record<string, string>,
   displayName: string | undefined,
 ): string => {
-  const marker = markerOf(labels);
   const trimmed = displayName?.replace(/[\r\n]+/g, " ").trim();
-  const combined =
+  const withMarker = (marker: string) =>
     trimmed && trimmed.length > 0 ? `${marker} ${trimmed}` : marker;
-  return combined.slice(0, MAX_DISPLAY_NAME_LENGTH);
+  const full = withMarker(markerOf(labels));
+  if (full.length <= MAX_DISPLAY_NAME_LENGTH) return full;
+  return withMarker(`[alchemy ${HASH_KEY}=${ownershipHash(labels)}]`).slice(
+    0,
+    MAX_DISPLAY_NAME_LENGTH,
+  );
 };
+
+/** Whether a marked display name belongs to logical id `id` of this stack. */
+export const ownsDisplayName = (id: string, displayName: string | undefined) =>
+  Effect.gen(function* () {
+    const { labels } = parseDisplayName(displayName);
+    const expected = yield* createInternalLabelsImpl(id);
+    if (labels[HASH_KEY] !== undefined) {
+      return labels[HASH_KEY] === ownershipHash(expected);
+    }
+    return yield* hasAlchemyLabels(id, labels);
+  });
 
 export const parseDisplayName = (
   displayName: string | undefined,

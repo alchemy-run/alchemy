@@ -24,7 +24,6 @@ const waitUntilGone = (name: string) =>
   vision.getProjectsLocationsProductsReferenceImages({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -34,7 +33,8 @@ const waitUntilGone = (name: string) =>
 
 const uploadObject = (bucketName: string, object: string, bytes: Uint8Array) =>
   Effect.gen(function* () {
-    const creds = yield* yield* Credentials;
+    const credentials = yield* Credentials;
+    const creds = yield* credentials;
     const client = yield* HttpClient.HttpClient;
     const url =
       `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName)}/o` +
@@ -70,10 +70,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/products/alchemy-missing/referenceImages/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Vision API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -111,8 +111,6 @@ export type FolderExclusion = Resource<
  * **Example:** Change the filter and disable
  * ```typescript
  * const exclusion = yield* GCP.Logging.FolderExclusion("DropDebug", {
- *   folderId: existing.folderId,
- *   exclusionId: existing.exclusionId,
  *   filter: "severity<ERROR",
  *   description: "drop non-errors",
  *   disabled: true,
@@ -225,7 +223,7 @@ export const FolderExclusionProvider = () =>
             Stream.map((exclusion) => toAttrs(exclusion, folderId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as FolderExclusion["Attributes"][]),
             ),
           );

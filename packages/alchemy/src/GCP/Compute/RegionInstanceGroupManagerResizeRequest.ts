@@ -58,9 +58,10 @@ export type RegionInstanceGroupManagerResizeRequestProps = {
   description?: string;
   /**
    * Requested run duration for VMs created by this request. At the end of
-   * the duration the instance is deleted. Immutable.
+   * the duration the instance is deleted. Compute requires it on insert.
+   * Immutable.
    */
-  requestedRunDuration?: RegionInstanceGroupManagerResizeRequestDuration;
+  requestedRunDuration: RegionInstanceGroupManagerResizeRequestDuration;
 };
 
 export type RegionInstanceGroupManagerResizeRequest = Resource<
@@ -116,6 +117,7 @@ export type RegionInstanceGroupManagerResizeRequest = Resource<
  *   {
  *     instanceGroupManager: manager.managerName,
  *     resizeBy: 1,
+ *     requestedRunDuration: { seconds: "3600" },
  *     description: "burst capacity",
  *   },
  * );
@@ -147,14 +149,6 @@ export class RegionInstanceGroupManagerResizeRequestNotResolved extends Data.Tag
   requestName: string;
   instanceGroupManager: string;
   region: string;
-}> {}
-
-export class RegionInstanceGroupManagerResizeRequestOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstanceGroupManagerResizeRequestOperationFailed",
-)<{
-  requestName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const managerNameOf = (value: string) => lastSegment(value);
@@ -223,13 +217,6 @@ const awaitResource = (
       schedule: Schedule.spaced("1 second"),
     }),
   );
-
-const failOp = (requestName: string, operation: string, message: string) =>
-  new RegionInstanceGroupManagerResizeRequestOperationFailed({
-    requestName,
-    operation,
-    message,
-  });
 
 const needsCancel = (state: string | undefined) => {
   const current = (state ?? "").toUpperCase();
@@ -324,11 +311,8 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
             returnPartialSuccess: true,
           })
           .pipe(
-            Stream.take(8),
             Stream.runCollect,
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as never[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
         const managers = Array.from(
           pages as readonly compute.InstanceGroupManagerAggregatedList[],
@@ -360,7 +344,7 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
                 Stream.map((item) => toAttrs(item, env.project, manager.name)),
                 Stream.runCollect,
                 Effect.map((items) => Array.from(items)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed(
                     [] as RegionInstanceGroupManagerResizeRequest["Attributes"][],
                   ),
@@ -406,7 +390,6 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
               requestedRunDuration: news.requestedRunDuration,
             },
           }),
-          (operation, message) => failOp(requestName, operation, message),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         current = yield* awaitResource(
@@ -448,8 +431,6 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
             instanceGroupManager,
             resizeRequest: output.requestName,
           }),
-          (operation, message) =>
-            failOp(output.requestName, operation, message),
           { ignoreNotFound: true },
         ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       }
@@ -462,7 +443,6 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
           instanceGroupManager,
           resizeRequest: output.requestName,
         }),
-        (operation, message) => failOp(output.requestName, operation, message),
         { ignoreNotFound: true },
       ).pipe(
         Effect.retry({

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 
 /** The warehouse the nightly job reads from. */
 export const Warehouse = GCP.BigQuery.Dataset("Warehouse", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 
@@ -31,7 +30,6 @@ export const Orders = Effect.gen(function* () {
  * it in production so a destroy cannot take the reports with it.
  */
 export const Reports = GCP.Storage.Bucket("Reports", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 

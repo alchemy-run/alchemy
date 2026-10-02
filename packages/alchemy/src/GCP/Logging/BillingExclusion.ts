@@ -112,8 +112,6 @@ export type BillingExclusion = Resource<
  * **Example:** Change the filter and disable
  * ```typescript
  * const exclusion = yield* GCP.Logging.BillingExclusion("DropDebug", {
- *   billingAccountId: existing.billingAccountId,
- *   exclusionId: existing.exclusionId,
  *   filter: "severity<ERROR",
  *   description: "drop non-errors",
  *   disabled: true,
@@ -233,7 +231,7 @@ export const BillingExclusionProvider = () =>
             Stream.map((exclusion) => toAttrs(exclusion, billingAccountId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag("NotFound", () =>
               Effect.succeed([] as BillingExclusion["Attributes"][]),
             ),
           );

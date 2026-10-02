@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -246,19 +247,6 @@ export class InstanceNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class InstanceOperationFailed extends Data.TaggedError(
-  "GCP.Memcache.InstanceOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class InstanceOperationPending extends Data.TaggedError(
-  "GCP.Memcache.InstanceOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class InstanceStillExists extends Data.TaggedError(
   "GCP.Memcache.InstanceStillExists",
 )<{
@@ -456,71 +444,29 @@ const getByName = (name: string) =>
     .getProjectsLocationsInstances({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
+/**
+ * Wait for a Memorystore for Memcached operation; instance create,
+ * resize, and upgrade take 10–20 minutes. With `notFoundOk`, NOT_FOUND
+ * (code 5) and an operation that is already gone count as success
+ * (delete race).
+ */
 const waitForOperation = (
   operation: memcache.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new InstanceOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new InstanceOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = memcache.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<memcache.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new InstanceOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new InstanceOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Memcache.InstanceOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) => memcache.getProjectsLocationsOperations({ name }),
+    { budget: "30 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        options?.notFoundOk === true &&
+        (error._tag === "NotFound" ||
+          (error._tag === "GCP.OperationFailed" && error.code === 5)),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -697,7 +643,6 @@ export const InstanceProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 

@@ -3,8 +3,8 @@ import * as Test from "@/Test/Alchemy";
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { location, logLevel, currentParent, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -20,23 +20,21 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const datasetNameFromOperation = (operation: translate.Operation) => {
-  const response = operation.response ?? {};
-  const name = response.name;
-  return typeof name === "string" && name.length > 0 ? name : undefined;
-};
+const findDataset = (parent: string, displayName: string) =>
+  translate.listProjectsLocationsDatasets.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.datasets ?? [])),
+    Stream.filter((dataset) => dataset.displayName === displayName),
+    Stream.runHead,
+  );
 
-const createDataset = (displayName: string) =>
+/** An empty Translation dataset (no sentence pairs imported). */
+const createEmptyDataset = (displayName: string) =>
   Effect.gen(function* () {
     const parent = yield* currentParent;
-    const page = yield* translate.listProjectsLocationsDatasets({
-      parent,
-      pageSize: 100,
-    });
-    const match = (page.datasets ?? []).find(
-      (dataset) => dataset.displayName === displayName,
-    );
-    if (match?.name) return match.name;
+    const existing = yield* findDataset(parent, displayName);
+    if (existing._tag === "Some" && existing.value.name) {
+      return existing.value.name;
+    }
     const operation = yield* translate.createProjectsLocationsDatasets({
       parent,
       body: {
@@ -45,16 +43,10 @@ const createDataset = (displayName: string) =>
         targetLanguageCode: "es",
       },
     });
-    const done = yield* GCP.Translate.waitForOperation(operation);
-    const name = datasetNameFromOperation(done);
-    if (name !== undefined) return name;
-    const again = yield* translate.listProjectsLocationsDatasets({
-      parent,
-      pageSize: 100,
-    });
-    return (again.datasets ?? []).find(
-      (dataset) => dataset.displayName === displayName,
-    )?.name;
+    yield* GCP.Translate.waitForOperation(operation);
+    const created = yield* findDataset(parent, displayName);
+    expect(created._tag).toEqual("Some");
+    return created._tag === "Some" ? (created.value.name ?? "") : "";
   });
 
 const deleteDataset = (name: string) =>
@@ -74,10 +66,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         translate.getProjectsLocationsModels({
-          name: `${parent}/models/alchemy-missing-model`,
+          name: `${parent}/models/NM0000000000000000000`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -85,137 +77,74 @@ test.provider(
 );
 
 test.provider.skipIf(!runLifecycle)(
-  "create, update, and delete a translation model",
+  "a model trained from an empty dataset fails with GCP.OperationFailed",
   (stack) =>
     Effect.gen(function* () {
-      const parent = yield* currentParent;
       yield* stack.destroy();
 
-      const probe = yield* translate
-        .listProjectsLocationsModels({
-          parent,
-          pageSize: 1,
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (probe.tag === "Forbidden") {
-        expect(probe.tag).toEqual("Forbidden");
-        yield* stack.destroy();
-        return;
-      }
-      expect(["ok", "NotFound"]).toContain(probe.tag);
+      const dataset = yield* createEmptyDataset("alcemptymodelds");
 
-      const displayName = "alcmodelds";
-      const dataset = yield* createDataset(displayName).pipe(
-        Effect.map((name) => ({ tag: "ok" as const, name })),
-        Effect.catchTag("Forbidden", (error) =>
-          Effect.succeed({
-            tag: "Forbidden" as const,
-            message: error.message,
-          }),
-        ),
-        Effect.catchTag("BadRequest", (error) =>
-          Effect.succeed({
-            tag: "BadRequest" as const,
-            message: error.message,
-          }),
-        ),
-        Effect.catchTag("GCP.Translate.OperationPending", (error) =>
-          Effect.succeed({
-            tag: "GCP.Translate.OperationPending" as const,
-            message: error.message,
-          }),
-        ),
-        Effect.catchTag("GCP.Translate.OperationFailed", (error) =>
-          Effect.succeed({
-            tag: "GCP.Translate.OperationFailed" as const,
-            message: error.message,
-          }),
-        ),
-      );
-      if (dataset.tag !== "ok" || dataset.name === undefined) {
-        expect([
-          "Forbidden",
-          "BadRequest",
-          "GCP.Translate.OperationPending",
-          "GCP.Translate.OperationFailed",
-          "ok",
-        ]).toContain(dataset.tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      const datasetName = dataset.name;
-      const created = yield* Effect.result(
+      const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            const model = yield* GCP.Translate.Model("EnEs", {
+            return yield* GCP.Translate.Model("Empty", {
               location,
-              dataset: datasetName,
-              displayName: "enes",
+              dataset,
+              displayName: "empty",
             });
-            return { model };
           }),
         ),
       );
+      expect(error._tag).toEqual("GCP.OperationFailed");
 
-      if (Result.isFailure(created)) {
-        expect([
-          "Forbidden",
-          "BadRequest",
-          "GCP.Translate.OperationFailed",
-          "GCP.Translate.ResourceNotResolved",
-        ]).toContain(created.failure._tag);
-        yield* deleteDataset(datasetName);
-        yield* stack.destroy();
-        return;
-      }
+      yield* stack.destroy();
+      yield* deleteDataset(dataset);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:translate", "live"],
+    timeout: 180_000,
+  },
+);
 
-      const model = created.success.model;
+// Training a model needs a dataset with imported sentence pairs and takes
+// hours. Point GCP_TEST_TRANSLATE_MODEL_DATASET at such a dataset.
+const runModelLifecycle =
+  runLifecycle &&
+  process.env.GCP_TEST_TRANSLATE_MODEL === "1" &&
+  !!process.env.GCP_TEST_TRANSLATE_MODEL_DATASET;
+
+test.provider.skipIf(!runModelLifecycle)(
+  "create and delete a translation model",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const dataset = process.env.GCP_TEST_TRANSLATE_MODEL_DATASET ?? "";
+
+      const model = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Translate.Model("EnEs", {
+            location,
+            dataset,
+            displayName: "enes",
+          });
+        }),
+      );
       expect(model.name).toContain("/models/");
       expect(model.location).toEqual(location);
-      expect(model.dataset).toEqual(datasetName);
       expect(model.displayName).toEqual("enes");
 
       const fetched = yield* translate.getProjectsLocationsModels({
         name: model.name,
       });
       expect(fetched.name).toEqual(model.name);
-      expect(fetched.displayName).toMatch(/^alc_/);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.Translate.Model("EnEs", {
-            modelId: model.modelId,
-            location,
-            dataset: datasetName,
-            displayName: "enes",
-          });
-        }),
-      );
-
-      expect(updated.name).toEqual(model.name);
+      expect(fetched.displayName).toEqual("enes");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(model.name);
       expect(gone).toEqual("gone");
-      yield* deleteDataset(datasetName);
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:translate", "live"],
-    timeout: 120_000,
+    timeout: 12 * 60 * 60_000,
   },
 );

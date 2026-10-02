@@ -14,6 +14,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Resize requests only accept accelerator (GPU) templates — a CPU template
+// fails with `Resize requests without accelerators are not supported.` GPUs
+// need quota and cost real money, so set GCP_TEST_MIG_RESIZE_REQUEST=1 (with
+// GPU quota) to opt in.
 const runLifecycle =
   !!process.env.GCP_TEST_MIG_RESIZE_REQUEST && !process.env.FAST;
 
@@ -56,12 +60,12 @@ const waitUntilGone = (
     );
 
 test.provider(
-  "probe insertInstanceGroupManagerResizeRequests entitlement",
+  "insertInstanceGroupManagerResizeRequests on a missing manager fails with NotFound",
   () =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const result = yield* compute
-        .insertInstanceGroupManagerResizeRequests({
+      const error = yield* Effect.flip(
+        compute.insertInstanceGroupManagerResizeRequests({
           project,
           zone,
           instanceGroupManager: "does-not-exist",
@@ -70,40 +74,9 @@ test.provider(
             description: "alchemy entitlement probe",
             resizeBy: 1,
           },
-        })
-        .pipe(
-          Effect.map(() => ({ tag: "ok" as const })),
-          Effect.catchTag("Forbidden", (error) =>
-            Effect.succeed({
-              tag: "Forbidden" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("BadRequest", (error) =>
-            Effect.succeed({
-              tag: "BadRequest" as const,
-              message: error.message,
-            }),
-          ),
-          Effect.catchTag("NotFound", (error) =>
-            Effect.succeed({
-              tag: "NotFound" as const,
-              message: error.message,
-            }),
-          ),
-        );
-      if (result.tag === "ok") {
-        yield* compute
-          .deleteInstanceGroupManagerResizeRequests({
-            project,
-            zone,
-            instanceGroupManager: "does-not-exist",
-            resizeRequest: "alchemy-rr-probe",
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        return;
-      }
-      expect(["Forbidden", "BadRequest", "NotFound"]).toContain(result.tag);
+        }),
+      );
+      expect(error._tag).toEqual("NotFound");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 60_000 },
 );
@@ -123,6 +96,8 @@ test.provider.skipIf(!runLifecycle)(
             zone,
             instanceTemplate: template.templateName,
             targetSize: 0,
+            // Resize requests are rejected while automatic repair is on.
+            instanceLifecyclePolicy: { defaultActionOnFailure: "DO_NOTHING" },
           });
           const request = yield* GCP.Compute.InstanceGroupManagerResizeRequest(
             "Burst",
@@ -130,6 +105,7 @@ test.provider.skipIf(!runLifecycle)(
               zone,
               instanceGroupManager: manager.managerName,
               resizeBy: 1,
+              requestedRunDuration: { seconds: "600" },
               description: "queued burst",
             },
           );

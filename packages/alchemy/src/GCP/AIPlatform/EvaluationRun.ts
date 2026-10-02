@@ -205,7 +205,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>
@@ -342,13 +341,17 @@ export const EvaluationRunProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // A running evaluation blocks the delete with BadRequest "There are
+      // other operations running on the EvaluationRun" until it finishes
+      // (cancel is unimplemented: HTTP 501).
       const operation = yield* aiplatform
         .deleteProjectsLocationsEvaluationRuns({ name: output.name })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
+            while: (error) =>
+              error._tag === "Conflict" || error._tag === "BadRequest",
+            times: 24,
             schedule: Schedule.spaced("5 seconds"),
           }),
         );
