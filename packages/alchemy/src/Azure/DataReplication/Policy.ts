@@ -37,8 +37,8 @@ export interface PolicyProps {
    * (`HyperVToAzStackHCI` or `VMwareToAzStackHCI`), e.g.
    * `{ instanceType: "VMwareToAzStackHCI", recoveryPointHistoryInMinutes: 4320,
    * crashConsistentFrequencyInMinutes: 60, appConsistentFrequencyInMinutes: 240 }`.
-   * Changing `instanceType` replaces the policy; other fields are updated
-   * in place.
+   * The service does not apply a re-PUT to an existing policy, so any
+   * change replaces the policy.
    */
   customProperties: DataReplicationCustomProperties;
 }
@@ -106,8 +106,7 @@ interface Where {
   policyName: string;
 }
 
-const getPolicy = (where: Where) =>
-  orUndefinedIfNotFound(dr.GetPolicy(where));
+const getPolicy = (where: Where) => orUndefinedIfNotFound(dr.GetPolicy(where));
 
 const customOf = (observed: Observed) =>
   (observed.properties?.customProperties ?? undefined) as
@@ -143,11 +142,8 @@ export const PolicyProvider = () =>
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.vault, output.vault) ||
         (news.name !== undefined && !sameName(news.name, output.policyName)) ||
-        (output.customProperties?.instanceType !== undefined &&
-          !sameName(
-            news.customProperties.instanceType,
-            String(output.customProperties.instanceType),
-          ))
+        (output.customProperties !== undefined &&
+          !matchesDesired(output.customProperties, news.customProperties))
       ) {
         return { action: "replace" } as const;
       }

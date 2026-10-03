@@ -16,8 +16,8 @@ import type { Providers } from "../Providers.ts";
 import {
   accountOwnedByStack,
   createChildName,
+  immutableChanged,
   kindProperties,
-  sameName,
   stringProp,
 } from "./internal.ts";
 
@@ -36,11 +36,12 @@ export interface SynchronizationSettingProps {
    * ID. Changing it replaces the setting.
    */
   name?: string;
-  /** How often consumers may receive snapshots. */
+  /** How often consumers may receive snapshots. Changing it replaces the setting. */
   recurrenceInterval: RecurrenceInterval;
   /**
    * ISO 8601 start time of the schedule, e.g. `2026-01-01T06:00:00Z`.
-   * Snapshots run at this time of day (or minute of the hour).
+   * Snapshots run at this time of day (or minute of the hour). Changing it
+   * replaces the setting.
    */
   synchronizationTime: string;
 }
@@ -136,10 +137,6 @@ const toAttrs = (
   };
 };
 
-/** Same instant, regardless of how Azure formats the timestamp. */
-const sameInstant = (a: string | undefined, b: string) =>
-  a !== undefined && Date.parse(a) === Date.parse(b);
-
 export const SynchronizationSettingProvider = () =>
   Provider.succeed(SynchronizationSetting, {
     stables: [
@@ -155,16 +152,30 @@ export const SynchronizationSettingProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (output === undefined) return undefined;
+      // Every prop is immutable (the RP rejects a re-PUT with different
+      // settings); an unresolved one comes from an upstream resource being
+      // created or replaced.
+      const next = news as unknown as Record<
+        keyof SynchronizationSettingProps,
+        unknown
+      >;
+      const ci = { caseInsensitive: true };
       if (
-        !sameName(news.resourceGroup, output.resourceGroup) ||
-        !sameName(news.account, output.accountName) ||
-        !sameName(news.share, output.shareName) ||
-        (news.name !== undefined &&
-          !sameName(news.name, output.synchronizationSettingName))
+        immutableChanged(next.resourceGroup, output.resourceGroup, ci) ||
+        immutableChanged(next.account, output.accountName, ci) ||
+        immutableChanged(next.share, output.shareName, ci) ||
+        (next.name !== undefined &&
+          immutableChanged(next.name, output.synchronizationSettingName, ci)) ||
+        immutableChanged(next.recurrenceInterval, output.recurrenceInterval) ||
+        (olds !== undefined &&
+          (!isResolved(next.synchronizationTime) ||
+            Date.parse(next.synchronizationTime as string) !==
+              Date.parse(olds.synchronizationTime)))
       ) {
-        return { action: "replace" } as const;
+        // A share holds one synchronization setting per kind.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -215,19 +226,11 @@ export const SynchronizationSettingProvider = () =>
         name,
       );
 
-      // Observe.
+      // Observe. Settings are immutable: every prop change replaces.
       const observed = yield* get;
-      const props = observed ? kindProperties(observed) : undefined;
 
-      // Ensure + sync: the PUT is an upsert of the whole schedule.
-      if (
-        props === undefined ||
-        stringProp(props, "recurrenceInterval") !== news.recurrenceInterval ||
-        !sameInstant(
-          stringProp(props, "synchronizationTime"),
-          news.synchronizationTime,
-        )
-      ) {
+      // Ensure.
+      if (observed === undefined) {
         yield* datashare.CreateSynchronizationSettings({
           subscriptionId,
           resourceGroupName: resourceGroup,

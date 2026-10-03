@@ -1,3 +1,14 @@
 export type { DevCenterIdentity, DevCenterIdentityType } from "./Common.ts";
+export * from "./AttachedNetwork.ts";
+export * from "./Catalog.ts";
+export * from "./DevBoxDefinition.ts";
 export * from "./DevCenter.ts";
+export * from "./EnvironmentType.ts";
+export * from "./Gallery.ts";
+export * from "./NetworkConnection.ts";
+export * from "./Pool.ts";
 export * from "./Project.ts";
+export * from "./ProjectCatalog.ts";
+export * from "./ProjectEnvironmentType.ts";
+export * from "./ProjectPolicy.ts";
+export * from "./Schedule.ts";

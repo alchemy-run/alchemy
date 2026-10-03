@@ -19,7 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createApiCenterName, getService, sameName } from "./Common.ts";
+import { createServiceName, getService, sameName } from "./Common.ts";
 
 export type ApiCenterIdentityType =
   | "None"
@@ -41,7 +41,7 @@ export interface ServiceProps {
   /** Resource group that holds the service. Changing it replaces the service. */
   resourceGroup: string;
   /**
-   * Service name: 3-90 letters, digits, and hyphens. It forms the data API
+   * Service name: 3-50 letters, digits, and single hyphens. It forms the data API
    * hostname `{name}.data.{location}.azure-apicenter.ms`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the service.
@@ -215,7 +215,7 @@ export const ServiceProvider = () =>
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
       const name =
-        output?.serviceName ?? olds?.name ?? (yield* createApiCenterName(id));
+        output?.serviceName ?? olds?.name ?? (yield* createServiceName(id));
       const observed = yield* getService(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -228,7 +228,7 @@ export const ServiceProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.ApiCenter");
       const resourceGroup = news.resourceGroup;
       const name =
-        news.name ?? output?.serviceName ?? (yield* createApiCenterName(id));
+        news.name ?? output?.serviceName ?? (yield* createServiceName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const where = {

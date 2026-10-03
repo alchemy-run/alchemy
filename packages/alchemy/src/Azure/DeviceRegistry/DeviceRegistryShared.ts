@@ -2,9 +2,17 @@
  * Shared helpers for the `deviceregistry` service (Microsoft.DeviceRegistry).
  * Not exported from the namespace barrel.
  */
+import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import type { WaitBudget } from "../Arm.ts";
+import {
+  hasAnyAlchemyTag,
+  orUndefinedIfNotFound,
+  requireSinglePage,
+  resourceGroupOf,
+  type WaitBudget,
+} from "../Arm.ts";
 
 /** Resource provider namespace registered at the top of every reconcile. */
 export const DEVICE_REGISTRY_RP = "Microsoft.DeviceRegistry";
@@ -43,15 +51,22 @@ export const sameJson = (a: unknown, b: unknown): boolean =>
   canonical(a) === canonical(b);
 
 const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(
-          Object.entries(v as Record<string, unknown>)
-            .filter(([, x]) => x !== undefined)
-            .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)),
-        )
-      : v,
-  ) ?? "undefined";
+  JSON.stringify(normalize(value)) ?? "undefined";
+
+/** Unwrap redacted values and sort object keys, dropping `undefined` members. */
+const normalize = (value: unknown): unknown => {
+  if (Redacted.isRedacted(value)) return Redacted.value(value);
+  if (Array.isArray(value)) return value.map(normalize);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, x]) => x !== undefined)
+        .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+        .map(([k, x]) => [k, normalize(x)]),
+    );
+  }
+  return value;
+};
 
 /**
  * The keys of `desired` (defined values only) whose observed value differs.
@@ -75,3 +90,29 @@ export const sameName = (a: string | undefined, b: string | undefined) =>
 export const sameLocation = (a: string | undefined, b: string | undefined) =>
   (a ?? "").replace(/\s/g, "").toLowerCase() ===
   (b ?? "").replace(/\s/g, "").toLowerCase();
+
+/**
+ * Alchemy-owned Device Registry namespaces in the subscription, used to
+ * enumerate their child devices and assets.
+ */
+export const listOwnedNamespaces = Effect.fn(function* (
+  subscriptionId: string,
+) {
+  const page = yield* orUndefinedIfNotFound(
+    deviceregistry
+      .ListNamespaceBySubscription({ subscriptionId })
+      .pipe(
+        Effect.flatMap((page) =>
+          requireSinglePage("ListNamespaceBySubscription", page),
+        ),
+      ),
+  );
+  return (page?.value ?? []).flatMap((ns) => {
+    const resourceGroup = resourceGroupOf(ns.id);
+    return hasAnyAlchemyTag(ns.tags) &&
+      resourceGroup !== undefined &&
+      ns.name !== undefined
+      ? [{ resourceGroup, name: ns.name }]
+      : [];
+  });
+});

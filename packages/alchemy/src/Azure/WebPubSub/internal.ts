@@ -85,6 +85,9 @@ export const whileWebPubSubBusy = {
   times: 30,
 } as const;
 
+/** Poll budget for Web PubSub long-running operations (up to 10 minutes). */
+export const WAIT = { interval: "10 seconds", times: 60 } as const;
+
 export const lower = (value: string | undefined | null) =>
   value?.toLowerCase();
 

@@ -5,6 +5,7 @@ import {
 } from "./AccessControlList.ts";
 import { ExternalNetwork, ExternalNetworkProvider } from "./ExternalNetwork.ts";
 import { InternalNetwork, InternalNetworkProvider } from "./InternalNetwork.ts";
+import { InternetGateway, InternetGatewayProvider } from "./InternetGateway.ts";
 import {
   InternetGatewayRule,
   InternetGatewayRuleProvider,
@@ -33,6 +34,10 @@ import { NetworkMonitor, NetworkMonitorProvider } from "./NetworkMonitor.ts";
 import { NetworkTap, NetworkTapProvider } from "./NetworkTap.ts";
 import { NetworkTapRule, NetworkTapRuleProvider } from "./NetworkTapRule.ts";
 import {
+  NetworkPacketBroker,
+  NetworkPacketBrokerProvider,
+} from "./NetworkPacketBroker.ts";
+import {
   NetworkToNetworkInterconnect,
   NetworkToNetworkInterconnectProvider,
 } from "./NetworkToNetworkInterconnect.ts";
@@ -42,6 +47,7 @@ export const resources = [
   AccessControlList,
   ExternalNetwork,
   InternalNetwork,
+  InternetGateway,
   InternetGatewayRule,
   IpCommunity,
   IpExtendedCommunity,
@@ -52,6 +58,7 @@ export const resources = [
   NetworkFabric,
   NetworkFabricController,
   NetworkMonitor,
+  NetworkPacketBroker,
   NetworkTap,
   NetworkTapRule,
   NetworkToNetworkInterconnect,
@@ -63,6 +70,7 @@ export const layers = () =>
     AccessControlListProvider(),
     ExternalNetworkProvider(),
     InternalNetworkProvider(),
+    InternetGatewayProvider(),
     InternetGatewayRuleProvider(),
     IpCommunityProvider(),
     IpExtendedCommunityProvider(),
@@ -73,6 +81,7 @@ export const layers = () =>
     NetworkFabricProvider(),
     NetworkFabricControllerProvider(),
     NetworkMonitorProvider(),
+    NetworkPacketBrokerProvider(),
     NetworkTapProvider(),
     NetworkTapRuleProvider(),
     NetworkToNetworkInterconnectProvider(),

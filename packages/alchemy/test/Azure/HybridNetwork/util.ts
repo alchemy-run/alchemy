@@ -33,3 +33,39 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
 
 /** AOSM is only available in a few regions. */
 export const location = "eastus";
+
+/** Name and version of the ARM-template artifact declared by `withStore`. */
+export const template = { name: "tmpl", version: "1.0.0" } as const;
+
+/**
+ * A resource group, publisher, container-registry artifact store, and a
+ * manifest declaring one ARM-template artifact (never uploaded). The store
+ * provisions a Standard ACR in a managed resource group (~1-3 minutes,
+ * a few cents per run).
+ */
+export const withStore = Effect.gen(function* () {
+  const group = yield* Azure.Resources.ResourceGroup("Group", { location });
+  const publisher = yield* Azure.HybridNetwork.Publisher("Publisher", {
+    resourceGroup: group.resourceGroupName,
+    location,
+  });
+  const store = yield* Azure.HybridNetwork.ArtifactStore("Store", {
+    resourceGroup: group.resourceGroupName,
+    publisher: publisher.publisherName,
+    location,
+  });
+  const manifest = yield* Azure.HybridNetwork.ArtifactManifest("Manifest", {
+    resourceGroup: group.resourceGroupName,
+    publisher: publisher.publisherName,
+    artifactStore: store.artifactStoreName,
+    location,
+    artifacts: [
+      {
+        artifactName: template.name,
+        artifactType: "ArmTemplate",
+        artifactVersion: template.version,
+      },
+    ],
+  });
+  return { group, publisher, store, manifest };
+});

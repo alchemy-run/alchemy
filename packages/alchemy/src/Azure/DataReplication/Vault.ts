@@ -59,8 +59,10 @@ export interface VaultProps {
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * Managed identity of the vault. `SystemAssigned` gives the vault a
-   * service principal it uses to reach storage and fabrics.
-   * @default unmanaged
+   * service principal it uses to reach storage and fabrics. The service
+   * rejects vaults created without a managed identity, so new vaults get a
+   * system-assigned identity unless `None` is requested explicitly.
+   * @default "SystemAssigned" on create; unmanaged afterwards
    */
   identity?: "None" | "SystemAssigned";
   /**
@@ -227,10 +229,16 @@ export const VaultProvider = () =>
       yield* ensureRegistered(subscriptionId, DATA_REPLICATION_NAMESPACE);
       const resourceGroup = news.resourceGroup;
       const name =
-        news.name ?? output?.vaultName ?? (yield* createDataReplicationName(id));
+        news.name ??
+        output?.vaultName ??
+        (yield* createDataReplicationName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
-      const where = { subscriptionId, resourceGroupName: resourceGroup, vaultName: name };
+      const where = {
+        subscriptionId,
+        resourceGroupName: resourceGroup,
+        vaultName: name,
+      };
       const get = getVault(subscriptionId, resourceGroup, name);
       const settle = waitForProvisioned(
         `data replication vault ${name}`,
@@ -252,8 +260,7 @@ export const VaultProvider = () =>
             vaultType: news.vaultType ?? "DisasterRecovery",
             publicNetworkAccess: news.publicNetworkAccess,
           },
-          identity:
-            news.identity !== undefined ? { type: news.identity } : undefined,
+          identity: { type: news.identity ?? "SystemAssigned" },
         });
       }
       observed = yield* settle;
@@ -264,7 +271,10 @@ export const VaultProvider = () =>
       if (tagsDiffer(observed.tags, tags)) patch.tags = tags;
       if (
         news.publicNetworkAccess !== undefined &&
-        !sameName(observed.properties?.publicNetworkAccess, news.publicNetworkAccess)
+        !sameName(
+          observed.properties?.publicNetworkAccess,
+          news.publicNetworkAccess,
+        )
       ) {
         patch.properties = { publicNetworkAccess: news.publicNetworkAccess };
       }

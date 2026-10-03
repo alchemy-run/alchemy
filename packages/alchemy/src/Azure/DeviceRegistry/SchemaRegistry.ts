@@ -221,8 +221,7 @@ export const SchemaRegistryProvider = () =>
           !sameName(news.name, output.schemaRegistryName)) ||
         (news.location !== undefined &&
           !sameLocation(news.location, output.location)) ||
-        (news.namespace !== undefined &&
-          news.namespace !== output.namespace) ||
+        (news.namespace !== undefined && news.namespace !== output.namespace) ||
         trimSlash(news.storageAccountContainerUrl).toLowerCase() !==
           trimSlash(output.storageAccountContainerUrl).toLowerCase()
       ) {

@@ -1,5 +1,6 @@
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -288,7 +289,16 @@ export const PublisherProvider = () =>
             resourceGroupName: output.resourceGroup,
             publisherName: output.publisherName,
           })
-          .pipe(retryInProgress),
+          .pipe(
+            retryInProgress,
+            // Nested resources linger briefly after their own delete
+            // completes, so the publisher reports them as still present.
+            Effect.retry({
+              while: (e) => e._tag === "CannotDeleteResource",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 24,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `AOSM publisher ${output.publisherName}`,

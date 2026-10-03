@@ -88,8 +88,7 @@ export const whileSignalRBusy = {
 /** Poll budget for SignalR long-running operations (up to 10 minutes). */
 export const WAIT = { interval: "10 seconds", times: 60 } as const;
 
-export const lower = (value: string | undefined | null) =>
-  value?.toLowerCase();
+export const lower = (value: string | undefined | null) => value?.toLowerCase();
 
 export const sameLocation = (
   a: string | undefined | null,
@@ -111,3 +110,45 @@ export const parseChildId = (armId: string | undefined) => {
   );
   return match ? { resourceGroup: match[1]!, signalR: match[2]! } : undefined;
 };
+
+/** Whether an observed shared private link already has the desired properties. */
+export const sharedPrivateLinkMatches = (
+  news: {
+    groupId: string;
+    privateLinkResourceId: string;
+    requestMessage?: string;
+  },
+  observed:
+    | {
+        groupId?: string;
+        privateLinkResourceId?: string;
+        requestMessage?: string;
+      }
+    | undefined,
+) =>
+  observed !== undefined &&
+  lower(observed.groupId) === lower(news.groupId) &&
+  lower(observed.privateLinkResourceId) === lower(news.privateLinkResourceId) &&
+  (news.requestMessage === undefined ||
+    observed.requestMessage === news.requestMessage);
+
+/**
+ * Whether a change requires a new shared private link. Azure keeps the
+ * target and the request message fixed after creation (a PUT with a new
+ * message succeeds but is ignored).
+ */
+export const sharedPrivateLinkTargetChanged = (
+  news: {
+    groupId: string;
+    privateLinkResourceId: string;
+    requestMessage?: string;
+  },
+  output: {
+    groupId: string;
+    privateLinkResourceId: string;
+    requestMessage: string | undefined;
+  },
+) =>
+  lower(news.groupId) !== lower(output.groupId) ||
+  lower(news.privateLinkResourceId) !== lower(output.privateLinkResourceId) ||
+  (news.requestMessage ?? "") !== (output.requestMessage ?? "");

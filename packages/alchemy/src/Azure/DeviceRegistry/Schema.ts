@@ -149,7 +149,13 @@ const toAttrs = (
 
 export const SchemaProvider = () =>
   Provider.succeed(Schema, {
-    stables: ["schemaName", "schemaRegistry", "resourceGroup", "schemaId", "uuid"],
+    stables: [
+      "schemaName",
+      "schemaRegistry",
+      "resourceGroup",
+      "schemaId",
+      "uuid",
+    ],
 
     // Schemas vanish with their registry.
     list: Effect.fn(function* () {
@@ -178,7 +184,9 @@ export const SchemaProvider = () =>
         return undefined;
       }
       const name =
-        output?.schemaName ?? olds?.name ?? (yield* createDeviceRegistryName(id));
+        output?.schemaName ??
+        olds?.name ??
+        (yield* createDeviceRegistryName(id));
       const observed = yield* getSchema(
         subscriptionId,
         resourceGroup,
@@ -197,9 +205,16 @@ export const SchemaProvider = () =>
       yield* ensureRegistered(subscriptionId, DEVICE_REGISTRY_RP);
       const { resourceGroup, schemaRegistry } = news;
       const name =
-        news.name ?? output?.schemaName ?? (yield* createDeviceRegistryName(id));
+        news.name ??
+        output?.schemaName ??
+        (yield* createDeviceRegistryName(id));
       const tags = yield* desiredTags(id, news.tags);
-      const get = getSchema(subscriptionId, resourceGroup, schemaRegistry, name);
+      const get = getSchema(
+        subscriptionId,
+        resourceGroup,
+        schemaRegistry,
+        name,
+      );
 
       // Observe.
       const observed = yield* get;

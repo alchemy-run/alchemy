@@ -65,16 +65,17 @@ test.provider(
       expect(observed.instanceType).toEqual("VMwareToAzStackHCI");
       expect(observed.recoveryPointHistoryInMinutes).toEqual(4320);
 
-      // In-place: retention.
+      // Replace: retention (the service ignores a re-PUT of a policy).
       const updated = yield* stack.deploy(
         program({
           instanceType: "VMwareToAzStackHCI",
           recoveryPointHistoryInMinutes: 2880,
         }),
       );
-      expect(updated.policy.policyId).toEqual(created.policy.policyId);
+      expect(updated.policy.policyName).not.toEqual(name);
+      expect(yield* waitGone(getPolicy(rg, vault, name))).toEqual("gone");
       expect(
-        customOf(yield* getPolicy(rg, vault, name))
+        customOf(yield* getPolicy(rg, vault, updated.policy.policyName))
           .recoveryPointHistoryInMinutes,
       ).toEqual(2880);
 

@@ -9,6 +9,8 @@ import {
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
+  type ProvisioningFailed,
+  type ProvisioningTimedOut,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -22,11 +24,19 @@ import { AzureEnvironment } from "../Environment.ts";
 export const DEFAULT_WORKSPACE = "default";
 
 /**
- * Deterministic name for an API Center service or catalog entity: 3-90
- * lowercase letters, digits, and hyphens.
+ * Deterministic name for an API Center service or catalog entity. The
+ * spec allows 3-90 characters, but the service RP rejects names longer
+ * than 64 (`^[a-zA-Z0-9\-\.]{1,64}$`), so generated names stay within 64.
  */
 export const createApiCenterName = (id: string) =>
-  createPhysicalName({ id, maxLength: 90, lowercase: true });
+  createPhysicalName({ id, maxLength: 64, lowercase: true });
+
+/**
+ * Deterministic API Center service name: the RP requires 3-50 characters
+ * that begin and end with a letter or digit, without consecutive dashes.
+ */
+export const createServiceName = (id: string) =>
+  createPhysicalName({ id, maxLength: 50, lowercase: true });
 
 /** Case-insensitive comparison for Azure names and locations. */
 export const sameName = (a: string | undefined, b: string | undefined) =>
@@ -126,7 +136,11 @@ export interface EntitySpec<
     props: P,
     observed: O,
     output: A | undefined,
-  ) => Op<O>;
+  ) => Effect.Effect<
+    O,
+    AzureOpError | ProvisioningFailed | ProvisioningTimedOut,
+    AzureOpContext
+  >;
   /** Attributes of the observed entity. */
   toAttrs: (subscriptionId: string, key: K, observed: O, props?: P) => A;
 }

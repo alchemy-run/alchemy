@@ -9,11 +9,7 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const tags = [
-  "provider:azure",
-  "provider:azure:deviceregistry",
-  "live",
-];
+export const tags = ["provider:azure", "provider:azure:deviceregistry", "live"];
 
 /** Device Registry regions; eastus is supported for every type. */
 export const location = "eastus";

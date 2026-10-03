@@ -38,8 +38,7 @@ test.provider(
       const { group, namespace } = yield* stack.deploy(
         program({ tags: { env: "a" } }),
       );
-      const get = (name: string) =>
-        getNamespace(group.resourceGroupName, name);
+      const get = (name: string) => getNamespace(group.resourceGroupName, name);
       const observed = yield* get(namespace.namespaceName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("a");
@@ -57,15 +56,13 @@ test.provider(
         program({ name: newName, tags: { env: "b" } }),
       );
       expect(replaced.namespace.namespaceName).toEqual(newName);
-      expect(replaced.namespace.namespaceId).not.toEqual(
-        namespace.namespaceId,
-      );
+      expect(replaced.namespace.namespaceId).not.toEqual(namespace.namespaceId);
       expect(yield* waitGone(get(namespace.namespaceName))).toEqual("gone");
 
       yield* stack.destroy();
-      expect(
-        yield* waitGone(get(replaced.namespace.namespaceName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(get(replaced.namespace.namespaceName))).toEqual(
+        "gone",
+      );
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
 );

@@ -39,15 +39,22 @@ export interface ArtifactStoreManagedResourceGroup {
   location?: string;
 }
 
+/**
+ * AOSM derives the backing registry/storage account names from the store
+ * name; generated names longer than this make store provisioning fail.
+ */
+const STORE_NAME_LENGTH = 24;
+
 export interface ArtifactStoreProps {
   /** Resource group of the publisher. Changing it replaces the store. */
   resourceGroup: string;
   /** Name of the publisher that owns the store. Changing it replaces the store. */
   publisher: string;
   /**
-   * Store name: 1-64 letters, digits, `_`, and `-`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the store.
+   * Store name: 1-64 letters, digits, `_`, and `-` (keep it short: the
+   * backing registry name is derived from it). If omitted, a unique
+   * 24-character name is generated from the app, stage, and logical ID.
+   * Changing it replaces the store.
    */
   name?: string;
   /**
@@ -263,7 +270,7 @@ export const ArtifactStoreProvider = () =>
       const name =
         output?.artifactStoreName ??
         olds?.name ??
-        (yield* createHybridNetworkName(id));
+        (yield* createHybridNetworkName(id, STORE_NAME_LENGTH));
       const observed = yield* getStore(
         subscriptionId,
         resourceGroup,
@@ -283,7 +290,7 @@ export const ArtifactStoreProvider = () =>
       const name =
         news.name ??
         output?.artifactStoreName ??
-        (yield* createHybridNetworkName(id));
+        (yield* createHybridNetworkName(id, STORE_NAME_LENGTH));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const where = {
