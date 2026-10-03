@@ -5,9 +5,11 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { runPaidOnly } from "../gates.ts";
 import {
   flexApp,
   flexConnectionString,
+  flexPlanRejection,
   flexStorage,
 } from "./fixtures/flex-app.ts";
 
@@ -69,9 +71,13 @@ const program = (connection: string, register: boolean) =>
     return { group, app, site, registration };
   });
 
-// Cost: Standard static site ~$9/month prorated (~$0.0125/h, a few cents per
-// run); Flex Consumption idle $0. Provisioning: ~4-6 minutes.
-test.provider(
+// The testing subscription may not create Flex Consumption plans (HTTP 502
+// "The subscription '<id>' is not allowed to create or update the
+// serverfarm.", ServerFarmCreateNotAllowed, in every region), so this runs
+// only with AZURE_TEST_PAID=1. Cost: Standard static site
+// ~$9/month prorated (~$0.0125/h, a few cents per run); Flex Consumption
+// idle $0. Provisioning: ~4-6 minutes.
+test.provider.skipIf(!runPaidOnly)(
   "register and detach a user-provided function app on a static site",
   (stack) =>
     Effect.gen(function* () {
@@ -95,9 +101,9 @@ test.provider(
         site.staticSiteName,
         app.siteName,
       );
-      expect(
-        observed.properties?.functionAppResourceId?.toLowerCase(),
-      ).toEqual(app.siteId.toLowerCase());
+      expect(observed.properties?.functionAppResourceId?.toLowerCase()).toEqual(
+        app.siteId.toLowerCase(),
+      );
 
       // A redeploy without changes keeps the registration.
       const same = yield* stack.deploy(program(connection, true));
@@ -120,5 +126,30 @@ test.provider(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 900_000,
+  },
+);
+
+// Probe: the subscription cannot create the Flex Consumption plan this
+// lifecycle needs.
+test.provider(
+  "flex consumption plan is rejected with ServerFarmCreateNotAllowed",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const error = yield* flexPlanRejection(group.resourceGroupName);
+      expect(error._tag).toEqual("ServerFarmCreateNotAllowed");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 300_000,
   },
 );

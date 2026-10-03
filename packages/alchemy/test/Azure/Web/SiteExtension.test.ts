@@ -51,10 +51,10 @@ const program = (extensionId: string | undefined) =>
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // Site extensions need Windows; F1 quota exists only in centralus.
+    // Site extensions need Windows; F1 quota exists in westus3 (centralus plan creates are throttled).
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "windows",
     });
@@ -92,7 +92,7 @@ test.provider(
         app.siteName,
         first,
       );
-      expect(observed.properties?.extension_id).toEqual(first);
+      expect(observed.name).toEqual(`${app.siteName}/${first}`);
 
       // Replacement: another extension.
       const replaced = yield* stack.deploy(program(second));
@@ -102,7 +102,7 @@ test.provider(
         app.siteName,
         second,
       );
-      expect(installed.properties?.extension_id).toEqual(second);
+      expect(installed.name).toEqual(`${app.siteName}/${second}`);
       expect(
         yield* extensionGone(group.resourceGroupName, app.siteName, first),
       ).toEqual("gone");

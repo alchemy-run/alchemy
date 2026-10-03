@@ -55,10 +55,10 @@ const program = (sidecar: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // The free trial has F1 quota in centralus but not in eastus.
+    // The free trial has F1 quota in westus3 (centralus plan creates are throttled).
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "linux",
     });

@@ -39,6 +39,12 @@ export interface ServiceRunnerProps {
    */
   identityId: string;
   /**
+   * What the identity is used for: deploying lab environments or managing
+   * lab VMs. Changing it replaces the runner.
+   * @default "Environment"
+   */
+  identityUsageType?: "Environment" | "VirtualMachine";
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -71,6 +77,12 @@ export interface ServiceRunner extends Resource<
 /**
  * A DevTest Labs service runner — the managed identity a lab uses to
  * deploy environments and apply artifacts on users' behalf.
+ *
+ * Azure has deprecated service runners: creating one now fails with
+ * `DevTestLabsServiceRunnerDeprecated` ("Service runner with
+ * IdentityUsageType of 'Environment' is deprecated. Use
+ * lab.Identity.UserAssignedIdentities instead."). Existing runners can
+ * still be read, retagged, and deleted.
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/use-managed-identities-environments
  *
@@ -132,7 +144,7 @@ export const ServiceRunnerProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         news.resourceGroup.toLowerCase() !==
@@ -140,7 +152,9 @@ export const ServiceRunnerProvider = () =>
         news.lab.toLowerCase() !== output.lab.toLowerCase() ||
         (news.name !== undefined &&
           news.name.toLowerCase() !== output.serviceRunnerName.toLowerCase()) ||
-        news.identityId.toLowerCase() !== output.identityId.toLowerCase()
+        news.identityId.toLowerCase() !== output.identityId.toLowerCase() ||
+        (news.identityUsageType ?? "Environment") !==
+          (olds?.identityUsageType ?? "Environment")
       ) {
         // A lab holds one user-assigned identity: remove the old runner first.
         return { action: "replace", deleteFirst: true } as const;
@@ -193,6 +207,9 @@ export const ServiceRunnerProvider = () =>
             (yield* labLocation(subscriptionId, resourceGroup, lab)),
           tags,
           identity,
+          properties: {
+            identityUsageType: news.identityUsageType ?? "Environment",
+          },
         });
       }
 

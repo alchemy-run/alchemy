@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { logLevel, subscription, tags, vaultStack } from "./shared.ts";
+import { fabricsStack, logLevel, subscription, tags } from "./shared.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -13,7 +13,8 @@ const program = (props: {
   locale: string;
 }) =>
   Effect.gen(function* () {
-    const { group, vault } = yield* vaultStack;
+    // Site Recovery only accepts alert settings once a fabric is registered.
+    const { group, vault } = yield* fabricsStack;
     const alerts = yield* Azure.SiteRecovery.AlertSetting("Alerts", {
       resourceGroup: group.resourceGroupName,
       vault: vault.vaultName,
@@ -32,7 +33,7 @@ const getAlerts = (rg: string, vault: string) =>
     });
   });
 
-// Vault and alert settings are free; ~2 minutes.
+// Vault, A2A fabrics, and alert settings are free; ~6 minutes.
 test.provider(
   "configure, update, and reset site recovery alert settings",
   (stack) =>
@@ -76,7 +77,7 @@ test.provider(
       expect(reobserved.properties?.locale).toEqual("fr-FR");
 
       // Delete: no delete API, the setting is reset to the vault default.
-      yield* stack.deploy(vaultStack);
+      yield* stack.deploy(fabricsStack);
       const reset = yield* getAlerts(rg, vault);
       expect(reset.properties?.sendToOwners).toEqual("DoNotSend");
       expect(reset.properties?.customEmailAddresses ?? []).toEqual([]);

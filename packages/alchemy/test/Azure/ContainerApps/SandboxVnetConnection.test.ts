@@ -34,16 +34,19 @@ const program = (subnet: "A" | "B") =>
       location: LOCATION,
       addressPrefixes: ["10.40.0.0/16"],
     });
-    // Both subnets stay deployed across the replacement step.
+    // Both subnets stay deployed across the replacement step. Sandbox
+    // groups require the Microsoft.App/environments delegation.
     const subnetA = yield* Azure.Network.Subnet("SubnetA", {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.40.1.0/24",
+      delegations: [{ serviceName: "Microsoft.App/environments" }],
     });
     const subnetB = yield* Azure.Network.Subnet("SubnetB", {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.40.2.0/24",
+      delegations: [{ serviceName: "Microsoft.App/environments" }],
     });
     const sandboxes = yield* Azure.ContainerApps.SandboxGroup("Sandboxes", {
       resourceGroup: group.resourceGroupName,
@@ -85,12 +88,22 @@ test.provider(
       expect(replaced.connection.subnetId.toLowerCase()).toEqual(
         replaced.subnetB.subnetId.toLowerCase(),
       );
-      expect((yield* get).properties?.subnetId?.toLowerCase()).toEqual(
+      // Replacement creates a new connection and deletes the old one.
+      expect(replaced.connection.connectionName).not.toEqual(
+        connection.connectionName,
+      );
+      const getReplaced = getConnection(
+        group.resourceGroupName,
+        sandboxes.sandboxGroupName,
+        replaced.connection.connectionName,
+      );
+      expect((yield* getReplaced).properties?.subnetId?.toLowerCase()).toEqual(
         replaced.subnetB.subnetId.toLowerCase(),
       );
+      expect(yield* waitGone(get)).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitGone(get)).toEqual("gone");
+      expect(yield* waitGone(getReplaced)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:containerapps", "live"],

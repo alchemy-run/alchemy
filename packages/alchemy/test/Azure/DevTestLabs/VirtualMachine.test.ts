@@ -4,7 +4,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { PUBLIC_KEY_1 } from "../Compute/helpers.ts";
-import { withVcpus } from "../gates.ts";
+import { runExpensive, withVcpus } from "../gates.ts";
 import {
   LAB_VM_SIZE,
   LAB_VM_SIZE_ALT,
@@ -52,8 +52,9 @@ const program = (props: { size: string; tags: Record<string, string> }) =>
     return { group, lab, vm };
   });
 
-// One 2-vCPU lab VM (~$0.10/hour) for ~15 minutes: ~$0.03.
-test.provider(
+// One 2-vCPU lab VM (~$0.10/hour) for ~25 minutes: ~$0.05. Gated: the lab
+// VM takes ~5 minutes to create, ~10 to resize, and ~5 to delete.
+test.provider.skipIf(!runExpensive)(
   "create, resize, retag, and delete a lab VM",
   (stack) =>
     Effect.gen(function* () {
@@ -81,5 +82,5 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_700_000 },
 );

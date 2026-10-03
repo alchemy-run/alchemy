@@ -267,7 +267,12 @@ export const DiskProvider = () =>
             hostCaching: news.hostCaching ?? observed?.properties?.hostCaching,
             managedDiskId:
               news.managedDiskId ?? observed?.properties?.managedDiskId,
-            leasedByLabVmId: observed?.properties?.leasedByLabVmId,
+            // A new disk is created attached: Azure fails standalone empty
+            // disks (provisioningState 'Failed', no error detail).
+            leasedByLabVmId:
+              observed === undefined
+                ? news.leasedByLabVmId
+                : observed.properties?.leasedByLabVmId,
           },
         });
         observed = yield* wait;

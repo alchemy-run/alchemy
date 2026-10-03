@@ -228,7 +228,12 @@ export const MetadataProvider = () =>
         (news.metadataName !== undefined &&
           !sameText(news.metadataName, output.metadataName))
       ) {
-        return { action: "replace" } as const;
+        // Azure allows one metadata per parentId, so a replacement that keeps
+        // the parent must delete the old metadata first.
+        return {
+          action: "replace",
+          deleteFirst: sameText(news.parentId, output.parentId),
+        } as const;
       }
       return undefined;
     }),

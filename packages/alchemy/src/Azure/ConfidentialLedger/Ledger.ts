@@ -380,18 +380,16 @@ export const LedgerProvider = () =>
       const get = getLedger(subscriptionId, resourceGroup, name);
       // The ledger GET never reports provisioningState; a ledger is usable
       // once its data-plane endpoint (`ledgerUri`) is published (~4 min).
-      const waitUntil = (ready: (ledger: ObservedLedger) => boolean) =>
-        waitForProvisioned(
-          label,
-          get,
-          (ledger) => {
-            const state = ledger.properties?.provisioningState;
-            if (state !== undefined && state !== "Succeeded") return state;
-            return ready(ledger) ? "Succeeded" : "Pending";
-          },
-          { interval: "10 seconds", times: 60 },
-        );
-      const wait = waitUntil((ledger) => !!ledger.properties?.ledgerUri);
+      const wait = waitForProvisioned(
+        label,
+        get,
+        (ledger) => {
+          const state = ledger.properties?.provisioningState;
+          if (state !== undefined && state !== "Succeeded") return state;
+          return ledger.properties?.ledgerUri ? "Succeeded" : "Pending";
+        },
+        { interval: "10 seconds", times: 60 },
+      );
 
       const aad: confidentialledger.AADBasedSecurityPrincipal[] = (
         news.aadBasedSecurityPrincipals ?? []

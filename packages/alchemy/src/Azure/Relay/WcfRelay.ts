@@ -252,7 +252,12 @@ export const WcfRelayProvider = () =>
       const fresh = yield* waitForProvisioned(
         `relay wcf relay ${where.relayName}`,
         getRelay(where),
-        () => undefined,
+        // The PUT is applied asynchronously: a GET right after it can still
+        // return the previous metadata, so wait until it converges.
+        (wcfRelay) =>
+          wcfRelay.properties?.userMetadata === userMetadata
+            ? undefined
+            : "Updating",
         { interval: "2 seconds", times: 15 },
       );
       return toAttrs(where, fresh);

@@ -11,7 +11,14 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { ownedOrUnowned, sameName, SITE_RECOVERY_NAMESPACE } from "./Shared.ts";
+import {
+  ignoreNoRegisteredServers,
+  ownedOrUnowned,
+  retryUntilServersRegistered,
+  retryWhileVaultRegistering,
+  sameName,
+  SITE_RECOVERY_NAMESPACE,
+} from "./Shared.ts";
 
 /** The alert setting every vault has. */
 export const DEFAULT_ALERT_SETTING = "defaultAlertSetting";
@@ -76,11 +83,21 @@ export interface AlertSetting extends Resource<
  * vault is tagged for the current stack and stage. There is no delete API:
  * destroying the resource resets it to `DoNotSend` with no recipients.
  *
+ * Site Recovery only accepts alert settings once the vault has at least one
+ * registered fabric (e.g. an Azure-to-Azure `Fabric`). A fabric deployed in
+ * the same stack is waited for (up to ~5 minutes); without one the write
+ * fails with `SiteRecoveryNoRegisteredServers`.
+ *
  * @see https://learn.microsoft.com/rest/api/site-recovery/replication-alert-settings/create
  *
  * ### Notifications
  * **Example:** Email the owners and an on-call alias
  * ```typescript
+ * yield* Azure.SiteRecovery.Fabric("primary", {
+ *   resourceGroup: group.resourceGroupName,
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
  * yield* Azure.SiteRecovery.AlertSetting("dr-alerts", {
  *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
@@ -106,7 +123,9 @@ interface Where {
 }
 
 const getAlertSetting = (where: Where) =>
-  orUndefinedIfNotFound(asr.GetReplicationAlertSettings(where));
+  orUndefinedIfNotFound(
+    retryWhileVaultRegistering(asr.GetReplicationAlertSettings(where)),
+  );
 
 const desiredOf = (news: AlertSettingProps) => ({
   sendToOwners: news.sendToOwners ?? "DoNotSend",
@@ -208,10 +227,12 @@ export const AlertSettingProvider = () =>
       if (observed !== undefined && matches(observed, desired)) {
         return toAttrs(news.resourceGroup, news.vault, name, observed);
       }
-      yield* asr.CreateReplicationAlertSettings({
-        ...where,
-        properties: desired,
-      });
+      yield* retryWhileVaultRegistering(
+        asr.CreateReplicationAlertSettings({
+          ...where,
+          properties: desired,
+        }),
+      ).pipe(retryUntilServersRegistered);
       const fresh = yield* waitForProvisioned(
         `site recovery alert setting ${name}`,
         getAlertSetting(where),
@@ -233,13 +254,19 @@ export const AlertSettingProvider = () =>
       const observed = yield* getAlertSetting(where);
       if (observed === undefined) return;
       yield* ignoreNotFound(
-        asr.CreateReplicationAlertSettings({
-          ...where,
-          properties: desiredOf({
-            resourceGroup: output.resourceGroup,
-            vault: output.vault,
+        retryWhileVaultRegistering(
+          asr.CreateReplicationAlertSettings({
+            ...where,
+            properties: desiredOf({
+              resourceGroup: output.resourceGroup,
+              vault: output.vault,
+            }),
           }),
-        }),
+        ),
+      ).pipe(
+        // Once the vault's last fabric is unregistered the setting can no
+        // longer be written, and no alerts can fire: nothing to reset.
+        ignoreNoRegisteredServers,
       );
     }),
 

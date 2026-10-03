@@ -48,8 +48,8 @@ const program = (props: {
     });
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      // The free trial has F1 quota in centralus but not in eastus.
-      location: "centralus",
+      // The free trial has F1 quota in westus3 (centralus plan creates are throttled).
+      location: "westus3",
       sku: "F1",
       os: props.os,
       tags: props.tags,

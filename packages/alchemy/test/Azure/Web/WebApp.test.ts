@@ -47,17 +47,17 @@ const program = (props: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // The free trial has F1 quota in centralus but not in eastus. Both plans
+    // The free trial has F1 quota in westus3 (centralus plan creates are throttled). Both plans
     // stay deployed so the OS replacement never removes a live dependency.
     const linuxPlan = yield* Azure.Web.AppServicePlan("LinuxPlan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "linux",
     });
     const windowsPlan = yield* Azure.Web.AppServicePlan("WindowsPlan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "windows",
     });

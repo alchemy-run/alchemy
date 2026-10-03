@@ -31,7 +31,7 @@ const getSecret = (
     });
   });
 
-const program = (props: { value: string; tags: Record<string, string> }) =>
+const program = (props: { value: string }) =>
   Effect.gen(function* () {
     const { group, lab, user } = yield* labUserFixture();
     const secret = yield* Azure.DevTestLabs.Secret("Token", {
@@ -39,7 +39,6 @@ const program = (props: { value: string; tags: Record<string, string> }) =>
       lab: lab.labName,
       user: user.userName,
       value: Redacted.make(props.value),
-      tags: props.tags,
     });
     return { group, lab, user, secret };
   });
@@ -52,7 +51,7 @@ test.provider(
       yield* stack.destroy();
 
       const { group, lab, user, secret } = yield* stack.deploy(
-        program({ value: "first-value", tags: { env: "test" } }),
+        program({ value: "first-value" }),
       );
       const get = () =>
         getSecret(
@@ -62,16 +61,16 @@ test.provider(
           secret.secretName,
         );
       const observed = yield* get();
-      expect(observed.tags?.["alchemy::id"]).toEqual("Token");
-      expect(observed.tags?.env).toEqual("test");
+      expect(observed.name).toEqual(secret.secretName);
+      expect(observed.id?.toLowerCase()).toEqual(secret.secretId.toLowerCase());
 
-      // In-place: rotate the value and retag.
+      // In-place: rotate the value.
       const updated = yield* stack.deploy(
-        program({ value: "second-value", tags: { env: "prod" } }),
+        program({ value: "second-value" }),
       );
       expect(updated.secret.secretId).toEqual(secret.secretId);
       const reobserved = yield* get();
-      expect(reobserved.tags?.env).toEqual("prod");
+      expect(reobserved.name).toEqual(secret.secretName);
       if (reobserved.properties?.value !== undefined) {
         expect(reobserved.properties.value).toEqual("second-value");
       }

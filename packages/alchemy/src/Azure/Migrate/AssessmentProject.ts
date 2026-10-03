@@ -27,7 +27,9 @@ export interface AssessmentProjectProps {
   resourceGroup: string;
   /**
    * Name of the assessment project. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the project.
+   * from the app, stage, and logical ID (at most 40 characters — Azure
+   * Migrate fails with an internal server error on long names under long
+   * resource group names). Changing it replaces the project.
    */
   name?: string;
   /**
@@ -44,11 +46,6 @@ export interface AssessmentProjectProps {
    * @default "Enabled"
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /**
-   * Project status. An `Inactive` project rejects new assessments.
-   * @default "Active"
-   */
-  projectStatus?: "Active" | "Inactive";
   /** ARM ID of the `Migrate.Solution` that tracks this assessment project. */
   assessmentSolutionId?: string;
   /** ARM ID of a Log Analytics workspace used for dependency visualization. */
@@ -78,7 +75,10 @@ export interface AssessmentProject extends Resource<
     location: string;
     /** Endpoint the collector agent calls for the agent REST API. */
     serviceEndpoint: string;
-    /** Project status (`Active` or `Inactive`). */
+    /**
+     * Project status (`Active` or `Inactive`). Server-managed: the service
+     * ignores `projectStatus` on both PUT and PATCH.
+     */
     projectStatus: string;
     /** Public network access setting. */
     publicNetworkAccess: string;
@@ -108,13 +108,13 @@ export interface AssessmentProject extends Resource<
  * });
  * ```
  *
- * ### Pausing a Project
- * **Example:** Mark the project inactive
+ * ### Tagging a Project
+ * **Example:** Project with user tags
  * ```typescript
  * const project = yield* Azure.Migrate.AssessmentProject("assess", {
  *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
- *   projectStatus: "Inactive",
+ *   tags: { team: "migration" },
  * });
  * ```
  *
@@ -123,6 +123,11 @@ export interface AssessmentProject extends Resource<
 export const AssessmentProject = Resource<AssessmentProject>(
   "Azure.Migrate.AssessmentProject",
 );
+
+// The service answers a PUT with a 500 InternalServerError when the project
+// name is long and the resource group name is too (a 60-char name under a
+// 90-char group fails; 40 chars under the same group succeeds).
+const projectName = (id: string) => migrateName(id, 40);
 
 type ObservedProject = migrate.GetAssessmentProjectsOperationResponse;
 
@@ -154,9 +159,11 @@ const toAttrs = (
   tags: userTags(project.tags),
 });
 
+// The service answers a PUT without `publicNetworkAccess`/`projectStatus`
+// with a 500 InternalServerError, so the PUT always carries both
+// (`projectStatus` is otherwise ignored by the service).
 const desiredProperties = (news: AssessmentProjectProps) => ({
-  publicNetworkAccess: news.publicNetworkAccess,
-  projectStatus: news.projectStatus,
+  publicNetworkAccess: news.publicNetworkAccess ?? "Enabled",
   assessmentSolutionId: news.assessmentSolutionId,
   customerWorkspaceId: news.customerWorkspaceId,
   customerWorkspaceLocation: news.customerWorkspaceLocation,
@@ -209,7 +216,7 @@ export const AssessmentProjectProvider = () =>
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
       const name =
-        output?.projectName ?? olds?.name ?? (yield* migrateName(id));
+        output?.projectName ?? olds?.name ?? (yield* projectName(id));
       const observed = yield* getAssessmentProject(
         subscriptionId,
         resourceGroup,
@@ -225,7 +232,7 @@ export const AssessmentProjectProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Migrate");
       const resourceGroup = news.resourceGroup;
-      const name = news.name ?? output?.projectName ?? (yield* migrateName(id));
+      const name = news.name ?? output?.projectName ?? (yield* projectName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const properties = desiredProperties(news);
@@ -247,7 +254,7 @@ export const AssessmentProjectProvider = () =>
           projectName: name,
           location: observed?.location ?? location,
           tags,
-          properties,
+          properties: { ...properties, projectStatus: "Active" },
         });
       }
 

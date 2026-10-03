@@ -94,16 +94,18 @@ test.provider(
       const second = yield* stack.deploy(
         program(password, {
           dataMaskingState: "Enabled",
-          exemptPrincipals: "alchemyadmin",
+          // Must be an existing database user; Azure echoes it as `guest;`.
+          exemptPrincipals: "guest",
         }),
       );
       expect(second.setting?.policyId).toEqual(first.setting?.policyId);
+      expect(second.setting?.exemptPrincipals).toEqual("guest");
       const observed2 = yield* awaitObserved(
         get,
-        (o) => o.properties?.exemptPrincipals === "alchemyadmin",
+        (o) => o.properties?.exemptPrincipals?.replace(/;$/, "") === "guest",
         12,
       );
-      expect(observed2.properties?.exemptPrincipals).toEqual("alchemyadmin");
+      expect(observed2.properties?.exemptPrincipals).toMatch(/^guest;?$/);
 
       // Removing the resource disables masking.
       yield* stack.deploy(program(password, undefined));

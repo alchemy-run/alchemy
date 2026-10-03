@@ -1,4 +1,6 @@
+import * as compute from "@distilled.cloud/azure/compute";
 import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
+import * as network from "@distilled.cloud/azure/network";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -12,6 +14,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  resourceGroupOf,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -173,6 +176,36 @@ const toAttrs = (
   };
 };
 
+/** Private IP of the compute VM's primary NIC (lab VMs live in their own group). */
+const computePrivateIp = (subscriptionId: string, computeId: string | undefined) =>
+  Effect.gen(function* () {
+    const vmGroup = resourceGroupOf(computeId);
+    const vmName = computeId?.split("/").at(-1);
+    if (vmGroup === undefined || vmName === undefined) return undefined;
+    const vm = yield* orUndefinedIfNotFound(
+      compute.GetVirtualMachine({
+        subscriptionId,
+        resourceGroupName: vmGroup,
+        vmName,
+      }),
+    );
+    const nics = vm?.properties?.networkProfile?.networkInterfaces ?? [];
+    const nicId = (nics.find((nic) => nic.properties?.primary) ?? nics[0])?.id;
+    const nicGroup = resourceGroupOf(nicId);
+    const nicName = nicId?.split("/").at(-1);
+    if (nicGroup === undefined || nicName === undefined) return undefined;
+    const nic = yield* orUndefinedIfNotFound(
+      network.GetNetworkInterface({
+        subscriptionId,
+        resourceGroupName: nicGroup,
+        networkInterfaceName: nicName,
+      }),
+    );
+    const configs = nic?.properties?.ipConfigurations ?? [];
+    return (configs.find((c) => c.properties?.primary) ?? configs[0])
+      ?.properties?.privateIPAddress;
+  });
+
 /** Creation-time settings (everything but size and tags). */
 const fixedSettings = (props: VirtualMachineProps) =>
   JSON.stringify({
@@ -217,7 +250,13 @@ export const VirtualMachineProvider = () =>
         output?.virtualMachineName ?? olds?.name ?? (yield* createVmName(id));
       const observed = yield* getVm(subscriptionId, resourceGroup, lab, name);
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, lab, name, observed);
+      const attrs = {
+        ...toAttrs(resourceGroup, lab, name, observed),
+        privateIpAddress: yield* computePrivateIp(
+          subscriptionId,
+          observed.properties?.computeId,
+        ),
+      };
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
@@ -267,7 +306,10 @@ export const VirtualMachineProvider = () =>
         observed = yield* wait;
       }
 
-      // Sync size via the resize action.
+      // Sync size via the resize action. It is a long-running POST whose
+      // failure (e.g. SkuNotAvailable) only shows on its async operation,
+      // which the SDK does not poll: the lab VM keeps its old size and the
+      // bounded wait below times out.
       if (observed.properties?.size?.toLowerCase() !== news.size.toLowerCase()) {
         yield* devtestlabs.ResizeVirtualMachine({ ...where, size: news.size });
         observed = yield* waitForProvisioned(
@@ -289,7 +331,17 @@ export const VirtualMachineProvider = () =>
         observed = yield* wait;
       }
 
-      return toAttrs(resourceGroup, lab, name, observed);
+      // The lab omits the NIC unless `$expand`ed, so read the private IP
+      // from the underlying compute VM's primary NIC.
+      const privateIpAddress = yield* computePrivateIp(
+        subscriptionId,
+        observed.properties?.computeId,
+      );
+
+      return {
+        ...toAttrs(resourceGroup, lab, name, observed),
+        privateIpAddress,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {

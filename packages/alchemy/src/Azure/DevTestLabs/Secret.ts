@@ -1,18 +1,13 @@
 import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
-  desiredTags,
   ensureRegistered,
   ignoreNotFound,
-  isOwned,
   orUndefinedIfNotFound,
-  tagsDiffer,
-  userTags,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -42,11 +37,6 @@ export interface SecretProps {
    * the previous deploy.
    */
   value: Redacted.Redacted<string>;
-  /**
-   * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
-   */
-  tags?: Record<string, string>;
 }
 
 export interface Secret extends Resource<
@@ -65,8 +55,6 @@ export interface Secret extends Resource<
     user: string;
     /** Unique immutable identifier (GUID). */
     uniqueIdentifier: string | undefined;
-    /** User tags (Alchemy ownership tags stripped). */
-    tags: Record<string, string>;
   },
   never,
   Providers
@@ -76,6 +64,11 @@ export interface Secret extends Resource<
  * A secret in a DevTest Labs user's secret store (the lab's Key Vault),
  * e.g. a VM password or a repository token that lab formulas and
  * environments reference by name.
+ *
+ * Lab secrets live in Key Vault: Azure accepts but drops ARM tags, so a
+ * secret carries no ownership marker and is identified by its
+ * deterministic name. A new secret becomes readable about 1-2 minutes
+ * after it is written.
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-store-secrets-in-key-vault
  *
@@ -124,7 +117,6 @@ const toAttrs = (
   lab,
   user,
   uniqueIdentifier: s.properties?.uniqueIdentifier,
-  tags: userTags(s.tags),
 });
 
 export const SecretProvider = () =>
@@ -151,6 +143,7 @@ export const SecretProvider = () =>
       return undefined;
     }),
 
+    // No ownership marker survives (Azure drops tags on lab secrets).
     read: Effect.fn(function* ({ id, olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
@@ -173,8 +166,7 @@ export const SecretProvider = () =>
         name,
       );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, lab, user, name, observed);
-      return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
+      return toAttrs(resourceGroup, lab, user, name, observed);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -183,14 +175,14 @@ export const SecretProvider = () =>
       const { resourceGroup, lab, user } = news;
       const name =
         news.name ?? output?.secretName ?? (yield* createLabResourceName(id));
-      const tags = yield* desiredTags(id, news.tags);
       const value = Redacted.value(news.value);
       const get = getSecret(subscriptionId, resourceGroup, lab, user, name);
       const wait = waitForProvisioned(
         `lab secret ${name}`,
         get,
         (s) => s.properties?.provisioningState,
-        { interval: "3 seconds", times: 40 },
+        // A written secret becomes readable after ~90 seconds.
+        { interval: "5 seconds", times: 36 },
       );
 
       // Observe.
@@ -198,12 +190,12 @@ export const SecretProvider = () =>
       if (observed !== undefined) observed = yield* wait;
 
       // Ensure + sync: the value is write-only, so a rotation is detected
-      // against the previous props; the PUT is a long-running upsert.
+      // against the previous props (and an adopted secret is rewritten);
+      // the PUT is an upsert.
       if (
         observed === undefined ||
         olds === undefined ||
-        value !== Redacted.value(olds.value) ||
-        tagsDiffer(observed.tags, tags)
+        value !== Redacted.value(olds.value)
       ) {
         yield* devtestlabs.SecretsCreateOrUpdate({
           subscriptionId,
@@ -214,7 +206,6 @@ export const SecretProvider = () =>
           location:
             observed?.location ??
             (yield* labLocation(subscriptionId, resourceGroup, lab)),
-          tags,
           properties: { value },
         });
         observed = yield* wait;

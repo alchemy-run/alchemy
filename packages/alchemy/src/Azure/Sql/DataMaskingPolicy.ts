@@ -27,8 +27,10 @@ export interface DataMaskingPolicyProps {
   /** Whether dynamic data masking is enabled for the database. */
   dataMaskingState: "Enabled" | "Disabled";
   /**
-   * Semicolon-separated SQL users that see unmasked data, e.g.
-   * `"reporting;dbo"`.
+   * Semicolon-separated database users that see unmasked data, e.g.
+   * `"reporting;auditor"`. Every user must already exist in the database
+   * (Azure answers `InternalServerError` otherwise). `dbo` is always
+   * exempt and Azure drops it from the list.
    */
   exemptPrincipals?: string;
 }
@@ -96,6 +98,18 @@ const getSetting = (subscriptionId: string, scope: DatabaseScope) =>
     }),
   );
 
+/**
+ * Azure echoes the list with a trailing `;` and silently drops `dbo`;
+ * normalize both sides to a sorted, lower-cased set of names.
+ */
+const principalList = (value: string | undefined) =>
+  (value ?? "")
+    .split(";")
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => name !== "" && name !== "dbo")
+    .sort()
+    .join(";");
+
 const toAttrs = (
   scope: DatabaseScope,
   observed: Observed,
@@ -105,7 +119,8 @@ const toAttrs = (
   serverName: scope.serverName,
   databaseName: scope.databaseName,
   dataMaskingState: observed.properties?.dataMaskingState ?? "Disabled",
-  exemptPrincipals: observed.properties?.exemptPrincipals || undefined,
+  exemptPrincipals:
+    principalList(observed.properties?.exemptPrincipals) || undefined,
   maskingLevel: observed.properties?.maskingLevel,
 });
 
@@ -168,17 +183,22 @@ export const DataMaskingPolicyProvider = () =>
         dataMaskingState: news.dataMaskingState,
         exemptPrincipals: news.exemptPrincipals ?? "",
       };
+      const principalsMatch = (observed: Observed) =>
+        principalList(observed.properties?.exemptPrincipals) ===
+        principalList(desired.exemptPrincipals);
       const fresh = yield* syncSetting({
         label: `sql data masking policy on ${scope.databaseName}`,
         get: getSetting(subscriptionId, scope),
-        converged: (observed) => fieldsMatch(observed.properties, desired),
+        converged: (observed) =>
+          fieldsMatch(observed.properties, desired, ["exemptPrincipals"]) &&
+          principalsMatch(observed),
         put: sql.DataMaskingPoliciesCreateOrUpdate({
           ...databasePath(subscriptionId, scope),
           dataMaskingPolicyName: SETTING_NAME,
           properties: desired,
         }),
         visible: (observed) =>
-          fieldsMatch(observed.properties, desired, ["dataMaskingState"]) &&
+          principalsMatch(observed) &&
           (lower(observed.properties?.dataMaskingState) ===
             lower(desired.dataMaskingState) ||
             desired.dataMaskingState === "Enabled"),

@@ -201,10 +201,29 @@ export const SourceControlProvider = () =>
       );
 
       // Observe.
-      const observed = yield* get;
+      let observed = yield* get;
 
-      // Ensure + sync. The PUT/PATCH is long-running: it returns while the
-      // first clone is still in progress.
+      // Sync. Microsoft.Web rejects any PUT/PATCH over a connected
+      // repository ("Conflict with existing ScmType: ExternalGit"), so a
+      // delta disconnects first and reconnects with the desired settings.
+      if (
+        observed !== undefined &&
+        !matchesDesired(desired, observed.properties)
+      ) {
+        yield* ignoreNotFound(
+          slot === undefined
+            ? web.DeleteWebAppSourceControl(where)
+            : web.DeleteWebAppSourceControlSlot({ ...where, slot }),
+        );
+        yield* waitUntilGone(`source control of ${siteName}`, get, {
+          interval: "5 seconds",
+          times: 24,
+        });
+        observed = undefined;
+      }
+
+      // Ensure. The PUT is long-running: it returns while the first clone
+      // is still in progress.
       if (observed === undefined) {
         yield* slot === undefined
           ? web.WebAppsCreateOrUpdateSourceControl({
@@ -212,14 +231,6 @@ export const SourceControlProvider = () =>
               properties: desired,
             })
           : web.WebAppsCreateOrUpdateSourceControlSlot({
-              ...where,
-              slot,
-              properties: desired,
-            });
-      } else if (!matchesDesired(desired, observed.properties)) {
-        yield* slot === undefined
-          ? web.UpdateWebAppSourceControl({ ...where, properties: desired })
-          : web.UpdateWebAppSourceControlSlot({
               ...where,
               slot,
               properties: desired,

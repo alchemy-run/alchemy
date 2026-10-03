@@ -140,6 +140,11 @@ const TENANT_KINDS = new Set(
   ].map((k) => k.toLowerCase()),
 );
 
+/** Codeless connector kinds that allow many instances per workspace. */
+const MULTI_INSTANCE_KINDS = new Set(
+  ["RestApiPoller", "GenericUI", "APIPolling"].map((k) => k.toLowerCase()),
+);
+
 const getConnector = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -193,7 +198,12 @@ export const DataConnectorProvider = () =>
         (news.dataConnectorId !== undefined &&
           !sameText(news.dataConnectorId, output.dataConnectorId))
       ) {
-        return { action: "replace" } as const;
+        // First-party kinds allow one connector per kind and context
+        // (tenant/subscription) per workspace, so the old one must go first.
+        return {
+          action: "replace",
+          deleteFirst: !MULTI_INSTANCE_KINDS.has(output.kind.toLowerCase()),
+        } as const;
       }
       return undefined;
     }),

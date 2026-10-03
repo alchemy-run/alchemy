@@ -5,6 +5,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { runPaidOnly } from "../gates.ts";
+import { f1PlanCreateRejection } from "./fixtures/f1-plan.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -46,10 +48,10 @@ const program = (source: { repoUrl: string; branch: string } | undefined) =>
       location: "eastus",
     });
     // Flex Consumption has no Kudu source control and the trial has no
-    // Consumption (Y1) or Basic quota; F1 quota exists only in centralus.
+    // Consumption (Y1) or Basic quota; F1 quota exists in westus3 (centralus plan creates are throttled).
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "windows",
     });
@@ -70,9 +72,12 @@ const program = (source: { repoUrl: string; branch: string } | undefined) =>
     return { group, app };
   });
 
+// Needs a fresh F1 plan, and F1 plan creates are throttled for the
+// subscription (HTTP 429 AppServicePlanCreateThrottled, see
+// fixtures/f1-plan.ts), so this runs only with AZURE_TEST_PAID=1.
 // Cost: $0 (F1 Free plan). Provisioning: ~2-4 minutes (Kudu clones the
 // repository on each change).
-test.provider(
+test.provider.skipIf(!runPaidOnly)(
   "connect, update, and disconnect source control",
   (stack) =>
     Effect.gen(function* () {
@@ -116,6 +121,31 @@ test.provider(
         yield* sourceControlGone(group.resourceGroupName, app.siteName),
       ).toEqual("gone");
 
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 600_000,
+  },
+);
+
+// Probe: F1 plan creates are throttled for the subscription (see
+// fixtures/f1-plan.ts).
+test.provider(
+  "F1 plan create is rejected with AppServicePlanCreateThrottled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const error = yield* f1PlanCreateRejection(group.resourceGroupName);
+      expect(error._tag).toEqual("AppServicePlanCreateThrottled");
       yield* stack.destroy();
     }).pipe(logLevel),
   {

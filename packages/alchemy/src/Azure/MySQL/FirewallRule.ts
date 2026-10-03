@@ -106,8 +106,17 @@ interface RuleRef extends ServerRef {
   readonly firewallRuleName: string;
 }
 
+/** A missing rule answers 404 `FirewallRuleNotExist`. */
 const getRule = (ref: RuleRef) =>
-  orUndefinedIfNotFound(mysql.GetFirewallRule(ref));
+  orUndefinedIfNotFound(
+    mysql
+      .GetFirewallRule(ref)
+      .pipe(
+        Effect.catchTag("FirewallRuleNotExist", () =>
+          Effect.succeed(undefined),
+        ),
+      ),
+  );
 
 const toAttrs = (
   ref: RuleRef,

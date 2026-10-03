@@ -39,10 +39,9 @@ const program = (props: {
       name: props.group,
       location: "eastus",
     });
-    const reader = yield* Azure.ManagedIdentity.UserAssignedIdentity(
-      "Reader",
-      { resourceGroup: group.resourceGroupName },
-    );
+    const reader = yield* Azure.ManagedIdentity.UserAssignedIdentity("Reader", {
+      resourceGroup: group.resourceGroupName,
+    });
     const ledger = yield* Azure.ConfidentialLedger.Ledger("Ledger", {
       resourceGroup: group.resourceGroupName,
       ledgerType: props.ledgerType,
@@ -94,7 +93,8 @@ test.provider(
       expect(updated.ledger.ledgerId).toEqual(ledger.ledgerId);
       const reobserved = yield* getLedger(group, ledger.ledgerName);
       expect(reobserved.tags?.env).toEqual("prod");
-      const principals = reobserved.properties?.aadBasedSecurityPrincipals ?? [];
+      const principals =
+        reobserved.properties?.aadBasedSecurityPrincipals ?? [];
       expect(
         principals.find((p) => p.principalId === updated.reader.principalId)
           ?.ledgerRoleName,

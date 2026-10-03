@@ -1,5 +1,6 @@
 import * as devcenter from "@distilled.cloud/azure/devcenter";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -199,7 +200,15 @@ export const GalleryProvider = () =>
           devCenterName: devCenter,
           galleryName: name,
           properties: { galleryResourceId: news.galleryResourceId },
-        });
+        }).pipe(
+          // A fresh role assignment for the dev center's identity takes a
+          // few minutes to propagate to the Dev Center RP.
+          Effect.retry({
+            while: (e) => e._tag === "DevCenterNotAuthorizedToGallery",
+            schedule: Schedule.spaced("10 seconds"),
+            times: 30,
+          }),
+        );
       }
       const fresh = yield* waitForProvisioned(
         `dev center gallery ${name}`,

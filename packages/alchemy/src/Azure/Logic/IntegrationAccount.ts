@@ -50,11 +50,6 @@ export interface IntegrationAccountProps {
    */
   sku?: IntegrationAccountSkuName;
   /**
-   * Whether the account is enabled.
-   * @default "Enabled"
-   */
-  state?: "Enabled" | "Disabled";
-  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -75,7 +70,10 @@ export interface IntegrationAccount extends Resource<
     location: string;
     /** Pricing tier. */
     sku: string;
-    /** Whether the account is enabled. */
+    /**
+     * Account state reported by Azure. ARM accepts `properties.state` on
+     * PUT but ignores it (the account stays `Enabled`), so it is read-only.
+     */
     state: string;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
@@ -228,18 +226,17 @@ export const IntegrationAccountProvider = () =>
         (yield* createLogicName(id));
       const location = news.location ?? output?.location ?? env.location;
       const sku = news.sku ?? "Free";
-      const state = news.state ?? "Enabled";
       const tags = yield* desiredTags(id, news.tags);
 
       // Observe.
       let observed = yield* getAccount(subscriptionId, resourceGroup, name);
 
-      // Ensure + sync: the PUT is a synchronous upsert of sku, state, and
-      // tags, so one PUT covers a missing account or any observed delta.
+      // Ensure + sync: the PUT is a synchronous upsert of sku and tags, so
+      // one PUT covers a missing account or any observed delta. PATCH
+      // rejects `properties`, and PUT ignores `properties.state`.
       if (
         observed === undefined ||
         observed.sku?.name?.toLowerCase() !== sku.toLowerCase() ||
-        observed.properties?.state !== state ||
         tagsDiffer(observed.tags, tags)
       ) {
         observed = yield* logic.IntegrationAccountsCreateOrUpdate({
@@ -248,7 +245,8 @@ export const IntegrationAccountProvider = () =>
           integrationAccountName: name,
           location: observed?.location ?? location,
           sku: { name: sku },
-          properties: { state },
+          // Required: a PUT without `properties` is rejected as invalid.
+          properties: {},
           tags,
         });
       }

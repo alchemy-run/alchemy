@@ -23,8 +23,8 @@ import {
 /** One rule of a project policy. */
 export interface ProjectPolicyResourcePolicy {
   /**
-   * Resource the rule applies to: a resource ID (e.g. an attached network
-   * or image) or a wildcard such as `{devCenterId}/attachednetworks/*`.
+   * ID of an existing resource the rule applies to, e.g. an attached
+   * network or image. Azure rejects wildcards and unknown IDs.
    */
   resources?: string;
   /** Filter expression over `resourceType`, e.g. a SKU name. */
@@ -41,13 +41,21 @@ export interface ProjectPolicyProps {
   /** Name of the dev center. Changing it replaces the policy. */
   devCenter: string;
   /**
-   * Policy name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the policy.
+   * Policy name. A dev center's first policy must be named `default`;
+   * others can only be created after it exists. If omitted, a unique name
+   * is generated from the app, stage, and logical ID. Changing it replaces
+   * the policy.
    */
   name?: string;
-  /** Resources (images, SKUs, attached networks) the scoped projects may use. */
+  /**
+   * Resources (images, SKUs, attached networks) the scoped projects may
+   * use. Azure rejects an empty list.
+   */
   resourcePolicies?: ProjectPolicyResourcePolicy[];
-  /** ARM resource IDs of the projects the policy applies to. */
+  /**
+   * ARM resource IDs of the projects the policy applies to. Must be empty
+   * for the `default` policy, which applies to every project.
+   */
   scopes?: string[];
 }
 
@@ -82,15 +90,22 @@ export interface ProjectPolicy extends Resource<
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-project-policy
  *
  * ### Restricting Projects
- * **Example:** Allow one SKU for a project
+ * **Example:** A default policy plus a stricter policy for one project
  * ```typescript
- * const policy = yield* Azure.DevCenter.ProjectPolicy("policy", {
+ * // Every dev center needs a `default` policy (no scopes) before any other.
+ * const defaults = yield* Azure.DevCenter.ProjectPolicy("default", {
  *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
+ *   name: "default",
+ *   resourcePolicies: [{ resourceType: "Skus", action: "Allow" }],
+ * });
+ * const policy = yield* Azure.DevCenter.ProjectPolicy("policy", {
+ *   resourceGroup: group.resourceGroupName,
+ *   devCenter: defaults.devCenter,
  *   scopes: [project.projectId],
- *   resourcePolicies: [
- *     { resourceType: "Skus", filter: "name eq 'general_i_8c32gb256ssd_v2'", action: "Allow" },
- *   ],
+ *   // `resources` must be the ID of an existing image or attached network;
+ *   // wildcards are rejected.
+ *   resourcePolicies: [{ resources: attached.attachedNetworkId }],
  * });
  * ```
  *
@@ -152,7 +167,9 @@ export const ProjectPolicyProvider = () =>
         (news.name !== undefined &&
           !sameArm(news.name, output.projectPolicyName))
       ) {
-        return { action: "replace" } as const;
+        // A project can be in the scope of only one policy, so the
+        // replacement cannot coexist with the old policy.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

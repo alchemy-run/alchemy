@@ -20,9 +20,11 @@ export interface DynamicConfigurationProps {
   /** Name of the parent configuration. Changing it replaces the dynamic configuration. */
   configuration: string;
   /**
-   * Name of the dynamic configuration: the name or unique identifier of
-   * the solution or config template it configures. Changing it replaces
-   * the dynamic configuration.
+   * Name of the dynamic configuration: the unique identifier of the
+   * template it configures (`uniqueIdentifier` on `Azure.Edge.ConfigTemplate`
+   * or `Azure.Edge.SolutionTemplate`). The template must already be linked
+   * to a hierarchy entity whose configuration reference points at the
+   * parent configuration. Changing it replaces the dynamic configuration.
    */
   name: string;
   /** Version of the values that is current, e.g. `1.0.0`. */
@@ -57,8 +59,11 @@ export interface DynamicConfiguration extends Resource<
  * configuration. It tracks which version of a solution or config
  * template's values is current; the values live in immutable
  * `Azure.Edge.DynamicConfigurationVersion` children. Its name must be the
- * name (or unique identifier) of the solution or config template it
- * configures.
+ * unique identifier of the template it configures, and the service only
+ * resolves that template once it is linked (`Azure.Edge.ConfigTemplateMetadata`)
+ * to a site or target whose `Azure.Edge.ConfigurationReference` points at
+ * the parent configuration; otherwise creation fails with "No solution
+ * template or config template found".
  *
  * Dynamic configurations carry no tags or free-form fields, so Alchemy
  * cannot mark them; one found under the expected name is treated as this
@@ -67,12 +72,26 @@ export interface DynamicConfiguration extends Resource<
  * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
  *
  * ### Creating a Dynamic Configuration
- * **Example:** Values for a solution template
+ * **Example:** Values for a linked config template
  * ```typescript
- * const dynamic = yield* Azure.Edge.DynamicConfiguration("app-values", {
+ * const reference = yield* Azure.Edge.ConfigurationReference("site-config", {
+ *   resourceUri: site.siteId,
+ *   configurationResourceId: configuration.configurationId,
+ * });
+ * const links = yield* Azure.Edge.ConfigTemplateMetadata("common-links", {
+ *   resourceGroup: group.resourceGroupName,
+ *   configTemplate: template.configTemplateName,
+ *   contextId: context.contextId,
+ *   linkedHierarchies: [{ level: "country", hierarchyIds: [site.siteId] }],
+ * });
+ * const dynamic = yield* Azure.Edge.DynamicConfiguration("common-values", {
  *   resourceGroup: group.resourceGroupName,
  *   configuration: configuration.configurationName,
- *   name: app.solutionTemplateName,
+ *   name: Output.all(
+ *     template.uniqueIdentifier,
+ *     links.configTemplateMetadataId,
+ *     reference.configurationReferenceId,
+ *   ).pipe(Output.map(([uid]) => uid as string)),
  *   currentVersion: "1.0.0",
  * });
  * ```

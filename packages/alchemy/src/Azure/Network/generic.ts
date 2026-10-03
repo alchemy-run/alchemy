@@ -468,9 +468,14 @@ export const networkProvider =
           spec.del(subscriptionId, path as NetworkPath),
         ).pipe(
           // `CannotDeleteResource`: nested children are still being removed.
-          Effect.retry(
-            whileInUse(["CannotDeleteResource", ...(spec.inUseTags ?? [])]),
-          ),
+          // Slow resources (hubs, gateways) can hold `NetworkOperationInProgress`
+          // for the rest of an interrupted 15-30 minute provisioning.
+          Effect.retry({
+            ...whileInUse(["CannotDeleteResource", ...(spec.inUseTags ?? [])]),
+            ...(spec.slow
+              ? { schedule: Schedule.spaced("15 seconds"), times: 120 }
+              : {}),
+          }),
         );
         yield* waitGone(
           describe(path as NetworkPath),

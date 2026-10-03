@@ -1,4 +1,5 @@
 import * as synapse from "@distilled.cloud/azure/synapse";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -11,6 +12,15 @@ import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 
 /** The protector is a singleton named `current`. */
 const PROTECTOR_NAME = "current";
+
+/**
+ * The workspace has no encryption protector endpoint: Azure answers every
+ * GET/PUT on `encryptionProtector` with an empty-bodied 404 unless the
+ * workspace was created with a customer-managed key.
+ */
+export class EncryptionProtectorUnavailable extends Data.TaggedError(
+  "Azure.Synapse.EncryptionProtectorUnavailable",
+)<{ readonly message: string }> {}
 
 export interface EncryptionProtectorProps {
   /** Resource group of the workspace. Changing it replaces the protector. */
@@ -53,9 +63,11 @@ export interface EncryptionProtector extends Resource<
 /**
  * The TDE protector of a Synapse workspace's dedicated SQL pools — the key
  * that wraps every pool's database encryption key. Requires a workspace
- * created with a customer-managed key for `AzureKeyVault`.
+ * created with a customer-managed key: on any other workspace Azure
+ * answers with an empty 404 and reconcile fails with
+ * `EncryptionProtectorUnavailable`.
  *
- * This is a singleton setting that always exists on a workspace. Azure
+ * This is a singleton setting that always exists on a CMK workspace. Azure
  * cannot remove a protector, so destroying the resource leaves the current
  * key in place (switching a CMK workspace back to a service-managed key is
  * not supported).
@@ -172,6 +184,14 @@ export const EncryptionProtectorProvider = () =>
             encryptionProtectorName: PROTECTOR_NAME,
             properties: { serverKeyType, serverKeyName },
           },
+        ).pipe(
+          Effect.catchTag("NotFound", () =>
+            Effect.fail(
+              new EncryptionProtectorUnavailable({
+                message: `workspace ${workspace} has no encryption protector; create it with a customerManagedKey`,
+              }),
+            ),
+          ),
         ),
       });
       return toAttrs(resourceGroup, workspace, fresh);

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import {
   createBackupName,
@@ -71,3 +72,49 @@ export const compact = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== undefined),
   ) as T;
+
+/**
+ * Retry an ASR call while a freshly created vault is still being
+ * registered with Site Recovery (typically well under a minute).
+ */
+export const retryWhileVaultRegistering = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "SiteRecoveryVaultNotRegistered",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 36,
+    }),
+  );
+
+/**
+ * Retry a vault-level ASR write until a fabric created in the same deploy
+ * has registered (`SiteRecoveryNoRegisteredServers`, up to ~5 minutes).
+ */
+export const retryUntilServersRegistered = <
+  A,
+  E extends { _tag: string },
+  R,
+>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "SiteRecoveryNoRegisteredServers",
+      schedule: Schedule.spaced("10 seconds"),
+      times: 30,
+    }),
+  );
+
+/** Treat `SiteRecoveryNoRegisteredServers` as "nothing to do". */
+export const ignoreNoRegisteredServers = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.asVoid,
+    Effect.catchIf(
+      (e) => e._tag === "SiteRecoveryNoRegisteredServers",
+      () => Effect.void,
+    ),
+  );

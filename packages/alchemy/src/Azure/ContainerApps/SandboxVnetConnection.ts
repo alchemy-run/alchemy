@@ -26,8 +26,9 @@ export interface SandboxVnetConnectionProps {
    */
   name?: string;
   /**
-   * ARM ID of the subnet the group's sandboxes join. Changing it replaces
-   * the connection.
+   * ARM ID of the subnet the group's sandboxes join. The subnet must be
+   * delegated to `Microsoft.App/environments`. Changing it replaces the
+   * connection.
    */
   subnetId: string;
 }
@@ -54,7 +55,8 @@ export interface SandboxVnetConnection extends Resource<
 /**
  * A virtual network connection of a sandbox group
  * (`Microsoft.App/sandboxGroups/vnetConnections`) — places the group's
- * sandboxes in a subnet so they can reach private resources.
+ * sandboxes in a subnet so they can reach private resources. The subnet must
+ * be delegated to `Microsoft.App/environments`.
  *
  * Connections cannot be tagged; Alchemy treats a connection as owned when
  * its sandbox group is owned by the same stack and stage.
@@ -62,6 +64,12 @@ export interface SandboxVnetConnection extends Resource<
  * ### Connecting Sandboxes to a VNet
  * **Example:** Sandboxes in a private subnet
  * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("sandboxes", {
+ *   resourceGroup: group.resourceGroupName,
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ * });
  * const sandboxes = yield* Azure.ContainerApps.SandboxGroup("sandboxes", {
  *   resourceGroup: group.resourceGroupName,
  * });
@@ -200,7 +208,14 @@ export const SandboxVnetConnectionProvider = () =>
       // Ensure. The subnet is the connection's identity; nothing else is
       // mutable.
       if (observed === undefined) {
+        // The connection must live in its sandbox group's region.
+        const group = yield* app.GetSandboxGroup({
+          subscriptionId,
+          resourceGroupName: resourceGroup,
+          sandboxGroupName: sandboxGroup,
+        });
         yield* app.VnetConnectionsCreateOrUpdate({
+          location: group.location,
           subscriptionId,
           resourceGroupName: resourceGroup,
           sandboxGroupName: sandboxGroup,

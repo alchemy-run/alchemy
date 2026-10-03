@@ -7,7 +7,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runExpensive } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -62,10 +61,11 @@ const program = (props: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
     });
-    // The free trial has F1 quota in centralus but not in eastus.
+    // The free trial has F1 quota in westus3 (eastus has none; centralus
+    // plan creates are throttled subscription-wide).
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "centralus",
+      location: "westus3",
       sku: "F1",
       os: "linux",
     });
@@ -95,9 +95,7 @@ const program = (props: {
   });
 
 // Cost: $0 (F1 Free plan + empty Standard_LRS account). ~3-5 minutes.
-// Gated: while the fleet runs, F1 plan creation fails subscription-wide with
-// `AppServicePlanCreateThrottled` for 5+ minutes per attempt.
-test.provider.skipIf(!runExpensive)(
+test.provider(
   "create, update, replace, and delete a service connector linker",
   (stack) =>
     Effect.gen(function* () {

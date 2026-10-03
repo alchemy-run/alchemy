@@ -137,8 +137,10 @@ export interface FlexibleServerProps {
   /**
    * Globally unique server name (it becomes the DNS label
    * `{name}.mysql.database.azure.com`): 3-63 lowercase letters, digits,
-   * and hyphens. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the server.
+   * and hyphens. If omitted, a unique name of at most 32 characters is
+   * generated from the app, stage, and logical ID (long server names in
+   * long resource-group names fail to provision). Changing it replaces the
+   * server.
    */
   name?: string;
   /**
@@ -335,10 +337,16 @@ const DEFAULT_SKU: FlexibleServerSku = {
 const DEFAULT_LOGIN = "alchemyadmin";
 const DEFAULT_VERSION = "8.0.21";
 
+/**
+ * Azure allows 63 characters, but creation fails asynchronously with an
+ * opaque `InternalServerError` when a long server name meets a long resource
+ * group name (63 + 90 fails; 24 + 90 and 63 + 65 succeed), so generated names
+ * stay short.
+ */
 const createServerName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({
     id,
-    maxLength: 63,
+    maxLength: 32,
     lowercase: true,
   });
   return name
@@ -743,22 +751,22 @@ export const FlexibleServerProvider = () =>
             },
           })
           .pipe(Effect.retry(whileServerBusy));
-        // GET answers 404 until creation completes. The PUT answers 202 and
-        // can then fail asynchronously (e.g. `ProvisionNotSupportedForRegion`);
-        // that error is only on the async operation, so the server simply
-        // never appears.
+        // GET answers 404 until creation completes (≈ 3 min). The PUT answers
+        // 202 and can then fail asynchronously (`InternalServerError`
+        // ≈ 5 min in, `ProvisionNotSupportedForRegion`); that error is only on
+        // the async operation, so the server simply never appears.
         const appeared = yield* get.pipe(
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
             until: (server) => server !== undefined,
-            times: 120,
+            times: 60,
           }),
         );
         if (appeared === undefined) {
           return yield* new ProvisioningFailed({
             resource: label,
             state: "NotCreated",
-            message: `${label} did not appear in '${location}' within 20 minutes; the create request was likely rejected asynchronously (often ProvisionNotSupportedForRegion — see https://aka.ms/mysqlcapacity)`,
+            message: `${label} did not appear in '${location}' within 10 minutes; the create request was rejected asynchronously (InternalServerError, or ProvisionNotSupportedForRegion — see https://aka.ms/mysqlcapacity)`,
           });
         }
         observed = yield* waitReady;
