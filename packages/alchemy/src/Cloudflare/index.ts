@@ -61,6 +61,7 @@ export * as MagicTransit from "./MagicTransit/index.ts";
 export * as ManagedTransforms from "./ManagedTransforms/index.ts";
 export * as MtlsCertificate from "./MtlsCertificate/index.ts";
 export * as NetworkInterconnects from "./NetworkInterconnects/index.ts";
+export * as Observability from "./Observability/index.ts";
 export * as Organization from "./Organization/index.ts";
 export * as OriginCaCertificate from "./OriginCaCertificate/index.ts";
 export * as OriginPostQuantumEncryption from "./OriginPostQuantumEncryption/index.ts";
