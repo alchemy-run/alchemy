@@ -355,6 +355,30 @@ Add `scriptName` to bind a workflow hosted by another Worker script
 — bindings only, so deploy the host first. The full async-handler
 example lives in the API reference.
 
+## Start on an Artifacts push
+
+`Cloudflare.Workers.EventTriggers` starts a Workflow instance for each
+platform event, with the event as its params. No Queue sits in between.
+Here every push to a repository in one Artifacts namespace starts the
+Worker's `CI` Workflow:
+
+```typescript
+yield* Cloudflare.Workers.EventTriggers("CiTriggers", {
+  scriptName: worker.workerName,
+  triggers: [
+    {
+      type: "cf.artifacts.repo.pushed",
+      filter: { namespace: "my-namespace" },
+      workflows: [worker.env.CI],
+    },
+  ],
+});
+```
+
+The instance receives `{ type, source: { namespace, repoName }, payload:
+{ ref, before, after, commits } }`. A script's triggers are one list, so
+declare one `EventTriggers` per Worker.
+
 ## Send lifecycle events to a Queue
 
 Pass a Workflow binding from the declared Worker's `env` directly to
