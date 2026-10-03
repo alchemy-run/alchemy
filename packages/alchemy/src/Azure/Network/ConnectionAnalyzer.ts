@@ -125,6 +125,19 @@ export const ConnectionAnalyzerProvider = () =>
             connectionAnalyzerName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        properties: {
+          source: news.source,
+          destination: news.destination,
+          diagnosticOperations: news.diagnosticOperations,
+          protocolSettings: news.protocolSettings,
+          diagnosticOperationsSettings: news.diagnosticOperationsSettings,
+          expiryInDays: news.expiryInDays,
+          outputSettings: news.outputSettings,
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.CreateNetworkWatchersConnectionAnalyzer({
           subscriptionId,
@@ -148,19 +161,6 @@ export const ConnectionAnalyzerProvider = () =>
           connectionAnalyzerName: path.name,
           tags,
         }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        properties: {
-          source: news.source,
-          destination: news.destination,
-          diagnosticOperations: news.diagnosticOperations,
-          protocolSettings: news.protocolSettings,
-          diagnosticOperationsSettings: news.diagnosticOperationsSettings,
-          expiryInDays: news.expiryInDays,
-          outputSettings: news.outputSettings,
-        },
-      }),
       toAttrs: (path, observed) => ({
         connectionAnalyzerName: path.name,
         connectionAnalyzerId: observed.id ?? "",

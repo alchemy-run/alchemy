@@ -105,6 +105,16 @@ export interface EntityKey {
 
 type Op<A> = Effect.Effect<A, AzureOpError, AzureOpContext>;
 
+/** Context needed to generate a physical name (stack, stage, instance id). */
+type NameContext =
+  ReturnType<typeof createPhysicalName> extends Effect.Effect<
+    unknown,
+    unknown,
+    infer R
+  >
+    ? R
+    : never;
+
 /** Description of one API Center catalog entity (API, version, ...). */
 export interface EntitySpec<
   P extends object,
@@ -115,7 +125,11 @@ export interface EntitySpec<
   /** Human-readable label for wait/timeout messages. */
   label: (key: K) => string;
   /** Entity path derived from props (generating the name when omitted). */
-  keyOf: (props: P, id: string, output: A | undefined) => Effect.Effect<K>;
+  keyOf: (
+    props: P,
+    id: string,
+    output: A | undefined,
+  ) => Effect.Effect<K, never, NameContext>;
   /** Entity path recorded in the attributes. */
   keyOfAttrs: (attrs: A) => K;
   /** GET the entity. */

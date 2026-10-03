@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { isWholeExpression } from "./Members.ts";
 import {
   comparableMetadata,
   fromParameterValues,
@@ -255,12 +256,13 @@ export const PolicyAssignmentProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
+      if (isWholeExpression(news)) return undefined;
       // An unresolved scope or definition means its resource is being
       // replaced.
       if (!isResolved(news.scope) || !isResolved(news.policyDefinitionId)) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<PolicyAssignmentProps>(news)) return undefined;
       if (
         !sameId(news.scope, output.scope) ||
         !sameId(news.policyDefinitionId, output.policyDefinitionId) ||

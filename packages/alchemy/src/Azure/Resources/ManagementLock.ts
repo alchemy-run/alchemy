@@ -117,7 +117,9 @@ const lockNameOf = (id: string, name: string | undefined) =>
     : createPhysicalName({ id, maxLength: 90 });
 
 const getLock = (scope: string, lockName: string) =>
-  orUndefinedIfNotFound(resources.GetManagementLockByScope({ scope, lockName }));
+  orUndefinedIfNotFound(
+    resources.GetManagementLockByScope({ scope, lockName }),
+  );
 
 /** `{scope}/providers/Microsoft.Authorization/locks/{name}` → scope. */
 const scopeOf = (lockId: string) =>
@@ -161,8 +163,11 @@ export const ManagementLockProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.scope)) return { action: "replace" } as const;
-      if (!isResolved(news)) return undefined;
+      if (!isResolved(news)) {
+        return !("scope" in news) || !isResolved(news.scope)
+          ? ({ action: "replace" } as const)
+          : undefined;
+      }
       if (
         !sameId(news.scope, output.scope) ||
         (news.name !== undefined &&

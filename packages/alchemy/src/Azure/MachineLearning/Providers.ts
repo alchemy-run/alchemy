@@ -6,6 +6,10 @@ import { Compute, ComputeProvider } from "./Compute.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
 import { Datastore, DatastoreProvider } from "./Datastore.ts";
 import {
+  MarketplaceSubscription,
+  MarketplaceSubscriptionProvider,
+} from "./MarketplaceSubscription.ts";
+import {
   OnlineDeployment,
   OnlineDeploymentProvider,
 } from "./OnlineDeployment.ts";
@@ -26,6 +30,7 @@ export const resources = [
   Compute,
   Connection,
   Datastore,
+  MarketplaceSubscription,
   OnlineDeployment,
   OnlineEndpoint,
   OutboundRule,
@@ -42,6 +47,7 @@ export const layers = () =>
     ComputeProvider(),
     ConnectionProvider(),
     DatastoreProvider(),
+    MarketplaceSubscriptionProvider(),
     OnlineDeploymentProvider(),
     OnlineEndpointProvider(),
     OutboundRuleProvider(),

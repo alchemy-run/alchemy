@@ -136,6 +136,20 @@ export const AdminRuleProvider = () =>
             ruleName: path.name,
           }),
         ),
+      body: (news) => ({
+        kind: "Custom",
+        properties: {
+          description: news.description,
+          protocol: news.protocol,
+          access: news.access,
+          priority: news.priority,
+          direction: news.direction,
+          sources: news.sources ?? anyAddress,
+          destinations: news.destinations ?? anyAddress,
+          sourcePortRanges: news.sourcePortRanges ?? ["0-65535"],
+          destinationPortRanges: news.destinationPortRanges ?? ["0-65535"],
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.AdminRulesCreateOrUpdate({
           subscriptionId,
@@ -157,20 +171,6 @@ export const AdminRuleProvider = () =>
           force: true,
         }),
       ownerTags: networkManagerTags,
-      body: (news) => ({
-        kind: "Custom",
-        properties: {
-          description: news.description,
-          protocol: news.protocol,
-          access: news.access,
-          priority: news.priority,
-          direction: news.direction,
-          sources: news.sources ?? anyAddress,
-          destinations: news.destinations ?? anyAddress,
-          sourcePortRanges: news.sourcePortRanges ?? ["0-65535"],
-          destinationPortRanges: news.destinationPortRanges ?? ["0-65535"],
-        },
-      }),
       toAttrs: (path, observed) => ({
         ruleName: path.name,
         ruleId: observed.id ?? "",

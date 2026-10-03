@@ -17,7 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createChildName, sameArm, sameValue } from "./Common.ts";
+import { createChildName, sameArm, sameValue, inputFields } from "./Common.ts";
 
 export type ConnectionAuthType =
   | "None"
@@ -196,7 +196,12 @@ export const ConnectionProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

@@ -130,6 +130,14 @@ export const VirtualHubProvider = () =>
       immutable: (news, output) =>
         !sameId(news.virtualWanId, output.virtualWanId) ||
         (news.addressPrefix ?? undefined) !== output.addressPrefix,
+      get: (subscriptionId, path) =>
+        orUndefinedIfNotFound(
+          network.GetVirtualHub({
+            subscriptionId,
+            resourceGroupName: path.resourceGroup,
+            virtualHubName: path.name,
+          }),
+        ),
       // The hub is usable once its router finished provisioning.
       readyState: (observed) => {
         const state = observed.properties?.provisioningState;
@@ -141,14 +149,6 @@ export const VirtualHubProvider = () =>
             ? "Failed"
             : "Succeeded";
       },
-      get: (subscriptionId, path) =>
-        orUndefinedIfNotFound(
-          network.GetVirtualHub({
-            subscriptionId,
-            resourceGroupName: path.resourceGroup,
-            virtualHubName: path.name,
-          }),
-        ),
       put: (subscriptionId, path, body) =>
         network.VirtualHubsCreateOrUpdate({
           subscriptionId,

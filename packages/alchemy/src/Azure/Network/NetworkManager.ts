@@ -115,6 +115,25 @@ export const NetworkManagerProvider = () =>
             networkManagerName: path.name,
           }),
         ),
+      body: (news, { location, tags, subscriptionId }) => ({
+        location,
+        tags,
+        properties: {
+          description: news.description,
+          networkManagerScopes: {
+            subscriptions:
+              news.subscriptions ??
+              (news.managementGroups === undefined
+                ? [`/subscriptions/${subscriptionId}`]
+                : []),
+            managementGroups: news.managementGroups ?? [],
+          },
+          networkManagerScopeAccesses: news.scopeAccesses ?? [
+            "Connectivity",
+            "SecurityAdmin",
+          ],
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.NetworkManagersCreateOrUpdate({
           subscriptionId,
@@ -138,25 +157,6 @@ export const NetworkManagerProvider = () =>
         }),
       listAll: (subscriptionId) =>
         network.ListNetworkManagerBySubscription({ subscriptionId }),
-      body: (news, { location, tags, subscriptionId }) => ({
-        location,
-        tags,
-        properties: {
-          description: news.description,
-          networkManagerScopes: {
-            subscriptions:
-              news.subscriptions ??
-              (news.managementGroups === undefined
-                ? [`/subscriptions/${subscriptionId}`]
-                : []),
-            managementGroups: news.managementGroups ?? [],
-          },
-          networkManagerScopeAccesses: news.scopeAccesses ?? [
-            "Connectivity",
-            "SecurityAdmin",
-          ],
-        },
-      }),
       drifted: (observed, body, news) => {
         const p = observed.properties;
         const scopes = body.properties.networkManagerScopes;

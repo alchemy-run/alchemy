@@ -1,5 +1,4 @@
 import * as Azure from "@/Azure";
-import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { expect } from "alchemy-test";
@@ -10,6 +9,7 @@ import {
   subscription,
   tags,
   template,
+  uploadTemplate,
   waitGone,
   withStore,
 } from "./util.ts";
@@ -28,7 +28,7 @@ const program = (props: {
   tags: Record<string, string>;
 }) =>
   Effect.gen(function* () {
-    const { group, publisher, store, manifest } = yield* withStore;
+    const { group, publisher, store } = yield* withStore;
     const nfdg = yield* Azure.HybridNetwork.NetworkFunctionDefinitionGroup(
       "Nfdg",
       {
@@ -54,14 +54,10 @@ const program = (props: {
             {
               artifactType: "ArmTemplate",
               name: "app",
-              // Orders the version after the manifest declaring the artifact.
               artifactProfile: {
                 artifactStore: { id: store.artifactStoreId },
                 templateArtifactProfile: {
-                  templateName: Output.map(
-                    manifest.artifactManifestName,
-                    () => template.name,
-                  ),
+                  templateName: template.name,
                   templateVersion: template.version,
                 },
               },
@@ -85,6 +81,15 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // AOSM validates the definition against the uploaded template artifact.
+      const published = yield* stack.deploy(withStore);
+      yield* uploadTemplate({
+        resourceGroupName: published.group.resourceGroupName,
+        publisherName: published.publisher.publisherName,
+        artifactStoreName: published.store.artifactStoreName,
+        artifactManifestName: published.manifest.artifactManifestName,
+      });
 
       const { group, publisher, nfdg, nfdv } = yield* stack.deploy(
         program({ version: "1.0.0", description: "v1", tags: { env: "one" } }),

@@ -110,6 +110,17 @@ export const ConnectionMonitorProvider = () =>
             connectionMonitorName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        properties: {
+          endpoints: news.endpoints,
+          testConfigurations: news.testConfigurations,
+          testGroups: news.testGroups,
+          outputs: news.outputs,
+          notes: news.notes,
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.ConnectionMonitorsCreateOrUpdate({
           subscriptionId,
@@ -133,17 +144,6 @@ export const ConnectionMonitorProvider = () =>
           connectionMonitorName: path.name,
           tags,
         }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        properties: {
-          endpoints: news.endpoints,
-          testConfigurations: news.testConfigurations,
-          testGroups: news.testGroups,
-          outputs: news.outputs,
-          notes: news.notes,
-        },
-      }),
       slow: true,
       toAttrs: (path, observed) => ({
         connectionMonitorName: path.name,

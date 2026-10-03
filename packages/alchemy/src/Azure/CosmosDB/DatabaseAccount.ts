@@ -619,7 +619,11 @@ export const DatabaseAccountProvider = () =>
             capabilities: (news.capabilities ?? []).map((name) => ({ name })),
             enableFreeTier: news.enableFreeTier,
           },
-        });
+        }).pipe(
+          // A retried PUT can race the create it already started; the
+          // account then exists and is awaited below.
+          Effect.catchTag("CosmosAccountBeingCreated", () => Effect.void),
+        );
         observed = yield* waitForProvisioned(
           label,
           get,

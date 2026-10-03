@@ -181,7 +181,11 @@ const toAttrs = (
   purpose: solution.properties?.purpose ?? "",
   goal: solution.properties?.goal ?? "",
   status: solution.properties?.status ?? "",
-  extendedDetails: { ...solution.properties?.details?.extendedDetails },
+  extendedDetails: Object.fromEntries(
+    Object.entries(solution.properties?.details?.extendedDetails ?? {}).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  ),
 });
 
 export const SolutionProvider = () =>

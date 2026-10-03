@@ -417,6 +417,7 @@ export const NetworkFunctionDefinitionVersionProvider = () =>
           label,
           get,
           (version) =>
+            version.properties?.provisioningState === "Succeeded" &&
             version.properties?.versionState !== versionState
               ? "Updating"
               : version.properties?.provisioningState,

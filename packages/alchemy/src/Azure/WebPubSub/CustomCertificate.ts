@@ -44,8 +44,10 @@ export interface CustomCertificateProps {
    */
   keyVaultBaseUri: string;
   /**
-   * Name of the Key Vault secret (or certificate) holding the PFX.
-   * Changing it replaces the certificate.
+   * Name of the Key Vault secret (or certificate) holding the PFX. The
+   * certificate must be issued by a public CA: Web PubSub rejects
+   * self-signed certificates (the certificate ends in provisioning state
+   * `Failed`). Changing it replaces the certificate.
    */
   keyVaultSecretName: string;
   /**
@@ -193,7 +195,9 @@ export const CustomCertificateProvider = () =>
         return undefined;
       }
       const name =
-        output?.certificateName ?? olds?.name ?? (yield* createWebPubSubName(id));
+        output?.certificateName ??
+        olds?.name ??
+        (yield* createWebPubSubName(id));
       const observed = yield* getCertificate(
         subscriptionId,
         resourceGroup,
@@ -216,8 +220,15 @@ export const CustomCertificateProvider = () =>
       yield* ensureRegistered(subscriptionId, WEBPUBSUB_NAMESPACE);
       const { resourceGroup, webPubSub } = news;
       const name =
-        news.name ?? output?.certificateName ?? (yield* createWebPubSubName(id));
-      const get = getCertificate(subscriptionId, resourceGroup, webPubSub, name);
+        news.name ??
+        output?.certificateName ??
+        (yield* createWebPubSubName(id));
+      const get = getCertificate(
+        subscriptionId,
+        resourceGroup,
+        webPubSub,
+        name,
+      );
 
       // Observe, then ensure + sync: the PUT is a full upsert, skipped when
       // the observed certificate already matches. A certificate the service

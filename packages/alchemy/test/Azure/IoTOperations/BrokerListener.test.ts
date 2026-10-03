@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import { ensureRegistered } from "@/Azure/Arm.ts";
+import { ensureRegistered } from "@/Azure/Arm";
 import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import { expect } from "alchemy-test";

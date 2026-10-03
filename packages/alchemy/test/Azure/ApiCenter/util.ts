@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import { NOT_FOUND_TAGS } from "@/Azure/Arm.ts";
+import { NOT_FOUND_TAGS } from "@/Azure/Arm";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

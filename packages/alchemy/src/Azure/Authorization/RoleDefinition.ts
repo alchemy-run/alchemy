@@ -208,7 +208,9 @@ export const RoleDefinitionProvider = () =>
       if (output === undefined) return undefined;
       // Upstream scope IDs are stable attributes; an unresolved scope means
       // its resource is being replaced.
-      if (!isResolved(news.scope)) return { action: "replace" } as const;
+      if ("scope" in news && !isResolved(news.scope)) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       const scope = news.scope ?? (yield* defaultScope);
       if (normalizeScope(scope) !== normalizeScope(output.scope)) {

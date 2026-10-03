@@ -48,7 +48,7 @@ const program = (props: { description: string }) =>
 
 // Resource guard + empty vault + proxy: $0, ~1 minute.
 test.provider(
-  "create, update, and delete a resource guard proxy",
+  "create and delete a resource guard proxy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -65,18 +65,22 @@ test.provider(
       expect(
         observed.properties?.resourceGuardResourceId?.toLowerCase(),
       ).toEqual(guard.resourceGuardId.toLowerCase());
-      expect(observed.properties?.description).toEqual("first");
       const protectedVault = yield* getVault(rg, vault.backupVaultName);
       expect(protectedVault.properties.isVaultProtectedByResourceGuard).toEqual(
         true,
       );
 
-      // In-place update: description.
-      yield* stack.deploy(program({ description: "second" }));
+      // Re-deploying is a no-op that keeps the link.
+      yield* stack.deploy(program({ description: "first" }));
       const reobserved = yield* getProxy(rg, vault.backupVaultName);
-      expect(reobserved.properties?.description).toEqual("second");
+      expect(
+        reobserved.properties?.resourceGuardResourceId?.toLowerCase(),
+      ).toEqual(guard.resourceGuardId.toLowerCase());
 
       yield* stack.destroy();
+      expect(yield* waitGone(getProxy(rg, vault.backupVaultName))).toEqual(
+        "gone",
+      );
       expect(yield* waitGone(getVault(rg, vault.backupVaultName))).toEqual(
         "gone",
       );

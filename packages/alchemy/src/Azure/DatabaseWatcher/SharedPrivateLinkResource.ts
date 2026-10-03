@@ -1,5 +1,6 @@
 import * as databasewatcher from "@distilled.cloud/azure/databasewatcher";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -161,6 +162,8 @@ const toAttrs = (
 
 const lower = (value: string | undefined) => (value ?? "").toLowerCase();
 
+const SETTLED = new Set(["Succeeded", "Failed", "Canceled"]);
+
 export const SharedPrivateLinkResourceProvider = () =>
   Provider.succeed(SharedPrivateLinkResource, {
     stables: [
@@ -189,7 +192,9 @@ export const SharedPrivateLinkResourceProvider = () =>
           ((news.requestMessage ?? "") !== (olds.requestMessage ?? "") ||
             lower(news.dnsZone) !== lower(olds.dnsZone)))
       ) {
-        return { action: "replace" } as const;
+        // A watcher holds one shared private link per target resource and
+        // group, so the old link must go before its replacement is created.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -258,23 +263,36 @@ export const SharedPrivateLinkResourceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const name = output.sharedPrivateLinkResourceName;
+      const get = getLink(
+        subscriptionId,
+        output.resourceGroup,
+        output.watcherName,
+        name,
+      );
+      // A delete issued while the managed private endpoint is still being
+      // provisioned is not honoured; let provisioning settle first.
+      yield* get.pipe(
+        Effect.repeat({
+          until: (link) =>
+            link === undefined ||
+            SETTLED.has(link.properties?.provisioningState ?? "Succeeded"),
+          schedule: Schedule.spaced("10 seconds"),
+          times: 30,
+        }),
+      );
       yield* ignoreNotFound(
         databasewatcher.DeleteSharedPrivateLinkResource({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           watcherName: output.watcherName,
-          sharedPrivateLinkResourceName: output.sharedPrivateLinkResourceName,
+          sharedPrivateLinkResourceName: name,
         }),
       );
       yield* waitUntilGone(
-        `database watcher shared private link ${output.sharedPrivateLinkResourceName}`,
-        getLink(
-          subscriptionId,
-          output.resourceGroup,
-          output.watcherName,
-          output.sharedPrivateLinkResourceName,
-        ),
-        { interval: "5 seconds", times: 60 },
+        `database watcher shared private link ${name}`,
+        get,
+        { interval: "10 seconds", times: 54 },
       );
     }),
 

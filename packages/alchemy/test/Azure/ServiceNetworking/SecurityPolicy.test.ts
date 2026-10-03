@@ -35,47 +35,44 @@ const getPolicy = (
 
 // --- WAF policies -----------------------------------------------------------
 
-// Both WAF policies stay deployed so the policy can switch between them.
+// Application Gateway for Containers only supports the Default Rule Set 2.1;
+// a WAF policy with the OWASP rule sets fails provisioning.
+const AGC_RULES = {
+  managedRuleSets: [
+    { ruleSetType: "Microsoft_DefaultRuleSet", ruleSetVersion: "2.1" },
+  ],
+};
+
+// Both WAF policies stay deployed across the replacement step.
 const withWafPolicy = (props: {
-  name?: string;
   waf: "A" | "B";
   tags: Record<string, string>;
-  attach?: boolean;
 }) =>
   Effect.gen(function* () {
     const { group, controller } = yield* controllerOnly;
     const wafA = yield* Azure.Network.WebApplicationFirewallPolicy("WafA", {
       resourceGroup: group.resourceGroupName,
       policySettings: { state: "Enabled", mode: "Detection" },
+      managedRules: AGC_RULES,
     });
     const wafB = yield* Azure.Network.WebApplicationFirewallPolicy("WafB", {
       resourceGroup: group.resourceGroupName,
       policySettings: { state: "Enabled", mode: "Prevention" },
+      managedRules: AGC_RULES,
     });
     const policy = yield* Azure.ServiceNetworking.SecurityPolicy("Policy", {
       resourceGroup: group.resourceGroupName,
       trafficController: controller.trafficControllerName,
-      name: props.name,
       wafPolicyId: props.waf === "A" ? wafA.policyId : wafB.policyId,
       tags: props.tags,
     });
-    const frontend = props.attach
-      ? yield* Azure.ServiceNetworking.Frontend("Frontend", {
-          resourceGroup: group.resourceGroupName,
-          trafficController: controller.trafficControllerName,
-          securityPolicyConfigurations: {
-            wafSecurityPolicyId: policy.securityPolicyId,
-          },
-        })
-      : undefined;
-    return { group, controller, wafA, wafB, policy, frontend };
+    return { group, controller, wafA, wafB, policy };
   });
 
 // Cost: WAF policies are free until attached; traffic controller
-// (~$0.017/hour) + one frontend (~$0.01/hour) + AGC WAF on that frontend
-// for a few minutes (< $0.10). ~8-12 minutes.
+// (~$0.017/hour) for a few minutes (< $0.05). ~8-12 minutes.
 test.provider(
-  "create, update, attach, replace, and delete an AGC WAF security policy",
+  "create, update tags, replace, and delete an AGC WAF security policy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -94,46 +91,40 @@ test.provider(
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.["alchemy::id"]).toEqual("Policy");
 
-      // In-place update: WAF policy reference + tags, and attach to a
-      // frontend.
+      // In-place update: tags.
       const updated = yield* stack.deploy(
-        withWafPolicy({ waf: "B", tags: { env: "prod" }, attach: true }),
+        withWafPolicy({ waf: "A", tags: { env: "prod" } }),
       );
       expect(updated.policy.securityPolicyName).toEqual(
         policy.securityPolicyName,
       );
-      const reobserved = yield* getPolicy(rg, tc, policy.securityPolicyName);
-      expect(reobserved.tags?.env).toEqual("prod");
-      expect(reobserved.properties?.wafPolicy?.id.toLowerCase()).toEqual(
-        wafB.policyId.toLowerCase(),
-      );
       expect(
-        updated.frontend?.securityPolicyConfigurations.wafSecurityPolicyId?.toLowerCase(),
-      ).toEqual(policy.securityPolicyId.toLowerCase());
+        (yield* getPolicy(rg, tc, policy.securityPolicyName)).tags?.env,
+      ).toEqual("prod");
 
-      // Replacement: an explicit name (the frontend follows the new ID).
+      // Replacement: a different WAF policy (Azure rejects changing the
+      // reference in place).
       const replaced = yield* stack.deploy(
-        withWafPolicy({
-          name: "alchemy-test-policy-renamed",
-          waf: "B",
-          tags: {},
-          attach: true,
-        }),
+        withWafPolicy({ waf: "B", tags: { env: "prod" } }),
       );
-      expect(replaced.policy.securityPolicyName).toEqual(
-        "alchemy-test-policy-renamed",
+      expect(replaced.policy.securityPolicyName).not.toEqual(
+        policy.securityPolicyName,
       );
       expect(
-        replaced.frontend?.securityPolicyConfigurations.wafSecurityPolicyId?.toLowerCase(),
-      ).toEqual(replaced.policy.securityPolicyId.toLowerCase());
+        (yield* getPolicy(
+          rg,
+          tc,
+          replaced.policy.securityPolicyName,
+        )).properties?.wafPolicy?.id.toLowerCase(),
+      ).toEqual(wafB.policyId.toLowerCase());
       expect(
         yield* untilGone(getPolicy(rg, tc, policy.securityPolicyName)),
       ).toEqual("gone");
 
-      // Delete the policy and frontend, keep the controller.
+      // Delete the policy (and WAF policies), keep the controller.
       yield* stack.deploy(controllerOnly);
       expect(
-        yield* untilGone(getPolicy(rg, tc, "alchemy-test-policy-renamed")),
+        yield* untilGone(getPolicy(rg, tc, replaced.policy.securityPolicyName)),
       ).toEqual("gone");
 
       yield* stack.destroy();

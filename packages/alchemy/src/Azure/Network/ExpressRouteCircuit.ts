@@ -163,28 +163,6 @@ export const ExpressRouteCircuitProvider = () =>
             circuitName: path.name,
           }),
         ),
-      put: (subscriptionId, path, body) =>
-        network.ExpressRouteCircuitsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          circuitName: path.name,
-          ...body,
-        }),
-      del: (subscriptionId, path) =>
-        network.DeleteExpressRouteCircuit({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          circuitName: path.name,
-        }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateExpressRouteCircuitTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          circuitName: path.name,
-          tags,
-        }),
-      listAll: (subscriptionId) =>
-        network.ListExpressRouteCircuitAll({ subscriptionId }),
       body: (news, { location, tags, observed }) => {
         const tier = news.tier ?? "Standard";
         const family = news.family ?? "MeteredData";
@@ -218,6 +196,28 @@ export const ExpressRouteCircuitProvider = () =>
           },
         };
       },
+      put: (subscriptionId, path, body) =>
+        network.ExpressRouteCircuitsCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          circuitName: path.name,
+          ...body,
+        }),
+      del: (subscriptionId, path) =>
+        network.DeleteExpressRouteCircuit({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          circuitName: path.name,
+        }),
+      updateTags: (subscriptionId, path, tags) =>
+        network.UpdateExpressRouteCircuitTags({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          circuitName: path.name,
+          tags,
+        }),
+      listAll: (subscriptionId) =>
+        network.ListExpressRouteCircuitAll({ subscriptionId }),
       drifted: (observed, body) =>
         lower(observed.sku?.tier) !== lower(body.sku.tier) ||
         lower(observed.sku?.family) !== lower(body.sku.family) ||

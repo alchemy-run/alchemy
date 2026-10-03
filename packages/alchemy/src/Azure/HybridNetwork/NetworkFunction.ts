@@ -80,12 +80,16 @@ export interface NetworkFunctionProps {
    */
   secretDeploymentValues?: string | Redacted.Redacted<string>;
   /**
-   * Whether software updates are allowed during deployment.
+   * Whether software updates are allowed during deployment. AOSM requires
+   * `true` to install or update the function.
    */
   allowSoftwareUpdate?: boolean;
   /** Role configuration override values (JSON strings). Updated in place. */
   roleOverrideValues?: string[];
-  /** Managed identity the network function deploys with. */
+  /**
+   * Managed identity the network function deploys with (AOSM requires one).
+   * @default { type: "SystemAssigned" }
+   */
   identity?: HybridNetworkIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
@@ -310,6 +314,9 @@ export const NetworkFunctionProvider = () =>
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const configurationType = typeOf(news);
+      const identity: HybridNetworkIdentity = news.identity ?? {
+        type: "SystemAssigned",
+      };
       const secret = news.secretDeploymentValues;
       const secretValueHash =
         secret === undefined ? undefined : yield* hashSecret(secret);
@@ -338,7 +345,7 @@ export const NetworkFunctionProvider = () =>
         (news.roleOverrideValues !== undefined &&
           JSON.stringify(observed.properties?.roleOverrideValues ?? []) !==
             JSON.stringify(news.roleOverrideValues)) ||
-        identityDiffers(observed.identity, news.identity);
+        identityDiffers(observed.identity, identity);
 
       // Observe.
       let observed = yield* get;
@@ -350,7 +357,7 @@ export const NetworkFunctionProvider = () =>
             ...where,
             location: observed?.location ?? location,
             tags,
-            identity: identityRequest(news.identity),
+            identity: identityRequest(identity),
             properties: {
               networkFunctionDefinitionVersionResourceReference: {
                 idType: "Open",

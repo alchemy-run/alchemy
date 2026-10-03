@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as confluent from "@distilled.cloud/azure/confluent";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { ensureRegistered } from "@/Azure/Arm.ts";
+import { ensureRegistered } from "@/Azure/Arm";
 import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, userDetail, waitGone } from "./util.ts";
 

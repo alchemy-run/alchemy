@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import type { Input } from "@/Input";
 import * as Test from "@/Test/Alchemy";
 import * as sql from "@distilled.cloud/azure/sql";
 import { expect } from "alchemy-test";
@@ -55,7 +56,7 @@ const groupGone = (
 /** A Managed Instance subnet (NSG + route table + delegation) in `location`. */
 const miSubnet = (
   prefix: string,
-  resourceGroup: string,
+  resourceGroup: Input<string>,
   location: string,
   cidr: string,
 ) =>

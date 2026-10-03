@@ -157,10 +157,11 @@ export const SynchronizationSettingProvider = () =>
       // Every prop is immutable (the RP rejects a re-PUT with different
       // settings); an unresolved one comes from an upstream resource being
       // created or replaced.
-      const next = news as unknown as Record<
-        keyof SynchronizationSettingProps,
-        unknown
-      >;
+      // An unresolved props object comes from an upstream replacement; every
+      // prop is immutable, so that is a replace.
+      if (!isResolved(news))
+        return { action: "replace", deleteFirst: true } as const;
+      const next = news;
       const ci = { caseInsensitive: true };
       if (
         immutableChanged(next.resourceGroup, output.resourceGroup, ci) ||
@@ -205,7 +206,11 @@ export const SynchronizationSettingProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, share, name, observed);
-      return (yield* accountOwnedByStack(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStack(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

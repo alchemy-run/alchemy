@@ -60,8 +60,8 @@ export interface IntegrationAccountAssembly extends Resource<
   "Azure.Logic.IntegrationAccountAssembly",
   IntegrationAccountAssemblyProps,
   {
-    /** Name of the assembly. */
-    assemblyName: string;
+    /** Name of the assembly artifact in the integration account. */
+    assemblyArtifactName: string;
     /** Name of the integration account. */
     integrationAccount: string;
     /** Resource group of the integration account. */
@@ -133,7 +133,7 @@ const toAttrs = (
   name: string,
   observed: logic.GetIntegrationAccountAssemblyResponse,
 ): IntegrationAccountAssembly["Attributes"] => ({
-  assemblyName: name,
+  assemblyArtifactName: name,
   integrationAccount,
   resourceGroup,
   assemblyId: observed.id ?? "",
@@ -147,7 +147,7 @@ const toAttrs = (
 export const IntegrationAccountAssemblyProvider = () =>
   Provider.succeed(IntegrationAccountAssembly, {
     stables: [
-      "assemblyName",
+      "assemblyArtifactName",
       "integrationAccount",
       "resourceGroup",
       "assemblyId",
@@ -166,7 +166,7 @@ export const IntegrationAccountAssemblyProvider = () =>
         news.integrationAccount.toLowerCase() !==
           output.integrationAccount.toLowerCase() ||
         (news.name !== undefined &&
-          news.name.toLowerCase() !== output.assemblyName.toLowerCase())
+          news.name.toLowerCase() !== output.assemblyArtifactName.toLowerCase())
       ) {
         return { action: "replace" } as const;
       }
@@ -182,7 +182,9 @@ export const IntegrationAccountAssemblyProvider = () =>
         return undefined;
       }
       const name =
-        output?.assemblyName ?? olds?.name ?? (yield* createLogicName(id));
+        output?.assemblyArtifactName ??
+        olds?.name ??
+        (yield* createLogicName(id));
       const observed = yield* getAssembly(
         subscriptionId,
         resourceGroup,
@@ -201,7 +203,9 @@ export const IntegrationAccountAssemblyProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.Logic");
       const { resourceGroup, integrationAccount } = news;
       const name =
-        news.name ?? output?.assemblyName ?? (yield* createLogicName(id));
+        news.name ??
+        output?.assemblyArtifactName ??
+        (yield* createLogicName(id));
       const properties = {
         assemblyName: news.assemblyName,
         content: news.content,
@@ -256,16 +260,16 @@ export const IntegrationAccountAssemblyProvider = () =>
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           integrationAccountName: output.integrationAccount,
-          assemblyArtifactName: output.assemblyName,
+          assemblyArtifactName: output.assemblyArtifactName,
         }),
       );
       yield* waitUntilGone(
-        `integration account assembly ${output.assemblyName}`,
+        `integration account assembly ${output.assemblyArtifactName}`,
         getAssembly(
           subscriptionId,
           output.resourceGroup,
           output.integrationAccount,
-          output.assemblyName,
+          output.assemblyArtifactName,
         ),
       );
     }),

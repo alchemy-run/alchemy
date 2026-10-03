@@ -28,7 +28,10 @@ export interface ResourceGuardProxyProps {
    * replaces the proxy.
    */
   resourceGuardId: string;
-  /** Free-form description of the link. */
+  /**
+   * Free-form description sent when the link is created. Azure does not
+   * return it, so later changes are not synced.
+   */
   description?: string;
 }
 
@@ -182,15 +185,13 @@ export const ResourceGuardProxyProvider = () =>
       const observed = yield* get;
 
       // Ensure + sync: PUT is a synchronous upsert, sent only when the
-      // proxy is missing or points at another guard / has another description.
+      // proxy is missing or points at another guard.
       if (
         observed === undefined ||
         !sameText(
           observed.properties?.resourceGuardResourceId,
           news.resourceGuardId,
-        ) ||
-        (news.description !== undefined &&
-          observed.properties?.description !== news.description)
+        )
       ) {
         yield* dataprotection.DppResourceGuardProxyCreateOrUpdate({
           subscriptionId,

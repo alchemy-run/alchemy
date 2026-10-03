@@ -12,7 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createChildName, sameArm, sameValue } from "./Common.ts";
+import { createChildName, sameArm, sameValue, inputFields } from "./Common.ts";
 
 export interface CapabilityHostProps {
   /** Resource group of the workspace. Changing it replaces the capability host. */
@@ -169,7 +169,12 @@ export const CapabilityHostProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

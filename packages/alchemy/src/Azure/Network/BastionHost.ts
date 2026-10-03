@@ -170,27 +170,6 @@ export const BastionHostProvider = () =>
             bastionHostName: path.name,
           }),
         ),
-      put: (subscriptionId, path, body) =>
-        network.BastionHostsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          bastionHostName: path.name,
-          ...body,
-        }),
-      del: (subscriptionId, path) =>
-        network.DeleteBastionHost({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          bastionHostName: path.name,
-        }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateBastionHostTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          bastionHostName: path.name,
-          tags,
-        }),
-      listAll: (subscriptionId) => network.ListBastionHosts({ subscriptionId }),
       body: (news, { location, tags }) => ({
         location,
         tags,
@@ -221,11 +200,29 @@ export const BastionHostProvider = () =>
           enablePrivateOnlyBastion: news.enablePrivateOnlyBastion,
         },
       }),
+      put: (subscriptionId, path, body) =>
+        network.BastionHostsCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          bastionHostName: path.name,
+          ...body,
+        }),
+      del: (subscriptionId, path) =>
+        network.DeleteBastionHost({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          bastionHostName: path.name,
+        }),
+      updateTags: (subscriptionId, path, tags) =>
+        network.UpdateBastionHostTags({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          bastionHostName: path.name,
+          tags,
+        }),
+      listAll: (subscriptionId) => network.ListBastionHosts({ subscriptionId }),
       drifted: (observed, body) =>
-        subsetDiffers(
-          { sku: body.sku, properties: body.properties },
-          observed,
-        ),
+        subsetDiffers({ sku: body.sku, properties: body.properties }, observed),
       toAttrs: (path, observed) => ({
         bastionHostName: path.name,
         bastionHostId: observed.id ?? "",
@@ -234,8 +231,8 @@ export const BastionHostProvider = () =>
         sku: observed.sku?.name,
         dnsName: observed.properties?.dnsName,
         virtualNetworkId: observed.properties?.virtualNetwork?.id,
-        subnetId: observed.properties?.ipConfigurations?.[0]?.properties?.subnet
-          ?.id,
+        subnetId:
+          observed.properties?.ipConfigurations?.[0]?.properties?.subnet?.id,
         zones: [...(observed.zones ?? [])],
         scaleUnits: observed.properties?.scaleUnits,
         tags: userTags(observed.tags),

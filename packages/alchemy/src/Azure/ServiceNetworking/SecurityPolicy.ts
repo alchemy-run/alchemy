@@ -20,7 +20,13 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { AGC_BUDGET, childLocation, createAgcName, sameArm } from "./Common.ts";
+import {
+  AGC_BUDGET,
+  childLocation,
+  createAgcName,
+  ensureProvisioned,
+  sameArm,
+} from "./Common.ts";
 
 export interface SecurityPolicyIpAccessRule {
   /** Name of the rule, unique within the policy. */
@@ -62,8 +68,10 @@ export interface SecurityPolicyProps {
   /**
    * ARM ID of an Application Gateway WAF policy
    * (`Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies`)
-   * — makes this a `waf` policy. Set exactly one of `wafPolicyId` and
-   * `ipAccessRules`; switching between the two replaces the policy.
+   * using the `Microsoft_DefaultRuleSet` 2.1 managed rules — makes this a
+   * `waf` policy. Set exactly one of `wafPolicyId` and
+   * `ipAccessRules`; switching between the two, or pointing at a different
+   * WAF policy, replaces the policy.
    */
   wafPolicyId?: string;
   /**
@@ -111,8 +119,10 @@ export interface SecurityPolicy extends Resource<
 /**
  * A security policy of an Application Gateway for Containers traffic
  * controller — either a Web Application Firewall policy reference or a list
- * of IP access rules. Attach it to individual frontends or to the whole
- * traffic controller through `securityPolicyConfigurations`.
+ * of IP access rules. Attach IP access rule policies to individual frontends
+ * or to the whole traffic controller, and WAF policies to the traffic
+ * controller, through `securityPolicyConfigurations`. IP access rule
+ * policies are a preview feature that must be enabled on the subscription.
  *
  * IP access rule policies are free; WAF policies bill extra per frontend.
  *
@@ -144,8 +154,14 @@ export interface SecurityPolicy extends Resource<
  * ### Web Application Firewall
  * **Example:** Reference an Application Gateway WAF policy
  * ```typescript
+ * // AGC supports only the Default Rule Set 2.1.
  * const waf = yield* Azure.Network.WebApplicationFirewallPolicy("waf", {
  *   resourceGroup: group.resourceGroupName,
+ *   managedRules: {
+ *     managedRuleSets: [
+ *       { ruleSetType: "Microsoft_DefaultRuleSet", ruleSetVersion: "2.1" },
+ *     ],
+ *   },
  * });
  * const policy = yield* Azure.ServiceNetworking.SecurityPolicy("waf", {
  *   resourceGroup: group.resourceGroupName,
@@ -189,6 +205,16 @@ const toRules = (
     action: rule.action === "deny" ? "deny" : "allow",
   }));
 
+/** Azure reports `WAF`; normalize to the API's `waf` / `ipAccessRules`. */
+const canonicalPolicyType = (type: string | undefined) =>
+  type === undefined
+    ? undefined
+    : type.toLowerCase() === "waf"
+      ? "waf"
+      : type.toLowerCase() === "ipaccessrules"
+        ? "ipAccessRules"
+        : type;
+
 const toAttrs = (
   resourceGroup: string,
   trafficController: string,
@@ -200,7 +226,7 @@ const toAttrs = (
   trafficController,
   resourceGroup,
   location: policy.location,
-  policyType: policy.properties?.policyType,
+  policyType: canonicalPolicyType(policy.properties?.policyType),
   wafPolicyId: policy.properties?.wafPolicy?.id,
   ipAccessRules: toRules(policy.properties?.ipAccessRulesPolicy?.rules),
   tags: userTags(policy.tags),
@@ -283,7 +309,11 @@ export const SecurityPolicyProvider = () =>
         (news.location !== undefined &&
           !sameArm(news.location, output.location)) ||
         (output.policyType !== undefined &&
-          !sameArm(policyTypeOf(news), output.policyType))
+          !sameArm(policyTypeOf(news), output.policyType)) ||
+        // Azure rejects changing the WAF policy reference in place.
+        (news.wafPolicyId !== undefined &&
+          output.wafPolicyId !== undefined &&
+          !sameArm(news.wafPolicyId, output.wafPolicyId))
       ) {
         return { action: "replace" } as const;
       }
@@ -342,55 +372,46 @@ export const SecurityPolicyProvider = () =>
         })),
       };
 
-      // Observe.
-      let observed = yield* get;
-
-      // Ensure (long-running PUT). Children live in the parent's location.
-      if (observed === undefined) {
-        const location = yield* childLocation(
-          subscriptionId,
-          resourceGroup,
-          trafficController,
-          news.location ?? output?.location,
-          env.location,
-        );
-        yield* servicenetworking.SecurityPoliciesInterfaceCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          properties:
-            news.wafPolicyId !== undefined
-              ? { wafPolicy: { id: news.wafPolicyId } }
-              : { ipAccessRulesPolicy },
-        });
-      }
-      observed = yield* waitForProvisioned(
+      // Observe + ensure: PUT when missing or Failed (long-running), then
+      // wait for Succeeded. Children live in the parent's location.
+      let observed = yield* ensureProvisioned(
         label,
         get,
         (policy) => policy.properties?.provisioningState,
+        Effect.gen(function* () {
+          const location = yield* childLocation(
+            subscriptionId,
+            resourceGroup,
+            trafficController,
+            news.location ?? output?.location,
+          );
+          yield* servicenetworking.SecurityPoliciesInterfaceCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            properties:
+              news.wafPolicyId !== undefined
+                ? { wafPolicy: { id: news.wafPolicyId } }
+                : { ipAccessRulesPolicy },
+          });
+        }),
         AGC_BUDGET,
       );
 
-      // Sync tags and policy content against observed state.
+      // Sync tags and IP access rules against observed state (the WAF
+      // policy reference is immutable; diff replaces).
       const tagsChanged = tagsDiffer(observed.tags, tags);
-      const wafChanged =
-        news.wafPolicyId !== undefined &&
-        !sameArm(news.wafPolicyId, observed.properties?.wafPolicy?.id);
       const rulesChanged =
         news.wafPolicyId === undefined &&
         canonicalRules(desiredRules) !==
           canonicalRules(
             toRules(observed.properties?.ipAccessRulesPolicy?.rules),
           );
-      if (tagsChanged || wafChanged || rulesChanged) {
+      if (tagsChanged || rulesChanged) {
         yield* servicenetworking.UpdateSecurityPoliciesInterface({
           ...where,
           tags: tagsChanged ? tags : undefined,
-          properties: wafChanged
-            ? { wafPolicy: { id: news.wafPolicyId } }
-            : rulesChanged
-              ? { ipAccessRulesPolicy }
-              : undefined,
+          properties: rulesChanged ? { ipAccessRulesPolicy } : undefined,
         });
         observed = yield* waitForProvisioned(
           label,

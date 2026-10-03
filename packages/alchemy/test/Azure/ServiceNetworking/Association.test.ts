@@ -74,9 +74,11 @@ const getAssociation = (
   );
 
 // Cost: association (~$0.12/hour) + traffic controller (~$0.017/hour) for
-// ~20-30 minutes across two association generations (< $0.15). Subnet
-// injection and removal each take ~5-10 minutes, so the whole lifecycle
-// runs ~25-40 minutes: gated as expensive (slow).
+// ~30-40 minutes across two association generations (< $0.15). Measured
+// live: association create ~4.5 minutes, delete ~8 minutes, traffic
+// controller delete ~2.5 minutes, so the full lifecycle runs ~30-40
+// minutes — longer than the usual 15-minute cap, hence the gate and the
+// longer timeout.
 test.provider.skipIf(!runExpensive)(
   "create, update tags, replace, and delete an AGC association",
   (stack) =>
@@ -139,5 +141,5 @@ test.provider.skipIf(!runExpensive)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 2_700_000 },
 );

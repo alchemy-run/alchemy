@@ -19,7 +19,7 @@ const getScope = (resourceGroupName: string, scopeName: string) =>
 const program = (props: {
   name?: string;
   publicNetworkAccess?: "Enabled" | "Disabled";
-  serviceExtensions?: string[];
+  serviceExtensions?: Azure.HybridCompute.PrivateLinkScopeServiceExtension[];
   tags?: Record<string, string>;
 }) =>
   Effect.gen(function* () {

@@ -285,12 +285,6 @@ export const VmmServerProvider = () =>
     }),
 
     nuke: {
-      dependsOn: [
-        "Azure.Resources.ResourceGroup",
-        "Azure.ScVmm.Cloud",
-        "Azure.ScVmm.VirtualNetwork",
-        "Azure.ScVmm.VirtualMachineTemplate",
-        "Azure.ScVmm.AvailabilitySet",
-      ],
+      dependsOn: ["Azure.Resources.ResourceGroup"],
     },
   });

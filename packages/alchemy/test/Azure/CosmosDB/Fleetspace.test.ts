@@ -24,7 +24,9 @@ const getFleetspace = (
     }),
   );
 
-const program = (props: Omit<Azure.CosmosDB.FleetspaceProps, "resourceGroup" | "fleet">) =>
+const program = (
+  props: Omit<Azure.CosmosDB.FleetspaceProps, "resourceGroup" | "fleet">,
+) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
@@ -64,7 +66,9 @@ test.provider(
       expect(again.space.fleetspaceId).toEqual(space.fleetspaceId);
 
       // Replacement: a new name creates a new fleetspace and deletes the old.
-      const replaced = yield* stack.deploy(program({ name: "alchemy-renamed" }));
+      const replaced = yield* stack.deploy(
+        program({ name: "alchemy-renamed" }),
+      );
       expect(replaced.space.fleetspaceName).toEqual("alchemy-renamed");
       const renamed = yield* getFleetspace(
         group.resourceGroupName,
@@ -108,9 +112,9 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const pooled = {
-        serviceTier: "GeneralPurpose",
+        serviceTier: "GeneralPurpose" as const,
         dataRegions: [LOCATION],
-      } as const;
+      };
       const { group, fleet, space } = yield* stack.deploy(
         program({
           ...pooled,

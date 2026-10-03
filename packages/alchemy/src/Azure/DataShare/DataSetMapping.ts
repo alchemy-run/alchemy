@@ -1,3 +1,4 @@
+import { isResolved } from "../../Diff.ts";
 import * as datashare from "@distilled.cloud/azure/datashare";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -231,7 +232,11 @@ export const DataSetMappingProvider = () =>
       if (output === undefined) return undefined;
       // Every prop is immutable; an unresolved one comes from an upstream
       // resource being created or replaced.
-      const next = news as unknown as Record<keyof DataSetMappingProps, unknown>;
+      // An unresolved props object comes from an upstream replacement; every
+      // prop is immutable, so that is a replace.
+      if (!isResolved(news))
+        return { action: "replace", deleteFirst: true } as const;
+      const next = news;
       if (
         immutableChanged(next.resourceGroup, output.resourceGroup, ci) ||
         immutableChanged(next.account, output.accountName, ci) ||
@@ -266,7 +271,9 @@ export const DataSetMappingProvider = () =>
         return undefined;
       }
       const name =
-        output?.dataSetMappingName ?? olds?.name ?? (yield* createChildName(id));
+        output?.dataSetMappingName ??
+        olds?.name ??
+        (yield* createChildName(id));
       const observed = yield* getMapping(
         subscriptionId,
         resourceGroup,
@@ -282,7 +289,11 @@ export const DataSetMappingProvider = () =>
         name,
         observed,
       );
-      return (yield* accountOwnedByStack(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStack(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

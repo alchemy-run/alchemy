@@ -7,7 +7,10 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-const getService = (resourceGroupName: string, storageSyncServiceName: string) =>
+const getService = (
+  resourceGroupName: string,
+  storageSyncServiceName: string,
+) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
     return yield* storagesync.GetStorageSyncService({

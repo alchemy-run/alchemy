@@ -21,7 +21,7 @@ const getCache = (resourceGroupName: string, name: string) =>
 const program = (props: {
   tags: Record<string, string>;
   maxmemoryPolicy: string;
-  location?: string;
+  name?: string;
 }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -29,7 +29,7 @@ const program = (props: {
     });
     const cache = yield* Azure.Redis.Cache("Cache", {
       resourceGroup: group.resourceGroupName,
-      location: props.location,
+      name: props.name,
       sku: "Basic",
       capacity: 0,
       redisConfiguration: { maxmemoryPolicy: props.maxmemoryPolicy },
@@ -97,35 +97,34 @@ test.provider.skipIf(!runExpensive)(
 );
 
 // Replacement provisions a second Basic C0 cache: cents, but 40+ minutes
-// end to end.
+// end to end. It stays in eastus: this subscription may only create
+// Azure Cache for Redis where it already had one (`RedisCacheRetiring`).
 test.provider.skipIf(!runExpensive)(
-  "replace a redis cache when its location changes",
+  "replace a redis cache when its name changes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const { group, cache } = yield* stack.deploy(
-        program({ tags: {}, maxmemoryPolicy: "volatile-lru", location: "eastus" }),
+        program({ tags: {}, maxmemoryPolicy: "volatile-lru" }),
       );
+      const renamed = `${cache.cacheName.slice(0, 50)}-renamed`;
       const replaced = yield* stack.deploy(
-        program({
-          tags: {},
-          maxmemoryPolicy: "volatile-lru",
-          location: "westus2",
-        }),
+        program({ tags: {}, maxmemoryPolicy: "volatile-lru", name: renamed }),
       );
-      expect(cache.location).toEqual("eastus");
-      expect(replaced.cache.location).toEqual("westus2");
+      expect(replaced.cache.cacheName).toEqual(renamed);
       expect(replaced.cache.cacheId).not.toEqual(cache.cacheId);
+      expect(
+        (yield* getCache(group.resourceGroupName, renamed)).properties
+          .provisioningState,
+      ).toEqual("Succeeded");
       expect(
         yield* waitGone(getCache(group.resourceGroupName, cache.cacheName)),
       ).toEqual("gone");
 
       yield* stack.destroy();
       expect(
-        yield* waitGone(
-          getCache(group.resourceGroupName, replaced.cache.cacheName),
-        ),
+        yield* waitGone(getCache(group.resourceGroupName, renamed)),
       ).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 3_600_000 },

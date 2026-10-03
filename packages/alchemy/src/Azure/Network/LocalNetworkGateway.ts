@@ -105,6 +105,18 @@ export const LocalNetworkGatewayProvider = () =>
             localNetworkGatewayName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        properties: {
+          gatewayIpAddress: news.gatewayIpAddress,
+          fqdn: news.fqdn,
+          localNetworkAddressSpace: {
+            addressPrefixes: news.addressPrefixes ?? [],
+          },
+          bgpSettings: news.bgpSettings,
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.LocalNetworkGatewaysCreateOrUpdate({
           subscriptionId,
@@ -125,18 +137,6 @@ export const LocalNetworkGatewayProvider = () =>
           localNetworkGatewayName: path.name,
           tags,
         }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        properties: {
-          gatewayIpAddress: news.gatewayIpAddress,
-          fqdn: news.fqdn,
-          localNetworkAddressSpace: {
-            addressPrefixes: news.addressPrefixes ?? [],
-          },
-          bgpSettings: news.bgpSettings,
-        },
-      }),
       drifted: (observed, _body, news) => {
         const p = observed.properties;
         return (

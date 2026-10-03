@@ -1,6 +1,7 @@
 import * as dashboard from "@distilled.cloud/azure/dashboard";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -634,16 +635,52 @@ export const WorkspaceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        dashboard.DeleteGrafana({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          workspaceName: output.workspaceName,
+      // A workspace still busy with an earlier operation rejects the delete
+      // with a conflict; wait it out.
+      const deleteOnce = ignoreNotFound(
+        dashboard
+          .DeleteGrafana({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            workspaceName: output.workspaceName,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "Conflict" || e._tag === "ResourceConflict",
+              schedule: Schedule.spaced("15 seconds"),
+              times: 16,
+            }),
+          ),
+      );
+      yield* deleteOnce;
+      // Deletion runs ~5-12 minutes. Its status reads hit occasional 5xx
+      // bursts, and a failed background delete returns the workspace to
+      // `Succeeded` — re-issue the delete then.
+      const poll = getGrafana(
+        subscriptionId,
+        output.resourceGroup,
+        output.workspaceName,
+      ).pipe(
+        Effect.retry({
+          while: (e) =>
+            e._tag === "InternalServerError" ||
+            e._tag === "ServiceUnavailable" ||
+            e._tag === "BadGateway" ||
+            e._tag === "GatewayTimeout" ||
+            e._tag === "TooManyRequests",
+          schedule: Schedule.spaced("10 seconds"),
+          times: 6,
         }),
+        Effect.tap((grafana) =>
+          grafana !== undefined &&
+          grafana.properties?.provisioningState !== "Deleting"
+            ? deleteOnce
+            : Effect.void,
+        ),
       );
       yield* waitUntilGone(
         `Grafana workspace ${output.workspaceName}`,
-        getGrafana(subscriptionId, output.resourceGroup, output.workspaceName),
+        poll,
         BUDGET,
       );
     }),

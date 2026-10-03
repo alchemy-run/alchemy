@@ -1,5 +1,4 @@
 import * as Azure from "@/Azure";
-import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { expect } from "alchemy-test";
@@ -10,6 +9,7 @@ import {
   subscription,
   tags,
   template,
+  uploadTemplate,
   waitGone,
   withStore,
 } from "./util.ts";
@@ -27,7 +27,7 @@ const program = (props: {
   tags: Record<string, string>;
 }) =>
   Effect.gen(function* () {
-    const { group, publisher, store, manifest } = yield* withStore;
+    const { group, publisher, store } = yield* withStore;
     const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema(
       "Schema",
       {
@@ -35,6 +35,7 @@ const program = (props: {
         publisher: publisher.publisherName,
         location,
         schemaDefinition,
+        versionState: "Active",
       },
     );
     const nsdg = yield* Azure.HybridNetwork.NetworkServiceDesignGroup("Nsdg", {
@@ -64,11 +65,7 @@ const program = (props: {
               parameterValues: "{}",
               artifactProfile: {
                 artifactStoreReference: { id: store.artifactStoreId },
-                // Orders the version after the manifest declaring the artifact.
-                artifactName: Output.map(
-                  manifest.artifactManifestName,
-                  () => template.name,
-                ),
+                artifactName: template.name,
                 artifactVersion: template.version,
               },
             },
@@ -87,6 +84,15 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // AOSM validates the design against the uploaded template artifact.
+      const published = yield* stack.deploy(withStore);
+      yield* uploadTemplate({
+        resourceGroupName: published.group.resourceGroupName,
+        publisherName: published.publisher.publisherName,
+        artifactStoreName: published.store.artifactStoreName,
+        artifactManifestName: published.manifest.artifactManifestName,
+      });
 
       const { group, publisher, nsdg, nsdv } = yield* stack.deploy(
         program({ version: "1.0.0", tags: { env: "one" } }),

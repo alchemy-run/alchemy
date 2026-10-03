@@ -273,27 +273,29 @@ export const PoolProvider = () =>
           ? [{ resourceGroup, projectName: project.name }]
           : [];
       });
-      const pools = yield* Effect.forEach(owned, ({ resourceGroup, projectName }) =>
-        devcenter
-          .ListPoolByProject({
-            subscriptionId,
-            resourceGroupName: resourceGroup,
-            projectName,
-          })
-          .pipe(
-            Effect.flatMap((page) =>
-              requireSinglePage("ListPoolByProject", page),
-            ),
-            Effect.map((page) =>
-              (page.value ?? []).flatMap((pool) =>
-                hasAnyAlchemyTag(pool.tags) && pool.name !== undefined
-                  ? [toAttrs(resourceGroup, projectName, pool.name, pool)]
-                  : [],
+      const pools = yield* Effect.forEach(
+        owned,
+        ({ resourceGroup, projectName }) =>
+          devcenter
+            .ListPoolByProject({
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              projectName,
+            })
+            .pipe(
+              Effect.flatMap((page) =>
+                requireSinglePage("ListPoolByProject", page),
               ),
+              Effect.map((page) =>
+                (page.value ?? []).flatMap((pool) =>
+                  hasAnyAlchemyTag(pool.tags) && pool.name !== undefined
+                    ? [toAttrs(resourceGroup, projectName, pool.name, pool)]
+                    : [],
+                ),
+              ),
+              orUndefinedIfNotFound,
+              Effect.map((attrs) => attrs ?? []),
             ),
-            orUndefinedIfNotFound,
-            Effect.map((attrs) => attrs ?? []),
-          ),
       );
       return pools.flat();
     }),

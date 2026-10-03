@@ -298,7 +298,9 @@ export const PolicySetDefinitionProvider = () =>
 
     nuke: {
       // Members must outlive the set that references them.
-      dependsOn: ["Azure.Policy.PolicyDefinition", "Azure.Resources.ResourceGroup"],
+      dependsOn: [
+        "Azure.Policy.PolicyDefinition",
+        "Azure.Resources.ResourceGroup",
+      ],
     },
   });
-

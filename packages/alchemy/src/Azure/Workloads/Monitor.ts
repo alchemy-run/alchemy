@@ -367,11 +367,12 @@ export const MonitorProvider = () =>
           monitorName: output.monitorName,
         }),
       );
-      // Deleting the monitor also tears down its managed resource group.
+      // Deleting the monitor also tears down its managed resource group;
+      // a monitor whose provisioning failed can take over 20 minutes.
       yield* waitUntilGone(
         `SAP monitor ${output.monitorName}`,
         getMonitor(subscriptionId, output.resourceGroup, output.monitorName),
-        { interval: "15 seconds", times: 60 },
+        { interval: "30 seconds", times: 60 },
       );
     }),
 

@@ -5,6 +5,7 @@ export * from "./Configuration.ts";
 export * from "./ConfigurationReference.ts";
 export * from "./Context.ts";
 export * from "./Diagnostic.ts";
+export * from "./DisconnectedOperation.ts";
 export * from "./DynamicConfiguration.ts";
 export * from "./DynamicConfigurationVersion.ts";
 export * from "./DynamicSchema.ts";

@@ -24,6 +24,7 @@ import {
   sameArm,
   toArmIdentity,
   workspaceLocation,
+  inputFields,
 } from "./Common.ts";
 
 export interface ServerlessEndpointProps {
@@ -174,7 +175,12 @@ export const ServerlessEndpointProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

@@ -8,6 +8,7 @@ export type {
 export * from "./Compute.ts";
 export * from "./Connection.ts";
 export * from "./Datastore.ts";
+export * from "./MarketplaceSubscription.ts";
 export * from "./OnlineDeployment.ts";
 export * from "./OnlineEndpoint.ts";
 export * from "./OutboundRule.ts";

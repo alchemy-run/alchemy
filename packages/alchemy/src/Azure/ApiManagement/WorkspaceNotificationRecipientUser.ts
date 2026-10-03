@@ -110,7 +110,7 @@ export const WorkspaceNotificationRecipientUserProvider = () =>
       // user's service-relative id (`/users/{userId}`).
       get: (subscriptionId, key) =>
         apim
-          .ListNotificationRecipientUserByNotification({
+          .ListWorkspaceNotificationRecipientUserByNotification({
             subscriptionId,
             resourceGroupName: key.resourceGroup,
             serviceName: key.serviceName,

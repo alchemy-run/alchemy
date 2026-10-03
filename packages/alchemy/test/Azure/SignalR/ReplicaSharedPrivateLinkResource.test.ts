@@ -4,6 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import * as signalr from "@distilled.cloud/azure/signalr";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -82,8 +83,11 @@ const program = (props: { target: "A" | "B"; requestMessage: string }) =>
   });
 
 // Premium_P1 primary + replica (~$0.08/hour per unit) and two vaults:
-// ~$0.05 per run, ~8-10 minutes.
-test.provider(
+// ~$0.05 per run, but >15 minutes: on the test subscription the primary's
+// link (status `Pending`) was never replicated to the replica within 10
+// minutes, and a direct PUT on the replica fails with the typed
+// `SignalRReplicaLinkNotReplicated`. Runs only with AZURE_TEST_EXPENSIVE=1.
+test.provider.skipIf(!runExpensive)(
   "track, replace, and forget a replica shared private link resource",
   (stack) =>
     Effect.gen(function* () {

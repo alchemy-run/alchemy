@@ -223,7 +223,13 @@ export const ScheduleProvider = () =>
         scheduleName: name,
       };
       const label = `dev box pool schedule ${name}`;
-      const get = getSchedule(subscriptionId, resourceGroup, project, pool, name);
+      const get = getSchedule(
+        subscriptionId,
+        resourceGroup,
+        project,
+        pool,
+        name,
+      );
 
       // Observe.
       let observed = yield* get;

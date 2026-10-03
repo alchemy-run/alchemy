@@ -213,23 +213,27 @@ export const BackupEncryptionConfigProvider = () =>
 
       // Key updates apply asynchronously; wait for the vault to report them.
       const fresh = yield* get.pipe(
-        Effect.flatMap((config) => {
-          const status = (
-            config?.properties?.lastUpdateStatus ?? ""
-          ).toLowerCase();
-          if (status === "failed" || status === "partiallyfailed") {
-            return Effect.fail(
-              new ProvisioningFailed({
-                resource: `backup encryption config of ${vault}`,
-                state: status,
-                message: `customer-managed key update on vault ${vault} ended in '${status}'`,
-              }),
-            );
-          }
-          return converged(config, news) && status !== "initialized"
-            ? Effect.succeed(config!)
-            : Effect.fail("pending" as const);
-        }),
+        Effect.flatMap(
+          (config): Effect.Effect<Observed, ProvisioningFailed | "pending"> => {
+            const status = (
+              config?.properties?.lastUpdateStatus ?? ""
+            ).toLowerCase();
+            if (status === "failed" || status === "partiallyfailed") {
+              return Effect.fail(
+                new ProvisioningFailed({
+                  resource: `backup encryption config of ${vault}`,
+                  state: status,
+                  message: `customer-managed key update on vault ${vault} ended in '${status}'`,
+                }),
+              );
+            }
+            return config !== undefined &&
+              converged(config, news) &&
+              status !== "initialized"
+              ? Effect.succeed(config)
+              : Effect.fail("pending" as const);
+          },
+        ),
         Effect.retry({
           while: (e) => e === "pending",
           schedule: Schedule.spaced("5 seconds"),

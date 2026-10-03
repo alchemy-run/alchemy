@@ -352,9 +352,11 @@ export const DeploymentStackProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.resourceGroup))
-        return { action: "replace" } as const;
-      if (!isResolved(news)) return undefined;
+      if (!isResolved(news)) {
+        return !("resourceGroup" in news) || !isResolved(news.resourceGroup)
+          ? ({ action: "replace" } as const)
+          : undefined;
+      }
       if (
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||

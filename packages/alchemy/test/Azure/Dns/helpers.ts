@@ -1,0 +1,58 @@
+import * as Azure from "@/Azure";
+import type { AzureOpError } from "@distilled.cloud/azure";
+import * as dns from "@distilled.cloud/azure/dns";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+
+export const tags = ["provider:azure", "provider:azure:dns", "live"];
+
+export const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+/** The subscription ID of the ambient Azure environment. */
+export const subscriptionId = Effect.map(
+  Azure.AzureEnvironment.current,
+  (env) => env.subscriptionId,
+);
+
+/**
+ * Repeat a typed GET until it reports the resource as gone. Only typed
+ * not-found tags count as gone.
+ */
+export const untilGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
+  get.pipe(
+    Effect.as("found" as const),
+    Effect.catchTag(
+      ["ResourceNotFound", "ResourceGroupNotFound", "NotFound"],
+      () => Effect.succeed("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (status) => status === "gone",
+      times: 24,
+    }),
+  );
+
+export const getZone = (resourceGroupName: string, zoneName: string) =>
+  Effect.flatMap(subscriptionId, (subscriptionId) =>
+    dns.GetZone({ subscriptionId, resourceGroupName, zoneName }),
+  );
+
+export const getRecord = (
+  resourceGroupName: string,
+  zoneName: string,
+  recordType: string,
+  relativeRecordSetName: string,
+) =>
+  Effect.flatMap(subscriptionId, (subscriptionId) =>
+    dns.GetRecordSet({
+      subscriptionId,
+      resourceGroupName,
+      zoneName,
+      recordType,
+      relativeRecordSetName,
+    }),
+  );

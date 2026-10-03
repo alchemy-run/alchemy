@@ -32,8 +32,8 @@ export interface ReplicaSharedPrivateLinkResourceProps {
   replica: string;
   /**
    * Name of the primary service's `Azure.WebPubSub.SharedPrivateLinkResource`.
-   * Azure replicates every primary link to each replica under the same
-   * name; this resource waits for the copy and converges its settings.
+   * Azure replicates every approved primary link to each replica under the
+   * same name; this resource waits for the copy and converges its settings.
    * Changing it replaces the link.
    */
   sharedPrivateLinkResource: string;
@@ -85,9 +85,11 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
 /**
  * The replica copy of a Web PubSub shared private link resource. Azure does
  * not create replica links directly: each link of the primary service is
- * replicated to every replica under the same name, and the replica copy
- * needs its own approval on the target. This resource waits for the copy,
- * keeps its settings converged, and exposes its approval `status`.
+ * replicated to every replica under the same name once the target's owner
+ * approves the primary link's private endpoint connection, and the replica
+ * copy then needs its own approval on the target. This resource waits (up to
+ * 10 minutes) for the copy, keeps its settings converged, and exposes its
+ * approval `status`.
  *
  * Azure exposes no DELETE for replica shared private links: destroying this
  * resource only forgets it, and the copy is removed together with the

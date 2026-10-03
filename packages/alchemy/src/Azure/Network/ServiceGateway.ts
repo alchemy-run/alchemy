@@ -136,6 +136,17 @@ export const ServiceGatewayProvider = () =>
             serviceGatewayName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        sku: { name: "Standard", tier: "Regional" },
+        zones: news.zones,
+        properties: {
+          virtualNetwork: ref(news.virtualNetworkId),
+          routeTargetAddress: routeTargetInput(news.routeTarget),
+          routeTargetAddressV6: routeTargetInput(news.routeTargetV6),
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.ServiceGatewaysCreateOrUpdate({
           subscriptionId,
@@ -158,17 +169,6 @@ export const ServiceGatewayProvider = () =>
         }),
       listAll: (subscriptionId) =>
         network.ListServiceGatewayAll({ subscriptionId }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        sku: { name: "Standard", tier: "Regional" },
-        zones: news.zones,
-        properties: {
-          virtualNetwork: ref(news.virtualNetworkId),
-          routeTargetAddress: routeTargetInput(news.routeTarget),
-          routeTargetAddressV6: routeTargetInput(news.routeTargetV6),
-        },
-      }),
       drifted: (observed, _body, news) =>
         routeTargetDrifted(
           observed.properties?.routeTargetAddress,

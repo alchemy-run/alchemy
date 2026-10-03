@@ -185,10 +185,14 @@ export const TemplateSpecVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.resourceGroup) || !isResolved(news.templateSpecName)) {
-        return { action: "replace" } as const;
+      if (!isResolved(news)) {
+        return !("resourceGroup" in news) ||
+          !isResolved(news.resourceGroup) ||
+          !("templateSpecName" in news) ||
+          !isResolved(news.templateSpecName)
+          ? ({ action: "replace" } as const)
+          : undefined;
       }
-      if (!isResolved(news)) return undefined;
       if (
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||

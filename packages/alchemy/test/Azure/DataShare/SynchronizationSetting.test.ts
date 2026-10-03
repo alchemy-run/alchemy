@@ -52,9 +52,9 @@ test.provider(
       const intervalOf = (s: { properties?: unknown }) =>
         (s.properties as { recurrenceInterval?: string }).recurrenceInterval;
       expect(setting.recurrenceInterval).toEqual("Day");
-      expect(intervalOf(yield* get(setting.synchronizationSettingName))).toEqual(
-        "Day",
-      );
+      expect(
+        intervalOf(yield* get(setting.synchronizationSettingName)),
+      ).toEqual("Day");
 
       // Replacement: settings are immutable (one per kind per share).
       const updated = yield* stack.deploy(program("Hour"));
@@ -74,11 +74,5 @@ test.provider(
         yield* waitGone(get(updated.setting.synchronizationSettingName)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 600_000 },
-);
-
-test.provider(
-  "create, update, and delete a synchronization setting",
-  (stack) => stack.destroy().pipe(logLevel),
   { tags, timeout: 600_000 },
 );

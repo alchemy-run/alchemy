@@ -143,10 +143,14 @@ export const ResourceLinkProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.sourceId) || !isResolved(news.targetId)) {
-        return { action: "replace" } as const;
+      if (!isResolved(news)) {
+        return !("sourceId" in news) ||
+          !isResolved(news.sourceId) ||
+          !("targetId" in news) ||
+          !isResolved(news.targetId)
+          ? ({ action: "replace" } as const)
+          : undefined;
       }
-      if (!isResolved(news)) return undefined;
       if (
         !sameId(news.sourceId, output.sourceId) ||
         !sameId(news.targetId, output.targetId) ||
@@ -222,7 +226,10 @@ export const ResourceLinkProvider = () =>
           linkId: output.linkId.replace(/^\/+/, ""),
         }),
       );
-      yield* waitUntilGone(`resource link ${output.linkName}`, getLink(output.linkId));
+      yield* waitUntilGone(
+        `resource link ${output.linkName}`,
+        getLink(output.linkId),
+      );
     }),
 
     nuke: { dependsOn: ["Azure.Resources.ResourceGroup"] },

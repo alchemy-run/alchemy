@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import { ensureRegistered } from "@/Azure/Arm.ts";
+import { ensureRegistered } from "@/Azure/Arm";
 import * as Test from "@/Test/Alchemy";
 import * as elastic from "@distilled.cloud/azure/elastic";
 import { expect } from "alchemy-test";
@@ -117,11 +117,9 @@ test.provider.skipIf(runPaidOnly)(
           monitorName: "alchemy-elastic-probe",
           location,
           sku: { name: "ess-consumption-2024_Monthly" },
-          identity: { type: "SystemAssigned" },
           properties: { monitoringStatus: "Enabled", userInfo },
         })
         .pipe(Effect.flip);
-      console.log("PROBE", error._tag, JSON.stringify(error));
       expect(error._tag).toEqual("MarketplacePurchaseNotEligible");
       expect(
         yield* waitGone(

@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import { ensureRegistered } from "@/Azure/Arm.ts";
+import { ensureRegistered } from "@/Azure/Arm";
 import * as hybridcompute from "@distilled.cloud/azure/hybridcompute";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";

@@ -24,6 +24,7 @@ import {
   sameValue,
   toArmIdentity,
   workspaceLocation,
+  inputFields,
 } from "./Common.ts";
 
 export type ComputeType =
@@ -269,7 +270,12 @@ export const ComputeProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

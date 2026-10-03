@@ -23,7 +23,7 @@ import {
 import type {
   ComponentConfigurationProperty,
   ComponentServiceBind,
-} from "./JavaComponent.ts";
+} from "./DotNetComponent.ts";
 
 export interface JavaComponentProps {
   /** Resource group of the environment. Changing it replaces the component. */

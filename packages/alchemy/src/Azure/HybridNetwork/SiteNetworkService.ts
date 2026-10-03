@@ -78,7 +78,10 @@ export interface SiteNetworkServiceProps {
     /** Managed resource group location. */
     location?: string;
   };
-  /** Managed identity the service deploys with. */
+  /**
+   * Managed identity the service deploys with (AOSM requires one).
+   * @default { type: "SystemAssigned" }
+   */
   identity?: HybridNetworkIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
@@ -286,6 +289,9 @@ export const SiteNetworkServiceProvider = () =>
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const desiredValues = news.configurationGroupValues ?? {};
+      const identity: HybridNetworkIdentity = news.identity ?? {
+        type: "SystemAssigned",
+      };
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -309,7 +315,7 @@ export const SiteNetworkServiceProvider = () =>
           ),
           desiredValues,
         ) ||
-        identityDiffers(observed.identity, news.identity);
+        identityDiffers(observed.identity, identity);
 
       // Observe.
       let observed = yield* get;
@@ -322,7 +328,7 @@ export const SiteNetworkServiceProvider = () =>
             location: observed?.location ?? location,
             tags,
             sku: { name: observed?.sku?.name ?? news.sku ?? "Standard" },
-            identity: identityRequest(news.identity),
+            identity: identityRequest(identity),
             properties: {
               siteReference: { id: news.siteId },
               networkServiceDesignVersionResourceReference: {

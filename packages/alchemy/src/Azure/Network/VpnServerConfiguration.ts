@@ -148,28 +148,6 @@ export const VpnServerConfigurationProvider = () =>
             vpnServerConfigurationName: path.name,
           }),
         ),
-      put: (subscriptionId, path, body) =>
-        network.VpnServerConfigurationsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          vpnServerConfigurationName: path.name,
-          ...body,
-        }),
-      del: (subscriptionId, path) =>
-        network.DeleteVpnServerConfiguration({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          vpnServerConfigurationName: path.name,
-        }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateVpnServerConfigurationTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          vpnServerConfigurationName: path.name,
-          tags,
-        }),
-      listAll: (subscriptionId) =>
-        network.ListVpnServerConfigurations({ subscriptionId }),
       // The PUT replaces the policy-group collection: carry the observed
       // groups (managed by VpnServerConfigurationPolicyGroup).
       body: (news, { location, tags, observed }) => ({
@@ -202,6 +180,28 @@ export const VpnServerConfigurationProvider = () =>
           })),
         },
       }),
+      put: (subscriptionId, path, body) =>
+        network.VpnServerConfigurationsCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          vpnServerConfigurationName: path.name,
+          ...body,
+        }),
+      del: (subscriptionId, path) =>
+        network.DeleteVpnServerConfiguration({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          vpnServerConfigurationName: path.name,
+        }),
+      updateTags: (subscriptionId, path, tags) =>
+        network.UpdateVpnServerConfigurationTags({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          vpnServerConfigurationName: path.name,
+          tags,
+        }),
+      listAll: (subscriptionId) =>
+        network.ListVpnServerConfigurations({ subscriptionId }),
       drifted: (observed, body) => {
         const {
           radiusServerSecret: _secret,

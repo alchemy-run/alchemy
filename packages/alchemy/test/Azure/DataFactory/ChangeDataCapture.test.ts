@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import type { Input } from "@/Input";
 import * as Test from "@/Test/Alchemy";
 import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { expect } from "alchemy-test";
@@ -47,7 +48,7 @@ const cdcGone = (
   );
 
 const connection = (
-  referenceName: string,
+  referenceName: Input<string>,
   common: Array<{ name: string; value: unknown }>,
 ) => ({
   type: "linkedservicetype",

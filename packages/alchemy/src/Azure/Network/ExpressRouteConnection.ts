@@ -115,6 +115,17 @@ export const ExpressRouteConnectionProvider = () =>
             connectionName: path.name,
           }),
         ),
+      body: (news, { path }) => ({
+        name: path.name,
+        properties: {
+          expressRouteCircuitPeering: { id: news.expressRouteCircuitPeeringId },
+          authorizationKey: reveal(news.authorizationKey),
+          routingWeight: news.routingWeight,
+          enableInternetSecurity: news.enableInternetSecurity ?? false,
+          expressRouteGatewayBypass: news.expressRouteGatewayBypass,
+          routingConfiguration: routingConfigurationInput(news.routing),
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.ExpressRouteConnectionsCreateOrUpdate({
           subscriptionId,
@@ -138,17 +149,6 @@ export const ExpressRouteConnectionProvider = () =>
             expressRouteGatewayName: path.expressRouteGateway!,
           }),
         ).pipe(Effect.map((gateway) => gateway?.tags)),
-      body: (news, { path }) => ({
-        name: path.name,
-        properties: {
-          expressRouteCircuitPeering: { id: news.expressRouteCircuitPeeringId },
-          authorizationKey: reveal(news.authorizationKey),
-          routingWeight: news.routingWeight,
-          enableInternetSecurity: news.enableInternetSecurity ?? false,
-          expressRouteGatewayBypass: news.expressRouteGatewayBypass,
-          routingConfiguration: routingConfigurationInput(news.routing),
-        },
-      }),
       drifted: (observed, body) => {
         const { authorizationKey: _key, ...desired } = body.properties;
         return subsetDiffers(desired, observed.properties);

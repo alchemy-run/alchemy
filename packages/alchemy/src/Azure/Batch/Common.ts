@@ -1,7 +1,7 @@
 import * as batch from "@distilled.cloud/azure/batch";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { orUndefinedIfNotFound } from "../Arm.ts";
+import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 
 /** Observe a Batch account; `undefined` when it does not exist. */
 export const getBatchAccount = (
@@ -12,6 +12,28 @@ export const getBatchAccount = (
   orUndefinedIfNotFound(
     batch.GetBatchAccount({ subscriptionId, resourceGroupName, accountName }),
   );
+
+/**
+ * Applications and application packages accept `tags` on the wire but
+ * Azure drops them. They count as owned when their Batch account carries
+ * this stack's and stage's ownership tags.
+ */
+export const accountOwnedByStage = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  accountName: string,
+) {
+  const observed = yield* getBatchAccount(
+    subscriptionId,
+    resourceGroupName,
+    accountName,
+  );
+  const { stack, stage } = yield* stackAndStage;
+  return (
+    observed?.tags?.["alchemy::stack"] === stack &&
+    observed?.tags?.["alchemy::stage"] === stage
+  );
+});
 
 /**
  * Name for a Batch child (pool, application): 1-64 letters, digits,

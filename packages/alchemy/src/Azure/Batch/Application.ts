@@ -5,19 +5,15 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
-  desiredTags,
   ensureRegistered,
   ignoreNotFound,
-  isOwned,
   orUndefinedIfNotFound,
-  tagsDiffer,
-  userTags,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createBatchChildName } from "./Common.ts";
+import { accountOwnedByStage, createBatchChildName } from "./Common.ts";
 
 export interface ApplicationProps {
   /** Resource group of the Batch account. Changing it replaces the application. */
@@ -44,11 +40,6 @@ export interface ApplicationProps {
    * set it after the package is deployed.
    */
   defaultVersion?: string;
-  /**
-   * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
-   */
-  tags?: Record<string, string>;
 }
 
 export interface Application extends Resource<
@@ -69,8 +60,6 @@ export interface Application extends Resource<
     allowUpdates: boolean | undefined;
     /** Default package version. */
     defaultVersion: string | undefined;
-    /** User tags (Alchemy ownership tags stripped). */
-    tags: Record<string, string>;
   },
   never,
   Providers
@@ -79,7 +68,10 @@ export interface Application extends Resource<
 /**
  * A Batch application — a named, versioned set of application packages
  * (zip files) that Batch deploys to compute nodes of pools and tasks that
- * reference it.
+ * reference it. The Batch account needs `autoStorage`; without it Azure
+ * rejects the application with `BatchAccountNotEnabledForAutoStorage`.
+ * Applications cannot be tagged; an application counts as owned when its
+ * Batch account carries this stack's and stage's ownership tags.
  *
  * @see https://learn.microsoft.com/azure/batch/batch-application-packages
  *
@@ -122,6 +114,11 @@ const getApplication = (
       accountName,
       applicationName,
     }),
+  ).pipe(
+    // No application can exist on an account without auto-storage.
+    Effect.catchTag("BatchAccountNotEnabledForAutoStorage", () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const toAttrs = (
@@ -137,7 +134,6 @@ const toAttrs = (
   displayName: app.properties?.displayName,
   allowUpdates: app.properties?.allowUpdates,
   defaultVersion: app.properties?.defaultVersion,
-  tags: userTags(app.tags),
 });
 
 export const ApplicationProvider = () =>
@@ -182,7 +178,13 @@ export const ApplicationProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
+        ? attrs
+        : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -193,7 +195,6 @@ export const ApplicationProvider = () =>
         news.name ??
         output?.applicationName ??
         (yield* createBatchChildName(id));
-      const tags = yield* desiredTags(id, news.tags);
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -209,7 +210,6 @@ export const ApplicationProvider = () =>
       if (observed === undefined) {
         observed = yield* batch.CreateApplication({
           ...where,
-          tags,
           properties: {
             displayName: news.displayName,
             allowUpdates: news.allowUpdates,
@@ -238,13 +238,8 @@ export const ApplicationProvider = () =>
       ) {
         changed.defaultVersion = news.defaultVersion;
       }
-      const tagsChanged = tagsDiffer(observed.tags, tags);
-      if (Object.keys(changed).length > 0 || tagsChanged) {
-        yield* batch.UpdateApplication({
-          ...where,
-          tags: tagsChanged ? tags : undefined,
-          properties: Object.keys(changed).length > 0 ? changed : undefined,
-        });
+      if (Object.keys(changed).length > 0) {
+        yield* batch.UpdateApplication({ ...where, properties: changed });
       }
 
       const fresh = yield* waitForProvisioned(
@@ -265,6 +260,11 @@ export const ApplicationProvider = () =>
           accountName: output.account,
           applicationName: output.applicationName,
         }),
+      ).pipe(
+        Effect.catchTag(
+          "BatchAccountNotEnabledForAutoStorage",
+          () => Effect.void,
+        ),
       );
       yield* waitUntilGone(
         `batch application ${output.applicationName}`,

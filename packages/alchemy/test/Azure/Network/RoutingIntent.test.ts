@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
@@ -39,7 +40,9 @@ const program = (destinations: ("Internet" | "PrivateTraffic")[]) =>
       routingPolicies: destinations.map((destination) => ({
         name: `${destination}Policy`,
         destinations: [destination],
-        nextHop: firewallId(sub, group.resourceGroupName),
+        nextHop: Output.map(group.resourceGroupName, (resourceGroup) =>
+          firewallId(sub, resourceGroup),
+        ),
       })),
     });
     return { group, wan, hub, intent };

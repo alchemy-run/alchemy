@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import { orUndefinedIfNotFound } from "@/Azure/Arm.ts";
+import { orUndefinedIfNotFound } from "@/Azure/Arm";
 import * as Test from "@/Test/Alchemy";
 import * as msi from "@distilled.cloud/azure/msi";
 import * as resources from "@distilled.cloud/azure/resources";

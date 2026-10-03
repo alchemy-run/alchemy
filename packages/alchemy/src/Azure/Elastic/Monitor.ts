@@ -131,9 +131,11 @@ export interface MonitorProps {
    */
   monitoringStatus?: "Enabled" | "Disabled";
   /**
-   * Whether the monitor gets a system-assigned managed identity, which
-   * Elastic uses to read Azure logs. Changing it replaces the monitor.
-   * @default true
+   * Whether the monitor gets a system-assigned managed identity. ARM
+   * currently rejects it for `Microsoft.Elastic/monitors` ("does not support
+   * creation of 'SystemAssigned' resource identity"), so leave it off unless
+   * your region supports it. Changing it replaces the monitor.
+   * @default false
    */
   systemAssignedIdentity?: boolean;
   /**
@@ -254,7 +256,7 @@ const createOnly = (props: MonitorProps) => ({
   version: props.version,
   hostingType: props.hostingType ?? "Hosted",
   projectDetails: props.projectDetails,
-  systemAssignedIdentity: props.systemAssignedIdentity ?? true,
+  systemAssignedIdentity: props.systemAssignedIdentity ?? false,
 });
 
 const toAttrs = (
@@ -379,7 +381,7 @@ export const MonitorProvider = () =>
           kind: news.kind,
           sku: { name: news.sku ?? DEFAULT_ELASTIC_SKU },
           identity:
-            (news.systemAssignedIdentity ?? true)
+            (news.systemAssignedIdentity ?? false)
               ? { type: "SystemAssigned" }
               : undefined,
           properties: {

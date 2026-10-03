@@ -1,5 +1,7 @@
 import * as storagesync from "@distilled.cloud/azure/storagesync";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -108,9 +110,12 @@ export interface CloudEndpoint extends Resource<
  * group has exactly one cloud endpoint, and a file share can back only one
  * cloud endpoint.
  *
- * Azure File Sync grants itself access to the storage account while the
- * endpoint is created, so the deploying principal needs permission to
- * create role assignments (e.g. Owner or User Access Administrator). The
+ * Azure File Sync must be able to reach the storage account. Either grant
+ * the `Microsoft.StorageSync` first-party service principal *Reader and
+ * Data Access* on the account (the portal does this for you), or enable
+ * the Storage Sync Service's managed identity (`useIdentity: true`) and
+ * grant it *Reader and Data Access*, *Storage Account Contributor*, and
+ * *Storage File Data Privileged Contributor* on the account. The
  * storage account must allow SMB 3.1.1, NTLMv2, and AES-128-GCM.
  *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-deployment-guide
@@ -127,7 +132,25 @@ export interface CloudEndpoint extends Resource<
  * });
  * const sync = yield* Azure.StorageSync.StorageSyncService("sync", {
  *   resourceGroup: group.resourceGroupName,
+ *   identity: { type: "SystemAssigned" },
+ *   useIdentity: true,
  * });
+ * // Reader and Data Access, Storage Account Contributor, and Storage File
+ * // Data Privileged Contributor for the service's identity.
+ * const grants = yield* Effect.forEach(
+ *   [
+ *     "c12c1c16-33a1-487b-954d-41c89c60f349",
+ *     "17d1049b-9a84-46fb-8f53-869881c3d3ab",
+ *     "69566ab7-960f-475b-8e7c-b3118f30c6bd",
+ *   ],
+ *   (role, i) =>
+ *     Azure.Authorization.RoleAssignment(`sync-grant-${i}`, {
+ *       scope: account.storageAccountId,
+ *       roleDefinitionId: role,
+ *       principalId: sync.principalId.as<string>(),
+ *       principalType: "ServicePrincipal",
+ *     }),
+ * );
  * const syncGroup = yield* Azure.StorageSync.SyncGroup("docs", {
  *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
@@ -136,7 +159,11 @@ export interface CloudEndpoint extends Resource<
  *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
- *   storageAccountResourceId: account.storageAccountId,
+ *   // Wait for the grants before creating the endpoint.
+ *   storageAccountResourceId: Output.all(
+ *     account.storageAccountId,
+ *     ...grants.map((grant) => grant.roleAssignmentId),
+ *   ).pipe(Output.map(([accountId]) => accountId)),
  *   azureFileShareName: share.shareName,
  * });
  * ```
@@ -159,6 +186,10 @@ export interface CloudEndpoint extends Resource<
 export const CloudEndpoint = Resource<CloudEndpoint>(
   "Azure.StorageSync.CloudEndpoint",
 );
+
+export class CloudEndpointCreateFailed extends Data.TaggedError(
+  "Azure.StorageSync.CloudEndpointCreateFailed",
+)<{ readonly message: string }> {}
 
 type Observed = storagesync.GetCloudEndpointResponse;
 
@@ -317,9 +348,12 @@ export const CloudEndpointProvider = () =>
       // Observe.
       let observed = yield* get;
 
-      // Ensure. The PUT is a long-running operation (~1-3 minutes).
+      // Ensure. The PUT is a long-running operation whose failure (e.g.
+      // `MgmtStorageAccountAuthorizationFailed` while a fresh role grant
+      // propagates) only shows as the endpoint never appearing, so the PUT
+      // is re-sent until the endpoint exists.
       if (observed === undefined) {
-        yield* storagesync.CreateCloudEndpoint({
+        const create = storagesync.CreateCloudEndpoint({
           ...where,
           properties: {
             storageAccountResourceId: news.storageAccountResourceId,
@@ -329,6 +363,30 @@ export const CloudEndpointProvider = () =>
             changeEnumerationIntervalDays: news.changeEnumerationIntervalDays,
           },
         });
+        const appeared = get.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (endpoint) => endpoint !== undefined,
+            times: 6,
+          }),
+        );
+        yield* create.pipe(
+          Effect.andThen(appeared),
+          Effect.flatMap((endpoint) =>
+            endpoint === undefined
+              ? Effect.fail(
+                  new CloudEndpointCreateFailed({
+                    message: `${label} was not created; check that Azure File Sync can read storage account ${news.storageAccountResourceId} (Reader and Data Access for the Microsoft.StorageSync principal, or roles for the service's managed identity)`,
+                  }),
+                )
+              : Effect.void,
+          ),
+          Effect.retry({
+            while: (e) =>
+              e._tag === "Azure.StorageSync.CloudEndpointCreateFailed",
+            times: 6,
+          }),
+        );
       }
       observed = yield* waitForProvisioned(
         label,

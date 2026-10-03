@@ -131,6 +131,14 @@ export const ReachabilityAnalysisIntentProvider = () =>
             reachabilityAnalysisIntentName: path.name,
           }),
         ),
+      body: (news) => ({
+        properties: {
+          description: news.description,
+          sourceResourceId: news.sourceResourceId,
+          destinationResourceId: news.destinationResourceId,
+          ipTraffic: news.ipTraffic,
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.CreateReachabilityAnalysisIntent({
           subscriptionId,
@@ -149,14 +157,6 @@ export const ReachabilityAnalysisIntentProvider = () =>
           reachabilityAnalysisIntentName: path.name,
         }),
       ownerTags: networkManagerTags,
-      body: (news) => ({
-        properties: {
-          description: news.description,
-          sourceResourceId: news.sourceResourceId,
-          destinationResourceId: news.destinationResourceId,
-          ipTraffic: news.ipTraffic,
-        },
-      }),
       toAttrs: (path, observed) => ({
         intentName: path.name,
         intentId: observed.id ?? "",

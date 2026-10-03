@@ -1,5 +1,5 @@
 import * as Azure from "@/Azure";
-import * as Output from "@/Output.ts";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as synapse from "@distilled.cloud/azure/synapse";
 import { expect } from "alchemy-test";

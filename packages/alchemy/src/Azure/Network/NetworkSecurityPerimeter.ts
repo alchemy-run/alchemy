@@ -86,6 +86,7 @@ export const NetworkSecurityPerimeterProvider = () =>
             networkSecurityPerimeterName: path.name,
           }),
         ),
+      body: (_news, { location, tags }) => ({ location, tags, properties: {} }),
       put: (subscriptionId, path, body) =>
         network.NetworkSecurityPerimetersCreateOrUpdate({
           subscriptionId,
@@ -109,7 +110,6 @@ export const NetworkSecurityPerimeterProvider = () =>
         }),
       listAll: (subscriptionId) =>
         network.ListNetworkSecurityPerimeterBySubscription({ subscriptionId }),
-      body: (_news, { location, tags }) => ({ location, tags, properties: {} }),
       drifted: () => false,
       toAttrs: (path, observed) => ({
         networkSecurityPerimeterName: path.name,

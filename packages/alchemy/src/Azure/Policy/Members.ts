@@ -1,8 +1,12 @@
 /**
- * Helpers shared by policy set definitions and their versions. Not
- * exported from the namespace barrel.
+ * Helpers shared by the Policy resources. Not exported from the namespace
+ * barrel.
  */
 import type * as resources from "@distilled.cloud/azure/resources";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import {
   fromParameterValues,
   sameId,
@@ -33,10 +37,24 @@ export const sameMembers = (
       (member.policyDefinitionReferenceId === undefined ||
         current.policyDefinitionReferenceId ===
           member.policyDefinitionReferenceId) &&
-      sameJson(fromParameterValues(current.parameters), member.parameters ?? {}) &&
+      sameJson(
+        fromParameterValues(current.parameters),
+        member.parameters ?? {},
+      ) &&
       sameJson(current.groupNames ?? [], member.groupNames ?? []) &&
       (member.definitionVersion === undefined ||
         current.definitionVersion === member.definitionVersion)
     );
   });
 
+/**
+ * True when the whole plan-time `news` input is a single unresolved
+ * expression rather than an object of (possibly unresolved) fields.
+ */
+export const isWholeExpression = <P extends object>(
+  news: Input<P>,
+): news is
+  | Output.Output<P, any>
+  | Config.Config<P>
+  | Effect.Effect<P, any, any> =>
+  Output.isOutput(news) || Effect.isEffect(news) || Config.isConfig(news);

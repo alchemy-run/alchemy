@@ -44,10 +44,15 @@ const builtInDefinition = (resourceGroupName: string, workspaceName: string) =>
       workspaceName,
     });
     const builtIn = page.value[0];
-    if (builtIn === undefined) {
+    if (builtIn?.name === undefined) {
       return yield* Effect.die(new Error("no built-in anomaly settings yet"));
     }
-    return builtIn.properties as Record<string, unknown>;
+    const full = yield* getSetting(
+      resourceGroupName,
+      workspaceName,
+      builtIn.name,
+    );
+    return full.properties as Record<string, unknown>;
   });
 
 const program = (opts?: {

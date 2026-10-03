@@ -339,9 +339,11 @@ export const DeploymentScriptProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
-      if (!isResolved(news.resourceGroup))
-        return { action: "replace" } as const;
-      if (!isResolved(news)) return undefined;
+      if (!isResolved(news)) {
+        return !("resourceGroup" in news) || !isResolved(news.resourceGroup)
+          ? ({ action: "replace" } as const)
+          : undefined;
+      }
       const { location } = yield* AzureEnvironment.current;
       const region = (value: string) => value.toLowerCase().replace(/\s/g, "");
       if (

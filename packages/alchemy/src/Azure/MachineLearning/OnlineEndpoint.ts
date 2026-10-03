@@ -25,6 +25,7 @@ import {
   sameValue,
   toArmIdentity,
   workspaceLocation,
+  inputFields,
 } from "./Common.ts";
 
 export type EndpointAuthMode = "Key" | "AMLToken" | "AADToken";
@@ -176,14 +177,14 @@ const toAttrs = (
   resourceGroup,
   location: endpoint.location,
   authMode: endpoint.properties.authMode,
-  scoringUri: endpoint.properties.scoringUri,
-  swaggerUri: endpoint.properties.swaggerUri,
+  scoringUri: endpoint.properties.scoringUri ?? undefined,
+  swaggerUri: endpoint.properties.swaggerUri ?? undefined,
   principalId: endpoint.identity?.principalId,
   tags: userTags(endpoint.tags),
 });
 
 const sameTraffic = (
-  observed: Record<string, number | undefined> | undefined,
+  observed: Record<string, number | undefined> | null | undefined,
   desired: Record<string, number> | undefined,
 ) =>
   desired === undefined ||
@@ -215,7 +216,12 @@ export const OnlineEndpointProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

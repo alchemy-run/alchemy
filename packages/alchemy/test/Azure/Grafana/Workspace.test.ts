@@ -60,8 +60,9 @@ const program = (props: {
   });
 
 // Standard X1 bills ~$0.07/hour (the first workspace in a subscription is
-// free for 30 days): ~5 min create, ~1 min update, ~3 min delete — cents.
-test.provider(
+// free for 30 days): cents per run, but ~3 min create, ~30 s update, and
+// 8-12 min delete — ~13-15 min end to end, over the time budget.
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete a Grafana workspace",
   (stack) =>
     Effect.gen(function* () {
@@ -119,8 +120,8 @@ test.provider(
   },
 );
 
-// Replacement provisions a second (zone-redundant, pricier) workspace:
-// ~15 min end to end, under $1 but slow.
+// Replacement provisions a second (zone-redundant, pricier) workspace and
+// deletes two: ~25 min end to end, under $1 but slow.
 test.provider.skipIf(!runExpensive)(
   "replace a Grafana workspace when zone redundancy changes",
   (stack) =>

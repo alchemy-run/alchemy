@@ -122,7 +122,7 @@ test.provider(
           },
         })
         .pipe(Effect.flip);
-      console.log("POOL PROBE", JSON.stringify(pool));
+      expect(pool._tag).toEqual("DevBoxTenantNotOnboarded");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },

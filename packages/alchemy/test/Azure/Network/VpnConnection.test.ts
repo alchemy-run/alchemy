@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
@@ -44,7 +45,7 @@ const program = (bandwidthMbps: number) =>
       links: [
         {
           name: "isp1",
-          vpnSiteLinkId: site.linkIds[0]!,
+          vpnSiteLinkId: Output.map(site.linkIds, (ids) => ids[0]!),
           sharedKey: Redacted.make("alchemy-test-shared-key-1"),
           bandwidthMbps,
         },

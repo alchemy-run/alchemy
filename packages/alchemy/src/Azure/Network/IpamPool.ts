@@ -116,6 +116,16 @@ export const IpamPoolProvider = () =>
             poolName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        properties: {
+          description: news.description,
+          displayName: news.displayName,
+          parentPoolName: news.parentPoolName,
+          addressPrefixes: news.addressPrefixes,
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.CreateIpamPool({
           subscriptionId,
@@ -139,16 +149,6 @@ export const IpamPoolProvider = () =>
           poolName: path.name,
           tags,
         }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        properties: {
-          description: news.description,
-          displayName: news.displayName,
-          parentPoolName: news.parentPoolName,
-          addressPrefixes: news.addressPrefixes,
-        },
-      }),
       drifted: (observed, _body, news) =>
         (observed.properties.description ?? undefined) !== news.description ||
         (observed.properties.displayName ?? undefined) !== news.displayName ||

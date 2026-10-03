@@ -217,6 +217,9 @@ export const RoleAssignmentProvider = () =>
       // Scope, role and principal IDs are stable attributes upstream; an
       // unresolved one means its resource is being replaced.
       if (
+        !("scope" in news) ||
+        !("roleDefinitionId" in news) ||
+        !("principalId" in news) ||
         !isResolved(news.scope) ||
         !isResolved(news.roleDefinitionId) ||
         !isResolved(news.principalId)
