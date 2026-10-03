@@ -188,35 +188,132 @@ import { VirtualWan, VirtualWanProvider } from "./VirtualWan.ts";
 
 import { VpnSite, VpnSiteProvider } from "./VpnSite.ts";
 
-import { VpnServerConfiguration, VpnServerConfigurationProvider } from "./VpnServerConfiguration.ts";
+import {
+  VpnServerConfiguration,
+  VpnServerConfigurationProvider,
+} from "./VpnServerConfiguration.ts";
 
-import { VpnServerConfigurationPolicyGroup, VpnServerConfigurationPolicyGroupProvider } from "./VpnServerConfigurationPolicyGroup.ts";
+import {
+  VpnServerConfigurationPolicyGroup,
+  VpnServerConfigurationPolicyGroupProvider,
+} from "./VpnServerConfigurationPolicyGroup.ts";
 
 import { VirtualHub, VirtualHubProvider } from "./VirtualHub.ts";
 
-import { HubVirtualNetworkConnection, HubVirtualNetworkConnectionProvider } from "./HubVirtualNetworkConnection.ts";
+import {
+  HubVirtualNetworkConnection,
+  HubVirtualNetworkConnectionProvider,
+} from "./HubVirtualNetworkConnection.ts";
 
 import { HubRouteTable, HubRouteTableProvider } from "./HubRouteTable.ts";
 
-import { VirtualHubBgpConnection, VirtualHubBgpConnectionProvider } from "./VirtualHubBgpConnection.ts";
+import {
+  VirtualHubBgpConnection,
+  VirtualHubBgpConnectionProvider,
+} from "./VirtualHubBgpConnection.ts";
 
 import { VpnGateway, VpnGatewayProvider } from "./VpnGateway.ts";
 
 import { VpnConnection, VpnConnectionProvider } from "./VpnConnection.ts";
 
-import { VpnGatewayNatRule, VpnGatewayNatRuleProvider } from "./VpnGatewayNatRule.ts";
+import {
+  VpnGatewayNatRule,
+  VpnGatewayNatRuleProvider,
+} from "./VpnGatewayNatRule.ts";
 
 import { P2sVpnGateway, P2sVpnGatewayProvider } from "./P2sVpnGateway.ts";
 
-import { VirtualHubIpConfiguration, VirtualHubIpConfigurationProvider } from "./VirtualHubIpConfiguration.ts";
+import {
+  VirtualHubIpConfiguration,
+  VirtualHubIpConfigurationProvider,
+} from "./VirtualHubIpConfiguration.ts";
 
 import { RouteMap, RouteMapProvider } from "./RouteMap.ts";
 
 import { RoutingIntent, RoutingIntentProvider } from "./RoutingIntent.ts";
 
-import { VirtualHubConnectionPolicy, VirtualHubConnectionPolicyProvider } from "./VirtualHubConnectionPolicy.ts";
+import {
+  VirtualHubConnectionPolicy,
+  VirtualHubConnectionPolicyProvider,
+} from "./VirtualHubConnectionPolicy.ts";
 
 import { BastionHost, BastionHostProvider } from "./BastionHost.ts";
+
+import {
+  ExpressRouteCircuit,
+  ExpressRouteCircuitProvider,
+} from "./ExpressRouteCircuit.ts";
+
+import {
+  ExpressRouteCircuitAuthorization,
+  ExpressRouteCircuitAuthorizationProvider,
+} from "./ExpressRouteCircuitAuthorization.ts";
+
+import {
+  FirewallPolicyIdpsSignatureOverrides,
+  FirewallPolicyIdpsSignatureOverridesProvider,
+} from "./FirewallPolicyIdpsSignatureOverrides.ts";
+
+import {
+  FirewallPolicyKubeSelectorGroup,
+  FirewallPolicyKubeSelectorGroupProvider,
+} from "./FirewallPolicyKubeSelectorGroup.ts";
+
+import { ServiceGateway, ServiceGatewayProvider } from "./ServiceGateway.ts";
+
+import {
+  VirtualNetworkAppliance,
+  VirtualNetworkApplianceProvider,
+} from "./VirtualNetworkAppliance.ts";
+
+import {
+  DdosProtectionPlan,
+  DdosProtectionPlanProvider,
+} from "./DdosProtectionPlan.ts";
+
+import { CustomIpPrefix, CustomIpPrefixProvider } from "./CustomIpPrefix.ts";
+
+import {
+  ExpressRoutePort,
+  ExpressRoutePortProvider,
+} from "./ExpressRoutePort.ts";
+
+import {
+  ExpressRoutePortAuthorization,
+  ExpressRoutePortAuthorizationProvider,
+} from "./ExpressRoutePortAuthorization.ts";
+
+import { ExpressRouteLag, ExpressRouteLagProvider } from "./ExpressRouteLag.ts";
+
+import {
+  InterconnectGroup,
+  InterconnectGroupProvider,
+} from "./InterconnectGroup.ts";
+
+import {
+  SecurityPartnerProvider,
+  SecurityPartnerProviderProvider,
+} from "./SecurityPartnerProvider.ts";
+
+import {
+  NetworkVirtualAppliance,
+  NetworkVirtualApplianceProvider,
+} from "./NetworkVirtualAppliance.ts";
+
+import {
+  NetworkVirtualApplianceConnection,
+  NetworkVirtualApplianceConnectionProvider,
+} from "./NetworkVirtualApplianceConnection.ts";
+
+import {
+  NetworkVirtualApplianceInboundSecurityRule,
+  NetworkVirtualApplianceInboundSecurityRuleProvider,
+} from "./NetworkVirtualApplianceInboundSecurityRule.ts";
+
+import {
+  ExpressRouteCircuitConnection,
+  ExpressRouteCircuitConnectionProvider,
+} from "./ExpressRouteCircuitConnection.ts";
 
 export const resources = [
   AdminRule,
@@ -300,6 +397,23 @@ export const resources = [
   VpnServerConfigurationPolicyGroup,
   VpnSite,
   WebApplicationFirewallPolicy,
+  ExpressRouteCircuit,
+  ExpressRouteCircuitAuthorization,
+  FirewallPolicyIdpsSignatureOverrides,
+  FirewallPolicyKubeSelectorGroup,
+  ServiceGateway,
+  VirtualNetworkAppliance,
+  DdosProtectionPlan,
+  CustomIpPrefix,
+  ExpressRoutePort,
+  ExpressRoutePortAuthorization,
+  ExpressRouteLag,
+  InterconnectGroup,
+  SecurityPartnerProvider,
+  NetworkVirtualAppliance,
+  NetworkVirtualApplianceConnection,
+  NetworkVirtualApplianceInboundSecurityRule,
+  ExpressRouteCircuitConnection,
 ];
 
 export const layers = () =>
@@ -391,5 +505,22 @@ export const layers = () =>
       VpnServerConfigurationPolicyGroupProvider(),
       VpnServerConfigurationProvider(),
       VpnSiteProvider(),
+      ExpressRouteCircuitProvider(),
+      ExpressRouteCircuitAuthorizationProvider(),
+      FirewallPolicyIdpsSignatureOverridesProvider(),
+      FirewallPolicyKubeSelectorGroupProvider(),
+      ServiceGatewayProvider(),
+      VirtualNetworkApplianceProvider(),
+      DdosProtectionPlanProvider(),
+      CustomIpPrefixProvider(),
+      ExpressRoutePortProvider(),
+      ExpressRoutePortAuthorizationProvider(),
+      ExpressRouteLagProvider(),
+      InterconnectGroupProvider(),
+      SecurityPartnerProviderProvider(),
+      NetworkVirtualApplianceProvider(),
+      NetworkVirtualApplianceConnectionProvider(),
+      NetworkVirtualApplianceInboundSecurityRuleProvider(),
+      ExpressRouteCircuitConnectionProvider(),
     ),
   );

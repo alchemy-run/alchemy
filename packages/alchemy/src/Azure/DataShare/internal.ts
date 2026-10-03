@@ -1,5 +1,6 @@
 import * as datashare from "@distilled.cloud/azure/datashare";
 import * as Effect from "effect/Effect";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 
@@ -68,4 +69,35 @@ export const kindProperties = (value: { properties?: unknown }) =>
 export const stringProp = (bag: Record<string, unknown>, key: string) => {
   const value = bag[key];
   return typeof value === "string" ? value : undefined;
+};
+
+const canonical = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(canonical)
+    : typeof value === "object" && value !== null
+      ? Object.keys(value)
+          .sort()
+          .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+          .map((key) => [key, canonical((value as Record<string, unknown>)[key])])
+      : value;
+
+/**
+ * Whether an immutable input changed. An unresolved input (an output of an
+ * upstream resource being created or replaced) counts as changed: stable
+ * upstream attributes are resolved at plan time.
+ */
+export const immutableChanged = (
+  next: unknown,
+  prev: unknown,
+  options: { caseInsensitive?: boolean } = {},
+) => {
+  if (!isResolved(next)) return true;
+  if (
+    options.caseInsensitive &&
+    typeof next === "string" &&
+    typeof prev === "string"
+  ) {
+    return next.toLowerCase() !== prev.toLowerCase();
+  }
+  return JSON.stringify(canonical(next)) !== JSON.stringify(canonical(prev));
 };

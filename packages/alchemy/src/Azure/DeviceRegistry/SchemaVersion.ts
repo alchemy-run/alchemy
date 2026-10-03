@@ -223,25 +223,27 @@ export const SchemaVersionProvider = () =>
         (news.description !== undefined &&
           observed.properties?.description !== news.description)
       ) {
-        yield* deviceregistry.SchemaVersionsCreateOrReplace({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          schemaRegistryName: schemaRegistry,
-          schemaName: schema,
-          schemaVersionName: version,
-          properties: {
-            schemaContent: news.schemaContent,
-            description: news.description,
-          },
-        }).pipe(
-          // A fresh role assignment for the registry's identity on the
-          // storage container takes a few minutes to propagate.
-          Effect.retry({
-            while: (e) => e._tag === "SchemaRegistryStorageAccessDenied",
-            schedule: Schedule.spaced("10 seconds"),
-            times: 30,
-          }),
-        );
+        yield* deviceregistry
+          .SchemaVersionsCreateOrReplace({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            schemaRegistryName: schemaRegistry,
+            schemaName: schema,
+            schemaVersionName: version,
+            properties: {
+              schemaContent: news.schemaContent,
+              description: news.description,
+            },
+          })
+          .pipe(
+            // A fresh role assignment for the registry's identity on the
+            // storage container takes a few minutes to propagate.
+            Effect.retry({
+              while: (e) => e._tag === "SchemaRegistryStorageAccessDenied",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+          );
       }
 
       const fresh = yield* waitForProvisioned(

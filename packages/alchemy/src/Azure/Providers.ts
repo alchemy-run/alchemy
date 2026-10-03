@@ -10,22 +10,31 @@ import * as Environment from "./Environment.ts";
 import type { ServiceProviders } from "./ServiceProviders.ts";
 // One import + one `services` entry per service, sorted. Each service owns
 // its `<Service>/Providers.ts`; never list resources here.
+import * as ApiCenterProviders from "./ApiCenter/Providers.ts";
 import * as ApiManagementProviders from "./ApiManagement/Providers.ts";
 import * as AppConfigurationProviders from "./AppConfiguration/Providers.ts";
 import * as AuthorizationProviders from "./Authorization/Providers.ts";
 import * as AutomationProviders from "./Automation/Providers.ts";
 import * as AzureStackHCIProviders from "./AzureStackHCI/Providers.ts";
+import * as BatchProviders from "./Batch/Providers.ts";
 import * as CdnProviders from "./Cdn/Providers.ts";
 import * as CognitiveServicesProviders from "./CognitiveServices/Providers.ts";
+import * as CommunicationProviders from "./Communication/Providers.ts";
 import * as ComputeProviders from "./Compute/Providers.ts";
+import * as ConfluentProviders from "./Confluent/Providers.ts";
 import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
 import * as ContainerInstanceProviders from "./ContainerInstance/Providers.ts";
 import * as ContainerRegistryProviders from "./ContainerRegistry/Providers.ts";
 import * as ContainerServiceProviders from "./ContainerService/Providers.ts";
 import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
+import * as CosmosDBPostgreSQLProviders from "./CosmosDBPostgreSQL/Providers.ts";
 import * as DataFactoryProviders from "./DataFactory/Providers.ts";
+import * as DataProtectionProviders from "./DataProtection/Providers.ts";
 import * as DataShareProviders from "./DataShare/Providers.ts";
 import * as DataReplicationProviders from "./DataReplication/Providers.ts";
+import * as DashboardProviders from "./Dashboard/Providers.ts";
+import * as DatabaseWatcherProviders from "./DatabaseWatcher/Providers.ts";
+import * as DatadogProviders from "./Datadog/Providers.ts";
 import * as DesktopVirtualizationProviders from "./DesktopVirtualization/Providers.ts";
 import * as DevCenterProviders from "./DevCenter/Providers.ts";
 import * as DevTestLabsProviders from "./DevTestLabs/Providers.ts";
@@ -33,8 +42,13 @@ import * as DeviceRegistryProviders from "./DeviceRegistry/Providers.ts";
 import * as DiscoveryProviders from "./Discovery/Providers.ts";
 import * as DnsResolverProviders from "./DnsResolver/Providers.ts";
 import * as EdgeProviders from "./Edge/Providers.ts";
+import * as ElasticProviders from "./Elastic/Providers.ts";
+import * as ElasticSanProviders from "./ElasticSan/Providers.ts";
 import * as EventGridProviders from "./EventGrid/Providers.ts";
 import * as EventHubProviders from "./EventHub/Providers.ts";
+import * as GrafanaProviders from "./Grafana/Providers.ts";
+import * as HDInsightProviders from "./HDInsight/Providers.ts";
+import * as HybridComputeProviders from "./HybridCompute/Providers.ts";
 import * as HybridNetworkProviders from "./HybridNetwork/Providers.ts";
 import * as IoTOperationsProviders from "./IoTOperations/Providers.ts";
 import * as LogAnalyticsProviders from "./LogAnalytics/Providers.ts";
@@ -50,6 +64,8 @@ import * as MySQLProviders from "./MySQL/Providers.ts";
 import * as NetAppProviders from "./NetApp/Providers.ts";
 import * as NetworkProviders from "./Network/Providers.ts";
 import * as NetworkCloudProviders from "./NetworkCloud/Providers.ts";
+import * as NotificationHubsProviders from "./NotificationHubs/Providers.ts";
+import * as PeeringProviders from "./Peering/Providers.ts";
 import * as PolicyProviders from "./Policy/Providers.ts";
 import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
 import * as PrivateDnsProviders from "./PrivateDns/Providers.ts";
@@ -60,30 +76,49 @@ import * as ResourcesProviders from "./Resources/Providers.ts";
 import * as SearchProviders from "./Search/Providers.ts";
 import * as SecurityInsightsProviders from "./SecurityInsights/Providers.ts";
 import * as ServiceBusProviders from "./ServiceBus/Providers.ts";
+import * as ServiceFabricProviders from "./ServiceFabric/Providers.ts";
+import * as ServiceFabricClassicProviders from "./ServiceFabricClassic/Providers.ts";
+import * as ServiceNetworkingProviders from "./ServiceNetworking/Providers.ts";
+import * as SignalRProviders from "./SignalR/Providers.ts";
 import * as SiteRecoveryProviders from "./SiteRecovery/Providers.ts";
 import * as SqlProviders from "./Sql/Providers.ts";
 import * as StorageProviders from "./Storage/Providers.ts";
+import * as StorageMoverProviders from "./StorageMover/Providers.ts";
+import * as StorageSyncProviders from "./StorageSync/Providers.ts";
+import * as StreamAnalyticsProviders from "./StreamAnalytics/Providers.ts";
 import * as SynapseProviders from "./Synapse/Providers.ts";
+import * as VirtualEnclavesProviders from "./VirtualEnclaves/Providers.ts";
 import * as VMwareProviders from "./VMware/Providers.ts";
 import * as WebProviders from "./Web/Providers.ts";
+import * as WebPubSubProviders from "./WebPubSub/Providers.ts";
+import * as WorkloadsProviders from "./Workloads/Providers.ts";
 
 const services: ReadonlyArray<ServiceProviders> = [
+  ApiCenterProviders,
   ApiManagementProviders,
   AppConfigurationProviders,
   AuthorizationProviders,
   AutomationProviders,
   AzureStackHCIProviders,
+  BatchProviders,
   CdnProviders,
   CognitiveServicesProviders,
+  CommunicationProviders,
   ComputeProviders,
+  ConfluentProviders,
   ContainerAppsProviders,
   ContainerInstanceProviders,
   ContainerRegistryProviders,
   ContainerServiceProviders,
   CosmosDBProviders,
+  CosmosDBPostgreSQLProviders,
   DataFactoryProviders,
+  DataProtectionProviders,
   DataShareProviders,
   DataReplicationProviders,
+  DashboardProviders,
+  DatabaseWatcherProviders,
+  DatadogProviders,
   DesktopVirtualizationProviders,
   DevCenterProviders,
   DevTestLabsProviders,
@@ -91,8 +126,13 @@ const services: ReadonlyArray<ServiceProviders> = [
   DiscoveryProviders,
   DnsResolverProviders,
   EdgeProviders,
+  ElasticProviders,
+  ElasticSanProviders,
   EventGridProviders,
   EventHubProviders,
+  GrafanaProviders,
+  HDInsightProviders,
+  HybridComputeProviders,
   HybridNetworkProviders,
   IoTOperationsProviders,
   LogAnalyticsProviders,
@@ -108,6 +148,8 @@ const services: ReadonlyArray<ServiceProviders> = [
   NetAppProviders,
   NetworkProviders,
   NetworkCloudProviders,
+  NotificationHubsProviders,
+  PeeringProviders,
   PolicyProviders,
   PostgreSQLProviders,
   PrivateDnsProviders,
@@ -118,12 +160,22 @@ const services: ReadonlyArray<ServiceProviders> = [
   SearchProviders,
   SecurityInsightsProviders,
   ServiceBusProviders,
+  ServiceFabricProviders,
+  ServiceFabricClassicProviders,
+  ServiceNetworkingProviders,
+  SignalRProviders,
   SiteRecoveryProviders,
   SqlProviders,
   StorageProviders,
+  StorageMoverProviders,
+  StorageSyncProviders,
+  StreamAnalyticsProviders,
   SynapseProviders,
+  VirtualEnclavesProviders,
   VMwareProviders,
   WebProviders,
+  WebPubSubProviders,
+  WorkloadsProviders,
 ];
 
 export class Providers extends Provider.ProviderCollection<Providers>()(

@@ -166,7 +166,13 @@ const toAttrs = (
 
 export const NamespaceProvider = () =>
   Provider.succeed(Namespace, {
-    stables: ["namespaceName", "namespaceId", "resourceGroup", "location", "uuid"],
+    stables: [
+      "namespaceName",
+      "namespaceId",
+      "resourceGroup",
+      "location",
+      "uuid",
+    ],
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
@@ -193,7 +199,8 @@ export const NamespaceProvider = () =>
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
-        (news.name !== undefined && !sameName(news.name, output.namespaceName)) ||
+        (news.name !== undefined &&
+          !sameName(news.name, output.namespaceName)) ||
         (news.location !== undefined &&
           !sameLocation(news.location, output.location))
       ) {
@@ -307,7 +314,11 @@ export const NamespaceProvider = () =>
       );
       yield* waitUntilGone(
         `device registry namespace ${output.namespaceName}`,
-        getNamespace(subscriptionId, output.resourceGroup, output.namespaceName),
+        getNamespace(
+          subscriptionId,
+          output.resourceGroup,
+          output.namespaceName,
+        ),
         DEVICE_REGISTRY_WAIT,
       );
     }),

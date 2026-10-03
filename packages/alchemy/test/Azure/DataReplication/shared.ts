@@ -15,7 +15,9 @@ export const tags = [
   "live",
 ];
 
-export const LOCATION = "eastus";
+// The eastus Microsoft.DataReplication endpoint hangs vault PUTs until the
+// ARM gateway times out (503); westus2 and centralus answer in seconds.
+export const LOCATION = "westus2";
 
 export const subscription = Effect.map(
   Azure.AzureEnvironment.current,

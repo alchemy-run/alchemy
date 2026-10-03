@@ -339,10 +339,21 @@ export const StorageSyncServiceProvider = () =>
             : undefined,
           properties: propsChanged ? properties : undefined,
         });
+        // The PATCH is applied asynchronously: wait until the observed
+        // service reflects it.
         observed = yield* waitForProvisioned(
           label,
           get,
-          (service) => service.properties?.provisioningState,
+          (service) =>
+            service.properties?.incomingTrafficPolicy ===
+              incomingTrafficPolicy &&
+            (news.useIdentity === undefined ||
+              (service.properties?.useIdentity ?? false) ===
+                news.useIdentity) &&
+            !identityDiffers(service.identity, news.identity) &&
+            !tagsDiffer(service.tags, tags)
+              ? service.properties?.provisioningState
+              : "Updating",
           { interval: "5 seconds", times: 60 },
         );
       }

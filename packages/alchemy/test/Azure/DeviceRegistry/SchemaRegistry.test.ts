@@ -82,9 +82,7 @@ test.provider(
       expect(replaced.registry.namespace).toEqual(
         `${registry.namespace.slice(0, 28)}-ns`,
       );
-      expect(yield* waitGone(get(registry.schemaRegistryName))).toEqual(
-        "gone",
-      );
+      expect(yield* waitGone(get(registry.schemaRegistryName))).toEqual("gone");
 
       yield* stack.destroy();
       expect(

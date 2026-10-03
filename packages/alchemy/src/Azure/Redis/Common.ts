@@ -1,7 +1,13 @@
+import * as redis from "@distilled.cloud/azure/redis";
 import * as redisenterprise from "@distilled.cloud/azure/redisenterprise";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
+import {
+  orUndefinedIfNotFound,
+  stackAndStage,
+  waitForProvisioned,
+} from "../Arm.ts";
 
 /**
  * Cluster name: letters, digits, and single hyphens. Azure caps the name
@@ -98,3 +104,104 @@ export const readiness = (value: {
 };
 
 export const lower = (value: string | undefined) => value?.toLowerCase();
+
+/**
+ * Azure Cache for Redis (`Microsoft.Cache/redis`) name: 1-63 letters,
+ * digits, and single hyphens, starting and ending with a letter or digit.
+ * It forms the globally unique host name `<name>.redis.cache.windows.net`.
+ */
+export const createCacheName = Effect.fn(function* (id: string) {
+  const name = yield* createPhysicalName({
+    id,
+    maxLength: 63,
+    lowercase: true,
+    delimiter: "-",
+  });
+  return name
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+});
+
+/**
+ * Child names that only allow letters, digits, and underscores (firewall
+ * rules) or that we keep alphanumeric (access policies).
+ */
+export const createAlphanumericName = Effect.fn(function* (
+  id: string,
+  maxLength: number,
+) {
+  const name = yield* createPhysicalName({
+    id,
+    maxLength,
+    lowercase: true,
+    delimiter: "",
+  });
+  return name.replace(/[^a-z0-9]/g, "");
+});
+
+export const getCache = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  name: string,
+) =>
+  orUndefinedIfNotFound(
+    redis.GetRedis({ subscriptionId, resourceGroupName, name }),
+  );
+
+/**
+ * Cache children have no tags; they belong to the stage that owns their
+ * cache.
+ */
+export const cacheOwnedByStage = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  cacheName: string,
+) {
+  const observed = yield* getCache(subscriptionId, resourceGroupName, cacheName);
+  const { stack, stage } = yield* stackAndStage;
+  return (
+    observed?.tags?.["alchemy::stack"] === stack &&
+    observed?.tags?.["alchemy::stage"] === stage
+  );
+});
+
+/**
+ * A cache processes one update at a time (scaling, configuration, access
+ * policy changes, linking); further writes to it or its children fail with
+ * `Conflict` ("busy processing a previous update request"). Retry them,
+ * bounded.
+ */
+export const whileCacheBusy = {
+  while: (e: { readonly _tag: string }) => e._tag === "ResourceConflict",
+  schedule: Schedule.spaced("15 seconds"),
+  times: 40,
+} as const;
+
+/** Budget for a cache to settle after create, scale, or link (up to ~45 min). */
+export const CACHE_BUDGET = { interval: "45 seconds", times: 60 } as const;
+
+/** Wait until the cache accepts the next update. */
+export const waitForCacheIdle = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  name: string,
+) =>
+  waitForProvisioned(
+    `redis cache ${name}`,
+    getCache(subscriptionId, resourceGroupName, name),
+    (cache) => cache.properties.provisioningState,
+    CACHE_BUDGET,
+  );
+
+/** Like `waitForCacheIdle`, but a missing cache counts as idle. */
+export const waitForCacheIdleIfExists = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  name: string,
+) =>
+  Effect.gen(function* () {
+    const cache = yield* getCache(subscriptionId, resourceGroupName, name);
+    if (cache === undefined) return;
+    yield* waitForCacheIdle(subscriptionId, resourceGroupName, name);
+  });

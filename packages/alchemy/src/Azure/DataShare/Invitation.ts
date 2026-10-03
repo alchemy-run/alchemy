@@ -1,7 +1,6 @@
 import * as datashare from "@distilled.cloud/azure/datashare";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
@@ -12,7 +11,11 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { accountOwnedByStack, createChildName, sameName } from "./internal.ts";
+import {
+  accountOwnedByStack,
+  createChildName,
+  immutableChanged,
+} from "./internal.ts";
 
 export interface InvitationProps {
   /** Resource group of the Data Share account. Changing it replaces the invitation. */
@@ -167,20 +170,28 @@ export const InvitationProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      if (!isResolved(news) || output === undefined) return undefined;
+      if (output === undefined) return undefined;
+      // Every prop is immutable; an unresolved one comes from an upstream
+      // resource being created or replaced.
+      const next = news as unknown as Record<keyof InvitationProps, unknown>;
+      const ci = { caseInsensitive: true };
       if (
-        !sameName(news.resourceGroup, output.resourceGroup) ||
-        !sameName(news.account, output.accountName) ||
-        !sameName(news.share, output.shareName) ||
-        (news.name !== undefined &&
-          !sameName(news.name, output.invitationName)) ||
+        immutableChanged(next.resourceGroup, output.resourceGroup, ci) ||
+        immutableChanged(next.account, output.accountName, ci) ||
+        immutableChanged(next.share, output.shareName, ci) ||
+        (next.name !== undefined &&
+          immutableChanged(next.name, output.invitationName, ci)) ||
         (olds !== undefined &&
-          (news.targetEmail !== olds.targetEmail ||
-            news.targetActiveDirectoryId !== olds.targetActiveDirectoryId ||
-            news.targetObjectId !== olds.targetObjectId ||
-            news.expirationDate !== olds.expirationDate))
+          (immutableChanged(next.targetEmail, olds.targetEmail) ||
+            immutableChanged(
+              next.targetActiveDirectoryId,
+              olds.targetActiveDirectoryId,
+            ) ||
+            immutableChanged(next.targetObjectId, olds.targetObjectId) ||
+            immutableChanged(next.expirationDate, olds.expirationDate)))
       ) {
-        return { action: "replace" } as const;
+        // A share holds one pending invitation per recipient.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

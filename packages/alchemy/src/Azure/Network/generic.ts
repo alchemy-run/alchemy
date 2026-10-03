@@ -107,6 +107,14 @@ export interface NetworkResourceSpec<
     body: B,
   ) => Op<unknown>;
   readonly del: (subscriptionId: string, path: NetworkPath) => Op<unknown>;
+  /**
+   * Teardown that must finish before the DELETE (e.g. deprovisioning a
+   * BYOIP range). Must tolerate an already-missing resource.
+   */
+  readonly beforeDelete?: (
+    subscriptionId: string,
+    path: NetworkPath,
+  ) => Op<unknown>;
   /** Tag-only PATCH, used when only tags drifted. @default the full PUT */
   readonly updateTags?: (
     subscriptionId: string,
@@ -446,6 +454,9 @@ export const networkProvider =
           name: o[spec.nameAttr] as string,
         };
         for (const parent of parents) path[parent] = o[parent] as string;
+        if (spec.beforeDelete !== undefined) {
+          yield* spec.beforeDelete(subscriptionId, path as NetworkPath);
+        }
         yield* ignoreNotFound(
           spec.del(subscriptionId, path as NetworkPath),
         ).pipe(

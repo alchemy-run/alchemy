@@ -37,6 +37,21 @@ export const isVaultOwnedByStack = Effect.fn(function* (
   return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
 });
 
+/** Whether the fabric is tagged as owned by the current stack and stage. */
+export const isFabricOwnedByStack = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  fabricName: string,
+) {
+  const fabric = yield* orUndefinedIfNotFound(
+    dr.GetFabric({ subscriptionId, resourceGroupName, fabricName }),
+  );
+  if (fabric === undefined) return false;
+  const { stack, stage } = yield* stackAndStage;
+  const tags = tagRecord(fabric.tags);
+  return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
+});
+
 /**
  * Vault children cannot be tagged: they are owned when they are already in
  * state or their vault is tagged for the current stack and stage.

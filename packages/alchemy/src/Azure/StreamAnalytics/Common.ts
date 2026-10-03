@@ -1,4 +1,5 @@
 import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
@@ -45,7 +46,9 @@ const ownedByStage = Effect.fn(function* (
   tags: Record<string, string | undefined> | undefined,
 ) {
   const { stack, stage } = yield* stackAndStage;
-  return tags?.["alchemy::stack"] === stack && tags?.["alchemy::stage"] === stage;
+  return (
+    tags?.["alchemy::stack"] === stack && tags?.["alchemy::stage"] === stage
+  );
 });
 
 /**
@@ -58,7 +61,11 @@ export const jobOwnedByStage = Effect.fn(function* (
   resourceGroupName: string,
   jobName: string,
 ) {
-  const job = yield* getStreamingJob(subscriptionId, resourceGroupName, jobName);
+  const job = yield* getStreamingJob(
+    subscriptionId,
+    resourceGroupName,
+    jobName,
+  );
   return yield* ownedByStage(job?.tags);
 });
 
@@ -159,3 +166,27 @@ export interface TypedDocument {
 
 export const lower = (value: string | undefined) =>
   value?.toLowerCase().replace(/\s/g, "");
+
+export class ResourceGroupNameTooLong extends Data.TaggedError(
+  "Azure.StreamAnalytics.ResourceGroupNameTooLong",
+)<{
+  readonly resourceGroup: string;
+  readonly message: string;
+}> {}
+
+/**
+ * Stream Analytics rejects any request under a resource group whose name
+ * is longer than 80 characters with a 404 "HTTP Request has an invalid
+ * URL", even though ARM allows 90. Fail with a clear error instead.
+ */
+export const MAX_RESOURCE_GROUP_LENGTH = 80;
+
+export const checkResourceGroup = (resourceGroup: string) =>
+  resourceGroup.length > MAX_RESOURCE_GROUP_LENGTH
+    ? Effect.fail(
+        new ResourceGroupNameTooLong({
+          resourceGroup,
+          message: `Stream Analytics only supports resource group names up to ${MAX_RESOURCE_GROUP_LENGTH} characters; '${resourceGroup}' has ${resourceGroup.length}`,
+        }),
+      )
+    : Effect.void;

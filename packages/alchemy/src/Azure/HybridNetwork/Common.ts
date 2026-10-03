@@ -10,8 +10,11 @@ export const NAMESPACE = "Microsoft.HybridNetwork";
  * Generate an AOSM resource name: 1-64 letters, digits, `_`, and `-`,
  * starting with a letter or digit.
  */
-export const createHybridNetworkName = Effect.fn(function* (id: string) {
-  const name = yield* createPhysicalName({ id, maxLength: 64 });
+export const createHybridNetworkName = Effect.fn(function* (
+  id: string,
+  maxLength = 64,
+) {
+  const name = yield* createPhysicalName({ id, maxLength });
   return name
     .replace(/[^a-zA-Z0-9_-]/g, "-")
     .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, "");
