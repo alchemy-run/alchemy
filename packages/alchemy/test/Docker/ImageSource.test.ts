@@ -17,32 +17,60 @@ describe("Docker image source", {}, () => {
     "forwards the requested platform when publishing a built image",
     () => {
       const runCalls: ReadonlyArray<string>[] = [];
-      const pushCalls: Array<string | undefined> = [];
+      const buildCalls: Array<{ platform?: string }> = [];
+      const pushCalls: Array<{ platform?: string; credentialed: boolean }> = [];
       const output: CommandOutput = {
         exitCode: ChildProcessSpawner.ExitCode(0),
         stdout: "",
         stderr: "",
       };
-      const docker = {
-        run: (args: Array<string>) =>
-          Effect.sync(() => {
+      type ImageSourceDocker = Pick<
+        Docker["Service"],
+        "run" | "materialize"
+      > & {
+        image: Pick<Docker["Service"]["image"], "build" | "push">;
+      };
+      const docker: ImageSourceDocker = {
+        run: (args) =>
+          Effect.gen(function* () {
+            const expectedPrefix = [
+              "image",
+              "push",
+              "--platform",
+              "linux/arm64",
+            ];
+            if (
+              args.length !== expectedPrefix.length + 1 ||
+              args.some(
+                (arg, index) =>
+                  index < expectedPrefix.length &&
+                  arg !== expectedPrefix[index],
+              )
+            ) {
+              return yield* Effect.die(
+                new Error(`Unexpected Docker.run call: ${args.join(" ")}`),
+              );
+            }
             runCalls.push(args);
             return output;
           }),
         materialize: () => Effect.succeed(undefined),
         image: {
-          build: () => Effect.succeed(output),
-          push: (
-            _ref: string,
-            _credentials: RegistryCredentials,
-            platform?: string,
-          ) =>
+          build: (options) =>
             Effect.sync(() => {
-              pushCalls.push(platform);
+              buildCalls.push({ platform: options.platform });
+              return output;
+            }),
+          push: (_ref, credentials, platform) =>
+            Effect.sync(() => {
+              pushCalls.push({
+                platform,
+                credentialed: credentials.username === "publisher",
+              });
               return output;
             }),
         },
-      } as unknown as typeof Docker.Service;
+      };
       const credentials: RegistryCredentials = {
         server: "registry.example",
         username: "publisher",
@@ -71,7 +99,7 @@ describe("Docker image source", {}, () => {
         yield* images.resolve(options, target(credentials));
         yield* images.resolve(options, target(undefined));
       }).pipe(
-        Effect.provideService(Docker, docker),
+        Effect.provideService(Docker, docker as Docker["Service"]),
         Effect.provideService(AlchemyContext, {
           dotAlchemy: ".alchemy",
           dev: false,
@@ -91,6 +119,10 @@ describe("Docker image source", {}, () => {
       return resolve.pipe(
         Effect.tap(() =>
           Effect.sync(() => {
+            expect(buildCalls).toEqual([
+              { platform: "linux/arm64" },
+              { platform: "linux/arm64" },
+            ]);
             expect(runCalls).toHaveLength(1);
             expect(runCalls[0]).toEqual([
               "image",
@@ -99,7 +131,9 @@ describe("Docker image source", {}, () => {
               "linux/arm64",
               expect.any(String),
             ]);
-            expect(pushCalls).toEqual(["linux/arm64"]);
+            expect(pushCalls).toEqual([
+              { platform: "linux/arm64", credentialed: true },
+            ]);
           }),
         ),
       );
