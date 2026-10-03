@@ -882,18 +882,22 @@ export const DeploymentProvider = () =>
           if (!connection) return;
           const adapter = yield* findClusterAdapter(connection.auth.kind);
 
-          // Delete the in-cluster objects. If the cluster is gone (or
-          // transiently unreachable) skip them — cluster-scoped state dies
-          // with the cluster — and still clean up the adapter-owned cloud
-          // resources that outlive it (image repository, identity role).
+          // ClusterNotFound means the control plane is gone and took its
+          // objects with it. Auth and HTTP failures do not: skip only the
+          // missing cluster, then still clean up adapter-owned cloud
+          // resources (image repository, identity role).
           const transport = yield* adapter
             .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
+                Effect.succeed(undefined),
+              ),
+            );
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport,
               objects: output.kubernetesObjects ?? [],
-            }).pipe(Effect.catch(() => Effect.void));
+            });
             // A LoadBalancer Service carries the cloud controller's cleanup
             // finalizer; wait for it so the cloud load balancer is gone
             // before the cluster (and its controller) can be deleted —
@@ -902,10 +906,7 @@ export const DeploymentProvider = () =>
               (output.kubernetesObjects ?? []).filter(
                 (object) => object.kind === "Service",
               ),
-              (service) =>
-                waitForServiceGone(transport, service).pipe(
-                  Effect.catch(() => Effect.void),
-                ),
+              (service) => waitForServiceGone(transport, service),
               { discard: true },
             );
           }

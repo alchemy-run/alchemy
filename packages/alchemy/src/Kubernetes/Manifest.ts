@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { Drifted } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -14,6 +15,7 @@ import {
   readObject,
   KubernetesApiError,
 } from "./internal/client.ts";
+import { appliedObjectsMatch } from "./internal/declared.ts";
 import type {
   KubernetesObjectDefinition,
   KubernetesObjectRef,
@@ -210,7 +212,7 @@ export const ManifestProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ output, olds }) {
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
@@ -228,7 +230,17 @@ export const ManifestProvider = () =>
           if (!observed) return undefined;
           const uid = (observed as { metadata?: { uid?: string } }).metadata
             ?.uid;
-          return { ...output, uid };
+          const attrs = { ...output, uid };
+          const manifest = olds?.manifest;
+          if (!manifest) return attrs;
+          const preview = yield* applyObject({
+            transport,
+            object: yield* toObjectDefinition(manifest),
+            dryRun: true,
+          });
+          return appliedObjectsMatch(observed, preview, manifest)
+            ? attrs
+            : Drifted(attrs);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const connection = toConnection(news.cluster);
@@ -274,11 +286,9 @@ export const ManifestProvider = () =>
             ),
           );
           if (!transport) return;
-          yield* deleteObject({ transport, object: output.ref }).pipe(
-            // Tolerate any residual API failure so delete stays idempotent
-            // (e.g. the CRD backing an object was removed before the object).
-            Effect.catch(() => Effect.void),
-          );
+          // 404 (including a removed CRD's discovery 404) is already success.
+          // 403/5xx must surface: the object is still there.
+          yield* deleteObject({ transport, object: output.ref });
         }),
       };
     }),

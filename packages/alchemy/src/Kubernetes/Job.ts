@@ -724,17 +724,22 @@ export const JobProvider = () =>
           if (!connection) return;
           const adapter = yield* findClusterAdapter(connection.auth.kind);
 
-          // Delete the in-cluster objects; skip when the cluster is gone
-          // (cluster-scoped state dies with it) and still clean up the
-          // adapter-owned cloud resources that outlive it.
+          // ClusterNotFound means the control plane is gone and took its
+          // objects with it. Auth and HTTP failures do not: skip only the
+          // missing cluster, then still clean up adapter-owned cloud
+          // resources (image repository, identity role).
           const transport = yield* adapter
             .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
+                Effect.succeed(undefined),
+              ),
+            );
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport,
               objects: output.kubernetesObjects ?? [],
-            }).pipe(Effect.catch(() => Effect.void));
+            });
           }
 
           if (adapter.identity) {

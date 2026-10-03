@@ -12,8 +12,10 @@
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as https from "node:https";
+import { isPlainObject, unwrapRedacted } from "../../Util/data.ts";
 import {
   findClusterAdapter,
   type ClusterTransport,
@@ -47,6 +49,54 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
 
 const fieldManager = "alchemy";
 
+/** Deadline for auth-header minting and for each HTTP attempt. */
+const requestTimeout = "10 seconds";
+
+// ponytail: secrets shorter than 4 characters are not scrubbed. replaceAll
+// on a tiny needle shreds unrelated JSON. Upgrade path: a structured redaction
+// pass if a provider ever stores sub-4-character secrets.
+const minScrubLength = 4;
+
+export const collectRedactedSecrets = (
+  value: unknown,
+  out: string[] = [],
+): string[] => {
+  if (Redacted.isRedacted(value)) {
+    const inner = Redacted.value(value);
+    if (typeof inner === "string") {
+      if (inner.length >= minScrubLength) out.push(inner);
+    } else {
+      collectRedactedSecrets(inner, out);
+    }
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectRedactedSecrets(item, out);
+    return out;
+  }
+  if (isPlainObject(value)) {
+    for (const item of Object.values(value)) collectRedactedSecrets(item, out);
+  }
+  return out;
+};
+
+export const scrubSecrets = (
+  text: string,
+  secrets: readonly string[],
+): string => {
+  let out = text;
+  for (const secret of secrets) {
+    const forms = [secret, Buffer.from(secret).toString("base64")];
+    const escaped = JSON.stringify(secret).slice(1, -1);
+    if (escaped !== secret) forms.push(escaped);
+    for (const form of forms) {
+      if (form.length >= minScrubLength)
+        out = out.replaceAll(form, "<redacted>");
+    }
+  }
+  return out;
+};
+
 /**
  * Resolve the {@link ClusterTransport} for a connection through its
  * registered adapter.
@@ -61,108 +111,163 @@ const requestJson = Effect.fn(function* ({
   method,
   path,
   body,
+  secrets,
 }: {
   transport: ClusterTransport;
   method: string;
   path: string;
   body?: Record<string, unknown>;
+  /** Plaintext already unwrapped upstream (Helm render). Scrub these too. */
+  secrets?: readonly string[];
 }) {
-  const headers = yield* transport.headers;
+  // Outside the attempt retry: a hung token mint must not be retried as
+  // if it were a refused connection.
+  const headers = yield* transport.headers.pipe(Effect.timeout(requestTimeout));
   const url = new URL(path, transport.endpoint);
-  const payload = body ? JSON.stringify(body) : undefined;
+  const redactions = yield* Effect.sync(() => [
+    ...(body ? collectRedactedSecrets(body) : []),
+    ...(secrets ?? []),
+  ]);
+  // JSON.stringify(Redacted) emits the display placeholder. Unwrap only at
+  // the wire so plans and state keep the wrapper.
+  const payload = body
+    ? yield* Effect.sync(() => JSON.stringify(unwrapRedacted(body)))
+    : undefined;
 
-  return yield* Effect.tryPromise({
-    try: () =>
-      new Promise<unknown>((resolve, reject) => {
-        const request = https.request(
-          {
-            protocol: url.protocol,
-            hostname: url.hostname,
-            port: url.port || 443,
-            path: `${url.pathname}${url.search}`,
-            method,
-            headers: {
-              ...headers,
-              Accept: "application/json",
-              ...(payload
-                ? {
-                    "Content-Type": "application/apply-patch+yaml",
-                    "Content-Length": Buffer.byteLength(payload),
-                  }
-                : {}),
-            },
-            ...(transport.certificateAuthorityData
+  return yield* Effect.callback<unknown, KubernetesApiError | Error>(
+    (resume, signal) => {
+      let settled = false;
+      const finish = (
+        effect: Effect.Effect<unknown, KubernetesApiError | Error>,
+      ) => {
+        if (settled || signal.aborted) return;
+        settled = true;
+        resume(effect);
+      };
+      const request = https.request(
+        {
+          signal,
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || 443,
+          path: `${url.pathname}${url.search}`,
+          method,
+          headers: {
+            ...headers,
+            Accept: "application/json",
+            ...(payload
               ? {
-                  ca: Buffer.from(
-                    transport.certificateAuthorityData,
-                    "base64",
-                  ).toString("utf8"),
+                  "Content-Type": "application/apply-patch+yaml",
+                  "Content-Length": Buffer.byteLength(payload),
                 }
-              : {}),
-            ...(transport.clientCert
-              ? {
-                  cert: transport.clientCert.certificate,
-                  key: transport.clientCert.key,
-                }
-              : {}),
-            ...(transport.insecureSkipTlsVerify
-              ? { rejectUnauthorized: false }
               : {}),
           },
-          (response) => {
-            const chunks: Buffer[] = [];
-            response.on("data", (chunk) => {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            });
-            response.on("end", () => {
-              const responseBody = Buffer.concat(chunks).toString("utf8");
-              const statusCode = response.statusCode ?? 500;
+          ...(transport.certificateAuthorityData
+            ? {
+                ca: Buffer.from(
+                  transport.certificateAuthorityData,
+                  "base64",
+                ).toString("utf8"),
+              }
+            : {}),
+          ...(transport.clientCert
+            ? {
+                cert: transport.clientCert.certificate,
+                key: transport.clientCert.key,
+              }
+            : {}),
+          ...(transport.insecureSkipTlsVerify
+            ? { rejectUnauthorized: false }
+            : {}),
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          response.on("error", (error) => {
+            finish(Effect.fail(error));
+          });
+          response.on("aborted", () => {
+            finish(
+              Effect.fail(
+                new Error(`Kubernetes ${method} ${path} response aborted`),
+              ),
+            );
+          });
+          response.on("end", () => {
+            const rawBody = Buffer.concat(chunks).toString("utf8");
+            const statusCode = response.statusCode ?? 500;
 
-              if (statusCode < 200 || statusCode >= 300) {
-                reject(
+            if (statusCode < 200 || statusCode >= 300) {
+              // Error bodies can echo the request. Scrub only failures —
+              // a successful dry-run is the object we compare for drift.
+              const responseBody = scrubSecrets(rawBody, redactions);
+              finish(
+                Effect.fail(
                   new KubernetesApiError({
                     method,
                     path,
                     statusCode,
                     body: responseBody,
                   }),
-                );
-                return;
-              }
+                ),
+              );
+              return;
+            }
 
-              if (!responseBody.trim()) {
-                resolve(undefined);
-                return;
-              }
+            const responseBody = rawBody;
 
-              try {
-                resolve(JSON.parse(responseBody));
-              } catch {
-                resolve(responseBody);
-              }
-            });
-          },
+            if (!responseBody.trim()) {
+              finish(Effect.succeed(undefined));
+              return;
+            }
+
+            try {
+              finish(Effect.succeed(JSON.parse(responseBody)));
+            } catch {
+              finish(Effect.succeed(responseBody));
+            }
+          });
+        },
+      );
+
+      request.on("error", (error) => {
+        finish(
+          Effect.fail(
+            error instanceof Error ? error : new Error(String(error)),
+          ),
         );
-
-        request.on("error", reject);
-        if (payload) {
-          request.write(payload);
-        }
-        request.end();
-      }),
-    catch: (error) =>
+      });
+      if (payload) request.write(payload);
+      request.end();
+      // Bun's TLS client ignores AbortSignal and ClientRequest#destroy while
+      // the response is pending; destroying the socket is what releases it.
+      const stop = () => {
+        request.destroy();
+        request.socket?.destroy();
+      };
+      signal.addEventListener("abort", stop, { once: true });
+      return Effect.sync(() => {
+        signal.removeEventListener("abort", stop);
+        stop();
+      });
+    },
+  ).pipe(
+    Effect.timeout(requestTimeout),
+    Effect.mapError((error) =>
       error instanceof KubernetesApiError
         ? error
         : new Error(
             `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
           ),
-  }).pipe(
-    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS)
-    // are transient — a fresh managed endpoint's load balancer can refuse
-    // connections for a short window after the cluster reports ready.
-    // Every request here is idempotent (GET / SSA PATCH / DELETE), so
-    // retry them; HTTP errors (KubernetesApiError) are handled by the
-    // callers.
+    ),
+    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS,
+    // the per-attempt deadline) are transient — a fresh managed endpoint's
+    // load balancer can refuse connections for a short window after the
+    // cluster reports ready. Every request here is idempotent (GET / SSA
+    // PATCH / DELETE), so retry them; HTTP errors (KubernetesApiError)
+    // are handled by the callers.
     Effect.retry({
       while: (e): boolean => !(e instanceof KubernetesApiError),
       schedule: Schedule.max([
@@ -277,26 +382,35 @@ export const readObject = Effect.fn(function* ({
 export const applyObject = Effect.fn(function* ({
   transport,
   object,
+  dryRun,
+  secrets,
 }: {
   transport: ClusterTransport;
   object: KubernetesObjectDefinition;
+  /** `dryRun=All` — the apiserver returns the merged object and writes nothing. */
+  dryRun?: boolean;
+  /** Plaintext secrets no longer wrapped in the object (rendered Helm values). */
+  secrets?: readonly string[];
 }) {
   const basePath = yield* buildPath({
     transport,
     object: toKubernetesObjectRef(object),
   });
-  const path = `${basePath}?fieldManager=${fieldManager}&force=true`;
+  const path = `${basePath}?fieldManager=${fieldManager}&force=true${dryRun ? "&dryRun=All" : ""}`;
 
-  return yield* requestJson({
+  const applied = requestJson({
     transport,
     method: "PATCH",
     path,
     body: object,
-  }).pipe(
-    // A freshly provisioned cluster's API server briefly 5xxes while
-    // warming up, and the creator's bootstrap access can propagate
-    // asynchronously (401/403 in the first minute) — retry transient
-    // failures for ~1 min.
+    secrets,
+  });
+  // A freshly provisioned cluster's API server briefly 5xxes while warming
+  // up, and the creator's bootstrap access can propagate asynchronously
+  // (401/403 in the first minute). Dry-run is a read: a 403 there is
+  // permanent (get/list/watch), so don't sit on that retry.
+  if (dryRun) return yield* applied;
+  return yield* applied.pipe(
     Effect.retry({
       while: (e): boolean =>
         e instanceof KubernetesApiError &&
@@ -341,10 +455,13 @@ export const reconcileObjects = Effect.fn(function* ({
   transport,
   previousObjects,
   desiredObjects,
+  secrets,
 }: {
   transport: ClusterTransport;
   previousObjects: ReadonlyArray<KubernetesObjectRef>;
   desiredObjects: ReadonlyArray<KubernetesObjectDefinition>;
+  /** Plaintext secrets to scrub from apply errors. See {@link applyObject}. */
+  secrets?: readonly string[];
 }) {
   const desiredRefs = desiredObjects.map(toKubernetesObjectRef);
   const desiredKeys = new Set(desiredRefs.map(kubernetesObjectKey));
@@ -367,6 +484,7 @@ export const reconcileObjects = Effect.fn(function* ({
         applyObject({
           transport,
           object,
+          secrets,
         }),
       {
         concurrency: "unbounded",
