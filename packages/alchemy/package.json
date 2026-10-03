@@ -101,6 +101,7 @@
     "./Server": "./src/Server/index.ts",
     "./State": "./src/State/index.ts",
     "./Util": "./src/Util/index.ts",
+    "./Website": "./src/Website/index.ts",
     "./bin/alchemy.js": "./bin/alchemy.js",
     "./bin/exec.js": "./bin/exec.js"
   },
@@ -385,6 +386,11 @@
         "types": "./lib/Util/index.d.ts",
         "bun": "./src/Util/index.ts",
         "default": "./lib/Util/index.js"
+      },
+      "./Website": {
+        "types": "./lib/Website/index.d.ts",
+        "bun": "./src/Website/index.ts",
+        "default": "./lib/Website/index.js"
       },
       "./bin/alchemy.js": "./bin/alchemy.js",
       "./bin/exec.js": "./bin/exec.js"
