@@ -553,7 +553,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       file: options.dockerfile,
       platform: options.platform,
     });
-    yield* push(options.imageUri, credentials);
+    yield* push(options.imageUri, credentials, options.platform);
     return options.imageUri;
   });
 
