@@ -2,12 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import {
-  type AuthError,
+  AuthError,
   reconfigureHint,
   type AuthProviders,
   type ProviderDetailLine,
 } from "./AuthProvider.ts";
-import type { ProviderConfig } from "./Profile.ts";
+import { ProfileStore, type ProviderConfig } from "./Profile.ts";
 
 /**
  * What a connected provider looks like right now. Establishing this means
@@ -104,8 +104,19 @@ export const inspectProvider = Effect.fn("inspectProvider")(function* (
     );
   }
 
+  const profiles = yield* ProfileStore;
+  const loadConfig = profiles.loadProviderConfig(provider, profile).pipe(
+    Effect.mapError((cause) =>
+      cause instanceof AuthError
+        ? cause
+        : new AuthError({
+            message: `Could not reload ${name} configuration for profile '${profile}'.`,
+            cause,
+          }),
+    ),
+  );
   const details = yield* Effect.result(
-    provider.details(profile, decoded.success, updateConfig),
+    provider.details(profile, loadConfig, updateConfig),
   );
   if (Result.isSuccess(details)) {
     return {

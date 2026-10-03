@@ -165,7 +165,7 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
                       }),
                   ),
                 ),
-            )
+            ).pipe(Effect.provideService(ProfileStore, profiles))
           : Effect.succeed({
               name: provider,
               method: config.method ?? "unknown",
@@ -400,6 +400,7 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       );
     }
     yield* report({ _tag: "provider.refresh.started", provider: name });
+    let persisted = false;
     const refreshed = yield* provider.login(
       input.profile,
       yield* provider.decodeConfig(input.profile, config),
@@ -412,9 +413,24 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
                 cause,
               }),
           ),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              persisted = true;
+            }),
+          ),
         ),
+      profiles.loadProviderConfig(provider, input.profile).pipe(
+        Effect.mapError((cause) =>
+          cause instanceof AuthError
+            ? cause
+            : new AuthError({
+                message: `Could not reload ${name} configuration for profile '${input.profile}'.`,
+                cause,
+              }),
+        ),
+      ),
     );
-    if (refreshed !== undefined) {
+    if (refreshed !== undefined && !persisted) {
       yield* profiles.setProviderConfig(input.profile, name, refreshed);
     }
     yield* report({ _tag: "provider.refresh.completed", provider: name });

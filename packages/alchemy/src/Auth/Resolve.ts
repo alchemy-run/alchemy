@@ -101,11 +101,23 @@ export const resolveProviderConfig = <
     const selection = yield* profile.current;
     const profileName = selection.name;
     const config = yield* profile.loadProviderConfig(auth, profileName);
+    const loadConfig = profile.loadProviderConfig(auth, profileName).pipe(
+      Effect.mapError((cause) =>
+        cause instanceof AuthError
+          ? cause
+          : new AuthError({
+              message: `${providerName}: could not reload profile '${profileName}': ${cause.message}`,
+              cause,
+            }),
+      ),
+    );
     return {
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config, (updated) =>
+      // Reload under the credentials lock on every resolve: a refresh
+      // rotates the stored token, so `config` goes stale after the first one.
+      resolve: auth.read(profileName, loadConfig, (updated) =>
         profile.setProviderConfig(profileName, providerName, updated).pipe(
           Effect.mapError(
             (cause) =>
