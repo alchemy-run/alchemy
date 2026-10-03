@@ -1,4 +1,4 @@
-import { Unowned } from "@/AdoptPolicy";
+import { Drifted, Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
 import * as Binding from "@/Binding.ts";
@@ -984,6 +984,8 @@ export interface TestCloudService {
   readonly resources: Map<string, Record<string, any>>;
   /** Ids whose `read` result is branded {@link Unowned} (foreign tags). */
   readonly unowned: Set<string>;
+  /** Ids whose `read` result is branded {@link Drifted} with unchanged attrs. */
+  readonly drifted: Set<string>;
   /** Lifecycle invocations, in order. Clear between phases to scope asserts. */
   readonly calls: { op: "read" | "reconcile" | "delete"; id: string }[];
 }
@@ -995,6 +997,7 @@ export class TestCloud extends Context.Service<TestCloud, TestCloudService>()(
 export const makeTestCloud = (): TestCloudService => ({
   resources: new Map(),
   unowned: new Set(),
+  drifted: new Set(),
   calls: [],
 });
 
@@ -1039,7 +1042,8 @@ export const driftResourceProvider = () =>
           const live = cloud.resources.get(id);
           if (live === undefined) return undefined;
           const attrs = copy(live);
-          return cloud.unowned.has(id) ? Unowned(attrs) : attrs;
+          if (cloud.unowned.has(id)) return Unowned(attrs);
+          return cloud.drifted.has(id) ? Drifted(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
           const cloud = yield* cloudOf;

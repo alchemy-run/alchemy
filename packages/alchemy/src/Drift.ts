@@ -4,7 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import { stripUnowned } from "./AdoptPolicy.ts";
+import { Drifted, stripUnowned } from "./AdoptPolicy.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -291,14 +291,14 @@ const runDrift = (
         return result({ action: "recreated", attr });
       }
 
-      // `read` may brand the attributes as Unowned when ownership markers
-      // (tags) have drifted out from under us — the brand is a plan-time
-      // routing hint, never persisted, and here the state store already
-      // records the resource as ours. Tag drift then surfaces through the
-      // attribute comparison below and repairs like any other drift.
+      // Unowned and Drifted are plan-time brands, never persisted (both are
+      // non-enumerable, and stripUnowned spreads them off). Unowned here
+      // means the state store already owns the row; tag drift still shows
+      // up in the attribute compare. Drifted means declared fields diverged
+      // while the persisted attributes did not, so equality would miss it.
       const live = stripUnowned(observed);
 
-      if (deepEqual(live, old.attr)) {
+      if (!Drifted.is(observed) && deepEqual(live, old.attr)) {
         return result({ action: "unchanged", attr: old.attr });
       }
 

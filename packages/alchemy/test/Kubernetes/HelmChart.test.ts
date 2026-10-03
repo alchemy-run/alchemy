@@ -10,6 +10,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
 const testOptions = {
@@ -45,6 +46,24 @@ describe("renderHelmChart (local fixture)", (it) => {
         expect(configMap.data.message).toBe("hello-from-values");
         expect(configMap.data.release).toBe("probe");
         expect(configMap.data.namespace).toBe("demo");
+      }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+  );
+
+  it.effect(
+    "unwraps Redacted values before writing the values file",
+    () =>
+      Effect.gen(function* () {
+        const objects = yield* renderHelmChart({
+          chart: chartDir,
+          releaseName: "probe",
+          namespace: "demo",
+          values: { message: Redacted.make("s3cr3t") },
+        });
+        const configMap = objects[0] as unknown as {
+          data: Record<string, string>;
+        };
+        expect(configMap.data.message).toBe("s3cr3t");
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -91,6 +110,28 @@ describe("renderHelmChart (local fixture)", (it) => {
         expect(objects.map((object) => object.metadata.name)).toEqual([
           "probe-config",
         ]);
+      }),
+    { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+  );
+
+  it.effect(
+    "scrubs Redacted values from helm stderr",
+    () =>
+      Effect.gen(function* () {
+        const result = yield* Effect.result(
+          renderHelmChart({
+            chart: chartDir,
+            releaseName: "probe",
+            namespace: "demo",
+            values: { message: Redacted.make("s3cr3t"), fail: true },
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("HelmError");
+          expect(result.failure.message).not.toContain("s3cr3t");
+          expect(result.failure.message).toContain("<redacted>");
+        }
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );

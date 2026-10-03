@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { Drifted } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import { hashDirectory } from "../Command/Memo.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -13,15 +14,22 @@ import {
 } from "./Connection.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
 import {
+  applyObject,
+  collectRedactedSecrets,
   connectCluster,
   deleteObjects,
+  KubernetesApiError,
+  readObject,
   reconcileObjects,
   resolveKindSpec,
 } from "./internal/client.ts";
+import { appliedObjectsMatch } from "./internal/declared.ts";
 import { renderHelmChart } from "./internal/helm.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
+import {
+  kubernetesObjectKey,
+  toKubernetesObjectRef,
+  type KubernetesObjectDefinition,
+  type KubernetesObjectRef,
 } from "./internal/objects.ts";
 import {
   connectionIdentity,
@@ -80,8 +88,9 @@ export interface HelmChartProps {
    */
   includeCrds?: boolean;
   /**
-   * Create (and own) the target Namespace object alongside the chart's
-   * objects.
+   * Create the target Namespace and track it with the chart. While set, the
+   * chart deletes that Namespace on destroy. Turning it off releases the
+   * Namespace without deleting it.
    * @default false
    */
   createNamespace?: boolean;
@@ -304,10 +313,26 @@ export const HelmChartProvider = () =>
           yield* session.note(
             `Applying ${String(desiredObjects.length)} objects from ${news.chart}...`,
           );
+          // The injected Namespace is tracked only while createNamespace is
+          // set. Dropping the flag forgets it; prune must not delete it.
+          const previousObjects = (output?.objects ?? []).filter(
+            (object) =>
+              news.createNamespace ||
+              namespace === "default" ||
+              object.kind !== "Namespace" ||
+              object.name !== namespace,
+          );
           const objects = yield* reconcileObjects({
             transport,
-            previousObjects: output?.objects ?? [],
+            previousObjects,
             desiredObjects,
+            // Rendered manifests are plain strings; the values' Redacted
+            // wrappers are the only copy of the credentials.
+            secrets: yield* Effect.sync(() =>
+              news.values === undefined
+                ? []
+                : collectRedactedSecrets(news.values),
+            ),
           });
 
           return {
@@ -320,7 +345,7 @@ export const HelmChartProvider = () =>
             code: { hash },
           };
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ output, olds }) {
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
@@ -332,7 +357,60 @@ export const HelmChartProvider = () =>
             ),
           );
           if (!transport) return undefined;
-          return output;
+          const desired = olds?.chart
+            ? yield* renderHelmChart({
+                chart: olds.chart,
+                repo: olds.repo,
+                version: olds.version,
+                releaseName: output.releaseName,
+                namespace: output.namespace,
+                values: olds.values,
+                includeCrds: olds.includeCrds,
+              }).pipe(
+                Effect.flatMap((rendered) =>
+                  injectNamespace(transport, rendered, output.namespace),
+                ),
+              )
+            : [];
+          const desiredByKey = new Map(
+            desired.map((object) => [
+              kubernetesObjectKey(toKubernetesObjectRef(object)),
+              object,
+            ]),
+          );
+          const secrets = yield* Effect.sync(() =>
+            olds?.values === undefined
+              ? []
+              : collectRedactedSecrets(olds.values),
+          );
+          const present: Array<KubernetesObjectRef> = [];
+          let drifted = false;
+          for (const object of output.objects) {
+            const observed = yield* readObject({ transport, object }).pipe(
+              Effect.catchIf(
+                (error): error is KubernetesApiError =>
+                  error instanceof KubernetesApiError &&
+                  error.statusCode === 404,
+                () => Effect.succeed(undefined),
+              ),
+            );
+            if (observed === undefined) continue;
+            present.push(object);
+            const wanted = desiredByKey.get(kubernetesObjectKey(object));
+            if (!wanted) continue;
+            const preview = yield* applyObject({
+              transport,
+              object: wanted,
+              dryRun: true,
+              secrets,
+            });
+            if (!appliedObjectsMatch(observed, preview, wanted)) drifted = true;
+          }
+          if (!drifted && present.length === output.objects.length) {
+            return output;
+          }
+          const attrs = { ...output, objects: present };
+          return drifted ? Drifted(attrs) : attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           const connection = connectionOfOutput(output);

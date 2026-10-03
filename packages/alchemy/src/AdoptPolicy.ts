@@ -64,6 +64,31 @@ export class OwnedBySomeoneElse extends Data.TaggedError("OwnedBySomeoneElse")<{
  */
 const UnownedTag: unique symbol = Symbol("alchemy/Unowned");
 
+const readBrand = (
+  tag: symbol,
+): {
+  <T extends object>(attrs: T): T;
+  is: (value: unknown) => boolean;
+} =>
+  Object.assign(
+    <T extends object>(attrs: T): T => {
+      const cloned = { ...attrs } as T;
+      Object.defineProperty(cloned, tag, {
+        value: true,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+      return cloned;
+    },
+    {
+      is: (value: unknown): boolean =>
+        typeof value === "object" &&
+        value !== null &&
+        (value as any)[tag] === true,
+    },
+  );
+
 /**
  * Brand a `read` return value as belonging to a different owner.
  *
@@ -91,36 +116,25 @@ const UnownedTag: unique symbol = Symbol("alchemy/Unowned");
  * Resources without ownership semantics should simply return plain attrs —
  * the engine treats them as owned and silent adoption is the default.
  */
-export const Unowned: {
-  <T extends object>(attrs: T): T;
-  is: (value: unknown) => boolean;
-} = Object.assign(
-  <T extends object>(attrs: T): T => {
-    const cloned = { ...attrs } as T;
-    Object.defineProperty(cloned, UnownedTag, {
-      value: true,
-      enumerable: false,
-      writable: false,
-      configurable: false,
-    });
-    return cloned;
-  },
-  {
-    is: (value: unknown): boolean =>
-      typeof value === "object" &&
-      value !== null &&
-      (value as any)[UnownedTag] === true,
-  },
-);
+export const Unowned = readBrand(UnownedTag);
+
+const DriftedTag: unique symbol = Symbol("alchemy/Drifted");
+
+/**
+ * Brand a `read` result when declared state diverged but the persisted
+ * attributes did not. Non-enumerable, so a spread cannot persist it.
+ * Drift repairs it; attribute equality alone would not.
+ */
+export const Drifted = readBrand(DriftedTag);
 
 /**
  * Strip the {@link Unowned} brand from an attributes object before persisting
  * it — state should not carry per-deploy ownership-routing metadata.
  *
  * The brand is intentionally non-enumerable, so a plain spread already
- * drops it; the additional `delete` is defense-in-depth in case a future
- * change makes the descriptor enumerable. Always returns a fresh object
- * (never mutates the input).
+ * drops it (and {@link Drifted}); the additional `delete` is defense-in-depth
+ * in case a future change makes the descriptor enumerable. Always returns a
+ * fresh object (never mutates the input).
  */
 export const stripUnowned = <T extends object>(attrs: T): T => {
   const out: any = { ...attrs };

@@ -1,4 +1,4 @@
-import { Unowned } from "@/AdoptPolicy";
+import { Drifted, Unowned } from "@/AdoptPolicy";
 import { Progress, type ApplyEvent, type ProgressEvent } from "@/Report.ts";
 import * as Namespace from "@/Namespace.ts";
 import { Stack } from "@/Stack";
@@ -573,6 +573,24 @@ describe("ownership", { tags: ["unit", "local"] }, () => {
           attr: { value: "a" },
         });
         expect(Unowned.is(state!.attr)).toBe(false);
+      }).pipe(withCloud(cloud));
+    },
+  );
+
+  test.provider(
+    "a Drifted brand repairs when the attributes still match, and does not persist",
+    (stack) => {
+      const cloud = makeTestCloud();
+      return Effect.gen(function* () {
+        yield* stack.deploy(DriftResource("A", { value: "a" }));
+        cloud.drifted.add("A");
+        cloud.calls.length = 0;
+
+        const result = yield* runDrift();
+
+        expect(result.resources.A?.action).toEqual("repaired");
+        expect(reconcileCalls(cloud)).toEqual(["A"]);
+        expect(Drifted.is((yield* getState("A"))!.attr)).toBe(false);
       }).pipe(withCloud(cloud));
     },
   );

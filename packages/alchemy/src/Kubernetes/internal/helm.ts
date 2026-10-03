@@ -18,6 +18,8 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as YAML from "yaml";
+import { unwrapRedacted } from "../../Util/data.ts";
+import { collectRedactedSecrets, scrubSecrets } from "./client.ts";
 import type { KubernetesObjectDefinition } from "./objects.ts";
 
 /** A Helm invocation or render failure (bad chart ref, template error, …). */
@@ -69,6 +71,9 @@ export const renderHelmChart = Effect.fn(function* (
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const bin = yield* HelmBin;
+  const secrets = yield* Effect.sync(() =>
+    options.values === undefined ? [] : collectRedactedSecrets(options.values),
+  );
 
   const args = [
     "template",
@@ -96,7 +101,12 @@ export const renderHelmChart = Effect.fn(function* (
     // a temp values file without a YAML serializer.
     const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-helm-" });
     const valuesFile = path.join(dir, "values.json");
-    yield* fs.writeFileString(valuesFile, JSON.stringify(options.values));
+    // JSON.stringify(Redacted) emits the display placeholder. Unwrap at the
+    // values file; the chart props stay wrapped for plan and state.
+    const valuesJson = yield* Effect.sync(() =>
+      JSON.stringify(unwrapRedacted(options.values)),
+    );
+    yield* fs.writeFileString(valuesFile, valuesJson);
     args.push("--values", valuesFile);
   }
 
@@ -135,9 +145,11 @@ export const renderHelmChart = Effect.fn(function* (
   if (result.exitCode !== 0) {
     return yield* Effect.fail(
       new HelmError({
-        message:
+        message: scrubSecrets(
           `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
-          result.stderr.trim(),
+            result.stderr.trim(),
+          secrets,
+        ),
       }),
     );
   }
