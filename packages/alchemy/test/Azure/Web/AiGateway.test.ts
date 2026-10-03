@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { runPaidOnly } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -47,11 +48,10 @@ const program = (props: { location: string; tags: Record<string, string> }) =>
   });
 
 // `Microsoft.Web/aigateways` (API 2026-07-15) is not rolled out to the test
-// subscription: ARM answers `InvalidResourceType`. Set
-// AZURE_TEST_WEB_AIGATEWAY=1 once it is available. Expected cost: $0.
-const runAiGateway = !!process.env.AZURE_TEST_WEB_AIGATEWAY;
+// subscription: ARM answers `InvalidResourceType`. Runs only with
+// AZURE_TEST_PAID=1 on a subscription that has the type. Expected cost: $0.
 
-test.provider.skipIf(!runAiGateway)(
+test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete an AI gateway",
   (stack) =>
     Effect.gen(function* () {
@@ -113,7 +113,7 @@ test.provider.skipIf(!runAiGateway)(
 
 // Probe: until the type is rolled out, ARM rejects it as InvalidResourceType
 // and the provider treats the gateway as absent.
-test.provider.skipIf(runAiGateway)(
+test.provider.skipIf(runPaidOnly)(
   "unavailable AI gateway type is rejected with InvalidResourceType",
   (stack) =>
     Effect.gen(function* () {

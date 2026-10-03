@@ -192,7 +192,15 @@ export const ConfigTemplateMetadataProvider = () =>
           output.configTemplateMetadataName.toLowerCase() ||
         !sameId(news.contextId, output.contextId)
       ) {
-        return { action: "replace" } as const;
+        // A context links at most one metadata per config template, so a
+        // replacement under the same template and context deletes first.
+        const sameSlot =
+          news.resourceGroup.toLowerCase() ===
+            output.resourceGroup.toLowerCase() &&
+          news.configTemplate.toLowerCase() ===
+            output.configTemplate.toLowerCase() &&
+          sameId(news.contextId, output.contextId);
+        return { action: "replace", deleteFirst: sameSlot } as const;
       }
       return undefined;
     }),

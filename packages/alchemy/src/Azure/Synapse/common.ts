@@ -335,6 +335,23 @@ export interface VulnerabilityAssessmentFields {
   };
 }
 
+/**
+ * Whether observed vulnerability assessment properties reflect `desired`.
+ * Azure stores `storageContainerPath` with a trailing `/`.
+ */
+export const vulnerabilityAssessmentMatches = (
+  observed:
+    | { storageContainerPath?: string; recurringScans?: unknown }
+    | undefined,
+  desired: { storageContainerPath?: string; recurringScans?: unknown },
+) => {
+  const trim = (path: string | undefined) => path?.replace(/\/+$/, "");
+  return fieldsMatch(
+    { ...observed, storageContainerPath: trim(observed?.storageContainerPath) },
+    { ...desired, storageContainerPath: trim(desired.storageContainerPath) },
+  );
+};
+
 /** Props locating a child of a dedicated SQL pool. */
 export interface SqlPoolChildProps {
   /** Resource group of the workspace. Changing it replaces the resource. */

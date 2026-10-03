@@ -17,6 +17,7 @@ import {
   createSiteRecoveryName,
   matchesDesired,
   ownedOrUnowned,
+  retryWhileVaultRegistering,
   sameName,
   SITE_RECOVERY_NAMESPACE,
 } from "./Shared.ts";
@@ -123,12 +124,14 @@ const getPolicy = (
   policyName: string,
 ) =>
   orUndefinedIfNotFound(
-    asr.GetReplicationPolicy({
-      subscriptionId,
-      resourceGroupName,
-      resourceName,
-      policyName,
-    }),
+    retryWhileVaultRegistering(
+      asr.GetReplicationPolicy({
+        subscriptionId,
+        resourceGroupName,
+        resourceName,
+        policyName,
+      }),
+    ),
   );
 
 const detailsOf = (observed: Observed) =>
@@ -231,18 +234,22 @@ export const ReplicationPolicyProvider = () =>
 
       // Ensure: create when missing.
       if (observed === undefined) {
-        yield* asr.CreateReplicationPolicy({
-          ...where,
-          properties: { providerSpecificInput: news.providerSpecificInput },
-        });
+        yield* retryWhileVaultRegistering(
+          asr.CreateReplicationPolicy({
+            ...where,
+            properties: { providerSpecificInput: news.providerSpecificInput },
+          }),
+        );
       } else if (!matchesDesired(detailsOf(observed), expected)) {
         // Sync: retention / snapshot settings differ from the observed policy.
-        yield* asr.UpdateReplicationPolicy({
-          ...where,
-          properties: {
-            replicationProviderSettings: news.providerSpecificInput,
-          },
-        });
+        yield* retryWhileVaultRegistering(
+          asr.UpdateReplicationPolicy({
+            ...where,
+            properties: {
+              replicationProviderSettings: news.providerSpecificInput,
+            },
+          }),
+        );
       }
 
       // Both run as ASR jobs: wait until the observed policy converges.
@@ -275,12 +282,14 @@ export const ReplicationPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        asr.DeleteReplicationPolicy({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          resourceName: output.vault,
-          policyName: output.policyName,
-        }),
+        retryWhileVaultRegistering(
+          asr.DeleteReplicationPolicy({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            resourceName: output.vault,
+            policyName: output.policyName,
+          }),
+        ),
       );
       yield* waitUntilGone(
         `site recovery policy ${output.policyName}`,

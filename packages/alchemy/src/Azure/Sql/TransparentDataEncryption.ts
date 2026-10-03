@@ -8,6 +8,7 @@ import {
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
+  waitForProvisioned,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -87,6 +88,26 @@ const getSetting = (subscriptionId: string, scope: DatabaseScope) =>
     }),
   );
 
+/**
+ * Azure accepts a state change while an encryption/decryption scan is
+ * running (e.g. the initial scan of a new database) but silently drops
+ * it, so wait for the scan to finish before writing.
+ */
+const waitForScanIdle = (
+  subscriptionId: string,
+  scope: DatabaseScope,
+  label: string,
+) =>
+  waitForProvisioned(
+    label,
+    getSetting(subscriptionId, scope),
+    (observed) =>
+      lower(observed.properties?.scanState) === "running"
+        ? "Updating"
+        : "Succeeded",
+    { interval: "5 seconds", times: 60 },
+  );
+
 const toAttrs = (
   scope: DatabaseScope,
   observed: Observed,
@@ -154,8 +175,10 @@ export const TransparentDataEncryptionProvider = () =>
         databaseName: news.database,
       };
       const desired = { state: news.state };
+      const label = `sql transparent data encryption on ${scope.databaseName}`;
+      yield* waitForScanIdle(subscriptionId, scope, label);
       const fresh = yield* syncSetting({
-        label: `sql transparent data encryption on ${scope.databaseName}`,
+        label,
         get: getSetting(subscriptionId, scope),
         converged: (observed) =>
           lower(observed.properties?.state) === lower(desired.state),
@@ -173,6 +196,7 @@ export const TransparentDataEncryptionProvider = () =>
       const label = `sql transparent data encryption on ${output.databaseName}`;
       if ((yield* getSetting(subscriptionId, output)) === undefined) return;
       // The setting cannot be removed; re-enable encryption (Azure's default).
+      yield* ignoreNotFound(waitForScanIdle(subscriptionId, output, label));
       yield* ignoreNotFound(
         syncSetting({
           label,

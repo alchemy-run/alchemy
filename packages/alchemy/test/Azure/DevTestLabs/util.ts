@@ -1,6 +1,7 @@
 import * as Azure from "@/Azure";
-import type { AzureOpError } from "@distilled.cloud/azure";
+import { Credentials, type AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -42,28 +43,46 @@ export const labFixture = (location = "eastus") =>
     return { group, lab };
   });
 
-/** Lab + a lab user named by a managed identity's object ID (all free). */
+/**
+ * The deploying principal (`oid` / `tid` claims of the ARM token). DevTest
+ * Labs only accepts lab users it can resolve in the tenant: the deploying
+ * service principal works, while managed identities and first-party service
+ * principals are rejected with "User was not found in the tenant."
+ */
+export const caller = Effect.gen(function* () {
+  const config = yield* yield* Credentials;
+  const token = Redacted.value(config.bearerToken);
+  return yield* Effect.sync(
+    () =>
+      JSON.parse(
+        Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+      ) as { oid: string; tid: string },
+  );
+});
+
+/** Lab + a lab user for the deploying principal (all free). */
 export const labUserFixture = (location = "eastus") =>
   Effect.gen(function* () {
+    const { oid, tid } = yield* caller;
     const { group, lab } = yield* labFixture(location);
-    const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity(
-      "LabPrincipal",
-      { resourceGroup: group.resourceGroupName, location },
-    );
     const user = yield* Azure.DevTestLabs.User("LabUser", {
       resourceGroup: group.resourceGroupName,
       lab: lab.labName,
-      objectId: identity.principalId,
-      tenantId: identity.tenantId,
+      objectId: oid,
+      tenantId: tid,
     });
-    return { group, lab, identity, user };
+    return { group, lab, user };
   });
 
 /** Size of lab VMs in tests (2 vCPU, SCSI; ~$0.10/hour). */
 export const LAB_VM_SIZE =
   process.env.AZURE_TEST_LAB_VM_SIZE ?? "Standard_D2as_v4";
+/**
+ * Resize target. Standard_D2s_v3 hit "SkuNotAvailable ... Capacity
+ * Restrictions" in eastus.
+ */
 export const LAB_VM_SIZE_ALT =
-  process.env.AZURE_TEST_LAB_VM_SIZE_ALT ?? "Standard_D2s_v3";
+  process.env.AZURE_TEST_LAB_VM_SIZE_ALT ?? "Standard_D2as_v5";
 
 /** Lab + registered VNet/subnet for lab VMs (all free). */
 export const labNetworkFixture = (location = "eastus") =>

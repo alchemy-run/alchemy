@@ -85,22 +85,28 @@ export interface User extends Resource<
  * when a principal first uses the lab; declare it to manage those
  * children as code. Deleting it deletes the user's lab resources.
  *
+ * The principal must be resolvable by DevTest Labs: users and
+ * application service principals of the tenant work, while managed
+ * identities are rejected with "User was not found in the tenant."
+ *
  * @see https://learn.microsoft.com/rest/api/dtl/users
  *
  * ### Registering a User
- * **Example:** Lab profile for a managed identity
+ * **Example:** Lab profile for a user
  * ```typescript
- * const user = yield* Azure.DevTestLabs.User("ci", {
+ * const user = yield* Azure.DevTestLabs.User("alice", {
  *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
- *   objectId: identity.principalId,
- *   tenantId: identity.tenantId,
+ *   objectId: "00000000-0000-0000-0000-000000000000", // Entra object ID
+ *   principalName: "alice@contoso.com",
  * });
  * ```
  *
  * @resource
  */
 export const User = Resource<User>("Azure.DevTestLabs.User");
+
+const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
 const getUser = (
   subscriptionId: string,
@@ -110,6 +116,16 @@ const getUser = (
 ) =>
   orUndefinedIfNotFound(
     devtestlabs.GetUser({ subscriptionId, resourceGroupName, labName, name }),
+  ).pipe(
+    // For the calling principal the lab always answers with a synthesized
+    // profile (zero GUID, no provisioning state) — even after a delete.
+    Effect.map((u) =>
+      u === undefined ||
+      (u.properties?.uniqueIdentifier === ZERO_GUID &&
+        u.properties?.provisioningState === undefined)
+        ? undefined
+        : u,
+    ),
   );
 
 const toAttrs = (

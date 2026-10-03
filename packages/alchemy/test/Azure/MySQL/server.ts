@@ -49,8 +49,9 @@ export const untilGone = <A, R>(
 ) =>
   get.pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["ResourceNotFound", "ResourceGroupNotFound"], () =>
-      Effect.succeed("gone" as const),
+    Effect.catchTag(
+      ["ResourceNotFound", "ResourceGroupNotFound", "FirewallRuleNotExist"],
+      () => Effect.succeed("gone" as const),
     ),
     Effect.repeat({
       schedule: Schedule.spaced("10 seconds"),

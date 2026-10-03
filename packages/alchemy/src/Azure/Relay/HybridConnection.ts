@@ -230,7 +230,12 @@ export const HybridConnectionProvider = () =>
       const fresh = yield* waitForProvisioned(
         `relay hybrid connection ${where.hybridConnectionName}`,
         getConnection(where),
-        () => undefined,
+        // The PUT is applied asynchronously: a GET right after it can still
+        // return the previous metadata, so wait until it converges.
+        (connection) =>
+          connection.properties?.userMetadata === userMetadata
+            ? undefined
+            : "Updating",
         { interval: "2 seconds", times: 15 },
       );
       return toAttrs(where, fresh);

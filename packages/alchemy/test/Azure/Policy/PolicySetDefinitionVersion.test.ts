@@ -84,24 +84,26 @@ test.provider(
       expect(observed?.properties?.description).toEqual("first");
       expect(observed?.properties?.policyDefinitions).toHaveLength(1);
 
-      // Description is mutable in place.
+      // Versions are immutable: a description change re-publishes 1.0.0.
       yield* stack.deploy(program("1.0.0", "second"));
       const reobserved = yield* getVersion(
         set.policySetDefinitionName,
-        "1.1.0",
+        "1.0.0",
       );
       expect(reobserved?.properties?.description).toEqual("second");
 
       // A new version number replaces the version.
-      const next = yield* stack.deploy(program("1.0.0", "second"));
-      expect(next.setVersion.version).toEqual("1.0.0");
+      const next = yield* stack.deploy(program("1.1.0", "second"));
+      expect(next.setVersion.version).toEqual("1.1.0");
+      const replaced = yield* getVersion(set.policySetDefinitionName, "1.1.0");
+      expect(replaced?.properties?.description).toEqual("second");
       expect(
         yield* versionGone(set.policySetDefinitionName, "1.0.0"),
       ).toBeUndefined();
 
       yield* stack.destroy();
       expect(
-        yield* versionGone(set.policySetDefinitionName, "1.0.0"),
+        yield* versionGone(set.policySetDefinitionName, "1.1.0"),
       ).toBeUndefined();
     }).pipe(logLevel),
   {

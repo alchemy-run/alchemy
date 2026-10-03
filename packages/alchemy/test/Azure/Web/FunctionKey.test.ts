@@ -10,7 +10,12 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { flexConnectionString, flexStorage } from "./fixtures/flex-app.ts";
+import { runPaidOnly } from "../gates.ts";
+import {
+  flexConnectionString,
+  flexPlanRejection,
+  flexStorage,
+} from "./fixtures/flex-app.ts";
 import {
   FUNCTION_NAME,
   FUNCTION_ZIP_BASE64,
@@ -145,9 +150,13 @@ const program = (connection: string, value: string | undefined) =>
 
 const explicitValue = "alchemyTestFunctionKeyValue0123456789abc";
 
-// Cost: ~$0 (Flex Consumption, idle; Standard_LRS storage). Provisioning:
-// ~4-6 minutes (package publish + host start).
-test.provider(
+// The testing subscription may not create Flex Consumption plans (HTTP 502
+// "The subscription '<id>' is not allowed to create or update the
+// serverfarm.", ServerFarmCreateNotAllowed, in every region), so this runs
+// only with AZURE_TEST_PAID=1. Cost: ~$0 (Flex Consumption,
+// idle; Standard_LRS storage). Provisioning: ~4-6 minutes (package publish +
+// host start).
+test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a function key",
   (stack) =>
     Effect.gen(function* () {
@@ -171,7 +180,10 @@ test.provider(
       expect(key.functionName).toEqual(FUNCTION_NAME);
       const generated = Redacted.value(key.value);
       expect(generated.length).toBeGreaterThanOrEqual(32);
-      const observed = yield* functionKeys(group.resourceGroupName, app.siteName);
+      const observed = yield* functionKeys(
+        group.resourceGroupName,
+        app.siteName,
+      );
       expect(observed.properties?.[key.keyName]).toEqual(generated);
 
       // A redeploy without a value keeps the generated key.
@@ -205,5 +217,30 @@ test.provider(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 900_000,
+  },
+);
+
+// Probe: the subscription cannot create the Flex Consumption plan this
+// lifecycle needs.
+test.provider(
+  "flex consumption plan is rejected with ServerFarmCreateNotAllowed",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const error = yield* flexPlanRejection(group.resourceGroupName);
+      expect(error._tag).toEqual("ServerFarmCreateNotAllowed");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 300_000,
   },
 );

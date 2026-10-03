@@ -12,6 +12,7 @@ import {
   waitGone,
   withStandardEnvironment,
 } from "./fixtures/shared.ts";
+import { runExpensive } from "../gates.ts";
 
 const LOCATION = STANDARD_LOCATION;
 
@@ -86,7 +87,9 @@ const program = (hostname: string, tags: Record<string, string>) =>
 // Cost: free certificate + Consumption environment (~$0). Requires a real
 // domain with DNS records in place (AZURE_TEST_CUSTOM_DOMAIN); issuance
 // takes 5-20 minutes on top of the ~15-35 minute environment lifecycle.
-test.provider.skipIf(!CUSTOM_DOMAIN)(
+// Gated (time + external DNS): run with AZURE_TEST_EXPENSIVE=1 and
+// AZURE_TEST_CUSTOM_DOMAIN set.
+test.provider.skipIf(!runExpensive || !CUSTOM_DOMAIN)(
   "issue, retag, and delete a managed certificate",
   (stack) =>
     Effect.gen(function* () {

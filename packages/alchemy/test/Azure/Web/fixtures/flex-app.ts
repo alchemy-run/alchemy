@@ -1,13 +1,14 @@
 import * as Azure from "@/Azure";
 import * as Output from "@/Output";
 import * as storage from "@distilled.cloud/azure/storage";
+import * as web from "@distilled.cloud/azure/web";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
 /**
- * A Flex Consumption (FC1) function app in eastus. FC1 plans have free-trial
- * quota in eastus and are not affected by the F1 plan-create throttle in
- * centralus, so site child resources that work on any plan test against it.
+ * A Flex Consumption (FC1) function app in eastus, for site child resources
+ * that work on any plan. See `flexPlanRejection` for why lifecycles on it are
+ * gated on the testing subscription.
  */
 export const flexStorage = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -61,4 +62,26 @@ export const flexApp = (connection: string) =>
       appSettings: { AzureWebJobsStorage: connection },
     });
     return { group, app };
+  });
+
+/**
+ * The testing subscription is barred from creating Flex Consumption plans:
+ * every region answers HTTP 502 "The subscription '<id>' is not allowed to
+ * create or update the serverfarm." (`ServerFarmCreateNotAllowed`). Tests
+ * on a Flex app run only with AZURE_TEST_PAID=1 and keep this probe ungated.
+ */
+export const flexPlanRejection = (resourceGroupName: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* web
+      .AppServicePlansCreateOrUpdate({
+        subscriptionId,
+        resourceGroupName,
+        name: "alchemy-flex-probe",
+        location: "eastus",
+        kind: "functionapp,linux",
+        sku: { name: "FC1", tier: "FlexConsumption" },
+        properties: { reserved: true },
+      })
+      .pipe(Effect.flip);
   });

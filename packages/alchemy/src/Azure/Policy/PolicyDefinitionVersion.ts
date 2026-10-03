@@ -76,7 +76,9 @@ export interface PolicyDefinitionVersion extends Resource<
  * A version of a custom Azure Policy definition. Assignments can pin a
  * version with `PolicyAssignment.definitionVersion` (e.g. `1.*.*`).
  *
- * Deleting the parent definition deletes its versions.
+ * Deleting the parent definition deletes its versions. Versions are
+ * immutable in ARM, so changing any other property deletes and
+ * re-publishes the same version.
  *
  * @see https://learn.microsoft.com/azure/governance/policy/concepts/definition-structure-basics#version-preview
  *
@@ -140,7 +142,7 @@ export const PolicyDefinitionVersionProvider = () =>
     // Versions are deleted with their parent definition.
     list: () => Effect.succeed([]),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (output === undefined) return undefined;
       if (isWholeExpression(news)) return undefined;
       if (!isResolved(news.policyDefinitionName)) {
@@ -153,6 +155,19 @@ export const PolicyDefinitionVersionProvider = () =>
         news.version !== output.version
       ) {
         return { action: "replace" } as const;
+      }
+      // ARM versions are immutable: any content change re-publishes the
+      // same version number, so the old one must be deleted first.
+      if (
+        olds !== undefined &&
+        ((news.mode ?? "All") !== (olds.mode ?? "All") ||
+          news.displayName !== olds.displayName ||
+          news.description !== olds.description ||
+          !sameJson(news.policyRule, olds.policyRule) ||
+          !sameJson(news.parameters ?? {}, olds.parameters ?? {}) ||
+          !sameJson(news.metadata ?? {}, olds.metadata ?? {}))
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -191,17 +206,33 @@ export const PolicyDefinitionVersionProvider = () =>
       const observed = yield* getVersion(subscriptionId, definition, version);
       const current = observed?.properties;
 
-      // Ensure + sync with one idempotent full PUT, skipped when the
-      // observed version already matches.
-      if (
-        current === undefined ||
-        current.mode !== desired.mode ||
-        current.displayName !== desired.displayName ||
-        current.description !== desired.description ||
-        !sameJson(current.policyRule, desired.policyRule) ||
-        !sameJson(current.parameters ?? {}, desired.parameters ?? {}) ||
-        !sameJson(comparableMetadata(current.metadata), desired.metadata)
-      ) {
+      const drifted =
+        current !== undefined &&
+        (current.mode !== desired.mode ||
+          current.displayName !== desired.displayName ||
+          current.description !== desired.description ||
+          !sameJson(current.policyRule, desired.policyRule) ||
+          !sameJson(current.parameters ?? {}, desired.parameters ?? {}) ||
+          !sameJson(comparableMetadata(current.metadata), desired.metadata));
+
+      // Versions are immutable ("Old versions cannot be changed"): a drifted
+      // version is deleted and re-published.
+      if (drifted) {
+        yield* ignoreNotFound(
+          resources.DeletePolicyDefinitionVersion({
+            subscriptionId,
+            policyDefinitionName: definition,
+            policyDefinitionVersion: version,
+          }),
+        );
+        yield* waitUntilGone(
+          `policy definition version ${definition}/${version}`,
+          getVersion(subscriptionId, definition, version),
+        );
+      }
+
+      // Ensure.
+      if (current === undefined || drifted) {
         yield* resources.PolicyDefinitionVersionsCreateOrUpdate({
           subscriptionId,
           policyDefinitionName: definition,

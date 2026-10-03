@@ -51,6 +51,7 @@ test.provider(
         program({ backupRetentionDays: 7, tags: { env: "test" } }),
       );
       expect(server.serverName).toMatch(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
+      expect(server.serverName.length).toBeLessThanOrEqual(32);
       expect(server.state).toEqual("Ready");
       expect(server.skuName).toEqual("Standard_B1ms");
       expect(server.version).toEqual("8.0.21");

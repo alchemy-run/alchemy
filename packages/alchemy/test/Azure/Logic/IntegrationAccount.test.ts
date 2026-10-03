@@ -10,16 +10,12 @@ const { test } = Test.make({ providers: Azure.providers() });
 // One Free account per region per subscription: this file owns westus2.
 const location = "westus2";
 
-const program = (props: {
-  state?: "Enabled" | "Disabled";
-  tags: Record<string, string>;
-}) =>
+const program = (props: { tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", { location });
     const account = yield* Azure.Logic.IntegrationAccount("Account", {
       resourceGroup: group.resourceGroupName,
       location,
-      state: props.state,
       tags: props.tags,
     });
     return { group, account };
@@ -58,19 +54,19 @@ test.provider(
       expect(observed.tags?.env).toEqual("a");
       expect(observed.tags?.["alchemy::id"]).toEqual("Account");
 
-      // In-place: tags and state.
+      // In-place: tags. (SKU upgrades are billed; state is read-only.)
       const updated = yield* stack.deploy(
-        program({ state: "Disabled", tags: { env: "b", team: "b2b" } }),
+        program({ tags: { env: "b", team: "b2b" } }),
       );
       expect(updated.account.integrationAccountId).toEqual(
         account.integrationAccountId,
       );
-      expect(updated.account.state).toEqual("Disabled");
+      expect(updated.account.tags).toEqual({ env: "b", team: "b2b" });
       const reobserved = yield* getAccount(
         group.resourceGroupName,
         account.integrationAccountName,
       );
-      expect(reobserved.properties?.state).toEqual("Disabled");
+      expect(reobserved.properties?.state).toEqual("Enabled");
       expect(reobserved.tags?.env).toEqual("b");
       expect(reobserved.tags?.team).toEqual("b2b");
 

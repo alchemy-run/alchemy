@@ -67,8 +67,10 @@ const lifecycle = (sku: "Basic" | "Standard", skip: boolean) =>
     { tags, timeout: 900_000 },
   );
 
-// A Basic hub (in a Basic WAN) has no hub charge and no router.
-lifecycle("Basic", false);
+// A Basic hub (in a Basic WAN) has no hub charge, but Azure took ~20
+// minutes to provision it and ~15 minutes to delete it (measured; ≈$0 but
+// ~35 minutes per run), well over the 10-minute budget.
+lifecycle("Basic", !runExpensive);
 
 // A Standard hub bills ~$0.25/hour and takes 15-30 minutes to provision its
 // router (≈$0.25 per run, but well over the 10-minute budget).

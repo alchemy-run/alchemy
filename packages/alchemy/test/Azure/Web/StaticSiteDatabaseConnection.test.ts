@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { runPaidOnly } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -86,16 +87,21 @@ const reveal = (value: string | Redacted.Redacted<string> | undefined) =>
     ? value
     : Redacted.value(value);
 
-// Cost: Basic SQL database ($4.90/month) + Standard static site ($9/month)
-// for ~10 minutes: about $0.01. Provisioning: ~4-6 minutes (SQL server).
-test.provider(
+// Microsoft.Web no longer implements creating Static Web Apps database
+// connections (the preview was retired): the PUT answers HTTP 500 "The
+// requested method is not implemented." (WebMethodNotImplemented). Runs
+// only with AZURE_TEST_PAID=1 in case the API returns. Cost: Basic SQL
+// database ($4.90/month) + Standard static site ($9/month) for ~10 minutes:
+// about $0.01. Provisioning: ~4-6 minutes (SQL server).
+test.provider.skipIf(!runPaidOnly)(
   "connect, update, and disconnect a static site database",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, server, database, site, connection } =
-        yield* stack.deploy(program(30));
+      const { group, server, database, site, connection } = yield* stack.deploy(
+        program(30),
+      );
       expect(connection!.databaseConnectionName).toEqual("default");
       expect(connection!.resourceId.toLowerCase()).toEqual(
         database.databaseId.toLowerCase(),
@@ -136,5 +142,48 @@ test.provider(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 900_000,
+  },
+);
+
+// Probe: creating a database connection is rejected as not implemented.
+// Cost: a Standard static site for ~2 minutes (well under $0.01).
+test.provider(
+  "database connection create is rejected with WebMethodNotImplemented",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, site } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "centralus",
+          });
+          const site = yield* Azure.Web.StaticSite("Site", {
+            resourceGroup: group.resourceGroupName,
+            location: "centralus",
+            sku: "Standard",
+          });
+          return { group, site };
+        }),
+      );
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const error = yield* web
+        .StaticSitesCreateOrUpdateDatabaseConnection({
+          subscriptionId,
+          resourceGroupName: group.resourceGroupName,
+          name: site.staticSiteName,
+          databaseConnectionName: "default",
+          properties: {
+            resourceId: `/subscriptions/${subscriptionId}/resourceGroups/${group.resourceGroupName}/providers/Microsoft.Sql/servers/probe/databases/probe`,
+            region: "centralus",
+            connectionString: connectionString("probe", "probe", 30),
+          },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("WebMethodNotImplemented");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 300_000,
   },
 );

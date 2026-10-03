@@ -9,7 +9,6 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 const program = (props: {
   location: string;
-  projectStatus?: "Active" | "Inactive";
   tags?: Record<string, string>;
 }) =>
   Effect.gen(function* () {
@@ -17,7 +16,6 @@ const program = (props: {
     const project = yield* Azure.Migrate.AssessmentProject("Project", {
       resourceGroup: group.resourceGroupName,
       location: props.location,
-      projectStatus: props.projectStatus,
       tags: props.tags,
     });
     return { group, project };
@@ -32,7 +30,8 @@ const getProject = (resourceGroupName: string, projectName: string) =>
     });
   });
 
-// Free control-plane object; under a minute.
+// Free control-plane object; under a minute. `projectStatus` is not
+// exercised: the service ignores it on both PUT and PATCH.
 test.provider(
   "create, update, replace, and delete an assessment project",
   (stack) =>
@@ -50,19 +49,16 @@ test.provider(
       expect(observed.tags?.["alchemy::id"]).toEqual("Project");
       expect(observed.properties?.projectStatus).toEqual("Active");
 
-      // In place: tags and project status.
+      // In place: tags.
       const updated = yield* stack.deploy(
-        program({
-          location,
-          projectStatus: "Inactive",
-          tags: { env: "prod" },
-        }),
+        program({ location, tags: { env: "prod", team: "migrate" } }),
       );
       expect(updated.project.projectId).toEqual(project.projectId);
-      expect(updated.project.projectStatus).toEqual("Inactive");
+      expect(updated.project.tags).toEqual({ env: "prod", team: "migrate" });
       const reobserved = yield* get(project.projectName);
       expect(reobserved.tags?.env).toEqual("prod");
-      expect(reobserved.properties?.projectStatus).toEqual("Inactive");
+      expect(reobserved.tags?.team).toEqual("migrate");
+      expect(reobserved.tags?.["alchemy::id"]).toEqual("Project");
 
       // Replacement: the location is immutable.
       const replaced = yield* stack.deploy(
