@@ -1,3 +1,5 @@
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -45,6 +47,12 @@ export interface ContainerProps {
   stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
+  /** Network namespace. Use `{ container: id }` to share another container's namespace. */
+  networkMode?: Container.NetworkMode;
+  /** Linux capabilities to add, for example `SYS_ADMIN`. */
+  capAdd?: string[];
+  /** Host devices to expose to the container. */
+  devices?: Container.DeviceMapping[];
   /**
    * Extra `/etc/hosts` entries, each `hostname:address`. Docker's
    * `host-gateway` alias resolves to the host machine, so
@@ -97,6 +105,15 @@ export declare namespace Container {
     /** Network aliases for the container. */
     aliases?: string[];
   }
+  type NetworkMode = string | { container: string };
+  interface DeviceMapping {
+    /** Host device path. */
+    hostPath: string;
+    /** Container device path. */
+    containerPath: string;
+    /** Cgroup permissions. @default "rwm" */
+    permissions?: string;
+  }
   interface Healthcheck {
     /** Command to run for health checks. */
     cmd: string[] | string;
@@ -132,6 +149,12 @@ export interface Container extends Resource<
      * Format: `"80/tcp" -> 8080`.
      */
     ports: Record<string, number>;
+    /** Configured network namespace, when reported by Docker. */
+    networkMode?: string;
+    /** Added Linux capabilities, when reported by Docker. */
+    capAdd?: string[];
+    /** Configured host devices, when reported by Docker. */
+    devices?: Container.DeviceMapping[];
   },
   never,
   Providers
@@ -219,8 +242,27 @@ export interface Container extends Resource<
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   // Any `hostname:address` pair — host access is just the common case.
- *   extraHosts: ["payments.internal:10.1.2.3"],
+ *   extraHosts: ["service.example:192.0.2.10"],
  *   start: true,
+ * });
+ * ```
+ *
+ * ### Runtime Options
+ * **Example:** Share a donor container's network namespace
+ * ```typescript
+ * const donor = yield* Docker.Container("donor", { image: "redis:alpine" });
+ * const sidecar = yield* Docker.Container("sidecar", {
+ *   image: "busybox:latest",
+ *   networkMode: { container: donor.id },
+ * });
+ * ```
+ *
+ * **Example:** Add capabilities and devices
+ * ```typescript
+ * const worker = yield* Docker.Container("worker", {
+ *   image: "ubuntu:latest",
+ *   capAdd: ["SYS_ADMIN"],
+ *   devices: [{ hostPath: "/dev/fuse", containerPath: "/dev/fuse" }],
  * });
  * ```
  *
@@ -479,53 +521,71 @@ const normalizeImageRef = (image: Container.Image): string =>
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
-        name,
-        image: normalizeImageRef(news.image),
-        command: news.command,
-        env: normalizeEnvironment(news.environment),
-        volume: news.volumes?.map(
-          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-        ),
-        p: news.ports?.map((port) => {
-          const target = `${port.internal}/${port.protocol ?? "tcp"}`;
-          // `external: 0` means "any free host port". Docker spells that as a
-          // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
-          // host port 0 literally, which the daemon accepts and then reports
-          // back as 0.
-          return isRandomHostPort(port.external)
-            ? target
-            : `${port.external}:${target}`;
-        }),
-        "add-host": news.extraHosts,
-        restart: news.restart ?? "no",
-        label: news.labels,
-        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-        rm: news.removeOnExit ?? false,
-        ...(news.healthcheck
-          ? {
-              "health-cmd": Array.isArray(news.healthcheck.cmd)
-                ? news.healthcheck.cmd.join(" ")
-                : news.healthcheck.cmd,
-              "health-interval": normalizeDuration(news.healthcheck.interval),
-              "health-timeout": normalizeDuration(news.healthcheck.timeout),
-              "health-retries": news.healthcheck.retries ?? 0,
-              "health-start-period": normalizeDuration(
-                news.healthcheck.startPeriod,
-              ),
-              "health-start-interval": normalizeDuration(
-                news.healthcheck.startInterval,
-              ),
-            }
-          : {
-              "health-cmd": undefined,
-              "health-interval": undefined,
-              "health-timeout": undefined,
-              "health-retries": undefined,
-              "health-start-period": undefined,
-              "health-start-interval": undefined,
+    Effect.flatMap((name) =>
+      Effect.try({
+        try: (): Parameters<Docker["Service"]["container"]["create"]>[0] => {
+          validateContainerOptions(news);
+          return {
+            name,
+            image: normalizeImageRef(news.image),
+            command: news.command,
+            env: normalizeEnvironment(news.environment),
+            volume: news.volumes?.map(
+              (v) =>
+                `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+            ),
+            p: news.ports?.map((port) => {
+              const target = `${port.internal}/${port.protocol ?? "tcp"}`;
+              // `external: 0` means "any free host port". Docker spells that as a
+              // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
+              // host port 0 literally, which the daemon accepts and then reports
+              // back as 0.
+              return isRandomHostPort(port.external)
+                ? target
+                : `${port.external}:${target}`;
             }),
+            "add-host": news.extraHosts,
+            network: normalizeNetworkMode(news.networkMode),
+            "cap-add": normalizeCapabilities(news.capAdd),
+            device: normalizeDevices(news.devices),
+            restart: news.restart ?? "no",
+            label: news.labels,
+            "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+            rm: news.removeOnExit ?? false,
+            ...(news.healthcheck
+              ? {
+                  "health-cmd": Array.isArray(news.healthcheck.cmd)
+                    ? news.healthcheck.cmd.join(" ")
+                    : news.healthcheck.cmd,
+                  "health-interval": normalizeDuration(
+                    news.healthcheck.interval,
+                  ),
+                  "health-timeout": normalizeDuration(news.healthcheck.timeout),
+                  "health-retries": news.healthcheck.retries ?? 0,
+                  "health-start-period": normalizeDuration(
+                    news.healthcheck.startPeriod,
+                  ),
+                  "health-start-interval": normalizeDuration(
+                    news.healthcheck.startInterval,
+                  ),
+                }
+              : {
+                  "health-cmd": undefined,
+                  "health-interval": undefined,
+                  "health-timeout": undefined,
+                  "health-retries": undefined,
+                  "health-start-period": undefined,
+                  "health-start-interval": undefined,
+                }),
+          };
+        },
+        catch: (cause) =>
+          new Config.ConfigError(
+            new ConfigProvider.SourceError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+          ),
       }),
     ),
   );
@@ -540,7 +600,69 @@ const toContainerAttributes = (
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
   ports: toPortAttributes(info),
+  networkMode: info.HostConfig.NetworkMode,
+  capAdd: info.HostConfig.CapAdd ?? undefined,
+  devices: info.HostConfig.Devices?.map((device) => ({
+    hostPath: device.PathOnHost,
+    containerPath: device.PathInContainer,
+    permissions: device.CgroupPermissions,
+  })),
 });
+
+const normalizeNetworkMode = (
+  mode: Container.NetworkMode | undefined,
+): string | undefined =>
+  mode === undefined
+    ? undefined
+    : typeof mode === "string"
+      ? mode
+      : `container:${mode.container}`;
+
+const normalizeCapabilities = (
+  capAdd: string[] | undefined,
+): string[] | undefined => {
+  if (!capAdd?.length) return undefined;
+  return [
+    ...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean)),
+  ].sort();
+};
+
+const normalizeDevices = (
+  devices: Container.DeviceMapping[] | undefined,
+): string[] | undefined => {
+  if (!devices?.length) return undefined;
+  const normalized = devices.map(
+    (device) =>
+      `${device.hostPath}:${device.containerPath}:${device.permissions ?? "rwm"}`,
+  );
+  return [...new Set(normalized)].sort();
+};
+
+const validateContainerOptions = (news: ContainerProps): void => {
+  if (
+    isContainerNetworkMode(news.networkMode) &&
+    ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
+  ) {
+    throw new Error(
+      "Docker.Container networkMode.container cannot be combined with ports or networks",
+    );
+  }
+  const devices = news.devices ?? [];
+  const targets = new Set<string>();
+  for (const device of devices) {
+    if (targets.has(device.containerPath)) {
+      throw new Error(
+        `Docker.Container devices contain conflicting target path ${device.containerPath}`,
+      );
+    }
+    targets.add(device.containerPath);
+  }
+};
+
+const isContainerNetworkMode = (
+  mode: Container.NetworkMode | undefined,
+): boolean =>
+  typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;
 
 /** First binding that carries a real (non-zero) host port. */
 const boundHostPort = (

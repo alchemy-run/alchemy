@@ -81,6 +81,45 @@ test.provider(
 );
 
 test.provider(
+  "diff replaces a container when runtime options change",
+  () =>
+    Effect.gen(function* () {
+      const containerProvider = yield* Provider.findProvider(Docker.Container);
+      const containerDiff = yield* containerProvider.diff!({
+        id: "web",
+        fqn: "web",
+        instanceId: "instance",
+        olds: {
+          name: "web",
+          image: "nginx:alpine",
+          networkMode: "bridge",
+          capAdd: ["NET_ADMIN"],
+          devices: [{ hostPath: "/dev/video0", containerPath: "/dev/video0" }],
+        },
+        news: {
+          name: "web",
+          image: "nginx:alpine",
+          networkMode: { container: "donor-id" },
+          capAdd: ["SYS_ADMIN"],
+          devices: [{ hostPath: "/dev/video1", containerPath: "/dev/video1" }],
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          id: "web",
+          name: "web",
+          status: "created",
+          createdAt: 0,
+          imageRef: "nginx:alpine",
+          ports: {},
+        },
+      });
+      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "diff replaces a container when its labels or stop timeout change",
   () =>
     Effect.gen(function* () {
