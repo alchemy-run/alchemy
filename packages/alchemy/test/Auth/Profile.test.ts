@@ -733,12 +733,32 @@ it.live(
         const registered = yield* AuthProviders;
         const stale = { method: "oauth", refresh: "r0", expires: 0 };
         yield* profile.setProviderConfig("default", ROTATING_PROVIDER, stale);
+        const persist = (updated: Record<string, unknown>) =>
+          profile
+            .setProviderConfig("default", ROTATING_PROVIDER, updated)
+            .pipe(
+              Effect.mapError(
+                (cause) => new AuthError({ message: cause.message, cause }),
+              ),
+            );
         // Both inspections start from the config read before either refresh,
         // as two `alchemy profile show` processes started together would.
         const connections = yield* Effect.all(
           [
-            inspectProvider("default", ROTATING_PROVIDER, stale, registered),
-            inspectProvider("default", ROTATING_PROVIDER, stale, registered),
+            inspectProvider(
+              "default",
+              ROTATING_PROVIDER,
+              stale,
+              registered,
+              persist,
+            ),
+            inspectProvider(
+              "default",
+              ROTATING_PROVIDER,
+              stale,
+              registered,
+              persist,
+            ),
           ],
           { concurrency: "unbounded" },
         ).pipe(Effect.provide(Interaction.layerNonInteractive()));
