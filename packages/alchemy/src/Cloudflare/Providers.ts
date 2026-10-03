@@ -82,6 +82,7 @@ import * as MagicTransit from "./MagicTransit/index.ts";
 import * as ManagedTransforms from "./ManagedTransforms/index.ts";
 import * as MtlsCertificate from "./MtlsCertificate/index.ts";
 import * as NetworkInterconnects from "./NetworkInterconnects/index.ts";
+import * as Observability from "./Observability/index.ts";
 import * as Organization from "./Organization/index.ts";
 import * as OriginCaCertificate from "./OriginCaCertificate/index.ts";
 import * as OriginPostQuantumEncryption from "./OriginPostQuantumEncryption/index.ts";
@@ -290,6 +291,8 @@ export const providers = () =>
       McpServer.McpServer,
       MtlsCertificate.MtlsCertificate,
       NetworkInterconnects.NetworkInterconnectSettings,
+      Observability.ZoneTracing,
+      Observability.ZoneTracingRules,
       Organization.Organization,
       OriginCaCertificate.OriginCaCertificate,
       OriginPostQuantumEncryption.OriginPostQuantumEncryption,
@@ -542,6 +545,8 @@ export const providers = () =>
           McpServer.McpServerProvider(),
           MtlsCertificate.MtlsCertificateProvider(),
           NetworkInterconnects.NetworkInterconnectSettingsProvider(),
+          Observability.ZoneTracingProvider(),
+          Observability.ZoneTracingRulesProvider(),
           Organization.OrganizationProvider(),
           OriginCaCertificate.OriginCaCertificateProvider(),
           OriginPostQuantumEncryption.OriginPostQuantumEncryptionProvider(),
