@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/http";
 import {
@@ -120,28 +119,28 @@ export const makeDurableObjectBridge =
               typeof f === "function" ? f.bind(target) : f;
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            return (...args: unknown[]) =>
+              this.#execute(
+                (instance) =>
+                  Effect.suspend(() => {
+                    if (!Object.hasOwn(instance, prop)) {
+                      return Effect.die(
+                        new Error(
+                          `Method "${prop}" not found on Durable Object`,
+                        ),
+                      );
+                    }
+                    const member = instance[prop as keyof DurableObjectShape];
+                    const result =
+                      typeof member === "function"
+                        ? (member as (...args: unknown[]) => unknown)(...args)
+                        : member;
+                    return Effect.isEffect(result)
+                      ? result
+                      : Effect.succeed(result);
+                  }),
+                handleRpcExit,
+              );
           },
         });
       }
