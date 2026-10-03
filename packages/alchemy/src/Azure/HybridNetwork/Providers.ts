@@ -1,4 +1,8 @@
 import * as Layer from "effect/Layer";
+import {
+  ArtifactManifest,
+  ArtifactManifestProvider,
+} from "./ArtifactManifest.ts";
 import { ArtifactStore, ArtifactStoreProvider } from "./ArtifactStore.ts";
 import {
   ConfigurationGroupSchema,
@@ -16,6 +20,7 @@ import { Publisher, PublisherProvider } from "./Publisher.ts";
 import { Site, SiteProvider } from "./Site.ts";
 
 export const resources = [
+  ArtifactManifest,
   ArtifactStore,
   ConfigurationGroupSchema,
   NetworkFunctionDefinitionGroup,
@@ -25,6 +30,7 @@ export const resources = [
 ];
 export const layers = () =>
   Layer.mergeAll(
+    ArtifactManifestProvider(),
     ArtifactStoreProvider(),
     ConfigurationGroupSchemaProvider(),
     NetworkFunctionDefinitionGroupProvider(),
