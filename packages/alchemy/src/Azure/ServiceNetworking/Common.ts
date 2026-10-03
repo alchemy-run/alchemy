@@ -1,7 +1,13 @@
 import * as servicenetworking from "@distilled.cloud/azure/servicenetworking";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { orUndefinedIfNotFound, type WaitBudget } from "../Arm.ts";
+import * as Schedule from "effect/Schedule";
+import {
+  orUndefinedIfNotFound,
+  ProvisioningFailed,
+  waitForProvisioned,
+  type WaitBudget,
+} from "../Arm.ts";
 
 /**
  * Generate an Application Gateway for Containers resource name: up to 64
@@ -22,6 +28,33 @@ export const sameArm = (a: string | undefined, b: string | undefined) =>
 /** Traffic controllers and their children converge within a few minutes. */
 export const AGC_BUDGET: WaitBudget = { interval: "5 seconds", times: 120 };
 
+/**
+ * Ensure a resource exists and is provisioned: PUT when it is missing or
+ * in the `Failed` state, then wait for `Succeeded`. Application Gateway for
+ * Containers occasionally fails a fresh child (e.g. a security policy that
+ * references a just-created WAF policy); re-sending the PUT converges it.
+ */
+export const ensureProvisioned = <A, E, R, E2, R2>(
+  label: string,
+  get: Effect.Effect<A | undefined, E, R>,
+  stateOf: (value: A) => string | undefined,
+  put: Effect.Effect<unknown, E2, R2>,
+  budget: WaitBudget = AGC_BUDGET,
+) =>
+  Effect.gen(function* () {
+    const current = yield* get;
+    if (current === undefined || stateOf(current) === "Failed") {
+      yield* put;
+    }
+    return yield* waitForProvisioned(label, get, stateOf, budget);
+  }).pipe(
+    Effect.retry({
+      while: (e) => e instanceof ProvisioningFailed,
+      schedule: Schedule.spaced("15 seconds"),
+      times: 3,
+    }),
+  );
+
 /** Read a traffic controller, or `undefined` when it does not exist. */
 export const getTrafficController = (
   subscriptionId: string,
@@ -37,22 +70,27 @@ export const getTrafficController = (
   );
 
 /**
- * Location of a child: the explicit one, the previously observed one, or
- * the parent traffic controller's location (children must match it).
+ * Wait until the parent traffic controller is `Succeeded` (children are
+ * rejected or fail while it is still updating, e.g. right after another
+ * child was removed) and return the child's location: the explicit one or
+ * the parent's (children must match it).
  */
 export const childLocation = (
   subscriptionId: string,
   resourceGroupName: string,
   trafficControllerName: string,
   explicit: string | undefined,
-  fallback: string,
 ) =>
   Effect.gen(function* () {
-    if (explicit !== undefined) return explicit;
-    const parent = yield* getTrafficController(
-      subscriptionId,
-      resourceGroupName,
-      trafficControllerName,
+    const parent = yield* waitForProvisioned(
+      `traffic controller ${trafficControllerName}`,
+      getTrafficController(
+        subscriptionId,
+        resourceGroupName,
+        trafficControllerName,
+      ),
+      (controller) => controller.properties?.provisioningState,
+      { interval: "5 seconds", times: 60 },
     );
-    return parent?.location ?? fallback;
+    return explicit ?? parent.location;
   });

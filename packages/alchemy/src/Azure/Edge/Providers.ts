@@ -16,6 +16,10 @@ import {
 import { Context, ContextProvider } from "./Context.ts";
 import { Diagnostic, DiagnosticProvider } from "./Diagnostic.ts";
 import {
+  DisconnectedOperation,
+  DisconnectedOperationProvider,
+} from "./DisconnectedOperation.ts";
+import {
   DynamicConfiguration,
   DynamicConfigurationProvider,
 } from "./DynamicConfiguration.ts";
@@ -55,6 +59,7 @@ export const resources = [
   ConfigurationReference,
   Context,
   Diagnostic,
+  DisconnectedOperation,
   DynamicConfiguration,
   DynamicConfigurationVersion,
   DynamicSchema,
@@ -78,6 +83,7 @@ export const layers = () =>
     ConfigurationReferenceProvider(),
     ContextProvider(),
     DiagnosticProvider(),
+    DisconnectedOperationProvider(),
     DynamicConfigurationProvider(),
     DynamicConfigurationVersionProvider(),
     DynamicSchemaProvider(),

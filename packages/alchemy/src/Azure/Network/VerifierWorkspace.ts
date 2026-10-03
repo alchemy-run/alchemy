@@ -91,6 +91,11 @@ export const VerifierWorkspaceProvider = () =>
             workspaceName: path.name,
           }),
         ),
+      body: (news, { location, tags }) => ({
+        location,
+        tags,
+        properties: { description: news.description },
+      }),
       put: (subscriptionId, path, body) =>
         network.CreateVerifierWorkspace({
           subscriptionId,
@@ -114,11 +119,6 @@ export const VerifierWorkspaceProvider = () =>
           workspaceName: path.name,
           tags,
         }),
-      body: (news, { location, tags }) => ({
-        location,
-        tags,
-        properties: { description: news.description },
-      }),
       drifted: (observed, _body, news) =>
         (observed.properties?.description ?? undefined) !== news.description,
       toAttrs: (path, observed) => ({

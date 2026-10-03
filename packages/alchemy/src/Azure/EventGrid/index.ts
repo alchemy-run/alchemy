@@ -9,6 +9,7 @@ export * from "./ClientGroup.ts";
 export * from "./Domain.ts";
 export * from "./DomainEventSubscription.ts";
 export * from "./DomainTopic.ts";
+export * from "./DomainTopicEventSubscription.ts";
 export * from "./EventSubscription.ts";
 export * from "./Namespace.ts";
 export * from "./NamespaceTopic.ts";

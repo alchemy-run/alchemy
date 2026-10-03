@@ -108,7 +108,7 @@ export const WorkspaceGroupUserProvider = () =>
       // most one user, so the first page is authoritative.
       get: (subscriptionId, key) =>
         apim
-          .ListGroupUser({
+          .ListWorkspaceGroupUser({
             subscriptionId,
             resourceGroupName: key.resourceGroup,
             serviceName: key.serviceName,

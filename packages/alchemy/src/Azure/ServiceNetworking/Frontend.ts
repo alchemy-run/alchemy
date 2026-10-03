@@ -20,10 +20,20 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { AGC_BUDGET, childLocation, createAgcName, sameArm } from "./Common.ts";
+import {
+  AGC_BUDGET,
+  childLocation,
+  createAgcName,
+  ensureProvisioned,
+  sameArm,
+} from "./Common.ts";
 
 export interface FrontendSecurityPolicyConfigurations {
-  /** ARM ID of a `waf` security policy of the same traffic controller. */
+  /**
+   * ARM ID of a `waf` security policy of the same traffic controller.
+   * Azure currently rejects WAF policies on frontends; attach them to the
+   * traffic controller instead.
+   */
   wafSecurityPolicyId?: string;
   /**
    * ARM ID of an `ipAccessRules` security policy of the same traffic
@@ -309,39 +319,36 @@ export const FrontendProvider = () =>
       );
       const label = `AGC frontend ${name}`;
 
-      // Observe.
-      let observed = yield* get;
-
-      // Ensure (long-running PUT). Children live in the parent's location.
-      if (observed === undefined) {
-        const location = yield* childLocation(
-          subscriptionId,
-          resourceGroup,
-          trafficController,
-          news.location ?? output?.location,
-          env.location,
-        );
-        yield* servicenetworking.FrontendsInterfaceCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          properties: {
-            publicNetworkAccess: news.publicNetworkAccess,
-            association:
-              news.associationId === undefined
-                ? undefined
-                : { id: news.associationId },
-            securityPolicyConfigurations:
-              news.securityPolicyConfigurations === undefined
-                ? undefined
-                : toPolicyInput(news.securityPolicyConfigurations),
-          },
-        });
-      }
-      observed = yield* waitForProvisioned(
+      // Observe + ensure: PUT when missing or Failed (long-running), then
+      // wait for Succeeded. Children live in the parent's location.
+      let observed = yield* ensureProvisioned(
         label,
         get,
         (frontend) => frontend.properties?.provisioningState,
+        Effect.gen(function* () {
+          const location = yield* childLocation(
+            subscriptionId,
+            resourceGroup,
+            trafficController,
+            news.location ?? output?.location,
+          );
+          yield* servicenetworking.FrontendsInterfaceCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            properties: {
+              publicNetworkAccess: news.publicNetworkAccess,
+              association:
+                news.associationId === undefined
+                  ? undefined
+                  : { id: news.associationId },
+              securityPolicyConfigurations:
+                news.securityPolicyConfigurations === undefined
+                  ? undefined
+                  : toPolicyInput(news.securityPolicyConfigurations),
+            },
+          });
+        }),
         AGC_BUDGET,
       );
 

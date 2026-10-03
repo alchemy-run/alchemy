@@ -630,7 +630,9 @@ export const WebPubSubProvider = () =>
           .UpdateWebPubSub({
             ...where,
             location: observed.location,
-            sku: skuChanged ? { name: sku, capacity: news.capacity } : undefined,
+            sku: skuChanged
+              ? { name: sku, capacity: news.capacity }
+              : undefined,
             properties: Object.keys(delta).length > 0 ? delta : undefined,
             identity,
             tags: tagsChanged ? tags : undefined,
@@ -645,8 +647,7 @@ export const WebPubSubProvider = () =>
             const state = s.properties?.provisioningState;
             if (state !== "Succeeded") return state;
             const pending =
-              Object.keys(propertyDelta(news, s.properties ?? {})).length >
-                0 ||
+              Object.keys(propertyDelta(news, s.properties ?? {})).length > 0 ||
               lower(s.sku?.name) !== lower(sku) ||
               tagsDiffer(s.tags, tags);
             return pending ? "Updating" : state;

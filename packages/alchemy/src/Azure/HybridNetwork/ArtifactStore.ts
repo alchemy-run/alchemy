@@ -1,5 +1,6 @@
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -358,7 +359,16 @@ export const ArtifactStoreProvider = () =>
             publisherName: output.publisher,
             artifactStoreName: output.artifactStoreName,
           })
-          .pipe(retryInProgress),
+          .pipe(
+            // Tearing down the managed registry takes minutes; a delete
+            // already in flight (e.g. from an interrupted run) is waited out
+            // until the retried delete reports the store gone.
+            Effect.retry({
+              while: (e) => e._tag === "HybridNetworkOperationInProgress",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 60,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `AOSM artifact store ${output.artifactStoreName}`,

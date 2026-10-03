@@ -4,6 +4,9 @@ import * as Redacted from "effect/Redacted";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import type { InstanceId } from "../../InstanceId.ts";
+import type { Stack } from "../../Stack.ts";
+import type { Stage } from "../../Stage.ts";
 import {
   ensureRegistered,
   ignoreNotFound,
@@ -24,6 +27,9 @@ export interface EntityKey {
   readonly serviceName: string;
 }
 
+/** Engine services needed to generate an entity name (`createEntityName`). */
+type EntityNameServices = InstanceId | Stack | Stage;
+
 type Op<A> = Effect.Effect<A, AzureOpError, AzureOpContext>;
 
 /**
@@ -40,7 +46,11 @@ export interface EntitySpec<
   /** Human-readable label for wait/timeout messages. */
   label: (key: K) => string;
   /** Entity path derived from props (generating the entity name when omitted). */
-  keyOf: (props: P, id: string, output: A | undefined) => Effect.Effect<K>;
+  keyOf: (
+    props: P,
+    id: string,
+    output: A | undefined,
+  ) => Effect.Effect<K, never, EntityNameServices>;
   /** Entity path recorded in the attributes. */
   keyOfAttrs: (attrs: A) => K;
   /** GET the entity; typed not-found errors mean missing. */

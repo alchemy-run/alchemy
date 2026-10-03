@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as redis from "@distilled.cloud/azure/redis";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runExpensive } from "../gates.ts";
+import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -58,8 +58,10 @@ const program = (props: { linked: "Secondary" | "Tertiary" }) =>
 
 // Three Premium P1 caches (~$0.55/hour each) that take 30-40 minutes to
 // provision, plus 5-15 minutes per link/unlink: roughly $2-3 and well over
-// an hour per run.
-test.provider.skipIf(!runExpensive)(
+// an hour per run. Geo-replication needs a cache in a second region, and
+// the testing subscription may only create Azure Cache for Redis in eastus
+// (see the probe below), so this runs only on an entitled subscription.
+test.provider.skipIf(!runPaidOnly)(
   "link, re-link (replace), and unlink geo-replicated redis caches",
   (stack) =>
     Effect.gen(function* () {
@@ -107,4 +109,37 @@ test.provider.skipIf(!runExpensive)(
       ).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 7_200_000 },
+);
+
+// Ungated probe (instant, no cost): outside the regions where it already
+// had caches, the subscription is refused new Azure Cache for Redis caches
+// with a typed error, so the secondary of a link cannot be created.
+test.provider(
+  "a new redis cache in a second region is refused with a typed error",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const failure = yield* redis
+        .CreateRedis({
+          subscriptionId: yield* subscription,
+          resourceGroupName: group.resourceGroupName,
+          name: `${group.resourceGroupName.toLowerCase().slice(0, 40)}-wus2`
+            .replace(/[^a-z0-9-]/g, "-")
+            .replace(/-+/g, "-"),
+          location: "westus2",
+          properties: { sku: { name: "Basic", family: "C", capacity: 0 } },
+        })
+        .pipe(Effect.flip);
+      expect(failure._tag).toEqual("RedisCacheRetiring");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 300_000 },
 );

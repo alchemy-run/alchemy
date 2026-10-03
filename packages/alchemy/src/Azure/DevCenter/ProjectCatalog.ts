@@ -187,7 +187,12 @@ export const ProjectCatalogProvider = () =>
         catalogName: name,
       };
       const label = `project catalog ${name}`;
-      const get = getProjectCatalog(subscriptionId, resourceGroup, project, name);
+      const get = getProjectCatalog(
+        subscriptionId,
+        resourceGroup,
+        project,
+        name,
+      );
 
       // Observe.
       let observed = yield* get;

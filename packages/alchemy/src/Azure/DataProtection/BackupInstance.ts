@@ -95,7 +95,8 @@ export interface BackupInstanceProps {
   /** Data source parameters (e.g. containers for vaulted blob backup). */
   datasourceParameters?: BackupInstanceDatasourceParameters[];
   /**
-   * Friendly name shown in the portal.
+   * Friendly name shown in the portal. Set at creation only: Azure ignores
+   * friendly-name changes on an existing instance.
    * @default the data source's name
    */
   friendlyName?: string;
@@ -355,12 +356,12 @@ export const BackupInstanceProvider = () =>
       const current = observed?.properties;
 
       // Ensure + sync: the PUT is an async upsert; send it when the
-      // instance is missing or its policy, parameters, name, or tags drifted.
+      // instance is missing or its policy, parameters, or tags drifted.
+      // (Azure keeps the friendly name of an existing instance.)
       if (
         current === undefined ||
         !sameText(current.policyInfo.policyId, news.policyId) ||
         !isSubset(policyParameters, current.policyInfo.policyParameters) ||
-        current.friendlyName !== friendlyName ||
         tagsDiffer(observed?.tags, tags)
       ) {
         yield* dataprotection.BackupInstancesCreateOrUpdate({
@@ -371,7 +372,7 @@ export const BackupInstanceProvider = () =>
           tags,
           properties: {
             objectType: "BackupInstance",
-            friendlyName,
+            friendlyName: current?.friendlyName ?? friendlyName,
             dataSourceInfo,
             dataSourceSetInfo: news.dataSourceSet
               ? toDatasource(

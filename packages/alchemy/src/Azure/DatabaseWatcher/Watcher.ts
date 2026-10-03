@@ -220,9 +220,7 @@ const toAttrs = (
 const toIdentity = (identity: WatcherIdentity) => ({
   type: identity.type,
   userAssignedIdentities: identity.userAssignedIdentities?.length
-    ? Object.fromEntries(
-        identity.userAssignedIdentities.map((id) => [id, {}]),
-      )
+    ? Object.fromEntries(identity.userAssignedIdentities.map((id) => [id, {}]))
     : undefined,
 });
 
@@ -442,9 +440,10 @@ export const WatcherProvider = () =>
         yield* waitForSettled(get);
       }
       yield* ignoreNotFound(databasewatcher.DeleteWatcher(where));
+      // Deleting a watcher takes about four minutes.
       yield* waitUntilGone(`database watcher ${output.watcherName}`, get, {
-        interval: "5 seconds",
-        times: 60,
+        interval: "10 seconds",
+        times: 54,
       });
     }),
 

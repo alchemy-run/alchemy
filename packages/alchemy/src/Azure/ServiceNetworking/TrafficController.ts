@@ -22,6 +22,7 @@ import type { Providers } from "../Providers.ts";
 import {
   AGC_BUDGET,
   createAgcName,
+  ensureProvisioned,
   getTrafficController,
   sameArm,
 } from "./Common.ts";
@@ -119,12 +120,16 @@ export interface TrafficController extends Resource<
  * ```
  *
  * ### Applying a Security Policy
- * **Example:** IP access rules applied to every frontend
+ * **Example:** WAF policy applied to every frontend
  * ```typescript
+ * // The policy is a child of the controller, so reference it by ID on a
+ * // later deploy, once the policy exists.
  * const controller = yield* Azure.ServiceNetworking.TrafficController("alb", {
  *   resourceGroup: group.resourceGroupName,
+ *   name: "alb",
  *   securityPolicyConfigurations: {
- *     ipAccessRulesSecurityPolicyId: policy.securityPolicyId,
+ *     wafSecurityPolicyId:
+ *       "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ServiceNetworking/trafficControllers/alb/securityPolicies/waf",
  *   },
  * });
  * ```
@@ -270,27 +275,26 @@ export const TrafficControllerProvider = () =>
             : { id: configs.ipAccessRulesSecurityPolicyId },
       });
 
-      // Observe.
-      let observed = yield* get;
-
-      // Ensure (long-running PUT).
-      if (observed === undefined) {
-        yield* servicenetworking.TrafficControllerInterfaceCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          properties:
-            news.securityPolicyConfigurations === undefined
-              ? undefined
-              : {
-                  securityPolicyConfigurations: toPolicyInput(desiredPolicies),
-                },
-        });
-      }
-      observed = yield* waitForProvisioned(
+      // Observe + ensure: PUT when missing or Failed (long-running), then
+      // wait for Succeeded.
+      let observed = yield* ensureProvisioned(
         label,
         get,
         (controller) => controller.properties?.provisioningState,
+        Effect.gen(function* () {
+          yield* servicenetworking.TrafficControllerInterfaceCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            properties:
+              news.securityPolicyConfigurations === undefined
+                ? undefined
+                : {
+                    securityPolicyConfigurations:
+                      toPolicyInput(desiredPolicies),
+                  },
+          });
+        }),
         AGC_BUDGET,
       );
 

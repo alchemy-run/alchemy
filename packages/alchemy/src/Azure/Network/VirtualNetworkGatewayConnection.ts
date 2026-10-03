@@ -143,7 +143,10 @@ export const VirtualNetworkGatewayConnectionProvider = () =>
           news.connectionType.toLowerCase() !==
             output.connectionType.toLowerCase()) ||
         (output.virtualNetworkGatewayId !== undefined &&
-          !sameId(news.virtualNetworkGatewayId, output.virtualNetworkGatewayId)),
+          !sameId(
+            news.virtualNetworkGatewayId,
+            output.virtualNetworkGatewayId,
+          )),
       get: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetVirtualNetworkGatewayConnection({
@@ -152,32 +155,15 @@ export const VirtualNetworkGatewayConnectionProvider = () =>
             virtualNetworkGatewayConnectionName: path.name,
           }),
         ),
-      put: (subscriptionId, path, body) =>
-        network.VirtualNetworkGatewayConnectionsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayConnectionName: path.name,
-          ...body,
-        }),
-      del: (subscriptionId, path) =>
-        network.DeleteVirtualNetworkGatewayConnection({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayConnectionName: path.name,
-        }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateVirtualNetworkGatewayConnectionTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayConnectionName: path.name,
-          tags,
-        }),
       body: (news, { location, tags }) => ({
         location,
         tags,
         properties: {
           connectionType: news.connectionType,
-          virtualNetworkGateway1: { id: news.virtualNetworkGatewayId, properties: {} },
+          virtualNetworkGateway1: {
+            id: news.virtualNetworkGatewayId,
+            properties: {},
+          },
           virtualNetworkGateway2: gatewayRef(news.peerVirtualNetworkGatewayId),
           localNetworkGateway2: gatewayRef(news.localNetworkGatewayId),
           peer:
@@ -198,6 +184,26 @@ export const VirtualNetworkGatewayConnectionProvider = () =>
           egressNatRules: refs(news.egressNatRuleIds),
         },
       }),
+      put: (subscriptionId, path, body) =>
+        network.VirtualNetworkGatewayConnectionsCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayConnectionName: path.name,
+          ...body,
+        }),
+      del: (subscriptionId, path) =>
+        network.DeleteVirtualNetworkGatewayConnection({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayConnectionName: path.name,
+        }),
+      updateTags: (subscriptionId, path, tags) =>
+        network.UpdateVirtualNetworkGatewayConnectionTags({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayConnectionName: path.name,
+          tags,
+        }),
       // Keys are write-only; gateway references compare by ID only.
       drifted: (observed, body) => {
         const {
@@ -213,7 +219,10 @@ export const VirtualNetworkGatewayConnectionProvider = () =>
           subsetDiffers(desired, p) ||
           !sameId(virtualNetworkGateway1.id, p?.virtualNetworkGateway1?.id) ||
           (virtualNetworkGateway2 !== undefined &&
-            !sameId(virtualNetworkGateway2.id, p?.virtualNetworkGateway2?.id)) ||
+            !sameId(
+              virtualNetworkGateway2.id,
+              p?.virtualNetworkGateway2?.id,
+            )) ||
           (localNetworkGateway2 !== undefined &&
             !sameId(localNetworkGateway2.id, p?.localNetworkGateway2?.id))
         );
@@ -231,7 +240,8 @@ export const VirtualNetworkGatewayConnectionProvider = () =>
         resourceGroup: path.resourceGroup,
         location: observed.location ?? "",
         connectionType: observed.properties?.connectionType,
-        virtualNetworkGatewayId: observed.properties?.virtualNetworkGateway1?.id,
+        virtualNetworkGatewayId:
+          observed.properties?.virtualNetworkGateway1?.id,
         connectionStatus: observed.properties?.connectionStatus,
         tags: userTags(observed.tags),
       }),

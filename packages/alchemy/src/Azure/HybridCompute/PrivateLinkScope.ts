@@ -49,12 +49,24 @@ export interface PrivateLinkScopeProps {
    * Azure Arc extensions whose traffic is validated over the private
    * link.
    */
-  serviceExtensions?: string[];
+  serviceExtensions?: PrivateLinkScopeServiceExtension[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
   tags?: Record<string, string>;
+}
+
+/**
+ * An Azure Arc extension whose traffic is validated over the private link.
+ */
+export interface PrivateLinkScopeServiceExtension {
+  /** Name of the Azure Arc extension. */
+  serviceExtensionType?: string;
+  /**
+   * Whether the extension may use public Azure Arc extension endpoints.
+   */
+  serviceExtensionPublicNetworkAccess?: "Enabled" | "Disabled";
 }
 
 export interface PrivateLinkScope extends Resource<
@@ -76,7 +88,7 @@ export interface PrivateLinkScope extends Resource<
     /** Whether public Azure Arc endpoints are reachable. */
     publicNetworkAccess: string;
     /** Extensions validated over the private link. */
-    serviceExtensions: string[];
+    serviceExtensions: PrivateLinkScopeServiceExtension[];
     /** Provisioning state reported by Azure. */
     provisioningState: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
@@ -149,14 +161,28 @@ const toAttrs = (
   privateLinkScopeId: scope.properties?.privateLinkScopeId ?? "",
   location: scope.location,
   publicNetworkAccess: scope.properties?.publicNetworkAccess ?? "Disabled",
-  serviceExtensions: [...(scope.properties?.serviceExtensions ?? [])],
+  serviceExtensions: (scope.properties?.serviceExtensions ?? []).map((ext) => ({
+    serviceExtensionType: ext.serviceExtensionType,
+    serviceExtensionPublicNetworkAccess:
+      ext.serviceExtensionPublicNetworkAccess === "Enabled"
+        ? ("Enabled" as const)
+        : ext.serviceExtensionPublicNetworkAccess === "Disabled"
+          ? ("Disabled" as const)
+          : undefined,
+  })),
   provisioningState: scope.properties?.provisioningState,
   tags: userTags(scope.tags),
 });
 
-const sameSet = (a: readonly string[], b: readonly string[]) => {
-  const left = a.map((x) => x.toLowerCase()).sort();
-  const right = b.map((x) => x.toLowerCase()).sort();
+const extensionKey = (ext: hybridcompute.ServiceExtension) =>
+  `${ext.serviceExtensionType ?? ""}|${ext.serviceExtensionPublicNetworkAccess ?? ""}`.toLowerCase();
+
+const sameSet = (
+  a: readonly hybridcompute.ServiceExtension[],
+  b: readonly hybridcompute.ServiceExtension[],
+) => {
+  const left = a.map(extensionKey).sort();
+  const right = b.map(extensionKey).sort();
   return left.length === right.length && left.every((x, i) => x === right[i]);
 };
 

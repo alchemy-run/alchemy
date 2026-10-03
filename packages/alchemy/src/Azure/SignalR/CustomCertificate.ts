@@ -259,8 +259,8 @@ export const CustomCertificateProvider = () =>
       const fresh = yield* converge.pipe(
         Effect.retry({
           while: (e) => e._tag === "Azure.ProvisioningFailed",
-          schedule: Schedule.spaced("20 seconds"),
-          times: 9,
+          schedule: Schedule.spaced("30 seconds"),
+          times: 3,
         }),
       );
       return toAttrs(resourceGroup, signalR, name, fresh);

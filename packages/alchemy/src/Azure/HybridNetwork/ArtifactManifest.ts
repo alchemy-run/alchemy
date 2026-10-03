@@ -1,6 +1,7 @@
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -22,12 +23,20 @@ import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   canonical,
-  createHybridNetworkName,
   FAST_BUDGET,
   NAMESPACE,
   retryInProgress,
   sameArm,
 } from "./Common.ts";
+
+/** Manifest names: 5-50 lowercase alphanumerics separated by `-`. */
+const createManifestName = Effect.fn(function* (id: string) {
+  const name = yield* createPhysicalName({ id, maxLength: 50, lowercase: true });
+  return name
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[^a-z]+|-+$/g, "");
+});
 
 export type ManifestArtifactType =
   | "OCIArtifact"
@@ -52,9 +61,9 @@ export interface ArtifactManifestProps {
   /** Name of the artifact store that holds the manifest. Changing it replaces the manifest. */
   artifactStore: string;
   /**
-   * Manifest name: 1-64 letters, digits, `_`, and `-`. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the manifest.
+   * Manifest name: 5-50 lowercase letters, digits, and `-`, starting with
+   * a letter. If omitted, a unique name is generated from the app, stage,
+   * and logical ID. Changing it replaces the manifest.
    */
   name?: string;
   /**
@@ -308,7 +317,7 @@ export const ArtifactManifestProvider = () =>
       const name =
         output?.artifactManifestName ??
         olds?.name ??
-        (yield* createHybridNetworkName(id));
+        (yield* createManifestName(id));
       const observed = yield* getManifest(
         subscriptionId,
         resourceGroup,
@@ -329,7 +338,7 @@ export const ArtifactManifestProvider = () =>
       const name =
         news.name ??
         output?.artifactManifestName ??
-        (yield* createHybridNetworkName(id));
+        (yield* createManifestName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const where = {

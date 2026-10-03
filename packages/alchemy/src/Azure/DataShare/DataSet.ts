@@ -1,3 +1,4 @@
+import { isResolved } from "../../Diff.ts";
 import * as datashare from "@distilled.cloud/azure/datashare";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -265,7 +266,10 @@ export const DataSetProvider = () =>
       if (output === undefined) return undefined;
       // Every prop is immutable; an unresolved one comes from an upstream
       // resource being created or replaced.
-      const next = news as unknown as Record<keyof DataSetProps, unknown>;
+      // An unresolved props object comes from an upstream replacement; every
+      // prop is immutable, so that is a replace.
+      if (!isResolved(news)) return { action: "replace" } as const;
+      const next = news;
       if (
         immutableChanged(next.resourceGroup, output.resourceGroup, ci) ||
         immutableChanged(next.account, output.accountName, ci) ||
@@ -303,7 +307,11 @@ export const DataSetProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, share, name, observed);
-      return (yield* accountOwnedByStack(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStack(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

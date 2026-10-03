@@ -1,6 +1,39 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import type { Input } from "../../Input.ts";
+import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+
+/**
+ * The field-wise view of a plan-time `news` input, or `undefined` when the
+ * whole props object is a single unresolved expression.
+ */
+export function inputFields<P extends object>(
+  news: Input<P>,
+):
+  | Exclude<
+      Input<P>,
+      Output.Output<any> | Effect.Effect<any, any, any> | Config.Config<any>
+    >
+  | undefined;
+export function inputFields(news: unknown): unknown {
+  return Output.isOutput(news) || Effect.isEffect(news) || Config.isConfig(news)
+    ? undefined
+    : news;
+}
+
+/** An ARM tag map with `null` values (as some SDK shapes declare) dropped. */
+export const armTags = (
+  tags: { [key: string]: string | null | undefined } | null | undefined,
+): Record<string, string> | undefined =>
+  tags == null
+    ? undefined
+    : Object.fromEntries(
+        Object.entries(tags).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
 
 /**
  * Generate a workspace or registry name: 3-33 letters, digits, `-`, and

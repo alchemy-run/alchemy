@@ -132,6 +132,8 @@ export const PrivateLinkAssociationProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
       if (
+        !("managementGroupId" in news) ||
+        !("privateLink" in news) ||
         !isResolved(news.managementGroupId) ||
         !isResolved(news.privateLink)
       ) {

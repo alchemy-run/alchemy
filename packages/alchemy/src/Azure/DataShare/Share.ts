@@ -166,7 +166,11 @@ export const ShareProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, account, name, observed);
-      return (yield* accountOwnedByStack(subscriptionId, resourceGroup, account))
+      return (yield* accountOwnedByStack(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
         ? attrs
         : Unowned(attrs);
     }),

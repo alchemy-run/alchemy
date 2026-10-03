@@ -110,7 +110,7 @@ export const WorkspaceNotificationRecipientEmailProvider = () =>
       // recipients, so the first page is authoritative.
       get: (subscriptionId, key) =>
         apim
-          .ListNotificationRecipientEmailByNotification({
+          .ListWorkspaceNotificationRecipientEmailByNotification({
             subscriptionId,
             resourceGroupName: key.resourceGroup,
             serviceName: key.serviceName,

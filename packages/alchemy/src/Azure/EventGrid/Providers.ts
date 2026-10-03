@@ -9,6 +9,10 @@ import {
 } from "./DomainEventSubscription.ts";
 import { DomainTopic, DomainTopicProvider } from "./DomainTopic.ts";
 import {
+  DomainTopicEventSubscription,
+  DomainTopicEventSubscriptionProvider,
+} from "./DomainTopicEventSubscription.ts";
+import {
   EventSubscription,
   EventSubscriptionProvider,
 } from "./EventSubscription.ts";
@@ -45,6 +49,7 @@ export const resources = [
   Domain,
   DomainEventSubscription,
   DomainTopic,
+  DomainTopicEventSubscription,
   EventSubscription,
   Namespace,
   NamespaceTopic,
@@ -65,6 +70,7 @@ export const layers = () =>
     DomainProvider(),
     DomainEventSubscriptionProvider(),
     DomainTopicProvider(),
+    DomainTopicEventSubscriptionProvider(),
     EventSubscriptionProvider(),
     NamespaceProvider(),
     NamespaceTopicProvider(),

@@ -215,7 +215,7 @@ export const DatabaseProvider = () =>
       // Ensure. The PUT is a long-running operation (202 + empty body).
       if (observed === undefined) {
         yield* mysql
-          .CreateDatabase({
+          .DatabasesCreateOrUpdate({
             ...ref,
             properties: {
               charset: news.charset ?? DEFAULT_CHARSET,

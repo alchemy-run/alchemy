@@ -159,8 +159,7 @@ export const sharedPrivateLinkMatches = (
 ) =>
   observed !== undefined &&
   lower(observed.groupId) === lower(news.groupId) &&
-  lower(observed.privateLinkResourceId) ===
-    lower(news.privateLinkResourceId) &&
+  lower(observed.privateLinkResourceId) === lower(news.privateLinkResourceId) &&
   (news.requestMessage === undefined ||
     observed.requestMessage === news.requestMessage);
 
@@ -214,7 +213,7 @@ export const SharedPrivateLinkResourceProvider = () =>
       const name =
         output?.sharedPrivateLinkResourceName ??
         olds?.name ??
-        (yield* createWebPubSubName(id, 80));
+        (yield* createWebPubSubName(id));
       const observed = yield* getLink(
         subscriptionId,
         resourceGroup,
@@ -239,7 +238,7 @@ export const SharedPrivateLinkResourceProvider = () =>
       const name =
         news.name ??
         output?.sharedPrivateLinkResourceName ??
-        (yield* createWebPubSubName(id, 80));
+        (yield* createWebPubSubName(id));
       const get = getLink(subscriptionId, resourceGroup, webPubSub, name);
 
       // Observe.

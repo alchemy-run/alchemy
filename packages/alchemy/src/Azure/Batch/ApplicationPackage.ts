@@ -1,4 +1,5 @@
 import * as batch from "@distilled.cloud/azure/batch";
+import { createHash } from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -8,18 +9,15 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
-  desiredTags,
   ensureRegistered,
   ignoreNotFound,
-  isOwned,
   orUndefinedIfNotFound,
-  tagsDiffer,
-  userTags,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { accountOwnedByStage } from "./Common.ts";
 
 export interface ApplicationPackageProps {
   /** Resource group of the Batch account. Changing it replaces the package. */
@@ -37,14 +35,10 @@ export interface ApplicationPackageProps {
    * Base64-encoded zip file with the package contents. When set, Alchemy
    * uploads it to the package's storage blob and activates the package;
    * when omitted, the package stays `Pending` until you upload and activate
-   * it yourself. Changing it replaces the package.
+   * it yourself. Changing it re-uploads and re-activates the package, which
+   * Azure only allows when the application has `allowUpdates` enabled.
    */
   content?: string;
-  /**
-   * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
-   */
-  tags?: Record<string, string>;
 }
 
 export interface ApplicationPackage extends Resource<
@@ -67,8 +61,8 @@ export interface ApplicationPackage extends Resource<
     format: string | undefined;
     /** Time the package was last activated. */
     lastActivationTime: string | undefined;
-    /** User tags (Alchemy ownership tags stripped). */
-    tags: Record<string, string>;
+    /** SHA-256 of the last `content` Alchemy uploaded. */
+    contentHash: string | undefined;
   },
   never,
   Providers
@@ -80,7 +74,9 @@ export interface ApplicationPackage extends Resource<
  *
  * The Batch account needs `autoStorage`: packages are stored as blobs in
  * the auto-storage account. With `content`, the zip is uploaded and the
- * package activated during deploy.
+ * package activated during deploy. Packages cannot be tagged; a package
+ * counts as owned when its Batch account carries this stack's and stage's
+ * ownership tags.
  *
  * @see https://learn.microsoft.com/azure/batch/batch-application-packages
  *
@@ -138,6 +134,11 @@ const getPackage = (
       applicationName,
       versionName,
     }),
+  ).pipe(
+    // No application can exist on an account without auto-storage.
+    Effect.catchTag("BatchAccountNotEnabledForAutoStorage", () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const toAttrs = (
@@ -146,6 +147,7 @@ const toAttrs = (
   application: string,
   version: string,
   pkg: ObservedPackage,
+  contentHash: string | undefined,
 ): ApplicationPackage["Attributes"] => ({
   packageId: pkg.id ?? "",
   version,
@@ -155,8 +157,11 @@ const toAttrs = (
   state: pkg.properties?.state,
   format: pkg.properties?.format,
   lastActivationTime: pkg.properties?.lastActivationTime,
-  tags: userTags(pkg.tags),
+  contentHash,
 });
+
+const hashContent = (content: string) =>
+  Effect.sync(() => createHash("sha256").update(content).digest("hex"));
 
 /** Upload the zip to the package's SAS blob URL. */
 const uploadBlob = (storageUrl: string, version: string, content: string) =>
@@ -196,22 +201,21 @@ export const ApplicationPackageProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, olds, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         news.resourceGroup.toLowerCase() !==
           output.resourceGroup.toLowerCase() ||
         news.account.toLowerCase() !== output.account.toLowerCase() ||
         news.application.toLowerCase() !== output.application.toLowerCase() ||
-        news.version !== output.version ||
-        (olds !== undefined && news.content !== olds.content)
+        news.version !== output.version
       ) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       const account = output?.account ?? olds?.account;
@@ -239,15 +243,21 @@ export const ApplicationPackageProvider = () =>
         application,
         version,
         observed,
+        output?.contentHash,
       );
-      return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
+      return (yield* accountOwnedByStage(
+        subscriptionId,
+        resourceGroup,
+        account,
+      ))
+        ? attrs
+        : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Batch");
       const { resourceGroup, account, application, version } = news;
-      const tags = yield* desiredTags(id, news.tags);
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -266,21 +276,34 @@ export const ApplicationPackageProvider = () =>
       // Observe.
       let observed = yield* get;
 
-      // Ensure (and sync tags): the PUT is a synchronous upsert that
-      // returns the SAS URL of the package blob.
-      if (observed === undefined || tagsDiffer(observed.tags, tags)) {
-        observed = yield* batch.CreateApplicationPackage({ ...where, tags });
+      // Content to sync: a pending package, or content that differs from
+      // what was last uploaded.
+      const contentHash =
+        news.content !== undefined
+          ? yield* hashContent(news.content)
+          : output?.contentHash;
+      const needsUpload =
+        news.content !== undefined &&
+        (observed?.properties?.state !== "Active" ||
+          output?.contentHash !== contentHash);
+
+      // Ensure: the PUT is synchronous and returns a fresh SAS URL for the
+      // package blob (GET does not always include one).
+      if (observed === undefined || needsUpload) {
+        observed = yield* batch.CreateApplicationPackage(where);
       }
 
-      // Sync content: upload and activate a pending package.
-      if (
-        news.content !== undefined &&
-        observed.properties?.state !== "Active"
-      ) {
+      // Sync content: upload the zip and activate it.
+      if (needsUpload && news.content !== undefined) {
         const storageUrl = observed.properties?.storageUrl;
-        if (storageUrl !== undefined) {
-          yield* uploadBlob(storageUrl, version, news.content);
+        if (storageUrl === undefined) {
+          return yield* new ApplicationPackageUploadFailed({
+            version,
+            status: 0,
+            message: `Azure returned no storage URL for application package ${application}/${version}`,
+          });
         }
+        yield* uploadBlob(storageUrl, version, news.content);
         yield* batch.ActivateApplicationPackage({ ...where, format: "zip" });
       }
 
@@ -290,7 +313,14 @@ export const ApplicationPackageProvider = () =>
         () => undefined,
         { interval: "2 seconds", times: 15 },
       );
-      return toAttrs(resourceGroup, account, application, version, fresh);
+      return toAttrs(
+        resourceGroup,
+        account,
+        application,
+        version,
+        fresh,
+        contentHash,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -303,6 +333,11 @@ export const ApplicationPackageProvider = () =>
           applicationName: output.application,
           versionName: output.version,
         }),
+      ).pipe(
+        Effect.catchTag(
+          "BatchAccountNotEnabledForAutoStorage",
+          () => Effect.void,
+        ),
       );
       yield* waitUntilGone(
         `batch application package ${output.application}/${output.version}`,

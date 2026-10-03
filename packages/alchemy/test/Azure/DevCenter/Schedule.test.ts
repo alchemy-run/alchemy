@@ -4,6 +4,7 @@ import * as Test from "@/Test/Alchemy";
 import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -63,10 +64,61 @@ const program = (props: { time: string; tags: Record<string, string> }) =>
     return { group, project, pool, schedule };
   });
 
-// Everything here is free (no dev boxes are created); ~6-10 minutes.
+// Ungated: a schedule needs a pool, and the trial tenant was never
+// onboarded to Dev Box (which stopped accepting new customers on
+// 2025-11-01), so the pool is rejected with a typed error. ~7 minutes
+// (dev center create + delete), $0.
+test.provider(
+  "dev box pool schedules are unavailable for tenants not onboarded to Dev Box",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, project } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          const center = yield* Azure.DevCenter.DevCenter("Center", {
+            resourceGroup: group.resourceGroupName,
+            location: "eastus",
+            microsoftHostedNetworkEnableStatus: "Enabled",
+          });
+          const project = yield* Azure.DevCenter.Project("Project", {
+            resourceGroup: group.resourceGroupName,
+            location: "eastus",
+            devCenterId: center.devCenterId,
+          });
+          return { group, project };
+        }),
+      );
+      const pool = yield* devcenter
+        .PoolsCreateOrUpdate({
+          subscriptionId: yield* subscription,
+          resourceGroupName: group.resourceGroupName,
+          projectName: project.projectName,
+          poolName: "alchemy-probe",
+          location: "eastus",
+          properties: {
+            devBoxDefinitionName: "alchemy-probe",
+            networkConnectionName: "managedNetwork",
+            virtualNetworkType: "Managed",
+            managedVirtualNetworkRegions: ["eastus"],
+            licenseType: "Windows_Client",
+            localAdministrator: "Enabled",
+          },
+        })
+        .pipe(Effect.flip);
+      expect(pool._tag).toEqual("DevBoxTenantNotOnboarded");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 900_000 },
+);
+
+// Gated: needs a tenant onboarded to Dev Box (see the probe above).
+// Everything here is free (no dev boxes are created); ~6-10 minutes, $0.
 // Schedules accept only the name `default` and type `StopDevBox`, so there
 // is no replacement step.
-test.provider(
+test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a dev box pool schedule",
   (stack) =>
     Effect.gen(function* () {
@@ -103,7 +155,11 @@ test.provider(
       yield* stack.destroy();
       expect(
         yield* waitGone(
-          getSchedule(group.resourceGroupName, project.projectName, pool.poolName),
+          getSchedule(
+            group.resourceGroupName,
+            project.projectName,
+            pool.poolName,
+          ),
         ),
       ).toEqual("gone");
     }).pipe(logLevel),

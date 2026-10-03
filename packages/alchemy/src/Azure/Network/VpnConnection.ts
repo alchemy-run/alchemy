@@ -142,6 +142,26 @@ export const VpnConnectionProvider = () =>
             connectionName: path.name,
           }),
         ),
+      body: (news) => ({
+        properties: {
+          remoteVpnSite: { id: news.remoteVpnSiteId },
+          enableInternetSecurity: news.enableInternetSecurity ?? false,
+          routingConfiguration: routingConfigurationInput(news.routing),
+          vpnLinkConnections: news.links.map((link) => ({
+            name: link.name,
+            properties: {
+              vpnSiteLink: { id: link.vpnSiteLinkId },
+              sharedKey: reveal(link.sharedKey),
+              vpnConnectionProtocolType: link.protocol ?? "IKEv2",
+              connectionBandwidth: link.bandwidthMbps,
+              enableBgp: link.enableBgp ?? false,
+              routingWeight: link.routingWeight,
+              ingressNatRules: refs(link.ingressNatRuleIds),
+              egressNatRules: refs(link.egressNatRuleIds),
+            },
+          })),
+        },
+      }),
       put: (subscriptionId, path, body) =>
         network.VpnConnectionsCreateOrUpdate({
           subscriptionId,
@@ -165,26 +185,6 @@ export const VpnConnectionProvider = () =>
             gatewayName: path.vpnGateway!,
           }),
         ).pipe(Effect.map((gateway) => gateway?.tags)),
-      body: (news) => ({
-        properties: {
-          remoteVpnSite: { id: news.remoteVpnSiteId },
-          enableInternetSecurity: news.enableInternetSecurity ?? false,
-          routingConfiguration: routingConfigurationInput(news.routing),
-          vpnLinkConnections: news.links.map((link) => ({
-            name: link.name,
-            properties: {
-              vpnSiteLink: { id: link.vpnSiteLinkId },
-              sharedKey: reveal(link.sharedKey),
-              vpnConnectionProtocolType: link.protocol ?? "IKEv2",
-              connectionBandwidth: link.bandwidthMbps,
-              enableBgp: link.enableBgp ?? false,
-              routingWeight: link.routingWeight,
-              ingressNatRules: refs(link.ingressNatRuleIds),
-              egressNatRules: refs(link.egressNatRuleIds),
-            },
-          })),
-        },
-      }),
       // Shared keys are write-only: compare everything else.
       drifted: (observed, body) =>
         subsetDiffers(

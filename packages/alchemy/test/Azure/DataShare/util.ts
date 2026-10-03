@@ -35,7 +35,6 @@ export const waitGone = <A, R>(
     }),
   );
 
-
 /** Object ID of the deploying identity (the `oid` claim of the ARM token). */
 export const callerObjectId = Effect.gen(function* () {
   const config = yield* yield* Credentials;
@@ -168,7 +167,7 @@ export const chain = (options: ChainOptions) =>
         sourceShareLocation: account.location,
       },
     );
-    let mapping: Azure.DataShare.DataSetMapping["Attributes"] | undefined;
+    let mapping: Azure.DataShare.DataSetMapping | undefined;
     if (options.mapping) {
       yield* Azure.Authorization.RoleAssignment("ConsumerWritesTarget", {
         scope: storage.storageAccountId,
@@ -190,7 +189,8 @@ export const chain = (options: ChainOptions) =>
               })
             : undefined,
       };
-      const target = targets[(options.targetContainer ?? "Target") as "Target"]!;
+      const target =
+        targets[(options.targetContainer ?? "Target") as "Target"]!;
       mapping = yield* Azure.DataShare.DataSetMapping("Mapping", {
         resourceGroup: group.resourceGroupName,
         account: consumer.accountName,

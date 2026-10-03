@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { isWholeExpression } from "./Members.ts";
 import {
   comparableMetadata,
   metadataTags,
@@ -141,10 +142,11 @@ export const PolicyDefinitionVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
+      if (isWholeExpression(news)) return undefined;
       if (!isResolved(news.policyDefinitionName)) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<PolicyDefinitionVersionProps>(news)) return undefined;
       if (
         news.policyDefinitionName.toLowerCase() !==
           output.policyDefinitionName.toLowerCase() ||
@@ -228,11 +230,7 @@ export const PolicyDefinitionVersionProvider = () =>
       );
       yield* waitUntilGone(
         `policy definition version ${output.policyDefinitionName}/${output.version}`,
-        getVersion(
-          subscriptionId,
-          output.policyDefinitionName,
-          output.version,
-        ),
+        getVersion(subscriptionId, output.policyDefinitionName, output.version),
       );
     }),
 

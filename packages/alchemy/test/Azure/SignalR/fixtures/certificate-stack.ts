@@ -54,5 +54,3 @@ export const makeCertificateStack = (
     ).pipe(Output.map(([name]) => name));
     return { group, service, vault, secrets, signalRName };
   });
-
-export const certificateStack = makeCertificateStack();

@@ -20,7 +20,7 @@ import {
   metadataWithMarker,
   sameJson,
 } from "../Resources/Shared.ts";
-import { sameMembers, toMembers } from "./Members.ts";
+import { isWholeExpression, sameMembers, toMembers } from "./Members.ts";
 import type { PolicyParameterDefinition } from "./PolicyDefinition.ts";
 import type { PolicySetGroup, PolicySetMember } from "./PolicySetDefinition.ts";
 
@@ -140,10 +140,11 @@ export const PolicySetDefinitionVersionProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (output === undefined) return undefined;
+      if (isWholeExpression(news)) return undefined;
       if (!isResolved(news.policySetDefinitionName)) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<PolicySetDefinitionVersionProps>(news)) return undefined;
       if (
         news.policySetDefinitionName.toLowerCase() !==
           output.policySetDefinitionName.toLowerCase() ||
@@ -156,7 +157,8 @@ export const PolicySetDefinitionVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const set = output?.policySetDefinitionName ?? olds?.policySetDefinitionName;
+      const set =
+        output?.policySetDefinitionName ?? olds?.policySetDefinitionName;
       const version = output?.version ?? olds?.version;
       if (set === undefined || version === undefined) return undefined;
       const observed = yield* getVersion(subscriptionId, set, version);

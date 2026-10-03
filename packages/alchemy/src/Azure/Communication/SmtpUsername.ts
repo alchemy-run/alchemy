@@ -226,6 +226,7 @@ export const SmtpUsernameProvider = () =>
       // itself is immutable; diff replaces on change).
       const props = observed?.properties;
       if (
+        observed === undefined ||
         props === undefined ||
         lower(props.entraApplicationId) !== lower(desired.entraApplicationId) ||
         lower(props.tenantId) !== lower(desired.tenantId)

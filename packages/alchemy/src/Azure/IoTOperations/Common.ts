@@ -207,7 +207,11 @@ export const childLifecycle = <
       output: A | undefined;
     }) {
       if (!isResolved<P>(news) || output === undefined) return undefined;
-      const recorded = spec.keyOfAttrs(output) as Record<string, unknown>;
+      const recordedKey: ChildKey<S> = spec.keyOfAttrs(output);
+      const recorded: Record<string, unknown> = {
+        ...(recordedKey as S as Record<string, unknown>),
+        name: recordedKey.name,
+      };
       const scope = spec.scopeOf(news) as Record<string, unknown>;
       const scopeChanged = Object.keys(scope).some(
         (field) =>

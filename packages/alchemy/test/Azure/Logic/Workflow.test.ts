@@ -22,7 +22,10 @@ const definition = (greeting: string) => ({
     reply: {
       type: "Response",
       kind: "Http",
-      inputs: { statusCode: 200, body: `@{parameters('greeting')} ${greeting}` },
+      inputs: {
+        statusCode: 200,
+        body: `@{parameters('greeting')} ${greeting}`,
+      },
     },
   },
 });
@@ -64,9 +67,12 @@ const invoke = (url: Redacted.Redacted<string>, status: number) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.post(Redacted.value(url)).pipe(
       Effect.flatMap((res) =>
-        res.status === status
-          ? res.text
-          : Effect.fail(`status ${res.status}` as const),
+        Effect.gen(function* () {
+          if (res.status !== status) {
+            return yield* Effect.fail(`status ${res.status}` as const);
+          }
+          return yield* res.text;
+        }),
       ),
       Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
     );
@@ -140,10 +146,12 @@ test.provider(
           tags: { env: "b" },
         }),
       );
-      expect(replaced.workflow.workflowName).toEqual("alchemy-logic-test-hello");
-      expect(
-        yield* waitGone(getWorkflow(rg, workflow.workflowName)),
-      ).toEqual("gone");
+      expect(replaced.workflow.workflowName).toEqual(
+        "alchemy-logic-test-hello",
+      );
+      expect(yield* waitGone(getWorkflow(rg, workflow.workflowName))).toEqual(
+        "gone",
+      );
       expect(
         yield* invoke(replaced.workflow.triggerCallbackUrls.manual!, 200),
       ).toEqual("hi there");

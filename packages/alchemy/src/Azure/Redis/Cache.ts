@@ -231,7 +231,8 @@ export interface Cache extends Resource<
  * Provisioning takes roughly 15-20 minutes (Premium up to ~40); the
  * deploy blocks until the cache is `Succeeded`. For new workloads prefer
  * `Azure.Redis.ManagedRedis`: Microsoft retires these tiers in 2028 and
- * blocks cache creation for tenants that never had one.
+ * refuses new caches (`RedisCacheRetiring`) to subscriptions that never
+ * had one — in practice also in regions where the subscription had none.
  *
  * @see https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview
  *

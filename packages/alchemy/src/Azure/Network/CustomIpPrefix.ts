@@ -240,6 +240,33 @@ export const CustomIpPrefixProvider = () =>
         (news.asn !== undefined && news.asn !== output.asn) ||
         (news.geo !== undefined && lower(news.geo) !== lower(output.geo)),
       get: getPrefix,
+      body: (news, { location, tags, observed }) => {
+        const state = lower(observed?.properties?.commissionedState);
+        const commissioned = state !== undefined && COMMISSIONED.has(state);
+        // Only request a transition from a settled state.
+        const commissionedState =
+          news.commissioned === true && state === "provisioned"
+            ? "Commissioning"
+            : news.commissioned !== true && commissioned
+              ? "Decommissioning"
+              : undefined;
+        return {
+          location,
+          tags,
+          zones: news.zones,
+          properties: {
+            cidr: news.cidr,
+            prefixType: news.prefixType,
+            customIpPrefixParent: ref(news.parentId),
+            signedMessage: news.signedMessage,
+            authorizationMessage: news.authorizationMessage,
+            asn: news.asn,
+            geo: news.geo,
+            noInternetAdvertise: news.noInternetAdvertise ?? false,
+            commissionedState,
+          },
+        };
+      },
       put: (subscriptionId, path, body) =>
         network.CustomIPPrefixesCreateOrUpdate({
           subscriptionId,
@@ -301,33 +328,6 @@ export const CustomIpPrefixProvider = () =>
         }),
       listAll: (subscriptionId) =>
         network.ListCustomIPPrefixAll({ subscriptionId }),
-      body: (news, { location, tags, observed }) => {
-        const state = lower(observed?.properties?.commissionedState);
-        const commissioned = state !== undefined && COMMISSIONED.has(state);
-        // Only request a transition from a settled state.
-        const commissionedState =
-          news.commissioned === true && state === "provisioned"
-            ? "Commissioning"
-            : news.commissioned !== true && commissioned
-              ? "Decommissioning"
-              : undefined;
-        return {
-          location,
-          tags,
-          zones: news.zones,
-          properties: {
-            cidr: news.cidr,
-            prefixType: news.prefixType,
-            customIpPrefixParent: ref(news.parentId),
-            signedMessage: news.signedMessage,
-            authorizationMessage: news.authorizationMessage,
-            asn: news.asn,
-            geo: news.geo,
-            noInternetAdvertise: news.noInternetAdvertise ?? false,
-            commissionedState,
-          },
-        };
-      },
       drifted: (_observed, body) =>
         body.properties.commissionedState !== undefined,
       toAttrs: (path, observed) => ({

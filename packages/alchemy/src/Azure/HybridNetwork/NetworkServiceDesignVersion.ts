@@ -447,6 +447,7 @@ export const NetworkServiceDesignVersionProvider = () =>
           label,
           get,
           (version) =>
+            version.properties?.provisioningState === "Succeeded" &&
             version.properties?.versionState !== versionState
               ? "Updating"
               : version.properties?.provisioningState,

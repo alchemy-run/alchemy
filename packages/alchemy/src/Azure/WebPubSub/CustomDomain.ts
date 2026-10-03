@@ -194,7 +194,9 @@ export const CustomDomainProvider = () =>
       yield* ensureRegistered(subscriptionId, WEBPUBSUB_NAMESPACE);
       const { resourceGroup, webPubSub } = news;
       const name =
-        news.name ?? output?.customDomainName ?? (yield* createWebPubSubName(id));
+        news.name ??
+        output?.customDomainName ??
+        (yield* createWebPubSubName(id));
       const get = getDomain(subscriptionId, resourceGroup, webPubSub, name);
 
       // Observe.

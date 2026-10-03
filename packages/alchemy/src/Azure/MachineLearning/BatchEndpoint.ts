@@ -24,6 +24,7 @@ import {
   sameArm,
   toArmIdentity,
   workspaceLocation,
+  inputFields,
 } from "./Common.ts";
 
 import type { EndpointAuthMode } from "./OnlineEndpoint.ts";
@@ -161,8 +162,8 @@ const toAttrs = (
   resourceGroup,
   location: endpoint.location,
   authMode: endpoint.properties.authMode,
-  scoringUri: endpoint.properties.scoringUri,
-  defaultDeployment: endpoint.properties.defaults?.deploymentName,
+  scoringUri: endpoint.properties.scoringUri ?? undefined,
+  defaultDeployment: endpoint.properties.defaults?.deploymentName ?? undefined,
   principalId: endpoint.identity?.principalId,
   tags: userTags(endpoint.tags),
 });
@@ -188,7 +189,12 @@ export const BatchEndpointProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;

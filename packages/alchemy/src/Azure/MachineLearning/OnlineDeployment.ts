@@ -17,7 +17,12 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { containsValue, createChildName, sameArm } from "./Common.ts";
+import {
+  containsValue,
+  createChildName,
+  sameArm,
+  inputFields,
+} from "./Common.ts";
 
 export interface OnlineDeploymentProbe {
   /** Consecutive failures before the probe fails. */
@@ -216,7 +221,7 @@ const toAttrs = (
   resourceGroup,
   location: deployment.location,
   endpointComputeType: deployment.properties.endpointComputeType,
-  instanceType: deployment.properties.instanceType,
+  instanceType: deployment.properties.instanceType ?? undefined,
   instanceCount: deployment.sku?.capacity,
   tags: userTags(deployment.tags),
 });
@@ -256,10 +261,12 @@ export const OnlineDeploymentProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
+      const fields = inputFields(news);
       if (
-        !isResolved(news.resourceGroup) ||
-        !isResolved(news.workspace) ||
-        !isResolved(news.endpoint)
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace) ||
+        !isResolved(fields.endpoint)
       ) {
         return { action: "replace" } as const;
       }

@@ -61,7 +61,9 @@ test.provider(
       expect(invitation.invitationId).not.toEqual("");
       expect(invitation.invitationStatus).toEqual("Pending");
       const observed = yield* get(invitation.invitationName);
-      expect(observed.properties?.invitationId).toEqual(invitation.invitationId);
+      expect(observed.properties?.invitationId).toEqual(
+        invitation.invitationId,
+      );
       expect(observed.properties?.targetObjectId).toEqual(
         yield* callerObjectId,
       );
@@ -71,12 +73,14 @@ test.provider(
       expect(replaced.invitation.invitationId).not.toEqual(
         invitation.invitationId,
       );
-      expect(yield* waitGone(get(invitation.invitationName), 6)).toEqual("gone");
+      expect(yield* waitGone(get(invitation.invitationName), 6)).toEqual(
+        "gone",
+      );
 
       yield* stack.destroy();
-      expect(
-        yield* waitGone(get(replaced.invitation.invitationName)),
-      ).toEqual("gone");
+      expect(yield* waitGone(get(replaced.invitation.invitationName))).toEqual(
+        "gone",
+      );
     }).pipe(logLevel),
   { tags, timeout: 600_000 },
 );

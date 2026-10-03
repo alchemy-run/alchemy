@@ -162,7 +162,11 @@ const toAttrs = (
   capabilities: (context.properties?.capabilities ?? []).map((c) => ({
     name: c.name,
     description: c.description,
-    ...(c.state !== undefined ? { state: c.state } : {}),
+    ...(c.state === "active"
+      ? { state: "active" as const }
+      : c.state === "inactive"
+        ? { state: "inactive" as const }
+        : {}),
   })),
   hierarchies: (context.properties?.hierarchies ?? []).map((h) => ({
     name: h.name,

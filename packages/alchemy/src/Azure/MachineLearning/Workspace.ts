@@ -28,6 +28,7 @@ import {
   type MachineLearningIdentity,
   sameArm,
   toArmIdentity,
+  inputFields,
 } from "./Common.ts";
 
 export type WorkspaceKind = "Default" | "Hub" | "Project" | "FeatureStore";
@@ -272,11 +273,13 @@ export const WorkspaceProvider = () =>
       if (output === undefined) return undefined;
       // Associated resource IDs and the resource group are stable upstream;
       // an unresolved one means that resource is being replaced.
+      const fields = inputFields(news);
       if (
-        !isResolved(news.resourceGroup) ||
-        !isResolved(news.storageAccount) ||
-        !isResolved(news.keyVault) ||
-        !isResolved(news.hubResourceId)
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.storageAccount) ||
+        !isResolved(fields.keyVault) ||
+        !isResolved(fields.hubResourceId)
       ) {
         return { action: "replace" } as const;
       }

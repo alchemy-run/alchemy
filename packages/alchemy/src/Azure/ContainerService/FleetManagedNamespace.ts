@@ -4,6 +4,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { tagRecord } from "../../Tags.ts";
 import {
   desiredTags,
   ensureRegistered,
@@ -182,8 +183,8 @@ const propertiesMatch = (
   return (
     subsetMatches(rest, observed) &&
     subsetMatches(namespaceRest, have) &&
-    !tagsDiffer(have?.labels, labels ?? {}) &&
-    !tagsDiffer(have?.annotations, annotations ?? {})
+    !tagsDiffer(have?.labels, tagRecord(labels)) &&
+    !tagsDiffer(have?.annotations, tagRecord(annotations))
   );
 };
 

@@ -40,7 +40,9 @@ export const createHubName = Effect.fn(function* (id: string) {
     maxLength: 100,
     delimiter: "_",
   });
-  const cleaned = name.replace(/[^A-Za-z0-9_]/g, "_").replace(/^[^A-Za-z]+/, "");
+  const cleaned = name
+    .replace(/[^A-Za-z0-9_]/g, "_")
+    .replace(/^[^A-Za-z]+/, "");
   return cleaned.length > 0 ? cleaned : "hub";
 });
 
@@ -88,8 +90,7 @@ export const whileWebPubSubBusy = {
 /** Poll budget for Web PubSub long-running operations (up to 10 minutes). */
 export const WAIT = { interval: "10 seconds", times: 60 } as const;
 
-export const lower = (value: string | undefined | null) =>
-  value?.toLowerCase();
+export const lower = (value: string | undefined | null) => value?.toLowerCase();
 
 export const sameLocation = (
   a: string | undefined | null,

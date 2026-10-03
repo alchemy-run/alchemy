@@ -16,7 +16,13 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createChildName, sameArm, sameValue } from "./Common.ts";
+import {
+  armTags,
+  createChildName,
+  inputFields,
+  sameArm,
+  sameValue,
+} from "./Common.ts";
 
 export type DatastoreType =
   | "AzureBlob"
@@ -211,7 +217,7 @@ const toAttrs = (
   datastoreType: datastore.properties.datastoreType,
   accountName: datastore.properties.accountName,
   isDefault: datastore.properties.isDefault ?? false,
-  tags: userTags(datastore.properties.tags ?? undefined),
+  tags: userTags(armTags(datastore.properties.tags)),
 });
 
 const location = (news: DatastoreProps) => ({
@@ -235,11 +241,13 @@ export const DatastoreProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
+      const fields = inputFields(news);
       if (
-        !isResolved(news.resourceGroup) ||
-        !isResolved(news.workspace) ||
-        !isResolved(news.accountName) ||
-        !isResolved(news.containerName)
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace) ||
+        !isResolved(fields.accountName) ||
+        !isResolved(fields.containerName)
       ) {
         return { action: "replace" } as const;
       }
@@ -284,7 +292,7 @@ export const DatastoreProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, workspace, name, observed);
-      return (yield* isOwned(id, observed.properties.tags ?? undefined))
+      return (yield* isOwned(id, armTags(observed.properties.tags)))
         ? attrs
         : Unowned(attrs);
     }),

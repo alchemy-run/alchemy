@@ -27,10 +27,7 @@ import {
 } from "./CatalogCommon.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
-export type {
-  CatalogGitSource,
-  CatalogSyncType,
-} from "./CatalogCommon.ts";
+export type { CatalogGitSource, CatalogSyncType } from "./CatalogCommon.ts";
 
 export interface CatalogProps extends CatalogSourceProps {
   /** Resource group of the dev center. Changing it replaces the catalog. */

@@ -196,40 +196,26 @@ export const VirtualNetworkGatewayProvider = () =>
             virtualNetworkGatewayName: path.name,
           }),
         ),
-      put: (subscriptionId, path, body) =>
-        network.VirtualNetworkGatewaysCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayName: path.name,
-          ...body,
-        }),
-      del: (subscriptionId, path) =>
-        network.DeleteVirtualNetworkGateway({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayName: path.name,
-        }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateVirtualNetworkGatewayTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          virtualNetworkGatewayName: path.name,
-          tags,
-        }),
       // The PUT replaces the NAT-rule collection: carry the observed rules
       // (managed by VirtualNetworkGatewayNatRule).
       body: (news, { location, tags, observed }) => {
         const gatewayType = news.gatewayType ?? "Vpn";
-        const sku = news.sku ?? (gatewayType === "Vpn" ? "VpnGw1AZ" : "ErGw1AZ");
+        const sku =
+          news.sku ?? (gatewayType === "Vpn" ? "VpnGw1AZ" : "ErGw1AZ");
         const client = news.vpnClient;
         return {
           location,
           tags,
           properties: {
             gatewayType,
-            vpnType: gatewayType === "Vpn" ? (news.vpnType ?? "RouteBased") : undefined,
+            vpnType:
+              gatewayType === "Vpn"
+                ? (news.vpnType ?? "RouteBased")
+                : undefined,
             vpnGatewayGeneration:
-              gatewayType === "Vpn" ? (news.generation ?? "Generation1") : undefined,
+              gatewayType === "Vpn"
+                ? (news.generation ?? "Generation1")
+                : undefined,
             sku: { name: sku, tier: sku },
             activeActive: news.activeActive ?? false,
             enableBgp: news.enableBgp ?? false,
@@ -278,6 +264,26 @@ export const VirtualNetworkGatewayProvider = () =>
           },
         };
       },
+      put: (subscriptionId, path, body) =>
+        network.VirtualNetworkGatewaysCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayName: path.name,
+          ...body,
+        }),
+      del: (subscriptionId, path) =>
+        network.DeleteVirtualNetworkGateway({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayName: path.name,
+        }),
+      updateTags: (subscriptionId, path, tags) =>
+        network.UpdateVirtualNetworkGatewayTags({
+          subscriptionId,
+          resourceGroupName: path.resourceGroup,
+          virtualNetworkGatewayName: path.name,
+          tags,
+        }),
       drifted: (observed, body) => {
         const { natRules: _rules, ...desired } = body.properties;
         return subsetDiffers(desired, observed.properties);
@@ -290,8 +296,8 @@ export const VirtualNetworkGatewayProvider = () =>
         gatewayType: observed.properties?.gatewayType,
         vpnType: observed.properties?.vpnType,
         sku: observed.properties?.sku?.name,
-        subnetId: observed.properties?.ipConfigurations?.[0]?.properties?.subnet
-          ?.id,
+        subnetId:
+          observed.properties?.ipConfigurations?.[0]?.properties?.subnet?.id,
         bgpAsn: observed.properties?.bgpSettings?.asn,
         bgpPeeringAddress: observed.properties?.bgpSettings?.bgpPeeringAddress,
         natRuleIds: idsOf(observed.properties?.natRules),

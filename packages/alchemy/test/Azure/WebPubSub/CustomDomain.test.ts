@@ -5,10 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
 import { TEST_CERTIFICATE_DOMAIN } from "./fixtures/certificate.ts";
-import {
-  certificateStack,
-  makeCertificateStack,
-} from "./fixtures/certificate-stack.ts";
+import { makeCertificateStack } from "./fixtures/certificate-stack.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -28,7 +25,8 @@ const getDomain = (
   });
 
 /**
- * A custom domain needs a publicly resolvable CNAME
+ * A custom domain needs a CA-signed certificate (Web PubSub rejects
+ * self-signed ones) and a publicly resolvable CNAME
  * `{domain} → {webPubSubName}.webpubsub.azure.com` and a certificate for the
  * domain, which the test subscription cannot provide on its own. Supply:
  * - `AZURE_TEST_WEBPUBSUB_NAME`: fixed Web PubSub service name the CNAME targets
@@ -111,24 +109,25 @@ test.provider.skipIf(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe (Premium_P1 for ~8 minutes, ~$0.02): without a CNAME to the
-// service, Azure rejects the custom domain with a typed error.
+// Ungated probe (Premium_P1 for ~5 minutes, ~$0.01): a custom domain needs a
+// provisioned certificate (which needs a CA-signed PFX); without one Azure
+// rejects the domain with a typed error.
 test.provider(
-  "a custom domain without a CNAME is rejected with a typed error",
+  "a custom domain without a certificate is rejected with a typed error",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, service, certificate } = yield* stack.deploy(
+      const { group, service } = yield* stack.deploy(
         Effect.gen(function* () {
-          const base = yield* certificateStack;
-          const certificate = yield* Azure.WebPubSub.CustomCertificate("Tls", {
-            resourceGroup: base.group.resourceGroupName,
-            webPubSub: base.webPubSubName,
-            keyVaultBaseUri: base.vault.vaultUri,
-            keyVaultSecretName: base.secrets.A.secretName,
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
           });
-          return { ...base, certificate };
+          const service = yield* Azure.WebPubSub.WebPubSub("PubSub", {
+            resourceGroup: group.resourceGroupName,
+            sku: "Premium_P1",
+          });
+          return { group, service };
         }),
       );
       const error = yield* webpubsub
@@ -139,11 +138,13 @@ test.provider(
           name: "probe",
           properties: {
             domainName: TEST_CERTIFICATE_DOMAIN,
-            customCertificate: { id: certificate.certificateId },
+            customCertificate: {
+              id: `${service.webPubSubId}/customCertificates/probe`,
+            },
           },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("SignalRCustomDomainCnameMissing");
+      expect(error._tag).toEqual("SignalRCustomCertificateNotFound");
       expect(
         yield* waitGone(
           getDomain(group.resourceGroupName, service.webPubSubName, "probe"),

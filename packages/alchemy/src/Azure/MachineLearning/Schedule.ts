@@ -17,7 +17,13 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { containsValue, createChildName, sameArm } from "./Common.ts";
+import {
+  containsValue,
+  createChildName,
+  sameArm,
+  armTags,
+  inputFields,
+} from "./Common.ts";
 
 export interface ScheduleAction {
   /** What the schedule does when it fires. */
@@ -185,7 +191,7 @@ const toAttrs = (
   workspace,
   resourceGroup,
   isEnabled: schedule.properties.isEnabled ?? true,
-  tags: userTags(schedule.properties.tags ?? undefined),
+  tags: userTags(armTags(schedule.properties.tags)),
 });
 
 export const ScheduleProvider = () =>
@@ -201,7 +207,12 @@ export const ScheduleProvider = () =>
       if (output === undefined) return undefined;
       // Parent names are stable upstream; an unresolved one means the
       // parent is being replaced.
-      if (!isResolved(news.resourceGroup) || !isResolved(news.workspace)) {
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace)
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;
@@ -232,7 +243,7 @@ export const ScheduleProvider = () =>
       );
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, workspace, name, observed);
-      return (yield* isOwned(id, observed.properties.tags ?? undefined))
+      return (yield* isOwned(id, armTags(observed.properties.tags)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -260,7 +271,7 @@ export const ScheduleProvider = () =>
             props.description === news.description) &&
           containsValue(props.trigger, trigger) &&
           sameArm(props.action.actionType, news.action.actionType) &&
-          !tagsDiffer(props.tags ?? undefined, tags)
+          !tagsDiffer(armTags(props.tags), tags)
         );
       };
 

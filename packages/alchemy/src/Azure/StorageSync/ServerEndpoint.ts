@@ -1,4 +1,5 @@
 import * as storagesync from "@distilled.cloud/azure/storagesync";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -164,7 +165,7 @@ export interface ServerEndpoint extends Resource<
  *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
- *   serverResourceId: `${sync.storageSyncServiceId}/registeredServers/${serverId}`,
+ *   serverResourceId: Output.interpolate`${sync.storageSyncServiceId}/registeredServers/${serverId}`,
  *   serverLocalPath: "D:\\Shares\\Docs",
  * });
  * ```
@@ -190,7 +191,43 @@ export const ServerEndpoint = Resource<ServerEndpoint>(
   "Azure.StorageSync.ServerEndpoint",
 );
 
+export class RegisteredServerNotFound extends Data.TaggedError(
+  "Azure.StorageSync.RegisteredServerNotFound",
+)<{ readonly serverResourceId: string; readonly message: string }> {}
+
 type Observed = storagesync.GetServerEndpointResponse;
+
+/**
+ * Fail fast when the server is not registered with the service: ARM accepts
+ * the PUT and the endpoint then silently never appears.
+ */
+const requireRegisteredServer = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  storageSyncServiceName: string,
+  serverResourceId: string,
+) {
+  const serverId = serverResourceId.match(
+    /\/registeredServers\/([^/]+)$/i,
+  )?.[1];
+  const server =
+    serverId === undefined
+      ? undefined
+      : yield* orUndefinedIfNotFound(
+          storagesync.GetRegisteredServer({
+            subscriptionId,
+            resourceGroupName,
+            storageSyncServiceName,
+            serverId,
+          }),
+        );
+  if (server === undefined) {
+    return yield* new RegisteredServerNotFound({
+      serverResourceId,
+      message: `server ${serverResourceId} is not registered with storage sync service ${storageSyncServiceName}; register it with the Azure File Sync agent first`,
+    });
+  }
+});
 
 const createServerEndpointName = (id: string) => createChildName(id, 60);
 
@@ -390,6 +427,12 @@ export const ServerEndpointProvider = () =>
 
       // Ensure. The PUT is a long-running operation run by the agent.
       if (observed === undefined) {
+        yield* requireRegisteredServer(
+          subscriptionId,
+          resourceGroup,
+          storageSyncService,
+          news.serverResourceId,
+        );
         yield* storagesync.CreateServerEndpoint({
           ...where,
           properties: {

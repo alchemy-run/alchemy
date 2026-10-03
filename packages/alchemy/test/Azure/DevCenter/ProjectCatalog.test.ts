@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -56,21 +57,26 @@ const program = (props: {
     return { group, project, catalog };
   });
 
-// Dev centers, projects, and catalogs are free; ~4-6 minutes in total.
+// Dev centers, projects, and catalogs are free ($0). Catalog writes are
+// slow while the repository syncs (~40s create, ~40s update, ~160s delete)
+// and a dev center takes ~5 minutes to delete: ~12-13 minutes in total.
 test.provider(
-  "create, update, replace, and delete a project catalog",
+  "create, update, and delete a project catalog",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, project, catalog } = yield* stack.deploy(
+      const { group, project: parent, catalog } = yield* stack.deploy(
         program({ syncType: "Manual", tags: { a: "1" } }),
       );
       expect(catalog.sourceType).toEqual("gitHub");
       const observed = yield* getProjectCatalog(
         group.resourceGroupName,
-        project.projectName,
+        parent.projectName,
         catalog.catalogName,
+      );
+      expect(observed.properties?.gitHub?.uri).toEqual(
+        "https://github.com/microsoft/devcenter-catalog.git",
       );
       expect(observed.properties?.gitHub?.path).toEqual(
         "/Environment-Definitions",
@@ -86,28 +92,52 @@ test.provider(
       expect(updated.catalog.catalogId).toEqual(catalog.catalogId);
       const reobserved = yield* getProjectCatalog(
         group.resourceGroupName,
-        project.projectName,
+        parent.projectName,
         catalog.catalogName,
       );
       expect(reobserved.properties?.syncType).toEqual("Scheduled");
       expect(reobserved.properties?.tags?.a).toEqual("2");
 
-      // Replacement: the name is immutable.
-      const replaced = yield* stack.deploy(
-        program({
-          name: "alchemy-project-catalog-renamed",
-          syncType: "Scheduled",
-          tags: { a: "2" },
-        }),
-      );
-      expect(replaced.catalog.catalogName).toEqual(
-        "alchemy-project-catalog-renamed",
-      );
+      yield* stack.destroy();
       expect(
         yield* waitGone(
           getProjectCatalog(
             group.resourceGroupName,
-            project.projectName,
+            parent.projectName,
+            catalog.catalogName,
+          ),
+        ),
+      ).toEqual("gone");
+    }).pipe(logLevel),
+  { tags, timeout: 900_000 },
+);
+
+// Gated (slow, $0): the replacement creates the new catalog while the old
+// one still syncs (~140s) and deletes the old one (~200s); with the dev
+// center delete the whole run takes ~17 minutes.
+test.provider.skipIf(!runExpensive)(
+  "replace a project catalog when its name changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, project: parent, catalog } = yield* stack.deploy(
+        program({ syncType: "Manual", tags: { a: "1" } }),
+      );
+      const replaced = yield* stack.deploy(
+        program({
+          name: "alchemy-project-catalog-renamed",
+          syncType: "Manual",
+          tags: { a: "1" },
+        }),
+      );
+      expect(replaced.catalog.catalogName).toEqual("alchemy-project-catalog-renamed");
+      expect(replaced.catalog.catalogId).not.toEqual(catalog.catalogId);
+      expect(
+        yield* waitGone(
+          getProjectCatalog(
+            group.resourceGroupName,
+            parent.projectName,
             catalog.catalogName,
           ),
         ),
@@ -118,7 +148,7 @@ test.provider(
         yield* waitGone(
           getProjectCatalog(
             group.resourceGroupName,
-            project.projectName,
+            parent.projectName,
             replaced.catalog.catalogName,
           ),
         ),

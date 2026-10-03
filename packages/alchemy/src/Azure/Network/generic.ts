@@ -4,7 +4,10 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import type { InstanceId } from "../../InstanceId.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { Stack } from "../../Stack.ts";
+import type { Stage } from "../../Stage.ts";
 import {
   desiredTags,
   ensureRegistered,
@@ -47,7 +50,9 @@ export interface ArmObserved {
   readonly name?: string;
   readonly location?: string;
   readonly tags?: Record<string, string | undefined>;
-  readonly properties?: { readonly provisioningState?: string };
+  // `object &` opts out of weak-type detection: some responses (scope
+  // connections, NSP profiles) have properties without `provisioningState`.
+  readonly properties?: object & { readonly provisioningState?: string };
 }
 
 type Op<A> = Effect.Effect<A, any, AzureOpContext>;
@@ -75,7 +80,9 @@ export interface NetworkResourceSpec<
    */
   readonly tracked: boolean;
   /** Physical-name generator. @default 1-80 char Network name */
-  readonly physicalName?: (id: string) => Effect.Effect<string>;
+  readonly physicalName?: (
+    id: string,
+  ) => Effect.Effect<string, never, InstanceId | Stack | Stage>;
   /** Wait budgets for slow (10+ minute) resources. */
   readonly slow?: boolean;
   /**

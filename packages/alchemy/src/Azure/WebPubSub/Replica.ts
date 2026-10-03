@@ -173,9 +173,9 @@ const toAttrs = (
   sku: replica.sku?.name ?? "",
   capacity: replica.sku?.capacity,
   regionEndpointEnabled:
-    lower(replica.properties?.regionEndpointEnabled ?? "Enabled") ===
-    "enabled",
-  resourceStopped: lower(replica.properties?.resourceStopped ?? "false") === "true",
+    lower(replica.properties?.regionEndpointEnabled ?? "Enabled") === "enabled",
+  resourceStopped:
+    lower(replica.properties?.resourceStopped ?? "false") === "true",
   tags: userTags(replica.tags),
 });
 
@@ -206,7 +206,13 @@ const WAIT = { interval: "10 seconds", times: 60 } as const;
 
 export const ReplicaProvider = () =>
   Provider.succeed(Replica, {
-    stables: ["replicaName", "replicaId", "webPubSub", "resourceGroup", "location"],
+    stables: [
+      "replicaName",
+      "replicaId",
+      "webPubSub",
+      "resourceGroup",
+      "location",
+    ],
 
     // Replicas are deleted with their Web PubSub service.
     list: Effect.fn(function* () {
@@ -300,7 +306,9 @@ export const ReplicaProvider = () =>
           .UpdateWebPubSubReplicas({
             ...where,
             location: observed.location,
-            sku: skuChanged ? { name: sku, capacity: news.capacity } : undefined,
+            sku: skuChanged
+              ? { name: sku, capacity: news.capacity }
+              : undefined,
             properties: Object.keys(delta).length > 0 ? delta : undefined,
             tags: tagsChanged ? tags : undefined,
           })
@@ -314,8 +322,7 @@ export const ReplicaProvider = () =>
             const state = r.properties?.provisioningState;
             if (state !== "Succeeded") return state;
             const pending =
-              Object.keys(propertyDelta(news, r.properties ?? {})).length >
-                0 ||
+              Object.keys(propertyDelta(news, r.properties ?? {})).length > 0 ||
               lower(r.sku?.name) !== lower(sku) ||
               tagsDiffer(r.tags, tags);
             return pending ? "Updating" : state;

@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -49,24 +50,29 @@ const program = (props: {
     return { group, center, catalog };
   });
 
-// Dev centers and catalogs are free; ~3-5 minutes in total.
+// Dev centers, projects, and catalogs are free ($0). Catalog writes are
+// slow while the repository syncs (~40s create, ~40s update, ~160s delete)
+// and a dev center takes ~5 minutes to delete: ~12-13 minutes in total.
 test.provider(
-  "create, update, replace, and delete a dev center catalog",
+  "create, update, and delete a dev center catalog",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, center, catalog } = yield* stack.deploy(
+      const { group, center: parent, catalog } = yield* stack.deploy(
         program({ syncType: "Manual", tags: { a: "1" } }),
       );
       expect(catalog.sourceType).toEqual("gitHub");
       const observed = yield* getCatalog(
         group.resourceGroupName,
-        center.devCenterName,
+        parent.devCenterName,
         catalog.catalogName,
       );
       expect(observed.properties?.gitHub?.uri).toEqual(
         "https://github.com/microsoft/devcenter-catalog.git",
+      );
+      expect(observed.properties?.gitHub?.path).toEqual(
+        "/Environment-Definitions",
       );
       expect(observed.properties?.syncType).toEqual("Manual");
       expect(observed.properties?.tags?.a).toEqual("1");
@@ -79,26 +85,52 @@ test.provider(
       expect(updated.catalog.catalogId).toEqual(catalog.catalogId);
       const reobserved = yield* getCatalog(
         group.resourceGroupName,
-        center.devCenterName,
+        parent.devCenterName,
         catalog.catalogName,
       );
       expect(reobserved.properties?.syncType).toEqual("Scheduled");
       expect(reobserved.properties?.tags?.a).toEqual("2");
 
-      // Replacement: the name is immutable.
-      const replaced = yield* stack.deploy(
-        program({
-          name: "alchemy-catalog-renamed",
-          syncType: "Scheduled",
-          tags: { a: "2" },
-        }),
-      );
-      expect(replaced.catalog.catalogName).toEqual("alchemy-catalog-renamed");
+      yield* stack.destroy();
       expect(
         yield* waitGone(
           getCatalog(
             group.resourceGroupName,
-            center.devCenterName,
+            parent.devCenterName,
+            catalog.catalogName,
+          ),
+        ),
+      ).toEqual("gone");
+    }).pipe(logLevel),
+  { tags, timeout: 900_000 },
+);
+
+// Gated (slow, $0): the replacement creates the new catalog while the old
+// one still syncs (~140s) and deletes the old one (~200s); with the dev
+// center delete the whole run takes ~17 minutes.
+test.provider.skipIf(!runExpensive)(
+  "replace a dev center catalog when its name changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, center: parent, catalog } = yield* stack.deploy(
+        program({ syncType: "Manual", tags: { a: "1" } }),
+      );
+      const replaced = yield* stack.deploy(
+        program({
+          name: "alchemy-catalog-renamed",
+          syncType: "Manual",
+          tags: { a: "1" },
+        }),
+      );
+      expect(replaced.catalog.catalogName).toEqual("alchemy-catalog-renamed");
+      expect(replaced.catalog.catalogId).not.toEqual(catalog.catalogId);
+      expect(
+        yield* waitGone(
+          getCatalog(
+            group.resourceGroupName,
+            parent.devCenterName,
             catalog.catalogName,
           ),
         ),
@@ -109,7 +141,7 @@ test.provider(
         yield* waitGone(
           getCatalog(
             group.resourceGroupName,
-            center.devCenterName,
+            parent.devCenterName,
             replaced.catalog.catalogName,
           ),
         ),

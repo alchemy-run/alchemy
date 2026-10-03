@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import type { Input } from "@/Input";
 import * as Effect from "effect/Effect";
 
 /**
@@ -22,7 +23,10 @@ export const standardHub = Effect.gen(function* () {
 });
 
 /** A spoke VNet in the hub's resource group. */
-export const spokeVnet = (resourceGroup: string, addressPrefix: string) =>
+export const spokeVnet = (
+  resourceGroup: Input<string>,
+  addressPrefix: string,
+) =>
   Azure.Network.VirtualNetwork("Spoke", {
     resourceGroup,
     location: "eastus",

@@ -69,7 +69,10 @@ const program = (props: {
           },
           // Updates of a blob instance are rejected without these.
           datasourceParameters: [
-            { objectType: "BlobBackupDatasourceParameters", containersList: [] },
+            {
+              objectType: "BlobBackupDatasourceParameters",
+              containersList: [],
+            },
           ],
           friendlyName: props.instance.friendlyName,
           tags: props.instance.tags,
@@ -107,7 +110,7 @@ test.provider(
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Blobs");
 
-      // In-place update: friendly name and tags.
+      // In-place update: tags (the friendly name is create-only).
       const updated = yield* stack.deploy(
         program({
           instance: { friendlyName: "blobs-renamed", tags: { env: "prod" } },
@@ -115,8 +118,16 @@ test.provider(
       );
       expect(updated.instance!.backupInstanceName).toEqual(name);
       const reobserved = yield* getInstance(rg, vaultName, name);
-      expect(reobserved.properties?.friendlyName).toEqual("blobs-renamed");
+      expect(reobserved.properties?.friendlyName).toEqual("blobs");
+      expect(reobserved.properties?.currentProtectionState).toEqual(
+        "ProtectionConfigured",
+      );
       expect(reobserved.tags?.env).toEqual("prod");
+
+      // Remove the instance before its role grant: Azure Backup locks the
+      // storage account while protection is being removed.
+      yield* stack.deploy(program({}));
+      expect(yield* waitGone(getInstance(rg, vaultName, name))).toEqual("gone");
 
       yield* stack.destroy();
       expect(yield* waitGone(getInstance(rg, vaultName, name))).toEqual("gone");

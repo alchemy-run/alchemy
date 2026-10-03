@@ -1,9 +1,12 @@
 import * as Azure from "@/Azure";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import * as keyvault from "@distilled.cloud/azure/keyvault";
 import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -24,7 +27,59 @@ const getLink = (
     });
   });
 
-const program = (props: { target: "A" | "B"; requestMessage: string }) =>
+/**
+ * Web PubSub replicates a primary shared private link to its replicas only
+ * after the target approves the private endpoint connection. Approve every
+ * pending connection on the vault (we own both sides in this test).
+ */
+const approvePending = (resourceGroupName: string, vaultName: string) =>
+  Effect.gen(function* () {
+    const subscriptionId = yield* subscription;
+    const connections = yield* keyvault.ListPrivateEndpointConnectionByResource(
+      { subscriptionId, resourceGroupName, vaultName },
+    );
+    let approved = 0;
+    for (const connection of connections.value ?? []) {
+      // A connection can only be approved once it finished provisioning.
+      if (
+        connection.name === undefined ||
+        connection.properties?.provisioningState !== "Succeeded" ||
+        connection.properties?.privateLinkServiceConnectionState?.status !==
+          "Pending"
+      ) {
+        continue;
+      }
+      yield* keyvault.PutPrivateEndpointConnection({
+        subscriptionId,
+        resourceGroupName,
+        vaultName,
+        privateEndpointConnectionName: connection.name,
+        properties: {
+          privateLinkServiceConnectionState: {
+            status: "Approved",
+            description: "alchemy test",
+          },
+        },
+      });
+      approved++;
+    }
+    return approved;
+  });
+
+/** Keep approving pending connections on a vault (runs alongside a deploy). */
+const keepApproving = (resourceGroupName: string, vaultName: string) =>
+  approvePending(resourceGroupName, vaultName).pipe(
+    // A connection mid-transition rejects approval; the next round retries.
+    Effect.ignore,
+    Effect.repeat({ schedule: Schedule.spaced("10 seconds"), times: 80 }),
+    Effect.asVoid,
+  );
+
+const program = (props: {
+  target: "A" | "B";
+  requestMessage: string;
+  replicaLink: boolean;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -67,6 +122,9 @@ const program = (props: { target: "A" | "B"; requestMessage: string }) =>
       ).pipe(Output.map(([name]) => name)),
       location: "westus2",
     });
+    if (!props.replicaLink) {
+      return { group, service, replica, target, vaultB, link: undefined };
+    }
     const link = yield* Azure.WebPubSub.ReplicaSharedPrivateLinkResource(
       "WestLink",
       {
@@ -78,20 +136,39 @@ const program = (props: { target: "A" | "B"; requestMessage: string }) =>
         privateLinkResourceId: target.vaultId,
       },
     );
-    return { group, service, replica, target, link };
+    return { group, service, replica, target, vaultB, link };
   });
 
-// Premium_P1 primary + replica (~$0.08/hour per unit) and two vaults:
-// ~$0.05 per run, ~8-10 minutes.
-test.provider(
+// Premium_P1 primary + replica (~$0.07/hour per unit) and two vaults:
+// ~$0.05 per run, but ~15 minutes (two link approvals and replications), so
+// it only runs with AZURE_TEST_EXPENSIVE=1 (with a longer --timeout).
+test.provider.skipIf(!runExpensive)(
   "track, replace, and forget a replica shared private link resource",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, service, replica, target, link } = yield* stack.deploy(
-        program({ target: "A", requestMessage: "first" }),
+      // Primary link + replica first; the copy appears once approved.
+      const base = yield* stack.deploy(
+        program({ target: "A", requestMessage: "first", replicaLink: false }),
       );
+      expect(
+        yield* approvePending(
+          base.group.resourceGroupName,
+          base.target.vaultName,
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (approved) => approved > 0,
+            times: 30,
+          }),
+        ),
+      ).toBeGreaterThan(0);
+      const { group, service, replica, target, vaultB, link } =
+        yield* stack.deploy(
+          program({ target: "A", requestMessage: "first", replicaLink: true }),
+        );
+      if (link === undefined) return yield* Effect.die("link missing");
       const get = (name: string) =>
         getLink(
           group.resourceGroupName,
@@ -108,9 +185,20 @@ test.provider(
       expect(link.status).toBeDefined();
 
       // Replacement: a new primary link (new target) yields a new copy.
-      const replaced = yield* stack.deploy(
-        program({ target: "B", requestMessage: "second" }),
-      );
+      // The new primary link to vault B must be approved before its copy
+      // appears, so approve alongside the deploy.
+      const replaced = yield* stack
+        .deploy(
+          program({ target: "B", requestMessage: "second", replicaLink: true }),
+        )
+        .pipe(
+          Effect.raceFirst(
+            keepApproving(group.resourceGroupName, vaultB.vaultName).pipe(
+              Effect.andThen(Effect.never),
+            ),
+          ),
+        );
+      if (replaced.link === undefined) return yield* Effect.die("link missing");
       expect(replaced.link.sharedPrivateLinkResourceName).not.toEqual(
         link.sharedPrivateLinkResourceName,
       );

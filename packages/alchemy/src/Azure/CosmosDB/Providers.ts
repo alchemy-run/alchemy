@@ -19,9 +19,21 @@ import {
   CassandraRoleDefinition,
   CassandraRoleDefinitionProvider,
 } from "./CassandraRoleDefinition.ts";
+import {
+  ClientEncryptionKey,
+  ClientEncryptionKeyProvider,
+} from "./ClientEncryptionKey.ts";
 import { DatabaseAccount, DatabaseAccountProvider } from "./DatabaseAccount.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
 import { Fleetspace, FleetspaceProvider } from "./Fleetspace.ts";
+import {
+  FleetspaceAccount,
+  FleetspaceAccountProvider,
+} from "./FleetspaceAccount.ts";
+import {
+  PrivateEndpointConnection,
+  PrivateEndpointConnectionProvider,
+} from "./PrivateEndpointConnection.ts";
 import { GremlinDatabase, GremlinDatabaseProvider } from "./GremlinDatabase.ts";
 import { MongoCluster, MongoClusterProvider } from "./MongoCluster.ts";
 import {
@@ -44,6 +56,7 @@ import {
   SqlRoleDefinition,
   SqlRoleDefinitionProvider,
 } from "./SqlRoleDefinition.ts";
+import { Service, ServiceProvider } from "./Service.ts";
 import { Table, TableProvider } from "./Table.ts";
 import {
   GremlinRoleDefinition,
@@ -122,6 +135,10 @@ export const resources = [
   GremlinGraph,
   MongoRoleDefinition,
   MongoUserDefinition,
+  FleetspaceAccount,
+  PrivateEndpointConnection,
+  ClientEncryptionKey,
+  Service,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -157,4 +174,8 @@ export const layers = () =>
     GremlinGraphProvider(),
     MongoRoleDefinitionProvider(),
     MongoUserDefinitionProvider(),
+    FleetspaceAccountProvider(),
+    PrivateEndpointConnectionProvider(),
+    ClientEncryptionKeyProvider(),
+    ServiceProvider(),
   );

@@ -81,10 +81,12 @@ test.provider.skipIf(!runExpensive)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe (no cost: nothing is deployed into the managed group): a monitor whose subnet does not exist is accepted by ARM and then
-// fails provisioning. The provider surfaces the failure with the service's
-// recorded error instead of hanging.
-test.provider(
+// Free, but slow: ARM accepts a monitor whose subnet does not exist, the
+// managed App Service plan deployment fails after ~4 minutes
+// (`AppServicePlanDeploymentFailed`), and deleting the failed monitor takes
+// over 30 minutes. The provider surfaces the recorded error instead of
+// hanging. Runs only with AZURE_TEST_EXPENSIVE=1.
+test.provider.skipIf(!runExpensive)(
   "a monitor in a missing subnet fails provisioning with a typed error",
   (stack) =>
     Effect.gen(function* () {
@@ -107,8 +109,44 @@ test.provider(
         )
         .pipe(Effect.flip);
       expect(error._tag).toEqual("Azure.ProvisioningFailed");
+      expect(JSON.stringify(error)).toContain(
+        "AppServicePlanDeploymentFailed",
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
+);
+
+// Ungated probe (free: one empty resource group): a missing monitor reads
+// as the typed `ResourceNotFound` and deletes idempotently.
+test.provider(
+  "a missing monitor reads as a typed not-found and deletes idempotently",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const error = yield* getMonitor(group.resourceGroupName, "missing").pipe(
+        Effect.flip,
+      );
+      expect(error._tag).toEqual("ResourceNotFound");
+      yield* Effect.gen(function* () {
+        return yield* workloads.DeleteMonitor({
+          subscriptionId: yield* subscription,
+          resourceGroupName: group.resourceGroupName,
+          monitorName: "missing",
+        });
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 300_000 },
 );

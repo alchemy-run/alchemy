@@ -20,7 +20,13 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { AGC_BUDGET, childLocation, createAgcName, sameArm } from "./Common.ts";
+import {
+  AGC_BUDGET,
+  childLocation,
+  createAgcName,
+  ensureProvisioned,
+  sameArm,
+} from "./Common.ts";
 
 export interface AssociationProps {
   /**
@@ -283,32 +289,29 @@ export const AssociationProvider = () =>
       );
       const label = `AGC association ${name}`;
 
-      // Observe.
-      let observed = yield* get;
-
-      // Ensure (long-running PUT). Children live in the parent's location.
-      if (observed === undefined) {
-        const location = yield* childLocation(
-          subscriptionId,
-          resourceGroup,
-          trafficController,
-          news.location ?? output?.location,
-          env.location,
-        );
-        yield* servicenetworking.AssociationsInterfaceCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          properties: {
-            associationType: "subnets",
-            subnet: { id: news.subnetId },
-          },
-        });
-      }
-      observed = yield* waitForProvisioned(
+      // Observe + ensure: PUT when missing or Failed (long-running), then
+      // wait for Succeeded. Children live in the parent's location.
+      let observed = yield* ensureProvisioned(
         label,
         get,
         (association) => association.properties?.provisioningState,
+        Effect.gen(function* () {
+          const location = yield* childLocation(
+            subscriptionId,
+            resourceGroup,
+            trafficController,
+            news.location ?? output?.location,
+          );
+          yield* servicenetworking.AssociationsInterfaceCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            properties: {
+              associationType: "subnets",
+              subnet: { id: news.subnetId },
+            },
+          });
+        }),
         ASSOCIATION_BUDGET,
       );
 
