@@ -6829,6 +6829,9 @@ importers:
       '@distilled.cloud/axiom':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/axiom
+      '@distilled.cloud/azure':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/azure
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
