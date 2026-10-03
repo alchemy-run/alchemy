@@ -261,6 +261,7 @@ export interface AuthProviderImpl<
     profileName: string,
     config: Config,
     updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+    reload?: Effect.Effect<Config, AuthError>,
   ): Effect.Effect<Config | void, AuthError, R | Interaction>;
 
   logout(
@@ -311,7 +312,7 @@ export interface AuthProviderImpl<
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-> extends Omit<AuthProviderImpl<Config, Credentials>, "read"> {
+> extends Omit<AuthProviderImpl<Config, Credentials>, "read" | "details"> {
   readonly kind: "AuthProvider";
   readonly name: string;
   /**
@@ -325,6 +326,15 @@ export interface AuthProvider<
     loadConfig: Effect.Effect<Config, E>,
     updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<Credentials, E | AuthError | NeedsReauth>;
+  /**
+   * {@link AuthProviderImpl.details} under the profile's credentials lock,
+   * with `loadConfig` run inside the lock, since details may refresh.
+   */
+  details<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<ProviderDetails, E | AuthError | NeedsReauth, Interaction>;
   /** Log each environment contract once per built provider layer. */
   readonly logEnvironmentCredentials: (
     used: ReadonlyArray<string>,
@@ -355,7 +365,7 @@ export const AuthProvider =
   ) =>
     Effect.gen(function* () {
       // FileSystem/Path back the cross-process credentials lock that wraps
-      // `logout`/`read` below, so capture them with the impl's own services.
+      // `logout`/`read`/`details` below, so capture them with the impl's own services.
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
       // parameter only narrows the type), and `Effect.provideContext` makes
@@ -433,13 +443,13 @@ export const AuthProvider =
               .configure(profileName, currentConfig)
               .pipe(Effect.provideContext(ctx)),
           ),
-        login: (profileName, config, updateConfig) =>
+        login: (profileName, config, updateConfig, reload) =>
           Semaphore.withPermits(
             interactiveMutex,
             1,
           )(
             service
-              .login(profileName, config, updateConfig)
+              .login(profileName, config, updateConfig, reload)
               .pipe(Effect.provideContext(ctx)),
           ),
         logout: (profileName, config) =>
@@ -447,10 +457,12 @@ export const AuthProvider =
             profileName,
             service.logout(profileName, config),
           ).pipe(Effect.provideContext(ctx)),
-        details: (profileName, config, updateConfig) =>
+        details: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.details(profileName, config, updateConfig),
+            Effect.flatMap(loadConfig, (config) =>
+              service.details(profileName, config, updateConfig),
+            ),
           ).pipe(Effect.provideContext(ctx)),
         ...(service.configureWith === undefined
           ? {}

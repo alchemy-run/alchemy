@@ -453,6 +453,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       updateConfig?: (
         config: PlanetscaleAuthConfig,
       ) => Effect.Effect<void, AuthError>,
+      reload?: Effect.Effect<PlanetscaleAuthConfig, AuthError>,
     ) =>
       Match.value(config)
         .pipe(
@@ -472,35 +473,49 @@ export const PlanetscaleAuth = AuthProviderLayer<
               }
               const refreshed = yield* withProfileCredentialsLock(
                 profileName,
-                interaction.output
-                  .info("Planetscale: refreshing OAuth credentials...")
-                  .pipe(
-                    Effect.andThen(OAuthClient.refresh(credentials)),
-                    Effect.flatMap((credentials) => {
-                      const config = {
-                        ...oauth,
-                        clientId: credentials.clientId,
-                        access: Redacted.value(credentials.access),
-                        refresh: Redacted.value(credentials.refresh),
-                        expires: credentials.expires,
-                        scopes: credentials.scopes,
-                      };
-                      return (updateConfig?.(config) ?? Effect.void).pipe(
-                        Effect.as(config),
-                      );
-                    }),
-                    Effect.tap(() =>
-                      interaction.output.success(
-                        "Planetscale: OAuth credentials refreshed.",
+                Effect.gen(function* () {
+                  const current = yield* reload ?? Effect.succeed(oauth);
+                  if (current.method !== "oauth") return undefined;
+                  const freshCredentials = {
+                    type: "oauth" as const,
+                    clientId: current.clientId,
+                    access: Redacted.make(current.access),
+                    refresh: Redacted.make(current.refresh),
+                    expires: current.expires,
+                    scopes: current.scopes,
+                  };
+                  if (!OAuthClient.usesCurrentClient(freshCredentials))
+                    return undefined;
+                  return yield* interaction.output
+                    .info("Planetscale: refreshing OAuth credentials...")
+                    .pipe(
+                      Effect.andThen(OAuthClient.refresh(freshCredentials)),
+                      Effect.flatMap((credentials) => {
+                        const config = {
+                          ...current,
+                          clientId: credentials.clientId,
+                          access: Redacted.value(credentials.access),
+                          refresh: Redacted.value(credentials.refresh),
+                          expires: credentials.expires,
+                          scopes: credentials.scopes,
+                        };
+                        return (updateConfig?.(config) ?? Effect.void).pipe(
+                          Effect.as(config),
+                        );
+                      }),
+                      Effect.tap(() =>
+                        interaction.output.success(
+                          "Planetscale: OAuth credentials refreshed.",
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                }),
               ).pipe(
                 Effect.catchTag("OAuthError", () =>
                   configureOAuth(profileName),
                 ),
               );
-              return refreshed;
+              return refreshed ?? (yield* configureOAuth(profileName));
             }),
           ),
           Match.exhaustive,
