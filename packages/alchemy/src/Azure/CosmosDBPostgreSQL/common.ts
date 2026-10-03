@@ -55,7 +55,9 @@ export const whileClusterBusy = {
 
 /** Random password satisfying Azure's complexity rules (all four classes). */
 export const generatePassword = Effect.sync(() =>
-  Redacted.make(`Aa1-${crypto.randomBytes(24).toString("base64url")}`),
+  Redacted.make(
+    `Aa1-${Buffer.from(crypto.randomBytes(24)).toString("base64url")}`,
+  ),
 );
 
 export const reveal = (

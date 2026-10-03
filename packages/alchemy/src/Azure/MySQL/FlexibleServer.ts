@@ -357,7 +357,9 @@ const createServerName = Effect.fn(function* (id: string) {
 
 /** Random password satisfying Azure's complexity rules (all four classes). */
 const generatePassword = Effect.sync(() =>
-  Redacted.make(`Aa1-${crypto.randomBytes(24).toString("base64url")}`),
+  Redacted.make(
+    `Aa1-${Buffer.from(crypto.randomBytes(24)).toString("base64url")}`,
+  ),
 );
 
 const reveal = (
