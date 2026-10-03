@@ -23,6 +23,23 @@ const withoutVolatileMetadata = (
 };
 
 /**
+ * `stringData` is write-only. The apiserver stores it as base64 `data` and
+ * omits `stringData` from GET and dry-run responses, so compare the declared
+ * strings with `data` decoded on both sides.
+ */
+const decodeSecretData = (data: unknown): Record<string, unknown> => {
+  if (!isPlainObject(data)) return {};
+  const decoded: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    decoded[key] =
+      typeof value === "string"
+        ? Buffer.from(value, "base64").toString("utf8")
+        : value;
+  }
+  return decoded;
+};
+
+/**
  * Project an applied object onto the declared manifest. The dry-run is the
  * canonical applied form (defaults and list merge stay on the apiserver);
  * keys the manifest does not declare — admission annotations, controller
@@ -51,7 +68,11 @@ const projectDeclared = (
     const value =
       root && key === "metadata" && isPlainObject(source[key])
         ? withoutVolatileMetadata(source[key])
-        : source[key];
+        : root &&
+            key === "stringData" &&
+            (source.kind === "Secret" || desired.kind === "Secret")
+          ? decodeSecretData(source.data)
+          : source[key];
     out[key] = projectDeclared(value, child, false);
   }
   return out;

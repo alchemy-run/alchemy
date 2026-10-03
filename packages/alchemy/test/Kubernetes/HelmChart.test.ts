@@ -9,9 +9,12 @@ import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as OS from "node:os";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -23,6 +26,20 @@ const { test } = Test.make(testOptions);
 const chartDir = `${import.meta.dirname}/fixtures/chart`;
 
 const describe = layer(NodeServices.layer);
+
+const expectValuesFileGone = (secret: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* Effect.sync(() => OS.tmpdir());
+    const entries = yield* fs.readDirectory(tmp);
+    for (const entry of entries) {
+      if (!entry.startsWith("alchemy-helm-")) continue;
+      const valuesFile = path.join(tmp, entry, "values.json");
+      if (!(yield* fs.exists(valuesFile))) continue;
+      expect(yield* fs.readFileString(valuesFile)).not.toContain(secret);
+    }
+  });
 
 describe("renderHelmChart (local fixture)", (it) => {
   it.effect(
@@ -54,16 +71,18 @@ describe("renderHelmChart (local fixture)", (it) => {
     "unwraps Redacted values before writing the values file",
     () =>
       Effect.gen(function* () {
+        const secret = "helm-values-sentinel";
         const objects = yield* renderHelmChart({
           chart: chartDir,
           releaseName: "probe",
           namespace: "demo",
-          values: { message: Redacted.make("s3cr3t") },
+          values: { message: Redacted.make(secret) },
         });
         const configMap = objects[0] as unknown as {
           data: Record<string, string>;
         };
-        expect(configMap.data.message).toBe("s3cr3t");
+        expect(configMap.data.message).toBe(secret);
+        yield* expectValuesFileGone(secret);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );
@@ -118,20 +137,22 @@ describe("renderHelmChart (local fixture)", (it) => {
     "scrubs Redacted values from helm stderr",
     () =>
       Effect.gen(function* () {
+        const secret = "helm-stderr-sentinel";
         const result = yield* Effect.result(
           renderHelmChart({
             chart: chartDir,
             releaseName: "probe",
             namespace: "demo",
-            values: { message: Redacted.make("s3cr3t"), fail: true },
+            values: { message: Redacted.make(secret), fail: true },
           }),
         );
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result)) {
           expect(result.failure._tag).toBe("HelmError");
-          expect(result.failure.message).not.toContain("s3cr3t");
+          expect(result.failure.message).not.toContain(secret);
           expect(result.failure.message).toContain("<redacted>");
         }
+        yield* expectValuesFileGone(secret);
       }),
     { tags: ["provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
   );

@@ -350,6 +350,7 @@ test.provider(
   "drift read notices manifest field edits and missing helm objects",
   () => {
     let liveToken = "s3cr3t";
+    let liveSecret = "s3cr3t";
     let liveMessage = "s3cr3t";
     return serve(
       (request, response) => {
@@ -409,6 +410,58 @@ test.provider(
                   uid: "uid-1",
                   resourceVersion: "10",
                   annotations: { "deployed-at": "now" },
+                },
+              }),
+            );
+          });
+          return;
+        }
+        if (url.includes("/secrets/")) {
+          if (request.method === "GET") {
+            response.writeHead(200);
+            response.end(
+              JSON.stringify({
+                apiVersion: "v1",
+                kind: "Secret",
+                metadata: {
+                  name: "token",
+                  namespace: "default",
+                  uid: "uid-1",
+                  resourceVersion: "9",
+                },
+                type: "Opaque",
+                data: {
+                  token: Buffer.from(liveSecret).toString("base64"),
+                },
+              }),
+            );
+            return;
+          }
+          const chunks: Buffer[] = [];
+          request.on("data", (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          request.on("end", () => {
+            const submitted = JSON.parse(
+              Buffer.concat(chunks).toString("utf8"),
+            ) as { stringData?: { token?: string } };
+            // stringData is write-only; the stored object has base64 data.
+            response.writeHead(200);
+            response.end(
+              JSON.stringify({
+                apiVersion: "v1",
+                kind: "Secret",
+                metadata: {
+                  name: "token",
+                  namespace: "default",
+                  uid: "uid-1",
+                  resourceVersion: "10",
+                },
+                type: "Opaque",
+                data: {
+                  token: Buffer.from(
+                    submitted.stringData?.token ?? "",
+                  ).toString("base64"),
                 },
               }),
             );
@@ -519,6 +572,39 @@ test.provider(
             },
           });
           expect(Drifted.is(nested)).toBe(true);
+
+          const secretOlds = {
+            cluster: connection,
+            manifest: {
+              apiVersion: "v1",
+              kind: "Secret",
+              metadata: { name: "token", namespace: "default" },
+              stringData: { token: Redacted.make("s3cr3t") },
+            },
+          };
+          const secretOutput = {
+            ...output,
+            kind: "Secret",
+            ref: { ...output.ref, kind: "Secret" },
+          };
+          const secretInSync = yield* manifest.read({
+            id: "Secret",
+            fqn: "Secret",
+            instanceId: "i",
+            olds: secretOlds,
+            output: secretOutput,
+          });
+          expect(Drifted.is(secretInSync)).toBe(false);
+
+          liveSecret = "nope";
+          const secretEdited = yield* manifest.read({
+            id: "Secret",
+            fqn: "Secret",
+            instanceId: "i",
+            olds: secretOlds,
+            output: secretOutput,
+          });
+          expect(Drifted.is(secretEdited)).toBe(true);
 
           const helm = yield* Provider.findProvider(Kubernetes.HelmChart);
           if (helm.read === undefined) {
