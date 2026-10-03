@@ -77,6 +77,8 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Paths to Docker env files, forwarded as repeated `--env-file`. */
+        "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;

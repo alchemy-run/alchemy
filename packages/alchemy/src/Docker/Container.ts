@@ -27,6 +27,17 @@ export interface ContainerProps {
   command?: string[];
   /** Container environment variables. Use Redacted for secrets. */
   environment?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Paths to Docker env files, forwarded in the declared order as repeated
+   * `--env-file` options. Alchemy does not read or hash their contents, so
+   * changing a file in place does not replace the container; change the path
+   * (or use a versioned path) when a file change should trigger replacement.
+   * Docker resolves the files and may persist and expose their resulting
+   * values through Docker inspect. Treat env files as potentially secret.
+   * Explicit `environment` values are forwarded after these files and take
+   * precedence in Docker.
+   */
+  envFiles?: string[];
   /** Host/container port mappings. */
   ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
@@ -169,6 +180,25 @@ export interface Container extends Resource<
  * });
  * ```
  *
+ * ### Environment Files
+ * **Example:** Layered Docker env files
+ * ```typescript
+ * const app = yield* Docker.Container("app", {
+ *   image: "ghcr.io/acme/app:latest",
+ *   envFiles: ["./config/base.env", "./config/production.env"],
+ *   // Explicit values are passed after env files and take precedence.
+ *   environment: { LOG_LEVEL: "info" },
+ * });
+ * ```
+ *
+ * Alchemy does not read or hash env file contents, so changing a file in place
+ * does not replace the container. Docker resolves the files and may persist
+ * and expose their resulting values through Docker inspect. The normalized
+ * Container attributes omit `Config.Env`, so those values are not written to
+ * Alchemy resource-state attributes by this resource, but Docker daemon access
+ * can still reveal them. Treat env files as potentially secret. Use a changed
+ * or versioned path when a file change should trigger replacement.
+ *
  * ### Networks and Volumes
  * **Example:** PostgreSQL with persistent storage
  * ```typescript
@@ -219,7 +249,7 @@ export interface Container extends Resource<
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   // Any `hostname:address` pair — host access is just the common case.
- *   extraHosts: ["payments.internal:10.1.2.3"],
+ *   extraHosts: ["service.example:192.0.2.10"],
  *   start: true,
  * });
  * ```
@@ -485,6 +515,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         image: normalizeImageRef(news.image),
         command: news.command,
         env: normalizeEnvironment(news.environment),
+        "env-file": news.envFiles?.length ? news.envFiles : undefined,
         volume: news.volumes?.map(
           (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
         ),

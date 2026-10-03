@@ -81,6 +81,68 @@ test.provider(
 );
 
 test.provider(
+  "diff replaces a container when env file paths or order changes",
+  () =>
+    Effect.gen(function* () {
+      const containerProvider = yield* Provider.findProvider(Docker.Container);
+      const containerDiff = yield* containerProvider.diff!({
+        id: "web",
+        fqn: "web",
+        instanceId: "instance",
+        olds: {
+          name: "web",
+          image: "nginx:alpine",
+          envFiles: ["./base.env", "./local.env"],
+        },
+        news: {
+          name: "web",
+          image: "nginx:alpine",
+          envFiles: ["./local.env", "./base.env"],
+        },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          id: "web",
+          name: "web",
+          status: "created",
+          createdAt: 0,
+          imageRef: "nginx:alpine",
+          ports: {},
+        },
+      });
+      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "normalizes omitted and empty env files as equivalent",
+  () =>
+    Effect.gen(function* () {
+      const containerProvider = yield* Provider.findProvider(Docker.Container);
+      const containerDiff = yield* containerProvider.diff!({
+        id: "web",
+        fqn: "web",
+        instanceId: "instance",
+        olds: { name: "web", image: "nginx:alpine", envFiles: [] },
+        news: { name: "web", image: "nginx:alpine" },
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          id: "web",
+          name: "web",
+          status: "created",
+          createdAt: 0,
+          imageRef: "nginx:alpine",
+          ports: {},
+        },
+      });
+      expect(containerDiff).toBeUndefined();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "diff replaces a container when its labels or stop timeout change",
   () =>
     Effect.gen(function* () {
