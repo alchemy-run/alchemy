@@ -40,6 +40,24 @@ type TypeId = typeof TypeId;
  */
 export type SubscriptionSource =
   | {
+      /**
+       * Artifacts events for every repository in the account:
+       * `repo.created`, `repo.deleted`, `repo.forked`, `repo.imported`.
+       */
+      type: "artifacts";
+    }
+  | {
+      /**
+       * Artifacts events for one repository: `pushed`, `cloned`, `fetched`,
+       * `token.created`, `token.revoked`.
+       */
+      type: "artifacts.repo";
+      /** Artifacts namespace of the repository. */
+      namespace: string;
+      /** Name of the repository. */
+      repoName: string;
+    }
+  | {
       /** Cloudflare Images events. */
       type: "images";
     }
@@ -348,6 +366,17 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  *   queueId: queue.queueId,
  * });
  * ```
+ *
+ * **Example:** Pushes to one Artifacts repository
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("RepoPushes", {
+ *   source: { type: "artifacts.repo", namespace: "my-namespace", repoName: "my-repo" },
+ *   events: ["pushed"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ * To start a Workflow on pushes to every repository in a namespace without a
+ * Queue, use `Cloudflare.Workers.EventTriggers`.
  *
  * **Example:** Workflow lifecycle events, from a Workflow bound in this stack
  * Pass the Workflow binding from the host Worker's `env` directly. Its
@@ -703,6 +732,8 @@ const createSubscriptionName = (id: string, name: string | undefined) =>
  */
 type WireSource = {
   type?: string | null;
+  namespace?: string | null;
+  repoName?: string | null;
   modelName?: string | null;
   workerName?: string | null;
   workflowName?: string | null;
@@ -723,6 +754,13 @@ const toSource = (wire: unknown): SubscriptionSource => {
         type: "workflows.workflow",
         workflowName: source.workflowName ?? "",
       };
+    case "artifacts.repo":
+      return {
+        type: "artifacts.repo",
+        namespace: source.namespace ?? "",
+        repoName: source.repoName ?? "",
+      };
+    case "artifacts":
     case "images":
     case "kv":
     case "r2":
@@ -745,6 +783,10 @@ const sameSource = (a: SubscriptionSource, b: SubscriptionSource): boolean => {
       return a.workerName === (b as { workerName?: string }).workerName;
     case "workflows.workflow":
       return a.workflowName === (b as { workflowName?: string }).workflowName;
+    case "artifacts.repo": {
+      const other = b as { namespace?: string; repoName?: string };
+      return a.namespace === other.namespace && a.repoName === other.repoName;
+    }
     default:
       return true;
   }

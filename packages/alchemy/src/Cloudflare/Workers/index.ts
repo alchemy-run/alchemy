@@ -14,6 +14,7 @@ export * from "./DurableObjectBridge.ts";
 export * from "./DurableObjectState.ts";
 export * from "./DurableObjectStorage.ts";
 export * from "./EmailEventSource.ts";
+export * from "./EventTriggers.ts";
 export * from "./Fetch.ts";
 export * from "./GitHubRepositoryEventSource.ts";
 export * from "./HttpServer.ts";
