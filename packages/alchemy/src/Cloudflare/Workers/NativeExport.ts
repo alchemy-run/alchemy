@@ -10,8 +10,10 @@
  * `export { className } from "module";`, so the module must export the class
  * under that name. `module` is resolved like any import of the generated
  * entry: use a package specifier (`"@app/agent/sandbox"`) or an absolute
- * path. A package that cannot be resolved from the Worker's project fails the
- * build.
+ * path. A relative path (`"./sandbox.ts"`) is rejected with a build error,
+ * because it would resolve against the generated entry rather than the
+ * Worker's project. A package that cannot be resolved from the Worker's
+ * project fails the build.
  *
  * Bind the class like any other class the Worker hosts, e.g.
  * `env: { NAME: Cloudflare.DurableObject("NAME", { className }) }`.

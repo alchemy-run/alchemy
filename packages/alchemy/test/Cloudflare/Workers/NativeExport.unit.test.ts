@@ -1,6 +1,9 @@
 import { virtualEntryPlugin } from "@/Bundle/Bundle";
 import { nativeExport } from "@/Cloudflare/Workers/NativeExport.ts";
-import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
+import {
+  makeEffectVirtualEntry,
+  validateNativeExports,
+} from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -106,6 +109,35 @@ layer(NodeServices.layer)("Cloudflare.Workers.nativeExport", (it) => {
         expect(String(error.cause)).toContain(
           "@alchemy-native-export-test/missing",
         );
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker"] },
+  );
+
+  it.effect(
+    "re-exports a native class from a bare package specifier",
+    () =>
+      Effect.gen(function* () {
+        const exports = yield* capturedExports({
+          Container: "@cloudflare/containers",
+        });
+        expect((yield* entryExports(exports)).toSorted()).toEqual([
+          "Container",
+          "default",
+        ]);
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker"] },
+  );
+
+  it.effect(
+    "rejects a relative module as a typed build error",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          validateNativeExports({
+            Sandbox: nativeExport("./sandbox.ts"),
+          }),
+        );
+        expect(error._tag).toBe("BundleError");
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker"] },
   );

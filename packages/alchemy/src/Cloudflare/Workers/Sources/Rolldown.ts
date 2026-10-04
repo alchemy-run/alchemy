@@ -137,6 +137,34 @@ const configureCloudflarePlugins = (
   });
 };
 
+/**
+ * Reject a native export whose `module` is a relative path.
+ *
+ * The generated entry emits `export { className } from "<module>";` and
+ * resolves `module` from the Worker's project, so a relative path would
+ * resolve against the generated entry instead — it can never name the
+ * module the caller meant. The Rolldown source provider runs this before
+ * generating the entry, so the deploy fails with a typed build error naming
+ * the field and the class, not an unresolved import.
+ */
+export const validateNativeExports = (
+  exports: Record<string, WorkerExport>,
+): Effect.Effect<void, Bundle.BundleError> => {
+  for (const [className, entry] of Object.entries(exports)) {
+    if (!isNativeExport(entry)) continue;
+    const specifier = entry.module;
+    if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
+    return Effect.fail(
+      new Bundle.BundleError({
+        message:
+          `nativeExport(${JSON.stringify(className)}).module is the relative path ${JSON.stringify(specifier)}; ` +
+          "use a package specifier or an absolute path",
+      }),
+    );
+  }
+  return Effect.void;
+};
+
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -190,6 +218,9 @@ export const WorkerBundle = Effect.gen(function* () {
         },
       }),
     });
+    if (options.entry.kind === "effect") {
+      yield* validateNativeExports(options.entry.exports);
+    }
     const inputOptions: rolldown.InputOptions = {
       preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
       // Forever-devtool native modules that vite/chokidar reference behind
