@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type KeyPairId<ID extends string = string> = `key-${ID}`;
@@ -108,9 +103,7 @@ export interface KeyPair extends Resource<
 export const KeyPair = Resource<KeyPair>("AWS.EC2.KeyPair");
 
 const toKeyName = (id: string, props: { keyName?: string } = {}) =>
-  props.keyName
-    ? Effect.succeed(props.keyName)
-    : createPhysicalName({ id, maxLength: 255 });
+  props.keyName ? Effect.succeed(props.keyName) : createPhysicalName({ id, maxLength: 255 });
 
 const asRedacted = (
   material: string | Redacted.Redacted<string> | undefined,
@@ -127,9 +120,7 @@ export const KeyPairProvider = () =>
     Effect.gen(function* () {
       const describeByName = (keyName: string) =>
         ec2.describeKeyPairs({ KeyNames: [keyName] }).pipe(
-          Effect.catchTag("InvalidKeyPair.NotFound", () =>
-            Effect.succeed({ KeyPairs: [] }),
-          ),
+          Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.succeed({ KeyPairs: [] })),
           Effect.map((r) => r.KeyPairs?.[0]),
         );
 
@@ -157,10 +148,9 @@ export const KeyPairProvider = () =>
           const info = yield* describeByName(keyName);
           if (!info?.KeyPairId) return undefined;
           const tags = yield* createInternalTags(id);
-          const observedTags: Record<string, string | undefined> =
-            Object.fromEntries(
-              (info.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
-            );
+          const observedTags: Record<string, string | undefined> = Object.fromEntries(
+            (info.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+          );
           if (!hasTags(tags, observedTags)) {
             // Exists but unbranded — let the engine gate adoption behind --adopt.
             return Unowned({
@@ -194,9 +184,7 @@ export const KeyPairProvider = () =>
                   KeyName: string;
                 } => kp.KeyPairId != null && kp.KeyName != null,
               )
-              .filter((kp) =>
-                (kp.Tags ?? []).some((t) => t.Key === "alchemy::stack"),
-              )
+              .filter((kp) => (kp.Tags ?? []).some((t) => t.Key === "alchemy::stack"))
               .map((kp) => ({
                 keyPairId: kp.KeyPairId as KeyPairId,
                 keyName: kp.KeyName,
@@ -221,9 +209,7 @@ export const KeyPairProvider = () =>
               const imported = yield* ec2
                 .importKeyPair({
                   KeyName: keyName,
-                  PublicKeyMaterial: new TextEncoder().encode(
-                    news.publicKeyMaterial,
-                  ),
+                  PublicKeyMaterial: new TextEncoder().encode(news.publicKeyMaterial),
                   TagSpecifications: [
                     {
                       ResourceType: "key-pair",
@@ -231,11 +217,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(
-                  Effect.catchTag("InvalidKeyPair.Duplicate", () =>
-                    Effect.succeed(undefined),
-                  ),
-                );
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
               if (imported?.KeyPairId) {
                 info = {
                   KeyPairId: imported.KeyPairId,
@@ -259,11 +241,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(
-                  Effect.catchTag("InvalidKeyPair.Duplicate", () =>
-                    Effect.succeed(undefined),
-                  ),
-                );
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
               if (created?.KeyPairId) {
                 privateKey = asRedacted(created.KeyMaterial) ?? privateKey;
                 info = {
@@ -279,9 +257,7 @@ export const KeyPairProvider = () =>
           }
 
           if (!info?.KeyPairId) {
-            return yield* Effect.die(
-              new Error(`Failed to resolve EC2 key pair '${keyName}'`),
-            );
+            return yield* Effect.die(new Error(`Failed to resolve EC2 key pair '${keyName}'`));
           }
           const keyPairId = info.KeyPairId as KeyPairId;
 

@@ -11,10 +11,7 @@ type PgSsl = PgClient.PgPoolConfig["ssl"];
  * places — Hyperdrive's local `dev` origin passthrough hands the worker
  * `?sslmode=prefer`, and `prefer` is libpq's own default.
  */
-const OPPORTUNISTIC_SSL_MODES: ReadonlySet<string> = new Set([
-  "prefer",
-  "allow",
-]);
+const OPPORTUNISTIC_SSL_MODES: ReadonlySet<string> = new Set(["prefer", "allow"]);
 
 /**
  * Resolve the `ssl` option to hand `@effect/sql-pg` for a connection URL.
@@ -28,10 +25,7 @@ const OPPORTUNISTIC_SSL_MODES: ReadonlySet<string> = new Set([
  * (`@effect/sql-pg` < rc.115 also sent no TLS SNI; that was fixed upstream in
  * Effect-TS/effect#8174, so this helper no longer sets `servername`.)
  */
-export const resolveSsl = (
-  url: Redacted.Redacted<string>,
-  ssl: PgSsl,
-): PgSsl => {
+export const resolveSsl = (url: Redacted.Redacted<string>, ssl: PgSsl): PgSsl => {
   if (ssl !== undefined) return ssl;
   let parsed: URL;
   try {

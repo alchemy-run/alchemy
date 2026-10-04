@@ -156,9 +156,7 @@ export const consumeTranscriptionJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.transcribe"],
       "detail-type": ["Transcribe Job State Change"],
-      ...(props.statuses
-        ? { detail: { TranscriptionJobStatus: [...props.statuses] } }
-        : {}),
+      ...(props.statuses ? { detail: { TranscriptionJobStatus: [...props.statuses] } } : {}),
     },
     { description: props.description, state: props.state },
     process,
@@ -252,9 +250,7 @@ export const consumeMedicalScribeJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.transcribe"],
       "detail-type": ["Medical Scribe Job State Change"],
-      ...(props.statuses
-        ? { detail: { MedicalScribeJobStatus: [...props.statuses] } }
-        : {}),
+      ...(props.statuses ? { detail: { MedicalScribeJobStatus: [...props.statuses] } } : {}),
     },
     { description: props.description, state: props.state },
     process,
@@ -304,9 +300,7 @@ export const consumeVocabularyEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.transcribe"],
       "detail-type": ["Vocabulary State Change"],
-      ...(props.states
-        ? { detail: { VocabularyState: [...props.states] } }
-        : {}),
+      ...(props.states ? { detail: { VocabularyState: [...props.states] } } : {}),
     },
     { description: props.description, state: props.state },
     process,
@@ -354,9 +348,7 @@ export const consumeLanguageModelEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.transcribe"],
       "detail-type": ["Language Model State Change"],
-      ...(props.statuses
-        ? { detail: { ModelStatus: [...props.statuses] } }
-        : {}),
+      ...(props.statuses ? { detail: { ModelStatus: [...props.statuses] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

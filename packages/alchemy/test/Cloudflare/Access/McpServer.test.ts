@@ -1,26 +1,23 @@
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { isResourceState, State } from "@/State";
-import * as Cause from "effect/Cause";
 import * as Test from "@/Test/Alchemy";
-import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Schedule from "effect/Schedule";
-import { MinimumLogLevel } from "effect/References";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic identifiers — the server id is the API identity, so reruns
 // converge on the same server instead of leaking. The cases run concurrently,
@@ -104,9 +101,7 @@ test.provider(
       expect(syncRequests).toEqual(2);
 
       yield* stack.destroy();
-      expect(
-        yield* getLiveServer(accountId, DEFERRED_SYNC_SERVER_ID),
-      ).toBeUndefined();
+      expect(yield* getLiveServer(accountId, DEFERRED_SYNC_SERVER_ID)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
@@ -124,10 +119,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const token = yield* Cloudflare.Access.ServiceToken("McpToken", {});
-          const credentials = Output.all(
-            token.clientId,
-            token.clientSecret,
-          ).pipe(
+          const credentials = Output.all(token.clientId, token.clientSecret).pipe(
             Output.map(([clientId, clientSecret]) =>
               Redacted.make(
                 JSON.stringify({
@@ -157,9 +149,7 @@ test.provider(
           JSON.stringify({
             headers: {
               "cf-access-client-id": deployed.token.clientId,
-              "cf-access-client-secret": Redacted.value(
-                deployed.token.clientSecret!,
-              ),
+              "cf-access-client-secret": Redacted.value(deployed.token.clientSecret!),
             },
           }),
       ).toBe(true);
@@ -174,11 +164,7 @@ test.provider(
           accountId,
           serviceTokenId: deployed.token.serviceTokenId,
         })
-        .pipe(
-          Effect.catchTag("AccessServiceTokenNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
       expect(deletedToken).toBeUndefined();
     }).pipe(logLevel),
   {
@@ -191,9 +177,7 @@ test.provider(
 const getLiveServer = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpServer({ accountId, id })
-    .pipe(
-      Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)));
 
 test.provider(
   "overlong server IDs surface the typed validation error and remain cleanable",
@@ -286,12 +270,8 @@ test.provider(
       expect(updated.description).toEqual("alchemy mcp server v2");
       expect(updated.secureWebGateway).toEqual(true);
       expect(updated.updatedTools).toHaveLength(2);
-      expect(
-        updated.updatedTools.find((tool) => tool.name === "search")?.enabled,
-      ).toEqual(false);
-      expect(
-        updated.updatedTools.find((tool) => tool.name === "fetch")?.alias,
-      ).toEqual("get_page");
+      expect(updated.updatedTools.find((tool) => tool.name === "search")?.enabled).toEqual(false);
+      expect(updated.updatedTools.find((tool) => tool.name === "fetch")?.alias).toEqual("get_page");
 
       const liveUpdated = yield* getLiveServer(accountId, SERVER_ID);
       expect(liveUpdated?.name).toEqual("Alchemy MCP Server");
@@ -362,8 +342,7 @@ test.provider(
       );
       const rehostChange = rehostPlan.resources.Recreated!;
       expect(rehostChange.action).toEqual("replace");
-      if (rehostChange.action === "replace")
-        expect(rehostChange.deleteFirst).toBe(true);
+      if (rehostChange.action === "replace") expect(rehostChange.deleteFirst).toBe(true);
 
       const rehosted = yield* stack.deploy(
         Effect.gen(function* () {
@@ -390,8 +369,7 @@ test.provider(
       );
       const authChange = authPlan.resources.Recreated!;
       expect(authChange.action).toEqual("replace");
-      if (authChange.action === "replace")
-        expect(authChange.deleteFirst).toBe(true);
+      if (authChange.action === "replace") expect(authChange.deleteFirst).toBe(true);
 
       const recreated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -448,9 +426,7 @@ test.provider(
       );
       expect(deployed.serverId.length).toBeLessThanOrEqual(32);
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.McpServer,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.McpServer);
       const all = yield* provider.list();
 
       expect(all.some((s) => s.serverId === deployed.serverId)).toBe(true);
@@ -488,17 +464,13 @@ test.provider(
 
       const replaced = yield* deploy(REPLACE_SERVER_ID_V2);
       expect(replaced.serverId).toEqual(REPLACE_SERVER_ID_V2);
-      expect(
-        yield* getLiveServer(accountId, REPLACE_SERVER_ID),
-      ).toBeUndefined();
-      expect(
-        (yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2))?.id,
-      ).toEqual(REPLACE_SERVER_ID_V2);
+      expect(yield* getLiveServer(accountId, REPLACE_SERVER_ID)).toBeUndefined();
+      expect((yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2))?.id).toEqual(
+        REPLACE_SERVER_ID_V2,
+      );
 
       yield* stack.destroy();
-      expect(
-        yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2),
-      ).toBeUndefined();
+      expect(yield* getLiveServer(accountId, REPLACE_SERVER_ID_V2)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
@@ -570,36 +542,28 @@ test.provider(
             Effect.succeed(
               cause.reasons.some(
                 (reason) =>
-                  (Cause.isFailReason(reason) &&
-                    reason.error instanceof OwnedBySomeoneElse) ||
-                  (Cause.isDieReason(reason) &&
-                    reason.defect instanceof OwnedBySomeoneElse),
+                  (Cause.isFailReason(reason) && reason.error instanceof OwnedBySomeoneElse) ||
+                  (Cause.isDieReason(reason) && reason.defect instanceof OwnedBySomeoneElse),
               ),
             ),
           ),
         );
         expect(refused).toBe(true);
-        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(
-          external.name,
-        );
+        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(external.name);
         const adopted = yield* stack.deploy(resource().pipe(adopt(true)));
         expect(adopted.serverId).toEqual(external.id);
         expect(adopted.createdAt).toEqual(external.createdAt);
-        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(
-          "Adopted MCP server",
-        );
+        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual("Adopted MCP server");
         yield* stack.destroy();
         expect(yield* getLiveServer(accountId, serverId)).toBeUndefined();
       }).pipe(
         Effect.ensuring(
           // This test creates its fixture outside the stack. Reclaim that
           // exact fixture even if the adoption assertion fails.
-          zeroTrust
-            .deleteAccessAiControlMcpServer({ accountId, id: serverId })
-            .pipe(
-              Effect.catchTag("McpServerNotFound", () => Effect.void),
-              Effect.orDie,
-            ),
+          zeroTrust.deleteAccessAiControlMcpServer({ accountId, id: serverId }).pipe(
+            Effect.catchTag("McpServerNotFound", () => Effect.void),
+            Effect.orDie,
+          ),
         ),
       );
     }).pipe(logLevel),
@@ -622,9 +586,7 @@ test.provider(
       } as const;
       const resource = () => Cloudflare.Access.McpServer("Recovered", props);
       const initial = yield* stack.deploy(resource());
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.McpServer,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.McpServer);
       // Validate account-change planning without needing credentials for a
       // second account or issuing any request to an invented account.
       const diff = yield* provider.diff!({
@@ -669,10 +631,8 @@ test.provider(
           Effect.succeed(
             cause.reasons.some(
               (reason) =>
-                (Cause.isFailReason(reason) &&
-                  reason.error instanceof OwnedBySomeoneElse) ||
-                (Cause.isDieReason(reason) &&
-                  reason.defect instanceof OwnedBySomeoneElse),
+                (Cause.isFailReason(reason) && reason.error instanceof OwnedBySomeoneElse) ||
+                (Cause.isDieReason(reason) && reason.defect instanceof OwnedBySomeoneElse),
             ),
           ),
         ),
@@ -711,13 +671,9 @@ test.provider(
       expect(yield* getLiveServer(accountId, initial.serverId)).toBeUndefined();
       const recovered = yield* stack.deploy(resource("After deletion"));
       expect(recovered.serverId).toEqual(initial.serverId);
-      expect(
-        (yield* getLiveServer(accountId, recovered.serverId))?.name,
-      ).toEqual("After deletion");
+      expect((yield* getLiveServer(accountId, recovered.serverId))?.name).toEqual("After deletion");
       yield* stack.destroy();
-      expect(
-        yield* getLiveServer(accountId, recovered.serverId),
-      ).toBeUndefined();
+      expect(yield* getLiveServer(accountId, recovered.serverId)).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:access", "live"],
@@ -764,27 +720,23 @@ test.provider(
       const ready =
         initial.status === "ready"
           ? initial
-          : yield* zeroTrust
-              .syncAccessAiControlMcpServer({ accountId, id: initial.serverId })
-              .pipe(
-                Effect.catchTag("McpServerSyncFailure", () => Effect.void),
-                Effect.andThen(
-                  zeroTrust.readAccessAiControlMcpServer({
-                    accountId,
-                    id: initial.serverId,
-                  }),
-                ),
-                Effect.repeat({
-                  while: (server) => server.status !== "ready",
-                  schedule: Schedule.spaced("1 second"),
-                  times: 8,
+          : yield* zeroTrust.syncAccessAiControlMcpServer({ accountId, id: initial.serverId }).pipe(
+              Effect.catchTag("McpServerSyncFailure", () => Effect.void),
+              Effect.andThen(
+                zeroTrust.readAccessAiControlMcpServer({
+                  accountId,
+                  id: initial.serverId,
                 }),
-              );
+              ),
+              Effect.repeat({
+                while: (server) => server.status !== "ready",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            );
       expect(ready.error || undefined).toBeUndefined();
       expect(ready.status).toEqual("ready");
-      expect(ready.tools.map((tool) => tool.name)).toContain(
-        "authenticated_v1",
-      );
+      expect(ready.tools.map((tool) => tool.name)).toContain("authenticated_v1");
       // A rejected upstream credential must retain the complete failure body.
       yield* zeroTrust.updateAccessAiControlMcpServer({
         accountId,
@@ -796,11 +748,7 @@ test.provider(
           accountId,
           id: initial.serverId,
         })
-        .pipe(
-          Effect.catchTag("McpServerSyncFailure", (error) =>
-            Effect.succeed(error.body),
-          ),
-        );
+        .pipe(Effect.catchTag("McpServerSyncFailure", (error) => Effect.succeed(error.body)));
       const body = Schema.decodeUnknownSync(
         Schema.Struct({
           success: Schema.Literal(false),
@@ -818,16 +766,10 @@ test.provider(
       expect(rotated.createdAt).toEqual(initial.createdAt);
       // Discovery can report a transient routing error even after fetching
       // the new capabilities. Verify the credential through the returned tools.
-      expect(rotated.tools.map((tool) => tool.name)).toContain(
-        "authenticated_v2",
-      );
-      expect(rotated.tools.map((tool) => tool.name)).not.toContain(
-        "authenticated_v1",
-      );
+      expect(rotated.tools.map((tool) => tool.name)).toContain("authenticated_v2");
+      expect(rotated.tools.map((tool) => tool.name)).not.toContain("authenticated_v1");
       const live = yield* getLiveServer(accountId, rotated.serverId);
-      expect(live?.tools.map((tool) => tool.name)).toContain(
-        "authenticated_v2",
-      );
+      expect(live?.tools.map((tool) => tool.name)).toContain("authenticated_v2");
       yield* stack.destroy();
       expect(yield* getLiveServer(accountId, rotated.serverId)).toBeUndefined();
     }).pipe(logLevel),

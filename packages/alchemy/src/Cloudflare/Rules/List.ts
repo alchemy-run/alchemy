@@ -5,7 +5,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -132,11 +131,7 @@ export type ListRedirectItem = {
  * `{ ip }` for `ip` lists, `{ asn }` for `asn` lists, `{ hostname }` for
  * `hostname` lists, and `{ redirect }` for `redirect` lists.
  */
-export type ListItem =
-  | ListIpItem
-  | ListAsnItem
-  | ListHostnameItem
-  | ListRedirectItem;
+export type ListItem = ListIpItem | ListAsnItem | ListHostnameItem | ListRedirectItem;
 
 export type ListProps = {
   /**
@@ -207,13 +202,7 @@ export type ListAttributes = {
   modifiedOn: string;
 };
 
-export type List = Resource<
-  TypeId,
-  ListProps,
-  ListAttributes,
-  never,
-  Providers
->;
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
 
 /**
  * A Cloudflare account-level List (Lists API) — a named collection of IP
@@ -290,9 +279,7 @@ export const isList = (value: unknown): value is List =>
  * The asynchronous bulk items operation finished in a non-`completed`
  * state (or never completed within the polling budget).
  */
-export class ListBulkOperationError extends Data.TaggedError(
-  "ListBulkOperationError",
-)<{
+export class ListBulkOperationError extends Data.TaggedError("ListBulkOperationError")<{
   readonly operationId: string;
   readonly status: string;
   readonly message?: string;
@@ -309,7 +296,7 @@ export const ListProvider = () =>
         Effect.map((chunk) => Array.from(chunk)),
       );
     }),
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -381,12 +368,10 @@ export const ListProvider = () =>
               Effect.flatMap((match) => {
                 if (!match) return Effect.fail(error);
                 if (match.kind === news.kind) return Effect.succeed(match);
-                return rules
-                  .deleteList({ accountId: acct, listId: match.id })
-                  .pipe(
-                    Effect.catchTag("ListNotFound", () => Effect.void),
-                    Effect.flatMap(() => create),
-                  );
+                return rules.deleteList({ accountId: acct, listId: match.id }).pipe(
+                  Effect.catchTag("ListNotFound", () => Effect.void),
+                  Effect.flatMap(() => create),
+                );
               }),
             ),
           ),
@@ -492,9 +477,7 @@ type ComparableItem = ListItem | rules.GetListItemResponse;
  */
 const canonicalItem = (item: ComparableItem): string => {
   const comment =
-    "comment" in item && item.comment != null && item.comment !== ""
-      ? item.comment
-      : undefined;
+    "comment" in item && item.comment != null && item.comment !== "" ? item.comment : undefined;
   if ("ip" in item) {
     return JSON.stringify({ ip: item.ip, comment });
   }
@@ -527,10 +510,7 @@ const canonicalItem = (item: ComparableItem): string => {
 /**
  * Compare observed and desired items as multisets of canonical keys.
  */
-const sameItems = (
-  observed: readonly ComparableItem[],
-  desired: readonly ComparableItem[],
-) => {
+const sameItems = (observed: readonly ComparableItem[], desired: readonly ComparableItem[]) => {
   if (observed.length !== desired.length) return false;
   const a = observed.map(canonicalItem).sort();
   const b = desired.map(canonicalItem).sort();
@@ -543,15 +523,13 @@ const sameItems = (
  */
 const awaitBulkOperation = (accountId: string, operationId: string) =>
   Effect.gen(function* () {
-    const operation = yield* rules
-      .getListBulkOperation({ accountId, operationId })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (op) => op.status === "completed" || op.status === "failed",
-          times: 90,
-        }),
-      );
+    const operation = yield* rules.getListBulkOperation({ accountId, operationId }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (op) => op.status === "completed" || op.status === "failed",
+        times: 90,
+      }),
+    );
     if (operation.status !== "completed") {
       return yield* Effect.fail(
         new ListBulkOperationError({
@@ -563,10 +541,7 @@ const awaitBulkOperation = (accountId: string, operationId: string) =>
     }
   });
 
-const toAttributes = (
-  list: ObservedList,
-  accountId: string,
-): ListAttributes => ({
+const toAttributes = (list: ObservedList, accountId: string): ListAttributes => ({
   listId: list.id,
   accountId,
   name: list.name,

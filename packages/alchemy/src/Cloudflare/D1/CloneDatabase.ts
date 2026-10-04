@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { exportDatabase } from "./ExportDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
 
@@ -27,9 +27,7 @@ export const cloneDatabase = (options: CloneDatabaseOptions) =>
       .execute(HttpClientRequest.get(exportResult.signedUrl))
       .pipe(Effect.orDie);
     if (dumpRes.status < 200 || dumpRes.status >= 300) {
-      return yield* Effect.die(
-        `Failed to fetch D1 export dump (${dumpRes.status})`,
-      );
+      return yield* Effect.die(`Failed to fetch D1 export dump (${dumpRes.status})`);
     }
     const sqlData = yield* dumpRes.text.pipe(Effect.orDie);
 

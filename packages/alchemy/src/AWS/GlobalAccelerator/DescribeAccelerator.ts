@@ -32,10 +32,7 @@ export interface DescribeAccelerator extends Binding.Service<
   (
     accelerator: Accelerator,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      ga.DescribeAcceleratorResponse,
-      ga.DescribeAcceleratorError
-    >
+    () => Effect.Effect<ga.DescribeAcceleratorResponse, ga.DescribeAcceleratorError>
   >
 > {}
 export const DescribeAccelerator = Binding.Service<DescribeAccelerator>(

@@ -4,9 +4,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
@@ -15,8 +15,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type VpcId = `vpc-${string}`;
-export const VpcId = <const S extends string>(value: S): S & VpcId =>
-  value as S & VpcId;
+export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
 
 export type VpcArn = `arn:aws:ec2:${RegionID}:${AccountID}:vpc/${VpcId}`;
 
@@ -333,36 +332,29 @@ const vpcToAttributes = (
         statusMessage: assoc.CidrBlockState!.StatusMessage,
       },
     })),
-    ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map(
-      (assoc) => ({
-        associationId: assoc.AssociationId!,
-        ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-        ipv6CidrBlockState: {
-          state: assoc.Ipv6CidrBlockState!.State!,
-          statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-        },
-        networkBorderGroup: assoc.NetworkBorderGroup,
-        ipv6Pool: assoc.Ipv6Pool,
-      }),
-    ),
+    ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map((assoc) => ({
+      associationId: assoc.AssociationId!,
+      ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+      ipv6CidrBlockState: {
+        state: assoc.Ipv6CidrBlockState!.State!,
+        statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+      },
+      networkBorderGroup: assoc.NetworkBorderGroup,
+      ipv6Pool: assoc.Ipv6Pool,
+    })),
     tags,
   };
 };
 
 /** Map the `Tags` array on a describe response to a plain record. */
 const tagsFromVpc = (vpc: EC2.Vpc): Record<string, string> =>
-  Object.fromEntries(
-    (vpc.Tags ?? []).map((tag: EC2.Tag) => [tag.Key!, tag.Value!]),
-  );
+  Object.fromEntries((vpc.Tags ?? []).map((tag: EC2.Tag) => [tag.Key!, tag.Value!]));
 
 export const VpcProvider = () =>
   Provider.effect(
     Vpc,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -400,11 +392,7 @@ export const VpcProvider = () =>
           if (output?.vpcId) {
             const lookup = yield* ec2
               .describeVpcs({ VpcIds: [output.vpcId] })
-              .pipe(
-                Effect.catchTag("InvalidVpcID.NotFound", () =>
-                  Effect.succeed({ Vpcs: [] }),
-                ),
-              );
+              .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] })));
             vpc = lookup.Vpcs?.[0];
           }
 
@@ -421,8 +409,7 @@ export const VpcProvider = () =>
                 Ipv6CidrBlock: news.ipv6CidrBlock,
                 Ipv6IpamPoolId: news.ipv6IpamPoolId,
                 Ipv6NetmaskLength: news.ipv6NetmaskLength,
-                Ipv6CidrBlockNetworkBorderGroup:
-                  news.ipv6CidrBlockNetworkBorderGroup,
+                Ipv6CidrBlockNetworkBorderGroup: news.ipv6CidrBlockNetworkBorderGroup,
                 TagSpecifications: [
                   {
                     ResourceType: "vpc",
@@ -438,10 +425,7 @@ export const VpcProvider = () =>
                 // spaced retry (~90s) before surfacing the quota error.
                 Effect.retry({
                   while: (e) => e._tag === "VpcLimitExceeded",
-                  schedule: Schedule.max([
-                    Schedule.spaced("10 seconds"),
-                    Schedule.recurs(9),
-                  ]),
+                  schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(9)]),
                 }),
               );
             const newVpcId = createResult.Vpc!.VpcId! as VpcId;
@@ -462,8 +446,7 @@ export const VpcProvider = () =>
             VpcId: vpcId,
             Attribute: "enableDnsSupport",
           });
-          const currentDnsSupport =
-            dnsSupportResult.EnableDnsSupport?.Value ?? true;
+          const currentDnsSupport = dnsSupportResult.EnableDnsSupport?.Value ?? true;
           if (currentDnsSupport !== desiredDnsSupport) {
             yield* ec2.modifyVpcAttribute({
               VpcId: vpcId,
@@ -476,16 +459,13 @@ export const VpcProvider = () =>
             VpcId: vpcId,
             Attribute: "enableDnsHostnames",
           });
-          const currentDnsHostnames =
-            dnsHostnamesResult.EnableDnsHostnames?.Value ?? false;
+          const currentDnsHostnames = dnsHostnamesResult.EnableDnsHostnames?.Value ?? false;
           if (currentDnsHostnames !== desiredDnsHostnames) {
             yield* ec2.modifyVpcAttribute({
               VpcId: vpcId,
               EnableDnsHostnames: { Value: desiredDnsHostnames },
             });
-            yield* session.note(
-              `Updated DNS hostnames: ${desiredDnsHostnames}`,
-            );
+            yield* session.note(`Updated DNS hostnames: ${desiredDnsHostnames}`);
           }
 
           // Sync tags — observed cloud tags vs desired.
@@ -513,9 +493,7 @@ export const VpcProvider = () =>
           const final = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
           const finalVpc = final.Vpcs?.[0];
           if (!finalVpc) {
-            return yield* Effect.fail(
-              new Error(`VPC ${vpcId} disappeared during reconcile`),
-            );
+            return yield* Effect.fail(new Error(`VPC ${vpcId} disappeared during reconcile`));
           }
 
           return vpcToAttributes(finalVpc, region, accountId, desiredTags);
@@ -535,9 +513,7 @@ export const VpcProvider = () =>
                     // The default VPC is account furniture AWS provisions (and
                     // test/AWS/DefaultVpc.ts recreates); never census/nuke it.
                     .filter((vpc) => !vpc.IsDefault)
-                    .map((vpc) =>
-                      vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
-                    ),
+                    .map((vpc) => vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc))),
                 ),
               ),
             );
@@ -564,23 +540,18 @@ export const VpcProvider = () =>
                   // This can happen if subnets/IGW are being deleted concurrently
                   return (
                     e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" &&
-                      e.message?.includes("DependencyViolation"))
+                    (e._tag === "ValidationError" && e.message?.includes("DependencyViolation"))
                   );
                 },
                 schedule: Schedule.fixed(5000).pipe(
                   Schedule.upTo({ duration: "5 minutes" }),
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
+                    session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
                   ),
                 ),
               }),
               // Log the actual error for debugging
-              Effect.tapError((e) =>
-                session.note(`VPC delete failed: ${e._tag} - ${e.message}`),
-              ),
+              Effect.tapError((e) => session.note(`VPC delete failed: ${e._tag} - ${e.message}`)),
             );
 
           // 2. Wait for VPC to be fully deleted
@@ -611,10 +582,7 @@ class VpcStillExists extends Data.TaggedError("VpcStillExists")<{
 /**
  * Wait for VPC to be in available state
  */
-const waitForVpcAvailable = (
-  vpcId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForVpcAvailable = (vpcId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
     const vpc = result.Vpcs?.[0];
@@ -635,9 +603,7 @@ const waitForVpcAvailable = (
       schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for VPC to be available... (${attempt * 2}s)`,
-              )
+            ? session.note(`Waiting for VPC to be available... (${attempt * 2}s)`)
             : Effect.void,
         ),
       ),
@@ -651,11 +617,7 @@ const waitForVpcDeleted = (vpcId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeVpcs({ VpcIds: [vpcId] })
-      .pipe(
-        Effect.catchTag("InvalidVpcID.NotFound", () =>
-          Effect.succeed({ Vpcs: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] })));
 
     if (!result.Vpcs || result.Vpcs.length === 0) {
       return; // Successfully deleted

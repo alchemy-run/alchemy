@@ -53,8 +53,7 @@ export const advertisementContentType = (service: GitService): string =>
 /**
  * The `Content-Type` of a `POST /git-{upload,receive}-pack` result response.
  */
-export const resultContentType = (service: GitService): string =>
-  `application/x-${service}-result`;
+export const resultContentType = (service: GitService): string => `application/x-${service}-result`;
 
 /**
  * Builds the `# service=` prelude: one pkt-line plus a flush. Sent before the
@@ -69,12 +68,8 @@ interface AdvertisedRecord {
   readonly name: string;
 }
 
-const flattenRefs = (
-  refs: ReadonlyArray<RefRecord>,
-): Array<AdvertisedRecord> => {
-  const sorted = [...refs].sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  );
+const flattenRefs = (refs: ReadonlyArray<RefRecord>): Array<AdvertisedRecord> => {
+  const sorted = [...refs].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const records: Array<AdvertisedRecord> = [];
   for (const ref of sorted) {
     records.push({ oid: ref.oid, name: ref.name });
@@ -96,14 +91,10 @@ const refListSection = (
 ): Uint8Array => {
   const lines: Array<Uint8Array> = [];
   if (records.length === 0) {
-    lines.push(
-      pktLine(utf8Encode(`${ZERO_OID} capabilities^{}\0${capabilities}\n`)),
-    );
+    lines.push(pktLine(utf8Encode(`${ZERO_OID} capabilities^{}\0${capabilities}\n`)));
   } else {
     const first = records[0]!;
-    lines.push(
-      pktLine(utf8Encode(`${first.oid} ${first.name}\0${capabilities}\n`)),
-    );
+    lines.push(pktLine(utf8Encode(`${first.oid} ${first.name}\0${capabilities}\n`)));
     for (let i = 1; i < records.length; i++) {
       const record = records[i]!;
       lines.push(pktLine(utf8Encode(`${record.oid} ${record.name}\n`)));
@@ -122,13 +113,8 @@ const refListSection = (
  */
 export const uploadPackAdvertisement = (snapshot: RefsSnapshot): Uint8Array => {
   const records = flattenRefs(snapshot.refs);
-  const head = snapshot.refs.find(
-    (ref) => ref.name === `refs/heads/${snapshot.defaultBranch}`,
-  );
-  const withHead =
-    head === undefined
-      ? records
-      : [{ oid: head.oid, name: "HEAD" }, ...records];
+  const head = snapshot.refs.find((ref) => ref.name === `refs/heads/${snapshot.defaultBranch}`);
+  const withHead = head === undefined ? records : [{ oid: head.oid, name: "HEAD" }, ...records];
   return concatBytes([
     servicePrelude("git-upload-pack"),
     refListSection(withHead, uploadPackCapabilities(snapshot.defaultBranch)),
@@ -150,10 +136,7 @@ export const receivePackAdvertisement = (snapshot: RefsSnapshot): Uint8Array =>
 /**
  * Builds the advertisement for either service.
  */
-export const advertisement = (
-  service: GitService,
-  snapshot: RefsSnapshot,
-): Uint8Array =>
+export const advertisement = (service: GitService, snapshot: RefsSnapshot): Uint8Array =>
   service === "git-upload-pack"
     ? uploadPackAdvertisement(snapshot)
     : receivePackAdvertisement(snapshot);

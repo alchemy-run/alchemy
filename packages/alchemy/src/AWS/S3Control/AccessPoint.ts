@@ -218,9 +218,9 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  * it — swallowing that 404 as "already gone" orphans the access point (and
  * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
  */
-class AccessPointNotYetDeleted extends Data.TaggedError(
-  "AccessPointNotYetDeleted",
-)<{ readonly name: string }> {}
+class AccessPointNotYetDeleted extends Data.TaggedError("AccessPointNotYetDeleted")<{
+  readonly name: string;
+}> {}
 
 /**
  * Retry while the access point is still observable after a delete attempt.
@@ -250,32 +250,19 @@ export const AccessPointProvider = () =>
         );
       });
 
-      const accessPointArn = (
-        region: string,
-        accountId: string,
-        name: string,
-      ) => `arn:aws:s3:${region}:${accountId}:accesspoint/${name}`;
+      const accessPointArn = (region: string, accountId: string, name: string) =>
+        `arn:aws:s3:${region}:${accountId}:accesspoint/${name}`;
 
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPoint({ AccountId: accountId, Name: name })
-          .pipe(
-            Effect.catchTag("NoSuchAccessPoint", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
 
       const observedTags = (accountId: string, arn: string) =>
-        s3control
-          .listTagsForResource({ AccountId: accountId, ResourceArn: arn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-            ),
-            Effect.catchTag("NoSuchAccessPoint", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-          );
+        s3control.listTagsForResource({ AccountId: accountId, ResourceArn: arn }).pipe(
+          Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))),
+          Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed({} as Record<string, string>)),
+        );
 
       const toAttrs = (
         name: string,
@@ -284,8 +271,7 @@ export const AccessPointProvider = () =>
         accountId: AccountID,
       ) => ({
         accessPointName: name,
-        accessPointArn:
-          live.AccessPointArn ?? accessPointArn(region, accountId, name),
+        accessPointArn: live.AccessPointArn ?? accessPointArn(region, accountId, name),
         alias: live.Alias,
         bucket: live.Bucket ?? "",
         networkOrigin: live.NetworkOrigin ?? "Internet",
@@ -321,9 +307,7 @@ export const AccessPointProvider = () =>
             return Array.from(pages).flatMap((page) =>
               (page.AccessPointList ?? []).map((ap) => ({
                 accessPointName: ap.Name,
-                accessPointArn:
-                  ap.AccessPointArn ??
-                  accessPointArn(region, accountId, ap.Name),
+                accessPointArn: ap.AccessPointArn ?? accessPointArn(region, accountId, ap.Name),
                 alias: ap.Alias,
                 bucket: ap.Bucket,
                 networkOrigin: ap.NetworkOrigin,
@@ -334,8 +318,7 @@ export const AccessPointProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.accessPointName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.accessPointName ?? (yield* createName(id, olds ?? {}));
           const live = yield* observeAccessPoint(accountId, name);
           if (live === undefined) return undefined;
           const attrs = toAttrs(name, live, region, accountId);
@@ -350,12 +333,10 @@ export const AccessPointProvider = () =>
           if (
             oldName !== newName ||
             oldProps.bucket !== news.bucket ||
-            (oldProps.bucketAccountId ?? undefined) !==
-              (news.bucketAccountId ?? undefined) ||
+            (oldProps.bucketAccountId ?? undefined) !== (news.bucketAccountId ?? undefined) ||
             (oldProps.vpcConfiguration?.vpcId ?? undefined) !==
               (news.vpcConfiguration?.vpcId ?? undefined) ||
-            canonPab(oldProps.publicAccessBlock) !==
-              canonPab(news.publicAccessBlock)
+            canonPab(oldProps.publicAccessBlock) !== canonPab(news.publicAccessBlock)
           ) {
             // Everything except tags is create-only on an access point.
             return { action: "replace" } as const;
@@ -386,19 +367,12 @@ export const AccessPointProvider = () =>
                   ? {
                       BlockPublicAcls: news.publicAccessBlock.blockPublicAcls,
                       IgnorePublicAcls: news.publicAccessBlock.ignorePublicAcls,
-                      BlockPublicPolicy:
-                        news.publicAccessBlock.blockPublicPolicy,
-                      RestrictPublicBuckets:
-                        news.publicAccessBlock.restrictPublicBuckets,
+                      BlockPublicPolicy: news.publicAccessBlock.blockPublicPolicy,
+                      RestrictPublicBuckets: news.publicAccessBlock.restrictPublicBuckets,
                     }
                   : undefined,
               })
-              .pipe(
-                Effect.catchTag(
-                  "AccessPointAlreadyOwnedByYou",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("AccessPointAlreadyOwnedByYou", () => Effect.void));
             live = yield* retryWhileAccessPointPropagates(
               s3control.getAccessPoint({ AccountId: accountId, Name: name }),
             );
@@ -410,10 +384,7 @@ export const AccessPointProvider = () =>
           //    converges. Tagging a fresh access point can race propagation.
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const currentTags = yield* observedTags(
-            accountId,
-            attrs.accessPointArn,
-          );
+          const currentTags = yield* observedTags(accountId, attrs.accessPointArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {
             yield* retryWhileAccessPointPropagates(
@@ -438,12 +409,10 @@ export const AccessPointProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const name = output.accessPointName;
-          const deleteOnce = s3control
-            .deleteAccessPoint({ AccountId: accountId, Name: name })
-            .pipe(
-              // Idempotent delete — already gone is success.
-              Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
-            );
+          const deleteOnce = s3control.deleteAccessPoint({ AccountId: accountId, Name: name }).pipe(
+            // Idempotent delete — already gone is success.
+            Effect.catchTag("NoSuchAccessPoint", () => Effect.void),
+          );
           yield* deleteOnce;
           // Verify the access point is actually gone. `DeleteAccessPoint`
           // can spuriously return `NoSuchAccessPoint` for a freshly-created
@@ -457,9 +426,7 @@ export const AccessPointProvider = () =>
                 live === undefined
                   ? Effect.void
                   : deleteOnce.pipe(
-                      Effect.flatMap(() =>
-                        Effect.fail(new AccessPointNotYetDeleted({ name })),
-                      ),
+                      Effect.flatMap(() => Effect.fail(new AccessPointNotYetDeleted({ name }))),
                     ),
               ),
             ),

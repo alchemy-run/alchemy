@@ -1,8 +1,3 @@
-import * as ACME from "@/ACME";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import { Jose } from "@distilled.cloud/acme";
 import * as acme from "@distilled.cloud/acme/acme";
 import * as dns from "@distilled.cloud/cloudflare/dns";
@@ -12,13 +7,17 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(ACME.providers(), Cloudflare.providers()),
 });
 const ca = ACME.LetsEncryptStaging;
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const name = `alchemy-acme-lifecycle.${zoneName}`;
 const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -69,19 +68,12 @@ test.provider(
         .pipe(Stream.runCollect);
       expect(records).toEqual([]);
       yield* stack.destroy();
-      const certificateKey = yield* ACME.privateKeyToJwk(
-        configured.cert.privateKey,
-      );
+      const certificateKey = yield* ACME.privateKeyToJwk(configured.cert.privateKey);
       const revokedAgain = yield* acme
         .revokeCertificate({
-          certificate: Jose.base64url(
-            ACME.fromPem(configured.cert.certificate),
-          ),
+          certificate: Jose.base64url(ACME.fromPem(configured.cert.certificate)),
         })
-        .pipe(
-          Effect.provide(ACME.accountLayer({ ca, accountKey: certificateKey })),
-          Effect.result,
-        );
+        .pipe(Effect.provide(ACME.accountLayer({ ca, accountKey: certificateKey })), Effect.result);
       expect(Result.isFailure(revokedAgain)).toBe(true);
       if (Result.isFailure(revokedAgain))
         expect(revokedAgain.failure._tag).toBe("AcmeAlreadyRevoked");

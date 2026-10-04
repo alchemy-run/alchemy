@@ -42,6 +42,4 @@ export interface RetrieveProduct extends Binding.Service<
   >
 > {}
 
-export const RetrieveProduct = Binding.Service<RetrieveProduct>(
-  "Stripe.RetrieveProduct",
-);
+export const RetrieveProduct = Binding.Service<RetrieveProduct>("Stripe.RetrieveProduct");

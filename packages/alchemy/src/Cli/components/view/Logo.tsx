@@ -6,10 +6,10 @@
  * as braille dots (2x4 subpixels per cell) via signed distance functions, so
  * it scales to any column width.
  */
-import { Box, Text } from "../ui/index.ts";
 import { useMemo } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
 import { theme } from "../../CliKit/index.ts";
+import { Box, Text } from "../ui/index.ts";
 
 const CENTER = 12;
 const CIRCLE_R = 9.5;
@@ -19,9 +19,7 @@ const DOT_THRESHOLD = 0.35;
 // outline delicate instead of thickening into solid slabs as the logo grows
 const STROKE_SUBPIXELS = 2.5;
 
-const trianglePoints = (
-  strokeW: number,
-): ReadonlyArray<readonly [number, number]> => {
+const trianglePoints = (strokeW: number): ReadonlyArray<readonly [number, number]> => {
   const triR = CIRCLE_R - strokeW / 4;
   const triDx = triR * Math.cos(Math.PI / 6);
   const triTopY = CENTER - triR * Math.sin(Math.PI / 6);
@@ -36,22 +34,12 @@ const trianglePoints = (
 const sdCircleRing = (x: number, y: number, strokeW: number) =>
   Math.abs(Math.hypot(x - CENTER, y - CENTER) - CIRCLE_R) - strokeW / 2;
 
-const sdSegment = (
-  px: number,
-  py: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-) => {
+const sdSegment = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
   const abx = bx - ax;
   const aby = by - ay;
   const apx = px - ax;
   const apy = py - ay;
-  const t = Math.max(
-    0,
-    Math.min(1, (apx * abx + apy * aby) / (abx * abx + aby * aby)),
-  );
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / (abx * abx + aby * aby)));
   return Math.hypot(apx - t * abx, apy - t * aby);
 };
 
@@ -70,8 +58,7 @@ const sdTriangle = (
   return d - strokeW / 2;
 };
 
-const sdBindu = (x: number, y: number) =>
-  Math.hypot(x - CENTER, y - CENTER) - BINDU_R;
+const sdBindu = (x: number, y: number) => Math.hypot(x - CENTER, y - CENTER) - BINDU_R;
 
 // braille dot bit per (row 0-3, column 0-1) subpixel
 const BRAILLE_BITS = [
@@ -108,15 +95,9 @@ const rasterizeLogo = (cols: number): LogoRun[][] => {
         for (let sx = 0; sx < 2; sx++) {
           const x = (c * 2 + sx + 0.5) * scale;
           const y = (r * 4 + sy + 0.5) * scale;
-          const dStroke = Math.min(
-            sdCircleRing(x, y, strokeW),
-            sdTriangle(x, y, triPts, strokeW),
-          );
+          const dStroke = Math.min(sdCircleRing(x, y, strokeW), sdTriangle(x, y, triPts, strokeW));
           const strokeCov = Math.min(1, Math.max(0, 0.5 - dStroke / scale));
-          const binduCov = Math.min(
-            1,
-            Math.max(0, 0.5 - sdBindu(x, y) / scale),
-          );
+          const binduCov = Math.min(1, Math.max(0, 0.5 - sdBindu(x, y) / scale));
           if (Math.max(strokeCov, binduCov) > DOT_THRESHOLD) {
             bits |= BRAILLE_BITS[sy][sx];
             strokeSum += strokeCov;

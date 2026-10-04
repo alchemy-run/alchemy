@@ -29,10 +29,7 @@ export interface CopyClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: redshift.CopyClusterSnapshotMessage,
-    ) => Effect.Effect<
-      redshift.CopyClusterSnapshotResult,
-      redshift.CopyClusterSnapshotError
-    >
+    ) => Effect.Effect<redshift.CopyClusterSnapshotResult, redshift.CopyClusterSnapshotError>
   >
 > {}
 export const CopyClusterSnapshot = Binding.Service<CopyClusterSnapshot>(

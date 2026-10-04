@@ -3,9 +3,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -257,16 +257,12 @@ export interface LocalCluster extends Resource<
  */
 export const LocalCluster = Resource<LocalCluster>("Kubernetes.LocalCluster");
 
-export class LocalClusterError extends Data.TaggedError(
-  "Kubernetes.LocalClusterError",
-)<{ message: string }> {}
+export class LocalClusterError extends Data.TaggedError("Kubernetes.LocalClusterError")<{
+  message: string;
+}> {}
 
-const KindBin = Config.String("KIND_BIN").pipe(
-  Effect.orElseSucceed(() => "kind"),
-);
-const DockerBin = Config.String("DOCKER_BIN").pipe(
-  Effect.orElseSucceed(() => "docker"),
-);
+const KindBin = Config.String("KIND_BIN").pipe(Effect.orElseSucceed(() => "kind"));
+const DockerBin = Config.String("DOCKER_BIN").pipe(Effect.orElseSucceed(() => "docker"));
 
 const REGISTRY_IMAGE = "registry:3";
 const DEFAULT_REGISTRY_PORT = 5001;
@@ -306,10 +302,7 @@ export const LocalClusterProvider = () =>
       /** Run a CLI, returning its exit code and output. */
       const run = (bin: string, args: string[], stdin?: string) =>
         ChildProcess.make(bin, args, {
-          stdin:
-            stdin === undefined
-              ? "ignore"
-              : Stream.succeed(new TextEncoder().encode(stdin)),
+          stdin: stdin === undefined ? "ignore" : Stream.succeed(new TextEncoder().encode(stdin)),
           stdout: "pipe",
           stderr: "pipe",
           detached: false,
@@ -347,11 +340,7 @@ export const LocalClusterProvider = () =>
         );
 
       /** Run a CLI and fail with its stderr on a non-zero exit. */
-      const exec = Effect.fn(function* (
-        bin: string,
-        args: string[],
-        stdin?: string,
-      ) {
+      const exec = Effect.fn(function* (bin: string, args: string[], stdin?: string) {
         const result = yield* run(bin, args, stdin);
         if (result.exitCode !== 0) {
           return yield* new LocalClusterError({
@@ -390,11 +379,7 @@ export const LocalClusterProvider = () =>
       });
 
       const inspectRegistry = Effect.fn(function* (container: string) {
-        const result = yield* run(yield* DockerBin, [
-          "container",
-          "inspect",
-          container,
-        ]);
+        const result = yield* run(yield* DockerBin, ["container", "inspect", container]);
         if (result.exitCode !== 0) return undefined;
         const [info] = JSON.parse(result.stdout) as RegistryInspect[];
         return info;
@@ -402,17 +387,11 @@ export const LocalClusterProvider = () =>
 
       const registryHostPort = (info: RegistryInspect | undefined) => {
         const binding = info?.HostConfig?.PortBindings?.["5000/tcp"]?.[0];
-        return binding?.HostPort !== undefined
-          ? Number(binding.HostPort)
-          : undefined;
+        return binding?.HostPort !== undefined ? Number(binding.HostPort) : undefined;
       };
 
       const hostArchitecture = Effect.gen(function* () {
-        const { stdout } = yield* docker([
-          "version",
-          "--format",
-          "{{.Server.Arch}}",
-        ]);
+        const { stdout } = yield* docker(["version", "--format", "{{.Server.Arch}}"]);
         return toArchitecture(stdout);
       });
 
@@ -472,16 +451,12 @@ export const LocalClusterProvider = () =>
             configFile,
             "--wait",
             "120s",
-            ...(options.nodeImage !== undefined
-              ? ["--image", options.nodeImage]
-              : []),
+            ...(options.nodeImage !== undefined ? ["--image", options.nodeImage] : []),
             ...kubeconfigArgs(options.kubeconfig),
           ]).pipe(
             // A concurrent create of the same cluster is a race, not a failure.
             Effect.catchTag("Kubernetes.LocalClusterError", (error) =>
-              /already exist/i.test(error.message)
-                ? Effect.void
-                : Effect.fail(error),
+              /already exist/i.test(error.message) ? Effect.void : Effect.fail(error),
             ),
           );
           yield* fs.remove(dir, { recursive: true });
@@ -509,10 +484,7 @@ export const LocalClusterProvider = () =>
       }) {
         const container = `${options.name}-registry`;
         let info = yield* inspectRegistry(container);
-        if (
-          info !== undefined &&
-          registryHostPort(info) !== options.registryPort
-        ) {
+        if (info !== undefined && registryHostPort(info) !== options.registryPort) {
           yield* docker(["container", "rm", "--force", container]);
           info = undefined;
         }
@@ -532,10 +504,7 @@ export const LocalClusterProvider = () =>
             "bridge",
             "--name",
             container,
-            ...Object.entries(labels).flatMap(([key, value]) => [
-              "--label",
-              `${key}=${value}`,
-            ]),
+            ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
             REGISTRY_IMAGE,
           ]);
           info = yield* inspectRegistry(container);
@@ -545,9 +514,7 @@ export const LocalClusterProvider = () =>
         if (info?.NetworkSettings?.Networks?.kind === undefined) {
           yield* docker(["network", "connect", "kind", container]).pipe(
             Effect.catchTag("Kubernetes.LocalClusterError", (error) =>
-              /already exists/i.test(error.message)
-                ? Effect.void
-                : Effect.fail(error),
+              /already exists/i.test(error.message) ? Effect.void : Effect.fail(error),
             ),
           );
         }
@@ -555,12 +522,7 @@ export const LocalClusterProvider = () =>
         // containerd on each node: pull `localhost:<port>/…` from the
         // registry container over the kind network.
         const registryDir = `/etc/containerd/certs.d/localhost:${options.registryPort}`;
-        const { stdout } = yield* kind([
-          "get",
-          "nodes",
-          "--name",
-          options.name,
-        ]);
+        const { stdout } = yield* kind(["get", "nodes", "--name", options.name]);
         const nodes = stdout
           .split(/\r?\n/)
           .map((line) => line.trim())
@@ -571,14 +533,7 @@ export const LocalClusterProvider = () =>
             Effect.gen(function* () {
               yield* docker(["exec", node, "mkdir", "-p", registryDir]);
               yield* docker(
-                [
-                  "exec",
-                  "-i",
-                  node,
-                  "cp",
-                  "/dev/stdin",
-                  `${registryDir}/hosts.toml`,
-                ],
+                ["exec", "-i", node, "cp", "/dev/stdin", `${registryDir}/hosts.toml`],
                 `[host."http://${container}:5000"]\n`,
               );
             }),
@@ -612,18 +567,13 @@ export const LocalClusterProvider = () =>
             name,
             kubeconfig: output?.kubeconfig ?? olds?.kubeconfig,
             registryPort:
-              registryHostPort(registryInfo) ??
-              olds?.registryPort ??
-              DEFAULT_REGISTRY_PORT,
+              registryHostPort(registryInfo) ?? olds?.registryPort ?? DEFAULT_REGISTRY_PORT,
             architecture: yield* hostArchitecture,
           });
           if (output) return attrs;
           // kind clusters carry no ownership marker; the registry container
           // we start next to them does. Anything else is foreign.
-          const owned = yield* hasAlchemyTags(
-            id,
-            registryInfo?.Config?.Labels ?? undefined,
-          );
+          const owned = yield* hasAlchemyTags(id, registryInfo?.Config?.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -674,12 +624,7 @@ export const LocalClusterProvider = () =>
             output.name,
             ...kubeconfigArgs(output.kubeconfig),
           ]);
-          yield* run(yield* DockerBin, [
-            "container",
-            "rm",
-            "--force",
-            output.registryContainer,
-          ]);
+          yield* run(yield* DockerBin, ["container", "rm", "--force", output.registryContainer]);
         }),
       };
     }),

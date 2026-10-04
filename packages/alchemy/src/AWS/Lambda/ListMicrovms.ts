@@ -30,12 +30,7 @@ export interface ListMicrovms extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMicrovmsRequest,
-    ) => Effect.Effect<
-      microvms.ListMicrovmsResponse,
-      microvms.ListMicrovmsError
-    >
+    ) => Effect.Effect<microvms.ListMicrovmsResponse, microvms.ListMicrovmsError>
   >
 > {}
-export const ListMicrovms = Binding.Service<ListMicrovms>(
-  "AWS.Lambda.ListMicrovms",
-);
+export const ListMicrovms = Binding.Service<ListMicrovms>("AWS.Lambda.ListMicrovms");

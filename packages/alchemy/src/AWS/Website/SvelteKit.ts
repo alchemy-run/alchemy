@@ -3,12 +3,10 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SvelteKit build. */
-export const SVELTEKIT_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/sveltekit";
+export const SVELTEKIT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit";
 
 /** The AWS Lambda deploy target for the SvelteKit build. */
-export const SVELTEKIT_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/sveltekit/aws";
+export const SVELTEKIT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/aws";
 
 export interface SvelteKitProps extends FrameworkSiteProps {
   /**
@@ -82,10 +80,7 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SvelteKit = (
-  id: string,
-  props: InputProps<SvelteKitProps> = {},
-) => {
+export const SvelteKit = (id: string, props: InputProps<SvelteKitProps> = {}) => {
   const p = props as SvelteKitProps;
   return makeFrameworkSite(id, props, {
     name: "SvelteKit",

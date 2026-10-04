@@ -1,3 +1,13 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Redacted from "effect/Redacted";
+import {
+  authorize,
+  refresh,
+  revoke,
+  type OAuthCredentials,
+} from "@/Cloudflare/Auth/OAuthClient.ts";
 import {
   ALL_SCOPE_IDS,
   ALL_SCOPES,
@@ -6,23 +16,11 @@ import {
   OAUTH_SCOPE_GROUPS,
   partitionOAuthScopes,
 } from "@/Cloudflare/Auth/OAuthScopes.ts";
-import {
-  authorize,
-  refresh,
-  revoke,
-  type OAuthCredentials,
-} from "@/Cloudflare/Auth/OAuthClient.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 describe(
   "Cloudflare public OAuth client",
-  {
-    tags: ["unit", "provider:cloudflare", "provider:cloudflare:auth", "local"],
-  },
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:auth", "local"] },
   () => {
     it("uses a duplicate-free, colon-free catalog of allowed scopes", () => {
       const scopes = OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes);
@@ -62,33 +60,22 @@ describe(
         }),
       ).toEqual(["workers-scripts.write", "zone.read"]);
 
-      expect(
-        customOAuthScopeDefaults({
-          method: "stored",
-          credentialType: "apiToken",
-        }),
-      ).toEqual(ALL_SCOPE_IDS);
+      expect(customOAuthScopeDefaults({ method: "stored", credentialType: "apiToken" })).toEqual(
+        ALL_SCOPE_IDS,
+      );
     });
 
-    it.effect(
-      "uses Cloudflare's public-client authorization endpoint with S256 PKCE",
-      () =>
-        Effect.gen(function* () {
-          const authorization = yield* authorize(["workers-scripts.write"]);
-          const url = new URL(authorization.url);
+    it.effect("uses Cloudflare's public-client authorization endpoint with S256 PKCE", () =>
+      Effect.gen(function* () {
+        const authorization = yield* authorize(["workers-scripts.write"]);
+        const url = new URL(authorization.url);
 
-          expect(`${url.origin}${url.pathname}`).toBe(
-            "https://dash.cloudflare.com/oauth2/auth",
-          );
-          expect(url.searchParams.get("client_id")).toBe(
-            "e7e25ec474419def6ba38d2d2638b122",
-          );
-          expect(url.searchParams.get("redirect_uri")).toBe(
-            "https://alchemy.run/auth/callback",
-          );
-          expect(url.searchParams.get("response_type")).toBe("code");
-          expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-        }).pipe(Effect.provide(PlatformServices)),
+        expect(`${url.origin}${url.pathname}`).toBe("https://dash.cloudflare.com/oauth2/auth");
+        expect(url.searchParams.get("client_id")).toBe("e7e25ec474419def6ba38d2d2638b122");
+        expect(url.searchParams.get("redirect_uri")).toBe("https://alchemy.run/auth/callback");
+        expect(url.searchParams.get("response_type")).toBe("code");
+        expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+      }).pipe(Effect.provide(PlatformServices)),
     );
 
     it("preserves rotated credentials and uses standard token revocation", async () => {
@@ -96,16 +83,11 @@ describe(
       // SAFETY: the test double implements the callable fetch contract; Bun's
       // nonstandard static `preconnect` member is not used by FetchHttpClient.
       const fetch = (async (_input, init) => {
-        requests.push(
-          new URLSearchParams(await new Response(init?.body).text()),
-        );
-        return new Response(
-          JSON.stringify({
-            access_token: "next-access",
-            expires_in: 3600,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
+        requests.push(new URLSearchParams(await new Response(init?.body).text()));
+        return new Response(JSON.stringify({ access_token: "next-access", expires_in: 3600 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }) as typeof globalThis.fetch;
 
       const current: OAuthCredentials = {

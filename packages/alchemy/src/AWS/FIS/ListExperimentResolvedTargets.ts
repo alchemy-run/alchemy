@@ -38,7 +38,6 @@ export interface ListExperimentResolvedTargets extends Binding.Service<
     >
   >
 > {}
-export const ListExperimentResolvedTargets =
-  Binding.Service<ListExperimentResolvedTargets>(
-    "AWS.FIS.ListExperimentResolvedTargets",
-  );
+export const ListExperimentResolvedTargets = Binding.Service<ListExperimentResolvedTargets>(
+  "AWS.FIS.ListExperimentResolvedTargets",
+);

@@ -5,10 +5,10 @@ import * as SNS from "alchemy/AWS/SNS";
 import * as SQS from "alchemy/AWS/SQS";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { MARKER } from "./marker.ts";
 
 /**
@@ -152,8 +152,7 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
           yield* putObject({ Key: "hello.txt", Body: "hello from s3" });
           const object = yield* getObject({ Key: "hello.txt" });
           const text = yield* (
-            object.Body?.pipe(Stream.decodeText, Stream.mkString) ??
-              Effect.succeed("")
+            object.Body?.pipe(Stream.decodeText, Stream.mkString) ?? Effect.succeed("")
           );
           return yield* HttpServerResponse.json({ text });
         }

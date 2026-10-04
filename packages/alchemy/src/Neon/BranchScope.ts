@@ -28,9 +28,7 @@ export class InvalidBranchScope extends Data.TaggedError("InvalidBranchScope")<{
 }> {}
 
 /** Resolve lifecycle props after Alchemy has resolved resource references. */
-export const resolveBranchScope = Effect.fn(function* (
-  scope: Input.Resolve<BranchScope>,
-) {
+export const resolveBranchScope = Effect.fn(function* (scope: Input.Resolve<BranchScope>) {
   if ((scope.branch !== undefined) === (scope.project !== undefined)) {
     return yield* new InvalidBranchScope({
       message: "Specify exactly one of branch or project",

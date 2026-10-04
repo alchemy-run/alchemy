@@ -33,10 +33,7 @@ export interface GetIntrospectionSchema extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<appsync.GetIntrospectionSchemaRequest, "apiId">,
-    ) => Effect.Effect<
-      appsync.GetIntrospectionSchemaResponse,
-      appsync.GetIntrospectionSchemaError
-    >
+    ) => Effect.Effect<appsync.GetIntrospectionSchemaResponse, appsync.GetIntrospectionSchemaError>
   >
 > {}
 export const GetIntrospectionSchema = Binding.Service<GetIntrospectionSchema>(
