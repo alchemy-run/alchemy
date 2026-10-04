@@ -545,8 +545,10 @@ export const DockerLive = Layer.effect(
             "--platform",
             "linux/amd64",
             "--provenance=false",
-            ...Object.entries(image.buildArgs ?? {}).map(
-              ([name, value]) => `--build-arg ${name}=${value}`,
+            // One flag and one value per arg: a single `--build-arg NAME=VALUE`
+            // argv entry is parsed as an unknown flag `--build-arg NAME`.
+            ...Object.entries(image.buildArgs ?? {}).flatMap(
+              ([name, value]) => ["--build-arg", `${name}=${value}`],
             ),
             "-f",
             "-",

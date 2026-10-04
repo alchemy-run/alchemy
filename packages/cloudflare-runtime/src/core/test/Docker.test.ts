@@ -253,6 +253,38 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))(
         ]);
       }),
     );
+
+    it.effect(
+      "build passes each build arg as --build-arg then NAME=VALUE",
+      () =>
+        Effect.gen(function* () {
+          spawned.length = 0;
+          const docker = yield* Docker;
+          yield* docker.build("alchemy-test:latest", {
+            dockerfile: `${import.meta.dirname}/fixtures/Dockerfile.build-failure`,
+            buildArgs: { NODE_ENV: "production", GREETING: "hello world" },
+          });
+          expect(spawned.filter(([, verb]) => verb === "build")).toEqual([
+            [
+              "docker",
+              "build",
+              "--load",
+              "-t",
+              "alchemy-test:latest",
+              "--platform",
+              "linux/amd64",
+              "--provenance=false",
+              "--build-arg",
+              "NODE_ENV=production",
+              "--build-arg",
+              "GREETING=hello world",
+              "-f",
+              "-",
+              `${import.meta.dirname}/fixtures`,
+            ],
+          ]);
+        }),
+    );
   },
 );
 
