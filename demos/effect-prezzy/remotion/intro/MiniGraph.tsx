@@ -9,7 +9,10 @@ const AREA = { x: 1090, y: 250, width: 720 };
 const NODE = { w: 230, h: 84 };
 
 const fade = (local: number, delay: number, frames = 7) =>
-  interpolate(local, [delay, delay + frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  interpolate(local, [delay, delay + frames], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
 /** Where a line from a node's centre towards (dx, dy) leaves its box. */
 const exit = (n: { x: number; y: number }, dx: number, dy: number, pad = 8) => {
@@ -20,7 +23,10 @@ const exit = (n: { x: number; y: number }, dx: number, dy: number, pad = 8) => {
 };
 
 /** Where an arc into the drawing should land: the left edge of a node, or of an edge's label. */
-export const graphAnchor = (graph: MiniGraph, to: { node: string } | { edge: [string, string] }) => {
+export const graphAnchor = (
+  graph: MiniGraph,
+  to: { node: string } | { edge: [string, string] },
+) => {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   if ("node" in to) {
     const n = byId.get(to.node);
@@ -102,7 +108,10 @@ export const MiniGraphView = ({
   const placed = new Map<string, MiniNode>(
     graph.nodes.map((n) => {
       const was = before.get(n.id);
-      return [n.id, was ? { ...n, x: was.x + (n.x - was.x) * glide, y: was.y + (n.y - was.y) * glide } : n];
+      return [
+        n.id,
+        was ? { ...n, x: was.x + (n.x - was.x) * glide, y: was.y + (n.y - was.y) * glide } : n,
+      ];
     }),
   );
   const oldEdges = new Set(prev?.edges.map((e) => `${e.from}->${e.to}`));
@@ -110,8 +119,12 @@ export const MiniGraphView = ({
   const oldCards = new Set(prev?.cards?.map((c) => c.text));
   const newNodes = graph.nodes.filter((n) => !before.has(n.id));
   const edgeStart = delay + newNodes.length * 2;
-  const cardStart = edgeStart + graph.edges.filter((e) => !oldEdges.has(`${e.from}->${e.to}`)).length * 3 + 3;
-  const graphBottom = Math.max(...graph.nodes.map((n) => n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38), 0);
+  const cardStart =
+    edgeStart + graph.edges.filter((e) => !oldEdges.has(`${e.from}->${e.to}`)).length * 3 + 3;
+  const graphBottom = Math.max(
+    ...graph.nodes.map((n) => n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38),
+    0,
+  );
 
   // What changed since the previous step stays bright (and green); the rest dims.
   // Each part moves from how it looked at the end of the previous step, so
@@ -128,8 +141,14 @@ export const MiniGraphView = ({
   let newEdge = 0;
   let newCard = 0;
   return (
-    <div style={{ position: "absolute", left: AREA.x, top: AREA.y, width: AREA.width, height: 820 }}>
-      <svg width={AREA.width} height={820} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+    <div
+      style={{ position: "absolute", left: AREA.x, top: AREA.y, width: AREA.width, height: 820 }}
+    >
+      <svg
+        width={AREA.width}
+        height={820}
+        style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+      >
         {graph.edges.map((e) => {
           const a = placed.get(e.from);
           const b = placed.get(e.to);
@@ -147,7 +166,10 @@ export const MiniGraphView = ({
           const lx = s.x + (t.x - s.x) * 0.5;
           const ly = s.y + (t.y - s.y) * 0.5;
           const lw = (e.label?.length ?? 0) * 12.6 + 26;
-          const labelIn = isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`) ? fade(local, edgeStart + 5, 5) : 1;
+          const labelIn =
+            isNew || !oldLabels.has(`${e.from}->${e.to}:${e.label}`)
+              ? fade(local, edgeStart + 5, 5)
+              : 1;
           return (
             <g key={`${e.from}->${e.to}`} opacity={opacity}>
               <Arrow
@@ -155,14 +177,38 @@ export const MiniGraphView = ({
                 y1={s.y}
                 x2={t.x}
                 y2={t.y}
-                color={e.tone === "bad" ? TONE.bad : changed ? "#7ee787" : e.tone ? TONE[e.tone] : brand.fgMuted}
+                color={
+                  e.tone === "bad"
+                    ? TONE.bad
+                    : changed
+                      ? "#7ee787"
+                      : e.tone
+                        ? TONE[e.tone]
+                        : brand.fgMuted
+                }
                 progress={progress}
                 bend={0}
               />
               {e.label ? (
                 <g opacity={labelIn}>
-                  <rect x={lx - lw / 2} y={ly - 18} width={lw} height={36} rx={18} fill="#14110d" stroke={changed ? "#7ee787" : TONE.construct} strokeWidth={2} />
-                  <text x={lx} y={ly + 7} textAnchor="middle" fontFamily={mono} fontSize={21} fill={changed ? "#7ee787" : "#d4d4d4"}>
+                  <rect
+                    x={lx - lw / 2}
+                    y={ly - 18}
+                    width={lw}
+                    height={36}
+                    rx={18}
+                    fill="#14110d"
+                    stroke={changed ? "#7ee787" : TONE.construct}
+                    strokeWidth={2}
+                  />
+                  <text
+                    x={lx}
+                    y={ly + 7}
+                    textAnchor="middle"
+                    fontFamily={mono}
+                    fontSize={21}
+                    fill={changed ? "#7ee787" : "#d4d4d4"}
+                  >
                     {e.label}
                   </text>
                 </g>
@@ -174,7 +220,10 @@ export const MiniGraphView = ({
           ? (() => {
               // Everything drawn so far: the boxes and what's listed under them.
               const xs = graph.nodes.flatMap((n) => [n.x - NODE.w / 2, n.x + NODE.w / 2]);
-              const ys = graph.nodes.flatMap((n) => [n.y - NODE.h / 2, n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38]);
+              const ys = graph.nodes.flatMap((n) => [
+                n.y - NODE.h / 2,
+                n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38,
+              ]);
               const x = Math.min(...xs) - 26;
               const y = Math.min(...ys) - 30;
               const w = Math.max(...xs) + 26 - x;
@@ -183,10 +232,34 @@ export const MiniGraphView = ({
               const q = prev?.frame ? 1 : fade(local, delay, 8);
               return (
                 <g opacity={q}>
-                  <rect x={x} y={y} width={w} height={h} rx={22} fill={`${color}0d`} stroke={color} strokeWidth={2.5} strokeDasharray="10 8" />
+                  <rect
+                    x={x}
+                    y={y}
+                    width={w}
+                    height={h}
+                    rx={22}
+                    fill={`${color}0d`}
+                    stroke={color}
+                    strokeWidth={2.5}
+                    strokeDasharray="10 8"
+                  />
                   {/* Top-right, clear of anything arriving from above. */}
-                  <rect x={x + w - 46 - graph.frame.label.length * 13.2} y={y - 16} width={graph.frame.label.length * 13.2 + 24} height={32} rx={8} fill="#14110d" />
-                  <text x={x + w - 34 - graph.frame.label.length * 13.2} y={y + 8} fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
+                  <rect
+                    x={x + w - 46 - graph.frame.label.length * 13.2}
+                    y={y - 16}
+                    width={graph.frame.label.length * 13.2 + 24}
+                    height={32}
+                    rx={8}
+                    fill="#14110d"
+                  />
+                  <text
+                    x={x + w - 34 - graph.frame.label.length * 13.2}
+                    y={y + 8}
+                    fill={color}
+                    fontFamily={mono}
+                    fontSize={22}
+                    fontWeight={700}
+                  >
                     {graph.frame.label}
                   </text>
                 </g>
@@ -197,7 +270,10 @@ export const MiniGraphView = ({
           const members = graph.nodes.filter((n) => group.nodes.includes(n.id));
           if (!members.length) return null;
           const xs = members.flatMap((n) => [n.x - NODE.w / 2, n.x + NODE.w / 2]);
-          const ys = members.flatMap((n) => [n.y - NODE.h / 2, n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38]);
+          const ys = members.flatMap((n) => [
+            n.y - NODE.h / 2,
+            n.y + NODE.h / 2 + (n.notes?.length ?? 0) * 38,
+          ]);
           const x = Math.min(...xs) - 30;
           const y = Math.min(...ys) - 44;
           const w = Math.max(...xs) + 30 - x;
@@ -206,8 +282,25 @@ export const MiniGraphView = ({
           const q = prev?.groups?.some((g) => g.label === group.label) ? 1 : fade(local, delay, 8);
           return (
             <g key={group.label} opacity={q}>
-              <rect x={x} y={y} width={w} height={h} rx={22} fill={`${color}0d`} stroke={color} strokeWidth={2.5} />
-              <text x={x + w / 2} y={y + 30} textAnchor="middle" fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
+              <rect
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                rx={22}
+                fill={`${color}0d`}
+                stroke={color}
+                strokeWidth={2.5}
+              />
+              <text
+                x={x + w / 2}
+                y={y + 30}
+                textAnchor="middle"
+                fill={color}
+                fontFamily={mono}
+                fontSize={22}
+                fontWeight={700}
+              >
                 {group.label}
               </text>
             </g>
@@ -229,10 +322,24 @@ export const MiniGraphView = ({
                   <Arrow x1={n.x} y1={y1} x2={n.x} y2={y2} color={color} progress={p} bend={0} />
                   {p >= 1
                     ? dots.map((d, k) => (
-                        <circle key={k} cx={n.x} cy={y1 + (y2 - y1 - 16) * d} r={7} fill={color} opacity={Math.sin(Math.PI * d)} />
+                        <circle
+                          key={k}
+                          cx={n.x}
+                          cy={y1 + (y2 - y1 - 16) * d}
+                          r={7}
+                          fill={color}
+                          opacity={Math.sin(Math.PI * d)}
+                        />
                       ))
                     : null}
-                  <text x={n.x + 22} y={y1 + 8} fill={color} fontFamily={mono} fontSize={22} fontWeight={700}>
+                  <text
+                    x={n.x + 22}
+                    y={y1 + 8}
+                    fill={color}
+                    fontFamily={mono}
+                    fontSize={22}
+                    fontWeight={700}
+                  >
                     {graph.incoming.label}
                   </text>
                 </g>
@@ -358,7 +465,9 @@ export const MiniGraphView = ({
       >
         {(graph.cards ?? []).map((card) => {
           const isNew = !oldCards.has(card.text);
-          const q = (isNew ? fade(local, cardStart + newCard++ * 3) : 1) * brightness(now.card(card.text), then.card(card.text));
+          const q =
+            (isNew ? fade(local, cardStart + newCard++ * 3) : 1) *
+            brightness(now.card(card.text), then.card(card.text));
           const color = TONE[card.tone ?? "construct"];
           return (
             <div

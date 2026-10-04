@@ -5,5 +5,13 @@ import * as Effect from "effect/Effect";
 export const summarize = (room: string) => Effect.succeed(`Summary of ${room}`);
 
 /** The same two steps as Lambda functions, for the Step Functions version. */
-export const Summarize = AWS.Lambda.Function("Summarize", { main: import.meta.url }, Effect.succeed({}));
-export const SaveDigest = AWS.Lambda.Function("SaveDigest", { main: import.meta.url }, Effect.succeed({}));
+export const Summarize = AWS.Lambda.Function(
+  "Summarize",
+  { main: import.meta.url },
+  Effect.succeed({}),
+);
+export const SaveDigest = AWS.Lambda.Function(
+  "SaveDigest",
+  { main: import.meta.url },
+  Effect.succeed({}),
+);

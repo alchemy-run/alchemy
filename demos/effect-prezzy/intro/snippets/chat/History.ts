@@ -38,24 +38,30 @@ export const HistoryLive = Layer.effect(
 
     yield* Queues.consumeQueueMessages<Message>(
       messages,
-      Stream.runForEach(({ body }) =>
-        sql`INSERT INTO messages ${sql.insert(body)}`,
-      ),
+      Stream.runForEach(({ body }) => sql`INSERT INTO messages ${sql.insert(body)}`),
     );
     // #endregion consume
     // #region methods
 
     return {
       // #region append
-      append: (room: string, text: string) => queue.send({ room, text })/*hide*/.pipe(Effect.orDie)/*end*/,
+      append: (room: string, text: string) =>
+        queue
+          .send({ room, text }) /*hide*/
+          .pipe(Effect.orDie) /*end*/,
       // #endregion append
       // #region list
       list: (room: string) =>
-        sql<{ text: string }>`SELECT text FROM messages WHERE room = ${room}`/*hide*/.pipe(Effect.map((rows) => rows.map((row) => row.text)), Effect.orDie)/*end*/,
+        sql<{ text: string }>`SELECT text FROM messages WHERE room = ${room}` /*hide*/
+          .pipe(
+            Effect.map((rows) => rows.map((row) => row.text)),
+            Effect.orDie,
+          ) /*end*/,
       // #endregion list
     };
     // #endregion methods
   }),
-)/*hide*/.pipe(Layer.provide([Queues.WriteQueueBinding, Queues.EventSourceLive]))/*end*/;
+) /*hide*/
+  .pipe(Layer.provide([Queues.WriteQueueBinding, Queues.EventSourceLive])); /*end*/
 // #endregion live
 // #endregion show

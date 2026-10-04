@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { highlightTS } from "../marketing/highlightTS";
+import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 import {
   compactValues,
   HOST_TEMPLATE,
@@ -7,7 +8,6 @@ import {
   HOSTS,
   type HostResource,
 } from "./heroHosts";
-import { Line, sleep, TermChrome, useSpinner } from "./_terminal";
 import "./HeroHosts.css";
 
 /*
@@ -95,13 +95,9 @@ export default function HeroHosts() {
       await sleep(120);
       for (const r of resources) {
         if (aborted()) return;
-        setRows((rs) =>
-          rs.map((x) => (x.id === r.id ? { ...x, status: "creating" } : x)),
-        );
+        setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, status: "creating" } : x)));
         await sleep(r.bindings ? 380 : 220);
-        setRows((rs) =>
-          rs.map((x) => (x.id === r.id ? { ...x, status: "created" } : x)),
-        );
+        setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, status: "created" } : x)));
       }
       setDone(true);
     };
@@ -141,19 +137,10 @@ export default function HeroHosts() {
   const h = HOSTS[host]!;
 
   // A template, with each value in a slot that rolls when it changes.
-  const render = (
-    segments: string[],
-    was: readonly string[],
-    now: readonly string[],
-  ) =>
+  const render = (segments: string[], was: readonly string[], now: readonly string[]) =>
     segments.map((seg, n) => {
       if (n % 2 === 0)
-        return (
-          <span
-            key={n}
-            dangerouslySetInnerHTML={{ __html: highlightTS(seg) }}
-          />
-        );
+        return <span key={n} dangerouslySetInnerHTML={{ __html: highlightTS(seg) }} />;
       const k = +seg;
       const rolling = was[k] !== now[k];
       return (
@@ -169,22 +156,14 @@ export default function HeroHosts() {
           }
         >
           <span className="hh-slot__strip">
-            <span
-              dangerouslySetInnerHTML={{ __html: highlightTS(was[k]!) || "" }}
-            />
-            <span
-              dangerouslySetInnerHTML={{ __html: highlightTS(now[k]!) || "" }}
-            />
+            <span dangerouslySetInnerHTML={{ __html: highlightTS(was[k]!) || "" }} />
+            <span dangerouslySetInnerHTML={{ __html: highlightTS(now[k]!) || "" }} />
           </span>
         </span>
       );
     });
   const code = render(SEGMENTS, roll.was, roll.now);
-  const compact = render(
-    SEGMENTS_COMPACT,
-    compactValues(roll.was),
-    compactValues(roll.now),
-  );
+  const compact = render(SEGMENTS_COMPACT, compactValues(roll.was), compactValues(roll.now));
 
   return (
     <>
@@ -212,12 +191,7 @@ export default function HeroHosts() {
         </div>
       </div>
       <div className="v2-hero__term" aria-hidden>
-        <TermChrome
-          title="~/my-app"
-          badge="DEPLOY"
-          badgeColor={GREEN}
-          maxLines={9}
-        >
+        <TermChrome title="~/my-app" badge="DEPLOY" badgeColor={GREEN} maxLines={9}>
           <Line>
             <span style={{ color: GREEN }}>$ </span>
             {cmd}
@@ -251,20 +225,10 @@ export default function HeroHosts() {
                     display: "inline-block",
                   }}
                 >
-                  {r.status === "ready"
-                    ? "+"
-                    : r.status === "creating"
-                      ? spinner
-                      : "✓"}
+                  {r.status === "ready" ? "+" : r.status === "creating" ? spinner : "✓"}
                 </span>
-                <span
-                  style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}
-                >
-                  {r.id}
-                </span>
-                <span style={{ color: "var(--alc-code-comment)" }}>
-                  {` (${r.type})`}
-                </span>
+                <span style={{ color: "var(--alc-fg-invert)", fontWeight: 600 }}>{r.id}</span>
+                <span style={{ color: "var(--alc-code-comment)" }}>{` (${r.type})`}</span>
                 {r.bindings && (
                   <span style={{ color: "var(--alc-code-type)" }}>
                     {` (${r.bindings.length} binding)`}

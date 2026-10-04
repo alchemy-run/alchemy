@@ -20,7 +20,14 @@ const $ = (cmd: string) => `${T.dim}$${T.reset} ${cmd}`;
 const TABS = ["agent", "dev", "test"];
 
 /** A terminal step whose last `fresh` lines are new. */
-const term = (s: { title: string; notes: string; lines: string[]; fresh?: number; tab?: number; group?: string }): StepSpec => ({
+const term = (s: {
+  title: string;
+  notes: string;
+  lines: string[];
+  fresh?: number;
+  tab?: number;
+  group?: string;
+}): StepSpec => ({
   kind: "terminal",
   title: s.title,
   notes: s.notes,
@@ -75,7 +82,10 @@ const DEV = [
   `${T.ok}✓${T.reset} Api ${T.dim}(Cloudflare.Worker)${T.reset}    http://localhost:1337`,
   `${T.ok}✓${T.reset} Db  ${T.dim}(Cloudflare.D1.Database)${T.reset} local`,
 ];
-const DEV_WEB = [...DEV, `${T.ok}✓${T.reset} Web ${T.dim}(Cloudflare.Website)${T.reset}   http://localhost:5173`];
+const DEV_WEB = [
+  ...DEV,
+  `${T.ok}✓${T.reset} Web ${T.dim}(Cloudflare.Website)${T.reset}   http://localhost:5173`,
+];
 const PLAN = [
   $("alchemy deploy --stage prod"),
   `${T.ok}✓${T.reset} Plan ready ${T.dim}(0.9s)${T.reset}`,
@@ -103,12 +113,24 @@ const APPLIED = [
 /** A chain of steps building one file up: each entry omits the regions not written yet. */
 const chain = (
   base: { file: string; snippet: string; group?: string; regions?: string[] },
-  steps: { title: string; notes: string; omit?: string[]; snippet?: string; marks?: Extract<StepSpec, { kind: "code" }>["marks"]; error?: Extract<StepSpec, { kind: "code" }>["error"] }[],
+  steps: {
+    title: string;
+    notes: string;
+    omit?: string[];
+    snippet?: string;
+    marks?: Extract<StepSpec, { kind: "code" }>["marks"];
+    error?: Extract<StepSpec, { kind: "code" }>["error"];
+  }[],
 ): StepSpec[] => steps.map((s) => code({ ...base, ...s, snippet: s.snippet ?? base.snippet }));
 
 const LINK = { file: "src/Link.ts", snippet: "Link.ts" };
 const API_SCHEMA = { file: "src/ShortyApi.ts", snippet: "ShortyApi.ts" };
-const LINKS = { file: "src/Links.ts", snippet: "Links.ts", group: "demo-links", regions: ["service"] };
+const LINKS = {
+  file: "src/Links.ts",
+  snippet: "Links.ts",
+  group: "demo-links",
+  regions: ["service"],
+};
 const WORKER = { file: "src/Api.ts", snippet: "ApiDraft.error.ts", group: "demo-api" };
 const TEST = { file: "test/api.test.ts", snippet: "api.test.ts" };
 const STACK = { file: "alchemy.run.ts", snippet: "StackWeb.ts", group: "demo-stack" };
@@ -131,12 +153,14 @@ export const demo: StepSpec[] = [
     {
       title: "Start with the data, a Link",
       omit: ["notFound"],
-      notes: "Everything starts from the schema. A Link is a short code, the URL it points to, and when it was created.",
+      notes:
+        "Everything starts from the schema. A Link is a short code, the URL it points to, and when it was created.",
     },
     {
       title: "A missing link is a typed error",
       omit: ["status"],
-      notes: "What happens when a code doesn't exist? That's LinkNotFound: a real error type, not a null.",
+      notes:
+        "What happens when a code doesn't exist? That's LinkNotFound: a real error type, not a null.",
     },
     {
       title: "…that becomes a 404 over HTTP",
@@ -156,7 +180,11 @@ export const demo: StepSpec[] = [
       omit: ["getError", "list", "api"],
       notes: "GET /links/:code returns the Link…",
     },
-    { title: "…which can fail with LinkNotFound", omit: ["list", "api"], notes: "…or LinkNotFound, which is now part of the contract." },
+    {
+      title: "…which can fail with LinkNotFound",
+      omit: ["list", "api"],
+      notes: "…or LinkNotFound, which is now part of the contract.",
+    },
     { title: "And one to list every link", omit: ["api"], notes: "And GET /links lists them all." },
     {
       title: "Together they're one API, as a value",
@@ -170,12 +198,18 @@ export const demo: StepSpec[] = [
     {
       title: "Storage is a service, so the API never names a database",
       omit: ["storeError", "get", "list"],
-      notes: "Links is an interface: create a link. The Worker will depend on this, never on a database.",
+      notes:
+        "Links is an interface: create a link. The Worker will depend on this, never on a database.",
     },
-    { title: "It can also get and list links", omit: ["storeError"], notes: "Get one by code, and list them all." },
+    {
+      title: "It can also get and list links",
+      omit: ["storeError"],
+      notes: "Get one by code, and list them all.",
+    },
     {
       title: "Storage can fail, and the type says so",
-      notes: "And every method can fail with a LinkStoreError, because databases fail. It's in the type.",
+      notes:
+        "And every method can fail with a LinkStoreError, because databases fail. It's in the type.",
     },
   ]),
 
@@ -185,7 +219,8 @@ export const demo: StepSpec[] = [
       title: "The agent writes a Worker that asks for Links",
       omit: ["handlers", "fetch"],
       error: { hide: true },
-      notes: "Now the agent writes the Worker. It asks for Links, and for now provides it backed by D1.",
+      notes:
+        "Now the agent writes the Worker. It asks for Links, and for now provides it backed by D1.",
     },
     {
       title: "create calls Links",
@@ -197,9 +232,14 @@ export const demo: StepSpec[] = [
       title: "get and list turn storage failures into a 500",
       omit: ["fetch"],
       error: { hide: true },
-      notes: "get and list call Links too. A storage failure there is a defect, so it dies: the platform returns a 500.",
+      notes:
+        "get and list call Links too. A storage failure there is a defect, so it dies: the platform returns a 500.",
     },
-    { title: "fetch serves the whole API", error: { hide: true }, notes: "fetch serves ShortyApi with those handlers." },
+    {
+      title: "fetch serves the whole API",
+      error: { hide: true },
+      notes: "fetch serves ShortyApi with those handlers.",
+    },
   ]),
 
   // 5. The loop: types, fix, tests
@@ -232,28 +272,48 @@ export const demo: StepSpec[] = [
     {
       title: "Now a test, which deploys the real Stack",
       omit: ["dev", "deploy", "test"],
-      notes: "Types can't tell us the endpoints behave, so the agent writes a test. Test.make deploys the real Stack.",
+      notes:
+        "Types can't tell us the endpoints behave, so the agent writes a test. Test.make deploys the real Stack.",
     },
     {
       title: "dev: true runs it on your machine",
       omit: ["deploy", "test"],
-      marks: [{ kind: "circle", find: "dev: true", label: "local, in seconds", side: "right", tone: "good" }],
+      marks: [
+        {
+          kind: "circle",
+          find: "dev: true",
+          label: "local, in seconds",
+          side: "right",
+          tone: "good",
+        },
+      ],
       notes:
         "dev: true deploys to local simulators instead of the cloud: a local Worker, a local D1. No accounts, no waiting. That's what makes this fast enough for an agent's loop.",
     },
-    { title: "Deploy it once, before the tests", omit: ["test"], notes: "Deploy the Stack once for the whole file." },
+    {
+      title: "Deploy it once, before the tests",
+      omit: ["test"],
+      notes: "Deploy the Stack once for the whole file.",
+    },
     {
       title: "Each test gets a typed client to the deployed API",
       omit: ["create", "check"],
-      notes: "The test calls the API through a client derived from ShortyApi, the same one the website will use.",
+      notes:
+        "The test calls the API through a client derived from ShortyApi, the same one the website will use.",
     },
     { title: "Create a link…", omit: ["check"], notes: "Create a link…" },
     { title: "…and read it back", notes: "…and read it back." },
   ]),
-  term({ title: "The agent runs the tests…", notes: "bun test deploys the Stack to a local stage.", tab: 2, lines: TEST_START }),
+  term({
+    title: "The agent runs the tests…",
+    notes: "bun test deploys the Stack to a local stage.",
+    tab: 2,
+    lines: TEST_START,
+  }),
   term({
     title: "…and they pass, in about a second",
-    notes: "About a second and a half, including standing up the Worker and the database. That's the loop: types, then tests.",
+    notes:
+      "About a second and a half, including standing up the Worker and the database. That's the loop: types, then tests.",
     tab: 2,
     lines: [...TEST_START, ...TEST_OK],
     fresh: TEST_OK.length,
@@ -272,22 +332,38 @@ export const demo: StepSpec[] = [
       omit: ["env", "returnWeb"],
       notes: "The website is one more resource: a Vite site on Cloudflare.",
     },
-    { title: "…and give it the API's URL", omit: ["returnWeb"], notes: "It gets the Worker's URL as an environment variable." },
-    { title: "…and return its URL too", omit: ["returnApi"], notes: "And the Stack returns the website's URL." },
+    {
+      title: "…and give it the API's URL",
+      omit: ["returnWeb"],
+      notes: "It gets the Worker's URL as an environment variable.",
+    },
+    {
+      title: "…and return its URL too",
+      omit: ["returnApi"],
+      notes: "And the Stack returns the website's URL.",
+    },
   ]),
   code({
     title: "The website calls the API through the same typed client",
-    notes: "The website calls the API with a client derived from ShortyApi. Rename an endpoint and the website stops compiling.",
+    notes:
+      "The website calls the API with a client derived from ShortyApi. Rename an endpoint and the website stops compiling.",
     file: "web/src/client.ts",
     snippet: "client.ts",
   }),
   term({
     title: "alchemy dev runs it all locally",
-    notes: "alchemy dev brings up the Worker, the database and the website locally, and reloads on every save.",
+    notes:
+      "alchemy dev brings up the Worker, the database and the website locally, and reloads on every save.",
     tab: 1,
     lines: DEV_WEB,
   }),
-  { kind: "browser", title: "Shorty, running locally", url: "http://localhost:5173", image: "01-api-browser-3.png", notes: "Here's the website, talking to the local API." },
+  {
+    kind: "browser",
+    title: "Shorty, running locally",
+    url: "http://localhost:5173",
+    image: "01-api-browser-3.png",
+    notes: "Here's the website, talking to the local API.",
+  },
   {
     kind: "browser",
     title: "Shorten another link",
@@ -302,23 +378,27 @@ export const demo: StepSpec[] = [
     snippet: "ApiNeon.ts",
     title: "For production, let's use Postgres on Neon",
     marks: [{ kind: "underline", find: "NeonStorage", tone: "construct" }],
-    notes: "For production I want Postgres. Links is a service, so it's a one-word change: provide the Neon layer instead of D1.",
+    notes:
+      "For production I want Postgres. Links is a service, so it's a one-word change: provide the Neon layer instead of D1.",
   }),
   ...chain(NEON, [
     {
       title: "NeonStorage starts with a Neon Postgres project",
       omit: ["pool", "connect", "sql", "bind"],
-      notes: "So what is NeonStorage? It starts with a Neon Postgres project, running the same migrations as D1.",
+      notes:
+        "So what is NeonStorage? It starts with a Neon Postgres project, running the same migrations as D1.",
     },
     {
       title: "Hyperdrive pools connections to it at the edge",
       omit: ["dev", "caching", "connect", "sql", "bind"],
-      notes: "Workers are short-lived, so Hyperdrive keeps a pool of connections to Neon, close to the Worker.",
+      notes:
+        "Workers are short-lived, so Hyperdrive keeps a pool of connections to Neon, close to the Worker.",
     },
     {
       title: "In dev, it connects straight to Neon's own pooler",
       omit: ["caching", "connect", "sql", "bind"],
-      notes: "Under alchemy dev there's no Hyperdrive, so it goes straight to Neon's pooler instead.",
+      notes:
+        "Under alchemy dev there's no Hyperdrive, so it goes straight to Neon's pooler instead.",
     },
     {
       title: "Caching off, so a new link is readable right away",
@@ -328,11 +408,13 @@ export const demo: StepSpec[] = [
     {
       title: "The Worker connects to the pool…",
       omit: ["sql"],
-      notes: "Connect binds the Worker to the pool, and the binding layer wires it up at deploy time.",
+      notes:
+        "Connect binds the Worker to the pool, and the binding layer wires it up at deploy time.",
     },
     {
       title: "…and hands LinksSql a Postgres client",
-      notes: "And the result is a Postgres SQL client, which is all LinksSql needs. The Worker's code didn't change.",
+      notes:
+        "And the result is a Postgres SQL client, which is all LinksSql needs. The Worker's code didn't change.",
     },
   ]),
   term({ title: "tsc passes", notes: "Types first, as always.", lines: TSC_OK, group: "tsc-2" }),
@@ -346,11 +428,17 @@ export const demo: StepSpec[] = [
   }),
   term({
     title: "Deploy to production, starting with a plan",
-    notes: "alchemy deploy runs the Stack and shows the plan: Neon, Hyperdrive, the Worker with its binding, and the website.",
+    notes:
+      "alchemy deploy runs the Stack and shows the plan: Neon, Hyperdrive, the Worker with its binding, and the website.",
     lines: PLAN,
     group: "deploy",
   }),
-  term({ title: "Approve it, and it's live", notes: "Approve, and the providers create everything in order.", lines: APPLIED, group: "deploy-applied" }),
+  term({
+    title: "Approve it, and it's live",
+    notes: "Approve, and the providers create everything in order.",
+    lines: APPLIED,
+    group: "deploy-applied",
+  }),
   {
     kind: "browser",
     title: "Shorty, in production",

@@ -43,9 +43,7 @@ body.alc-root,
    Code surfaces on marketing pages: muted and status colors lifted to
    ≥7:1 (WCAG AAA) on the walnut code background.
    ============================================================ */
-[data-theme="dark"]
-  .alc-root
-  :is(.alc-code-block, .alc-term, .prf-win, .v2-steps__code) {
+[data-theme="dark"] .alc-root :is(.alc-code-block, .alc-term, .prf-win, .v2-steps__code) {
   --alc-code-comment: #ddd0ac;
   --alc-code-literal: #ffbea0;
   --alc-code-type: #86e3ff;

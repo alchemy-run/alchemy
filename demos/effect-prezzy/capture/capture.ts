@@ -56,7 +56,11 @@ const SOCKET = "shorty-demo";
 const SESSION = "shorty";
 /** Terminal tabs are tmux windows, drawn by tmux's own status line so tab and content always agree. */
 const TABS: Pane[] = ["deploy", "test", "dev"];
-const PANES: Record<Pane, string> = { deploy: `${SESSION}:0`, test: `${SESSION}:1`, dev: `${SESSION}:2` };
+const PANES: Record<Pane, string> = {
+  deploy: `${SESSION}:0`,
+  test: `${SESSION}:1`,
+  dev: `${SESSION}:2`,
+};
 /** The tab on screen; persists across scenes like the real terminal would. */
 let currentTab: Pane = "deploy";
 
@@ -81,13 +85,21 @@ const listFiles = async (base: string, rel = ""): Promise<string[]> => {
 };
 
 const readText = (file: string) => readFile(file, "utf8").catch(() => "");
-const exists = (file: string) => stat(file).then(() => true, () => false);
+const exists = (file: string) =>
+  stat(file).then(
+    () => true,
+    () => false,
+  );
 
 const sh = async (cmd: string[], opts: { cwd?: string; quiet?: boolean } = {}) => {
   const proc = Bun.spawn(cmd, { cwd: opts.cwd ?? dir, stdout: "pipe", stderr: "pipe" });
-  const [out, err] = [await new Response(proc.stdout).text(), await new Response(proc.stderr).text()];
+  const [out, err] = [
+    await new Response(proc.stdout).text(),
+    await new Response(proc.stderr).text(),
+  ];
   const code = await proc.exited;
-  if (code !== 0 && !opts.quiet) throw new Error(`${cmd.join(" ")} failed (${code}): ${err || out}`);
+  if (code !== 0 && !opts.quiet)
+    throw new Error(`${cmd.join(" ")} failed (${code}): ${err || out}`);
   return out;
 };
 const tmux = (...rest: string[]) => sh(["tmux", "-L", SOCKET, ...rest], { quiet: true });
@@ -101,7 +113,9 @@ const waitFor = async (pane: Pane, pattern: RegExp, timeout = 120_000) => {
     const text = await paneText(pane);
     if (pattern.test(text)) return text;
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${pattern} in the ${pane} pane:\n${text.slice(-3000)}`);
+      throw new Error(
+        `timed out waiting for ${pattern} in the ${pane} pane:\n${text.slice(-3000)}`,
+      );
     }
     await Bun.sleep(300);
   }
@@ -122,8 +136,26 @@ const startTmux = async (cols: number, rows: number) => {
   );
   await tmux("kill-server");
   const shell = `ZDOTDIR=${zdot} zsh -i`;
-  await sh(["tmux", "-f", tmuxConf, "-L", SOCKET, "new-session", "-d", "-s", SESSION, "-n", "deploy",
-    "-x", String(cols), "-y", String(rows), "-c", dir, shell]);
+  await sh([
+    "tmux",
+    "-f",
+    tmuxConf,
+    "-L",
+    SOCKET,
+    "new-session",
+    "-d",
+    "-s",
+    SESSION,
+    "-n",
+    "deploy",
+    "-x",
+    String(cols),
+    "-y",
+    String(rows),
+    "-c",
+    dir,
+    shell,
+  ]);
   for (const tab of TABS.slice(1)) {
     await tmux("new-window", "-d", "-t", PANES[tab], "-n", tab, "-c", dir, shell);
   }
@@ -143,7 +175,9 @@ const waitDev = async (timeout = 180_000) => {
       last = text;
       stableSince = Date.now();
     }
-    const ready = /Dev stack ready \((\d+)\/\1\)/.test(text.trimEnd().split("\n").slice(-3).join("\n"));
+    const ready = /Dev stack ready \((\d+)\/\1\)/.test(
+      text.trimEnd().split("\n").slice(-3).join("\n"),
+    );
     if (ready && Date.now() - stableSince > 2500) return;
     if (Date.now() > deadline) throw new Error(`alchemy dev did not settle:\n${text.slice(-3000)}`);
     await Bun.sleep(300);
@@ -282,7 +316,11 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         openedTabs.add(pane);
         if (pane === currentTab) return;
         const visible = (text: string) =>
-          text.split("\n").map((line) => line.trimEnd()).join("\n").trimEnd();
+          text
+            .split("\n")
+            .map((line) => line.trimEnd())
+            .join("\n")
+            .trimEnd();
         await tmux("select-window", "-t", PANES[pane]);
         const target = visible(await tmux("capture-pane", "-p", "-t", PANES[pane]));
         const deadline = Date.now() + 3_000;
@@ -305,7 +343,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
           await tmux("send-keys", "-t", PANES[pane], key);
         },
         async run(tab, command, opts) {
-          const prompts = (text: string) => text.split("\n").filter((line) => /❯/.test(line)).length;
+          const prompts = (text: string) =>
+            text.split("\n").filter((line) => /❯/.test(line)).length;
           const before = prompts(await paneText(tab));
           await term.type(tab, command);
           const deadline = Date.now() + (opts?.timeout ?? 120_000);
@@ -317,7 +356,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
               ? opts.until.test(text)
               : prompts(text) > before && /❯\s*$/.test(lines.at(-1) ?? "");
             if (finished) break;
-            if (Date.now() > deadline) throw new Error(`\`${command}\` did not finish:\n${text.slice(-3000)}`);
+            if (Date.now() > deadline)
+              throw new Error(`\`${command}\` did not finish:\n${text.slice(-3000)}`);
             await Bun.sleep(300);
           }
           await t.sleep("1200ms");
@@ -337,10 +377,12 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
         dir,
         state,
         async chapterLines(file) {
-          if (!(await exists(path.join(chapter, file)))) throw new Error(`${scene.chapter} has no ${file}`);
+          if (!(await exists(path.join(chapter, file))))
+            throw new Error(`${scene.chapter} has no ${file}`);
           const lines = (await readText(path.join(chapter, file))).split("\n");
           return (from, to = from) => {
-            if (from < 1 || to > lines.length || to < from) throw new Error(`${file} has no lines ${from}–${to}`);
+            if (from < 1 || to > lines.length || to < from)
+              throw new Error(`${file} has no lines ${from}–${to}`);
             return `${lines.slice(from - 1, to).join("\n")}\n`;
           };
         },
@@ -387,7 +429,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
             beats.push({ kind: "editor.patch", file, title, before, after });
           },
           async show(file, title) {
-            if (!(await exists(path.join(chapter, file)))) throw new Error(`${scene.chapter} has no ${file}`);
+            if (!(await exists(path.join(chapter, file))))
+              throw new Error(`${scene.chapter} has no ${file}`);
             const after = await readText(path.join(chapter, file));
             await context.editor.patch(file, title ?? file, () => after);
           },
@@ -431,7 +474,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
               ...(opts.edges ?? []).filter((e) => !edges.has(e)),
             ];
             if (missing.length === 0) break;
-            if (Date.now() > deadline) throw new Error(`diagram never showed ${missing.join(", ")}`);
+            if (Date.now() > deadline)
+              throw new Error(`diagram never showed ${missing.join(", ")}`);
             await Bun.sleep(500);
           }
           const previous = diagram;
@@ -515,11 +559,14 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
       for (const file of new Set([...want, ...have])) {
         if (!want.includes(file)) problems.push(`extra file ${file}`);
         else if (!have.includes(file)) problems.push(`missing file ${file}`);
-        else if ((await readText(path.join(dir, file))) !== (await readText(path.join(chapter, file)))) {
+        else if (
+          (await readText(path.join(dir, file))) !== (await readText(path.join(chapter, file)))
+        ) {
           problems.push(`${file} differs from chapters/${scene.chapter}/${file}`);
         }
       }
-      if (problems.length > 0) throw new Error(`${id} did not end at its chapter:\n  ${problems.join("\n  ")}`);
+      if (problems.length > 0)
+        throw new Error(`${id} did not end at its chapter:\n  ${problems.join("\n  ")}`);
 
       await t.hide(async () => {
         await tmux("detach-client", "-s", SESSION);
@@ -561,7 +608,8 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
     for (const e of timeline.events) {
       if (e.type !== "m") continue;
       if (e.data.startsWith(BEAT)) at.set(e.data.slice(BEAT.length), e.vt);
-      if (e.data.startsWith(TAB)) tabTimeline.push({ at: e.vt, tab: e.data.slice(TAB.length) as Pane });
+      if (e.data.startsWith(TAB))
+        tabTimeline.push({ at: e.vt, tab: e.data.slice(TAB.length) as Pane });
     }
     let index = 0;
     for (const beat of beats) {
@@ -585,7 +633,10 @@ const captureScene = async (id: string, scene: SceneDefinition) => {
 };
 
 const hasSession = async () =>
-  (await Bun.spawn(["tmux", "-L", SOCKET, "has-session", "-t", SESSION], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
+  (await Bun.spawn(["tmux", "-L", SOCKET, "has-session", "-t", SESSION], {
+    stdout: "ignore",
+    stderr: "ignore",
+  }).exited) === 0;
 
 const teardown = async () => {
   await tmux("kill-server");
@@ -601,7 +652,8 @@ const teardown = async () => {
       stdout: "inherit",
       stderr: "inherit",
     });
-    if ((await proc.exited) !== 0) console.error(`✘ ${cmd.join(" ")} failed; run it by hand in work/${project}`);
+    if ((await proc.exited) !== 0)
+      console.error(`✘ ${cmd.join(" ")} failed; run it by hand in work/${project}`);
   }
 };
 
@@ -619,9 +671,12 @@ if (!args.only) {
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
   if (previous) {
-    const prev = JSON.parse(await readText(path.join(captureRoot, previous.id, "scene.json"))) as SceneCapture;
+    const prev = JSON.parse(
+      await readText(path.join(captureRoot, previous.id, "scene.json")),
+    ) as SceneCapture;
     desk = prev.end;
-    const prevScene = (await import(path.join(root, "scenes", `${previous.id}.ts`))).default as SceneDefinition;
+    const prevScene = (await import(path.join(root, "scenes", `${previous.id}.ts`)))
+      .default as SceneDefinition;
     await cp(path.join(chaptersDir, prevScene.chapter), dir, {
       recursive: true,
       filter: (src) => !IGNORED.has(path.basename(src)),
@@ -639,7 +694,8 @@ if (!args.only) {
 
 try {
   for (const item of selected) {
-    const scene = (await import(path.join(root, "scenes", `${item.id}.ts`))).default as SceneDefinition;
+    const scene = (await import(path.join(root, "scenes", `${item.id}.ts`)))
+      .default as SceneDefinition;
     await captureScene(item.id, scene);
   }
 } finally {

@@ -60,11 +60,7 @@ export const HOSTS: Host[] = [
   },
   {
     label: "ECS",
-    values: [
-      "AWS.ECS.Service",
-      ", cluster: yield* Cluster, port: 3000",
-      "PhotosS3",
-    ],
+    values: ["AWS.ECS.Service", ", cluster: yield* Cluster, port: 3000", "PhotosS3"],
     resources: [
       { id: "Cluster", type: "AWS.ECS.Cluster" },
       { id: "Photos", type: "AWS.S3.Bucket" },
@@ -82,11 +78,7 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Kubernetes",
-    values: [
-      "Kubernetes.Deployment",
-      ", cluster: yield* Cluster, port: 3000",
-      "PhotosGCS",
-    ],
+    values: ["Kubernetes.Deployment", ", cluster: yield* Cluster, port: 3000", "PhotosGCS"],
     resources: [
       { id: "Photos", type: "GCP.Storage.Bucket" },
       { id: "Api", type: "Kubernetes.Deployment", bindings: ["Photos"] },
@@ -113,11 +105,7 @@ export const HOSTS: Host[] = [
   },
   {
     label: "Hetzner",
-    values: [
-      "Hetzner.Service",
-      ", server: yield* Box, port: 3000",
-      "PhotosVolume",
-    ],
+    values: ["Hetzner.Service", ", server: yield* Box, port: 3000", "PhotosVolume"],
     resources: [
       { id: "Box", type: "Hetzner.Server" },
       { id: "Photos", type: "Hetzner.Volume" },

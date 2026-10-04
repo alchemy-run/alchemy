@@ -1,9 +1,9 @@
 import * as Kubernetes from "alchemy/Kubernetes";
-import { Gke } from "./Gke.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Files, FilesGCS } from "./Files.ts";
+import { Gke } from "./Gke.ts";
 
 // #region show
 export default Kubernetes.Deployment(
@@ -18,7 +18,8 @@ export default Kubernetes.Deployment(
         const request = yield* HttpServerRequest;
         yield* files.upload(request.url, yield* request.text);
         return HttpServerResponse.empty({ status: 201 });
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
   }).pipe(Effect.provide(FilesGCS)),
 );
