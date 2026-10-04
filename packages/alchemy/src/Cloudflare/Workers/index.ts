@@ -24,6 +24,7 @@ export * from "./RateLimit.ts";
 export * from "./RateLimitBinding.ts";
 export * from "./Request.ts";
 export * from "./Route.ts";
+export * from "./NativeExport.ts";
 export * from "./Rpc.ts";
 export * from "./RpcDurableObject.ts";
 export * as RpcWebSocketClient from "./RpcWebSocketClient.ts";

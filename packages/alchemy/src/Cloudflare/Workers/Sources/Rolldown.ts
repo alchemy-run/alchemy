@@ -11,6 +11,7 @@ import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
 import { isDurableObjectExport } from "../DurableObject.ts";
+import { isNativeExport } from "../NativeExport.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
@@ -284,6 +285,7 @@ export const makeEffectVirtualEntry = (
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
   const migrations: Record<string, SqlMigrationSnapshot> = {};
+  const nativeClasses: Array<readonly [string, string]> = [];
   for (const [className, entry] of Object.entries(exports)) {
     if (isDurableObjectExport(entry)) {
       doClasses.push(className);
@@ -291,6 +293,8 @@ export const makeEffectVirtualEntry = (
       wfClasses.push(className);
     } else if (entry.kind === "sqlMigrations") {
       migrations[className] = entry.snapshot;
+    } else if (isNativeExport(entry)) {
+      nativeClasses.push([className, entry.module]);
     }
   }
   const hasMigrations = Object.keys(migrations).length > 0;
@@ -333,6 +337,9 @@ ${[
         ),
       ]
     : []),
+  ...nativeClasses.map(
+    ([id, module]) => `export { ${id} } from ${JSON.stringify(module)};`,
+  ),
 ].join("\n")}
 `;
 };

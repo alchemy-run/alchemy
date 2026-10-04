@@ -10,6 +10,7 @@ import {
 } from "../../RuntimeContext.ts";
 import type * as Serverless from "../../Serverless/index.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
+import type { NativeExport } from "./NativeExport.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
@@ -25,7 +26,8 @@ import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 export type WorkerExport =
   | DurableObjectExport
   | WorkflowExport
-  | SqlMigrationsExport;
+  | SqlMigrationsExport
+  | NativeExport;
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
