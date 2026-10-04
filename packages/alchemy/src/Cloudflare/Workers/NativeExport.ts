@@ -3,10 +3,18 @@
  * is: a native `DurableObject`, a Container-backed Durable Object or a
  * `WorkerEntrypoint` that has no Effect form. The stack names the module and
  * never imports it, so a class built on `cloudflare:workers` stays out of the
- * plan, which runs outside workerd. Register it with
- * `worker.export(className, Cloudflare.Workers.nativeExport(module))`; the
- * module must export the class under that name. Bind it like any other class
- * the Worker hosts, e.g. `env: { NAME: Cloudflare.DurableObject("NAME", { className }) }`.
+ * plan, which runs outside workerd.
+ *
+ * Register it with `worker.export(className, Cloudflare.Workers.nativeExport(module))`.
+ * The Worker's generated entry then contains
+ * `export { className } from "module";`, so the module must export the class
+ * under that name. `module` is resolved like any import of the generated
+ * entry: use a package specifier (`"@app/agent/sandbox"`) or an absolute
+ * path. A package that cannot be resolved from the Worker's project fails the
+ * build.
+ *
+ * Bind the class like any other class the Worker hosts, e.g.
+ * `env: { NAME: Cloudflare.DurableObject("NAME", { className }) }`.
  */
 export interface NativeExport {
   readonly kind: "native";
@@ -21,5 +29,7 @@ export const nativeExport = (module: string): NativeExport => ({
 export const isNativeExport = (value: unknown): value is NativeExport =>
   typeof value === "object" &&
   value !== null &&
-  (value as { kind?: unknown }).kind === "native" &&
-  typeof (value as { module?: unknown }).module === "string";
+  "kind" in value &&
+  value.kind === "native" &&
+  "module" in value &&
+  typeof value.module === "string";

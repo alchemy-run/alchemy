@@ -412,8 +412,8 @@ export const virtualEntryPlugin = Effect.gen(function* () {
             this.error(
               new Error(
                 `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
-                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
-                  "check that `alchemy` is installed in the project containing the entry.",
+                  "A generated entry imports `alchemy/*` (resolvable from any project that depends on alchemy), the entry itself, and the modules registered with `Cloudflare.Workers.nativeExport`; " +
+                  "check that the package is installed in the project containing the entry.",
               ),
             );
           }

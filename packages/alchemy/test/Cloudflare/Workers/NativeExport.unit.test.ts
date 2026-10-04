@@ -37,7 +37,7 @@ const entryExports = Effect.fn(function* (
   const { rolldown } = yield* Effect.promise(() => import("rolldown"));
   const virtualEntry = yield* virtualEntryPlugin;
   return yield* Effect.acquireUseRelease(
-    Effect.promise(() =>
+    Effect.tryPromise(() =>
       rolldown({
         input: main,
         cwd: packageRoot,
@@ -59,7 +59,7 @@ const entryExports = Effect.fn(function* (
       }),
     ),
     (bundle) =>
-      Effect.promise(() => bundle.generate({ format: "esm" })).pipe(
+      Effect.tryPromise(() => bundle.generate({ format: "esm" })).pipe(
         Effect.map(({ output }) =>
           output.flatMap((item) =>
             item.type === "chunk" && item.isEntry ? item.exports : [],
@@ -96,12 +96,16 @@ layer(NodeServices.layer)("Cloudflare.Workers.nativeExport", (it) => {
   );
 
   it.effect(
-    "leaves the generated entry's exports unchanged without native exports",
+    "fails the build when a native export's module cannot be resolved",
     () =>
       Effect.gen(function* () {
-        expect(yield* entryExports(yield* capturedExports({}))).toEqual([
-          "default",
-        ]);
+        const exports = yield* capturedExports({
+          Sandbox: "@alchemy-native-export-test/missing",
+        });
+        const error = yield* Effect.flip(entryExports(exports));
+        expect(String(error.cause)).toContain(
+          "@alchemy-native-export-test/missing",
+        );
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker"] },
   );
