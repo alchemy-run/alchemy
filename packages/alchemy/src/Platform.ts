@@ -574,7 +574,7 @@ export const Platform = <
                       const phase = yield* ALCHEMY_PHASE;
 
                       return ConfigProvider.make(
-                        Effect.fn(function* (path) {
+                        Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
