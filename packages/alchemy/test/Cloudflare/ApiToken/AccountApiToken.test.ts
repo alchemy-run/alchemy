@@ -9,11 +9,12 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { cloudflareOAuthProfile, listScriptsWithToken } from "./helpers.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-describe.skip(
+describe(
   "AccountApiToken",
   { tags: ["provider:cloudflare", "provider:cloudflare:apitoken", "live"] },
   () => {
@@ -47,6 +48,40 @@ describe.skip(
           const actualToken = yield* accounts.getToken({ accountId, tokenId: token.tokenId });
           expect(actualToken.id).toEqual(token.tokenId);
           expect(actualToken.name).toEqual(token.name);
+
+          yield* stack.destroy();
+
+          yield* waitForTokenToBeDeleted(token.tokenId, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:account"] },
+    );
+
+    test.provider.skipIf(!cloudflareOAuthProfile)(
+      "deploys a working account token with an OAuth profile",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const token = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.ApiToken.AccountApiToken("OAuthToken", {
+                policies: [
+                  {
+                    effect: "allow",
+                    permissionGroups: ["Workers Scripts Read"],
+                    resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+                  },
+                ],
+              });
+            }),
+          );
+          expect(token.status).toEqual("active");
+
+          const actualToken = yield* accounts.getToken({ accountId, tokenId: token.tokenId });
+          expect(actualToken.policies?.[0]?.permissionGroups?.length).toEqual(1);
+          yield* listScriptsWithToken(accountId, token.value);
 
           yield* stack.destroy();
 

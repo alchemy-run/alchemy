@@ -1,3 +1,4 @@
+import { apiKeyCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -9,7 +10,9 @@ import * as Stream from "effect/Stream";
 import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
 import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
+import * as Profile from "../../Alchemist/routes/profile.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { formatLocalTimestamp } from "../Format.ts";
@@ -148,16 +151,8 @@ const tokenAccountIdFlag = Flag.String("account-id").pipe(
 );
 
 /**
- * `alchemy provider cloudflare create-token` — mint a Cloudflare API token
- * (`POST /user/tokens`).
- *
- * This command is **standalone**: it does not use an Alchemy auth profile.
- * Cloudflare only mints a token whose permissions the authenticating
- * credential is allowed to grant — and OAuth/scoped tokens silently produce a
- * token with zero permissions — so it always authenticates with the account's
- * **Global API Key** (read from `CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL`,
- * otherwise prompted). The key is used only to create the token and is never
- * stored.
+ * `alchemy provider cloudflare token` — mint a Cloudflare API token, either
+ * account-owned with an Alchemy profile or user-owned with the Global API Key.
  *
  * With `--all-permissions` it builds a "superuser" token spanning every
  * permission group (after a confirmation prompt). Otherwise it prompts the
@@ -171,6 +166,7 @@ const createTokenCommand = Command.make(
   "token",
   {
     envFile,
+    profile,
     allPermissions: allPermissionsFlag,
     name: tokenNameFlag,
     accountId: tokenAccountIdFlag,
@@ -179,7 +175,7 @@ const createTokenCommand = Command.make(
   instrumentCommand("cloudflare.create-token", (a: { allPermissions: boolean }) => ({
     "alchemy.all_permissions": a.allPermissions,
   }))(
-    Effect.fn(function* ({ envFile, allPermissions, name, accountId, yes: approved }) {
+    Effect.fn(function* ({ envFile, profile, allPermissions, name, accountId, yes: approved }) {
       const prompt = yield* CliKit.CliKit;
       const provider = yield* loadConfigProvider(envFile);
       const read = <A>(config: Config.Config<Option.Option<A>>) =>
@@ -187,21 +183,73 @@ const createTokenCommand = Command.make(
           Effect.provide(ConfigProvider.layer(provider)),
           Effect.map(Option.getOrUndefined),
         );
-      const apiKey =
-        (yield* read(Config.String("CLOUDFLARE_API_KEY").pipe(Config.option))) ??
-        (yield* prompt.prompt.password({
-          message:
-            "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
-          validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
-        }));
-      const email =
-        (yield* read(Config.String("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
-        (yield* prompt.prompt.text({
-          message: "Cloudflare account email",
-          validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
-        }));
-      const credentials = { email, apiKey: Redacted.make(apiKey) };
-      const catalog = yield* CloudflareToken.catalog(credentials);
+      const envApiKey = yield* read(Config.String("CLOUDFLARE_API_KEY").pipe(Config.option));
+      const source =
+        profile ??
+        (envApiKey !== undefined
+          ? null
+          : yield* Effect.gen(function* () {
+              const cloudflareProfiles = (yield* Profile.list()).flatMap((p) =>
+                p.providers
+                  .filter((provider) => provider.name === "Cloudflare")
+                  .map((provider) => ({ name: p.name, method: provider.method })),
+              );
+              return yield* prompt.prompt.select<string | null>({
+                message: "Mint the token with",
+                options: [
+                  ...cloudflareProfiles
+                    .sort((a, b) => Number(b.method === "oauth") - Number(a.method === "oauth"))
+                    .map(({ name, method }) => ({
+                      value: name,
+                      label: name,
+                      description: `${method} profile; account-owned token`,
+                    })),
+                  {
+                    value: null,
+                    label: "Global API Key",
+                    description: "user-owned token; may span several accounts",
+                  },
+                ],
+              });
+            }));
+      const owner: CloudflareToken.CatalogInput =
+        source !== null
+          ? yield* Effect.gen(function* () {
+              const { layer, accountId } = yield* Cloudflare.resolveStateStoreScope({
+                profile: source,
+                envFile: Option.getOrUndefined(envFile),
+              });
+              const credentials = yield* Effect.gen(function* () {
+                return yield* CloudflareCredentials.Credentials;
+              }).pipe(Effect.provide(layer));
+              return { credentials, accountId };
+            })
+          : {
+              credentials: Effect.succeed(
+                apiKeyCredentials({
+                  apiKey: Redacted.make(
+                    envApiKey ??
+                      (yield* prompt.prompt.password({
+                        message:
+                          "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
+                        validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
+                      })),
+                  ),
+                  email:
+                    (yield* read(Config.String("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
+                    (yield* prompt.prompt.text({
+                      message: "Cloudflare account email",
+                      validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
+                    })),
+                }),
+              ),
+            };
+      const catalog = yield* CloudflareToken.catalog(owner);
+      if (catalog.unavailablePermissionGroups.length > 0) {
+        yield* prompt.output.info(
+          `Not grantable with OAuth, so left out: ${catalog.unavailablePermissionGroups.join(", ")}`,
+        );
+      }
       const resolvedAccountIds =
         accountId ??
         (catalog.accounts.length === 1
@@ -243,7 +291,7 @@ const createTokenCommand = Command.make(
             required: true,
           });
       const plan = yield* CloudflareToken.plan({
-        credentials,
+        ...owner,
         name: tokenName,
         accountIds: resolvedAccountIds,
         permissionGroupIds,
@@ -263,7 +311,7 @@ const createTokenCommand = Command.make(
         });
       }
       const result = yield* CloudflareToken.create({
-        credentials,
+        ...owner,
         plan,
       });
       yield* Console.log(formatCreatedCloudflareToken(result, Redacted.value(result.value)));

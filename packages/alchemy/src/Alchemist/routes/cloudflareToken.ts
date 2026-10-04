@@ -1,10 +1,11 @@
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
-import { apiKeyCredentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
+import { apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  OAUTH_UNGRANTABLE_PERMISSION_GROUPS,
   selectableScopes,
   tokenPolicies,
   type PermissionGroup,
@@ -13,9 +14,9 @@ import {
 import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { AlchemistInvalidInput, type Diagnostic } from "../Errors.ts";
 
-export interface GlobalCredentials {
-  readonly email: string;
-  readonly apiKey: Redacted.Redacted<string>;
+export interface CatalogInput {
+  readonly credentials: CloudflareCredentials.Credentials["Service"];
+  readonly accountId?: string;
 }
 
 export interface Account {
@@ -28,10 +29,10 @@ export type { PermissionGroup, TokenPolicy } from "../../Cloudflare/Auth/TokenPo
 export interface TokenCatalog {
   readonly accounts: ReadonlyArray<Account>;
   readonly permissionGroups: ReadonlyArray<PermissionGroup>;
+  readonly unavailablePermissionGroups: ReadonlyArray<string>;
 }
 
-export interface PlanInput {
-  readonly credentials: GlobalCredentials;
+export interface PlanInput extends CatalogInput {
   readonly name: string;
   readonly accountIds: ReadonlyArray<string>;
   readonly permissionGroupIds: ReadonlyArray<string> | "all";
@@ -46,8 +47,7 @@ export interface TokenPlan {
   readonly policies: ReadonlyArray<TokenPolicy>;
 }
 
-export interface CreateInput {
-  readonly credentials: GlobalCredentials;
+export interface CreateInput extends CatalogInput {
   readonly plan: TokenPlan;
 }
 
@@ -67,38 +67,37 @@ export class CloudflareTokenError extends Data.TaggedError("CloudflareTokenError
   readonly message: string;
 }> {}
 
-/** Authenticate the surrounding effect with the user's Global API Key. */
-const withGlobalKey = (credentials: GlobalCredentials) =>
-  Effect.provideService(
-    CloudflareCredentials.Credentials,
-    Effect.succeed(
-      apiKeyCredentials({
-        apiKey: credentials.apiKey,
-        email: credentials.email,
-      }),
-    ),
-  );
+const withCredentials = (input: CatalogInput) =>
+  Effect.provideService(CloudflareCredentials.Credentials, input.credentials);
 
 /** The accounts and permission groups a token can be scoped to. */
 export const catalog = Effect.fn("Alchemist.cloudflare.token.catalog")(
-  // The credentials only authenticate the call, via the transformer below.
-  function* (_credentials: GlobalCredentials) {
+  function* ({ accountId, credentials }: CatalogInput) {
+    const oauth = (yield* credentials).type === "oauth";
+    const getAccount = yield* accounts.getAccount;
     const listAccounts = yield* accounts.listAccounts;
-    const listPermissionGroups = yield* user.listTokenPermissionGroups;
-    const { accountResponse, permissionGroupResponse } = yield* Effect.all(
+    const listAccountPermissionGroups = yield* accounts.listTokensPermissionGroups;
+    const listUserPermissionGroups = yield* user.listTokenPermissionGroups;
+    const { accountList, groups } = yield* Effect.all(
       {
-        accountResponse: listAccounts({}),
-        permissionGroupResponse: listPermissionGroups({}),
+        accountList:
+          accountId === undefined
+            ? listAccounts({}).pipe(Effect.map(({ result }) => result))
+            : getAccount({ accountId }).pipe(Effect.map(({ name }) => [{ id: accountId, name }])),
+        groups:
+          accountId === undefined
+            ? listUserPermissionGroups({}).pipe(Effect.map(({ result }) => result))
+            : listAccountPermissionGroups({ accountId }),
       },
       { concurrency: "unbounded" },
     );
+    const ungrantable = (name?: string | null) =>
+      oauth && !!name && OAUTH_UNGRANTABLE_PERMISSION_GROUPS.has(name);
     return {
-      accounts: accountResponse.result.map(({ id, name }) => ({
-        id,
-        name,
-      })),
-      permissionGroups: permissionGroupResponse.result.flatMap((group) =>
-        group.id && group.name && group.scopes?.length
+      accounts: accountList.map(({ id, name }) => ({ id, name })),
+      unavailablePermissionGroups: groups.flatMap(({ name }) => (ungrantable(name) ? [name!] : [])),
+      permissionGroups: groups.flatMap((group) =>
+        group.id && group.name && group.scopes?.length && !ungrantable(group.name)
           ? [
               {
                 id: group.id,
@@ -112,12 +111,12 @@ export const catalog = Effect.fn("Alchemist.cloudflare.token.catalog")(
       ),
     } satisfies TokenCatalog;
   },
-  (effect, credentials) => withGlobalKey(credentials)(effect),
+  (effect, input) => withCredentials(input)(effect),
 );
 
 /** Resolve the selected permission groups into concrete token policies. */
 export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (input: PlanInput) {
-  const tokenCatalog = yield* catalog(input.credentials);
+  const tokenCatalog = yield* catalog(input);
   const selected =
     input.permissionGroupIds === "all"
       ? tokenCatalog.permissionGroups
@@ -133,8 +132,11 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (inpu
           }
           return Effect.succeed(group);
         });
-  const currentUser = yield* user.getUser({}).pipe(withGlobalKey(input.credentials));
-  const resolved = tokenPolicies(input.accountIds, currentUser.id, selected);
+  const userId =
+    input.accountId === undefined
+      ? (yield* user.getUser({}).pipe(withCredentials(input))).id
+      : undefined;
+  const resolved = tokenPolicies(input.accountIds, userId, selected);
   if (resolved.length === 0) {
     return yield* new AlchemistInvalidInput({
       field: "permissionGroupIds",
@@ -151,13 +153,15 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (inpu
   } satisfies TokenPlan;
 });
 
-/** Mint the planned token with the user's Global API Key. */
+/** Mint the planned token. */
 export const create = Effect.fn("Alchemist.cloudflare.token.create")(
   function* (input: CreateInput) {
-    const result = yield* user.createToken({
-      name: input.plan.name,
-      policies: input.plan.policies as TokenPolicy[],
-    });
+    const { accountId } = input;
+    const policies = input.plan.policies as TokenPolicy[];
+    const result =
+      accountId === undefined
+        ? yield* user.createToken({ name: input.plan.name, policies })
+        : yield* accounts.createToken({ accountId, name: input.plan.name, policies });
     if (!result.value) {
       return yield* new CloudflareTokenError({
         message: "Cloudflare did not return a token value.",
@@ -167,12 +171,17 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
       (count, policy) => count + (policy.permissionGroups?.length ?? 0),
       0,
     );
-    const verificationStatus = yield* user.verifyToken({}).pipe(
+    const verificationStatus = yield* Effect.gen(function* () {
+      const { status } =
+        accountId === undefined
+          ? yield* user.verifyToken({})
+          : yield* accounts.verifyToken({ accountId });
+      return status ?? undefined;
+    }).pipe(
       Effect.provideService(
         CloudflareCredentials.Credentials,
         Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make(result.value) })),
       ),
-      Effect.map(({ status }) => status),
       Effect.orElseSucceed(() => undefined),
     );
     return {
@@ -194,5 +203,5 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
           : [],
     } satisfies CreatedToken;
   },
-  (effect, input) => withGlobalKey(input.credentials)(effect),
+  (effect, input) => withCredentials(input)(effect),
 );

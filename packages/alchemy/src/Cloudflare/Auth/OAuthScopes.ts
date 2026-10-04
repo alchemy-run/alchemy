@@ -1,4 +1,8 @@
-/** Scopes enabled on Alchemy's public Cloudflare OAuth client. */
+/**
+ * Scopes enabled on Alchemy's public Cloudflare OAuth client. Cloudflare's
+ * full list is at https://api.cloudflare.com/client/v4/oauth/scopes (needs
+ * an OAuth bearer token).
+ */
 export const OAUTH_SCOPE_GROUPS = [
   {
     id: "developer-platform",
@@ -430,6 +434,7 @@ export const OAUTH_SCOPE_GROUPS = [
     id: "account-billing",
     label: "Account & Billing",
     scopes: [
+      "account-api-tokens.write",
       "account-api-gateway.write",
       "account-api-gateway.read",
       "account-custom-asset.read",
@@ -824,6 +829,7 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "zone-disable-esc.write": "Disable ESC Write",
   "ssl-and-certificates.read": "SSL and Certificates Read",
   "ssl-and-certificates.write": "SSL and Certificates Write",
+  "account-api-tokens.write": "Account API Tokens Write",
   "account-api-gateway.write": "Account API Gateway",
   "account-api-gateway.read": "Account API Gateway Read",
   "account-custom-asset.read": "Account Custom Asset Read",
