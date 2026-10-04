@@ -3,12 +3,14 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { toYamlDisplayValue } from "@/Cli/PropertyDiff.ts";
 import * as Kubernetes from "@/Kubernetes";
 import {
   appliedObjectsMatch,
   driftMask,
   hashDriftSelection,
 } from "@/Kubernetes/internal/declared.ts";
+import { encodeState, reviveStateRecursive } from "@/State/StateEncoding.ts";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
@@ -100,7 +102,7 @@ test(
         tolerations,
         tolerations,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       appliedObjectsMatch(
         {
@@ -121,6 +123,21 @@ test(
         tolerations,
       ),
     ).toBe(false);
+    expect(
+      appliedObjectsMatch(
+        {
+          ...tolerations,
+          spec: {
+            tolerations: [
+              ...tolerations.spec.tolerations,
+              { key: "gpu", operator: "Exists", effect: "NoSchedule" },
+            ],
+          },
+        },
+        tolerations,
+        tolerations,
+      ),
+    ).toBe(false);
     const bare = {
       apiVersion: "v1",
       kind: "Pod",
@@ -131,7 +148,7 @@ test(
       ...bare,
       spec: { tolerations: [{ key: "gpu", operator: "Equal" }] },
     };
-    expect(appliedObjectsMatch(defaulted, defaulted, bare)).toBe(true);
+    expect(appliedObjectsMatch(defaulted, bare, bare)).toBe(true);
     expect(
       appliedObjectsMatch(
         {
@@ -229,6 +246,125 @@ test(
         named,
       ),
     ).toBe(false);
+    const crdContainers = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: {
+        containers: [
+          { name: "a", image: "a:1" },
+          { name: "b", image: "b:1" },
+        ],
+      },
+    };
+    expect(
+      appliedObjectsMatch(
+        {
+          ...crdContainers,
+          spec: {
+            containers: [
+              { name: "b", image: "b:1" },
+              { name: "a", image: "a:1" },
+            ],
+          },
+        },
+        crdContainers,
+        crdContainers,
+      ),
+    ).toBe(false);
+    expect(
+      appliedObjectsMatch(
+        {
+          ...crdContainers,
+          spec: {
+            containers: [
+              { name: "a", image: "a:1" },
+              { name: "b", image: "b:1" },
+              { name: "c", image: "c:1" },
+            ],
+          },
+        },
+        crdContainers,
+        crdContainers,
+      ),
+    ).toBe(false);
+    const mapItems = {
+      ...named,
+      metadata: {
+        name: "w",
+        managedFields: [
+          {
+            manager: "alchemy",
+            fieldsV1: {
+              "f:spec": {
+                "f:items": {
+                  'k:{"name":"a"}': { ".": {} },
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+    const mapReordered = {
+      ...mapItems,
+      spec: {
+        items: [
+          { name: "b", image: "b:1" },
+          { name: "a", image: "a:1" },
+        ],
+      },
+    };
+    expect(appliedObjectsMatch(mapReordered, mapItems, mapItems)).toBe(true);
+    expect(JSON.stringify(driftMask(mapItems))).toContain('"spec.items"');
+    const k8sIoCrd = {
+      apiVersion: "widgets.acme.k8s.io/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: {
+        containers: [
+          { name: "a", image: "a:1" },
+          { name: "b", image: "b:1" },
+        ],
+      },
+    };
+    expect(
+      appliedObjectsMatch(
+        {
+          ...k8sIoCrd,
+          spec: {
+            containers: [
+              { name: "b", image: "b:1" },
+              { name: "a", image: "a:1" },
+            ],
+          },
+        },
+        k8sIoCrd,
+        k8sIoCrd,
+      ),
+    ).toBe(false);
+    const codes = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: {
+        name: "w",
+        managedFields: [
+          {
+            manager: "alchemy",
+            fieldsV1: { "f:spec": { "f:codes": { "v:1": {} } } },
+          },
+        ],
+      },
+      spec: { codes: [1, true] },
+    };
+    expect(
+      appliedObjectsMatch(
+        { ...codes, spec: { codes: [true, 1, 2] } },
+        { ...codes, spec: { codes: [1, true] } },
+        codes,
+      ),
+    ).toBe(true);
+    expect(appliedObjectsMatch({ ...codes, spec: { codes: [true] } }, codes, codes)).toBe(false);
     const settings = {
       apiVersion: "example.com/v1",
       kind: "Widget",
@@ -413,7 +549,8 @@ test(
         },
       },
     };
-    expect(yield* hashDriftSelection(orderedMask, reversedInit)).not.toBe(orderedBaseline);
+    // initContainers is a map list: order is not part of the merge key.
+    expect(yield* hashDriftSelection(orderedMask, reversedInit)).toBe(orderedBaseline);
     const reversedContainers = {
       ...ordered,
       spec: {
@@ -654,6 +791,309 @@ test(
         data: { memory: "1024Mi", cpu: "1000m", protocol: "TCP" },
       }),
     ).not.toBe(yield* hashDriftSelection(driftMask(config), config));
+  }),
+  { tags: ["provider:kubernetes", "local"] },
+);
+
+const containers = [
+  { name: "a", image: "a:1" },
+  { name: "b", image: "b:1" },
+];
+
+const reorderedContainers = [
+  { name: "b", image: "b:1" },
+  { name: "a", image: "a:1" },
+];
+
+const deploymentList = (fieldsV1?: unknown) => ({
+  apiVersion: "apps/v1",
+  kind: "Deployment",
+  metadata:
+    fieldsV1 === undefined
+      ? { name: "app" }
+      : {
+          name: "app",
+          managedFields: [{ manager: "alchemy", fieldsV1 }],
+        },
+  spec: { template: { spec: { containers } } },
+});
+
+const containerFields = (node: Record<string, unknown>) => ({
+  "f:spec": { "f:template": { "f:spec": { "f:containers": node } } },
+});
+
+test(
+  "fieldsV1 topology is reused on a later read",
+  Effect.gen(function* () {
+    const widget = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: { containers },
+    };
+    const widgetWitness = {
+      ...widget,
+      metadata: {
+        name: "w",
+        managedFields: [
+          {
+            manager: "alchemy",
+            fieldsV1: {
+              "f:spec": {
+                "f:containers": {
+                  ".": {},
+                  'k:{"name":"a"}': { ".": {} },
+                  'k:{"name":"b"}': { ".": {} },
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+    const widgetMask = driftMask(widget, widgetWitness);
+    const widgetReordered = { ...widget, spec: { containers: reorderedContainers } };
+    const widgetMissing = { ...widget, spec: { containers: [containers[0]] } };
+    const widgetExtra = {
+      ...widget,
+      spec: { containers: [...containers, { name: "c", image: "c:1" }] },
+    };
+    const widgetBaseline = yield* hashDriftSelection(widgetMask, widget);
+    // The raw CRD list is atomic. The stored apply topology is what ignores order.
+    expect(yield* hashDriftSelection(widget, widgetReordered)).not.toBe(
+      yield* hashDriftSelection(widget, widget),
+    );
+    expect(yield* hashDriftSelection(widgetMask, widgetReordered)).toBe(widgetBaseline);
+    expect(yield* hashDriftSelection(widgetMask, widgetExtra)).toBe(widgetBaseline);
+    expect(yield* hashDriftSelection(widgetMask, widgetMissing)).not.toBe(widgetBaseline);
+
+    const blank = deploymentList();
+    const blankMask = driftMask(blank);
+    const blankReordered = {
+      ...blank,
+      spec: { template: { spec: { containers: reorderedContainers } } },
+    };
+    const blankMissing = {
+      ...blank,
+      spec: { template: { spec: { containers: [containers[0]] } } },
+    };
+    const blankBaseline = yield* hashDriftSelection(blankMask, blank);
+    expect(yield* hashDriftSelection(blankMask, blankReordered)).toBe(blankBaseline);
+    expect(yield* hashDriftSelection(blankMask, blankMissing)).not.toBe(blankBaseline);
+
+    const keyed = deploymentList(
+      containerFields({
+        ".": {},
+        'k:{"name":"a"}': { ".": {} },
+        'k:{"name":"b"}': { ".": {} },
+      }),
+    );
+    const keyedMask = driftMask(deploymentList(), keyed);
+    const keyedBaseline = yield* hashDriftSelection(keyedMask, deploymentList());
+    expect(
+      yield* hashDriftSelection(keyedMask, {
+        ...deploymentList(),
+        spec: { template: { spec: { containers: reorderedContainers } } },
+      }),
+    ).toBe(keyedBaseline);
+
+    // An owned list with no k: entry is atomic until a later apply stores one.
+    const emptyOwned = deploymentList(containerFields({ ".": {} }));
+    const emptyMask = driftMask(deploymentList(), emptyOwned);
+    expect(JSON.stringify(emptyMask)).toContain('"spec.template.spec.containers":"atomic"');
+    const emptyBaseline = yield* hashDriftSelection(emptyMask, deploymentList());
+    expect(
+      yield* hashDriftSelection(emptyMask, {
+        ...deploymentList(),
+        spec: { template: { spec: { containers: reorderedContainers } } },
+      }),
+    ).not.toBe(emptyBaseline);
+  }),
+  { tags: ["provider:kubernetes", "local"] },
+);
+
+test(
+  "empty owned finalizers are a set and an appended toleration drifts",
+  Effect.gen(function* () {
+    const finalizers: string[] = [];
+    const namespace = {
+      apiVersion: "v1",
+      kind: "Namespace",
+      metadata: { name: "team", finalizers },
+    };
+    const finalizerWitness = (fields: ReadonlyArray<Record<string, unknown>>) => ({
+      ...namespace,
+      metadata: {
+        ...namespace.metadata,
+        managedFields: fields.map((fieldsV1) => ({ manager: "alchemy", fieldsV1 })),
+      },
+    });
+    const dotOnly = { "f:metadata": { "f:finalizers": { ".": {} } } };
+    const withMember = {
+      "f:metadata": { "f:finalizers": { ".": {}, 'v:"kubernetes"': {} } },
+    };
+    const emptySet = driftMask(namespace, finalizerWitness([dotOnly]));
+    const dotThenMember = driftMask(namespace, finalizerWitness([dotOnly, withMember]));
+    const memberThenDot = driftMask(namespace, finalizerWitness([withMember, dotOnly]));
+    expect(JSON.stringify(emptySet)).toContain('"metadata.finalizers":"set"');
+    expect(JSON.stringify(dotThenMember)).toContain('"metadata.finalizers":"set"');
+    expect(JSON.stringify(memberThenDot)).toContain('"metadata.finalizers":"set"');
+    const addedFinalizer = {
+      ...namespace,
+      metadata: { name: "team", finalizers: ["kubernetes"] },
+    };
+    for (const mask of [emptySet, dotThenMember, memberThenDot]) {
+      const baseline = yield* hashDriftSelection(mask, namespace);
+      expect(yield* hashDriftSelection(mask, addedFinalizer)).toBe(baseline);
+    }
+    const kept = {
+      ...namespace,
+      metadata: { name: "team", finalizers: ["example.com/keep"] },
+    };
+    const keptMask = driftMask(kept, finalizerWitness([dotOnly]));
+    expect(
+      yield* hashDriftSelection(keptMask, {
+        ...kept,
+        metadata: { name: "team", finalizers: ["kubernetes"] },
+      }),
+    ).not.toBe(yield* hashDriftSelection(keptMask, kept));
+
+    const codes = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: { codes: ["a"] },
+    };
+    const codeFields = (node: Record<string, unknown>) => ({
+      "f:spec": { "f:codes": node },
+    });
+    const dotThenValue = driftMask(codes, {
+      ...codes,
+      metadata: {
+        name: "w",
+        managedFields: [
+          { manager: "empty", fieldsV1: codeFields({ ".": {} }) },
+          { manager: "member", fieldsV1: codeFields({ ".": {}, 'v:"a"': {} }) },
+        ],
+      },
+    });
+    const valueThenDot = driftMask(codes, {
+      ...codes,
+      metadata: {
+        name: "w",
+        managedFields: [
+          { manager: "member", fieldsV1: codeFields({ ".": {}, 'v:"a"': {} }) },
+          { manager: "empty", fieldsV1: codeFields({ ".": {} }) },
+        ],
+      },
+    });
+    expect(JSON.stringify(dotThenValue)).toContain('"spec.codes":"set"');
+    expect(JSON.stringify(valueThenDot)).toContain('"spec.codes":"set"');
+    const codesBaseline = yield* hashDriftSelection(dotThenValue, codes);
+    expect(yield* hashDriftSelection(dotThenValue, { ...codes, spec: { codes: ["b", "a"] } })).toBe(
+      codesBaseline,
+    );
+    expect(yield* hashDriftSelection(valueThenDot, { ...codes, spec: { codes: ["b"] } })).not.toBe(
+      yield* hashDriftSelection(valueThenDot, codes),
+    );
+
+    const pod = {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: { name: "app" },
+      spec: {
+        tolerations: [{ key: "disk", operator: "Equal", value: "ssd", effect: "NoSchedule" }],
+      },
+    };
+    const podMask = driftMask(pod, {
+      ...pod,
+      metadata: {
+        name: "app",
+        managedFields: [{ manager: "alchemy", fieldsV1: { "f:spec": { "f:tolerations": {} } } }],
+      },
+    });
+    expect(JSON.stringify(podMask)).not.toContain('"spec.tolerations"');
+    const podBaseline = yield* hashDriftSelection(podMask, pod);
+    expect(
+      yield* hashDriftSelection(podMask, {
+        ...pod,
+        spec: {
+          tolerations: [
+            ...pod.spec.tolerations,
+            { key: "gpu", operator: "Exists", effect: "NoSchedule" },
+          ],
+        },
+      }),
+    ).not.toBe(podBaseline);
+  }),
+  { tags: ["provider:kubernetes", "local"] },
+);
+
+test(
+  "a redacted set identity stays wrapped in the drift mask",
+  Effect.gen(function* () {
+    const token = "private-token";
+    const declared = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: { tokens: Redacted.make([token]) },
+    };
+    const witness = {
+      ...declared,
+      metadata: {
+        name: "w",
+        managedFields: [
+          {
+            manager: "alchemy",
+            fieldsV1: { "f:spec": { "f:tokens": { ".": {}, 'v:"private-token"': {} } } },
+          },
+        ],
+      },
+      spec: { tokens: [token] },
+    };
+    const mask = driftMask(declared, witness);
+    const revived = reviveStateRecursive(JSON.parse(JSON.stringify(encodeState(mask))));
+    const shown = JSON.stringify(toYamlDisplayValue(revived));
+    expect(shown).not.toContain(token);
+    expect(shown).toContain("(redacted)");
+    expect(JSON.stringify(toYamlDisplayValue(declared))).not.toContain(token);
+
+    const present = {
+      apiVersion: "example.com/v1",
+      kind: "Widget",
+      metadata: { name: "w" },
+      spec: { tokens: [token, "other"] },
+    };
+    const baseline = yield* hashDriftSelection(revived, present);
+    expect(yield* hashDriftSelection(mask, present)).toBe(baseline);
+    expect(
+      yield* hashDriftSelection(revived, { ...present, spec: { tokens: ["other"] } }),
+    ).not.toBe(baseline);
+
+    const named = {
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: { name: "app" },
+      spec: {
+        template: { spec: { containers: [{ name: Redacted.make(token), image: "app:1" }] } },
+      },
+    };
+    const namedMask = driftMask(named);
+    expect(JSON.stringify(toYamlDisplayValue(namedMask))).not.toContain(token);
+    const live = {
+      ...named,
+      spec: { template: { spec: { containers: [{ name: token, image: "app:2" }] } } },
+    };
+    expect(yield* hashDriftSelection(namedMask, live)).toBe(
+      yield* hashDriftSelection(
+        driftMask({
+          ...named,
+          spec: { template: { spec: { containers: [{ name: token, image: "app:1" }] } } },
+        }),
+        live,
+      ),
+    );
   }),
   { tags: ["provider:kubernetes", "local"] },
 );

@@ -436,12 +436,10 @@ export const reconcileObjects = Effect.fn(function* ({
             redactions,
           });
           const ref = toKubernetesObjectRef(object);
+          const witnessed = isPlainObject(applied) ? applied : undefined;
           baselines.set(kubernetesObjectKey(ref), {
-            driftMask: driftMask(object),
-            baselineHash: yield* hashDriftSelection(
-              object,
-              isPlainObject(applied) ? applied : object,
-            ),
+            driftMask: driftMask(object, witnessed),
+            baselineHash: yield* hashDriftSelection(object, witnessed ?? object),
           });
         }),
       { concurrency: "unbounded" },

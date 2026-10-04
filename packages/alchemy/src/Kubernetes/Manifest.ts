@@ -260,10 +260,8 @@ export const ManifestProvider = () =>
           // converge-if-present in one call, `force: true` so alchemy owns
           // the fields it manages regardless of prior managers.
           const applied = yield* applyObject({ transport, object });
-          const baselineHash = yield* hashDriftSelection(
-            object,
-            isPlainObject(applied) ? applied : object,
-          );
+          const witnessed = isPlainObject(applied) ? applied : undefined;
+          const baselineHash = yield* hashDriftSelection(object, witnessed ?? object);
 
           yield* session.note(
             `Applied ${ref.apiVersion}/${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ""}${ref.name}`,
@@ -280,7 +278,7 @@ export const ManifestProvider = () =>
             ref,
             uid,
             baselineHash,
-            driftMask: driftMask(object),
+            driftMask: driftMask(object, witnessed),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

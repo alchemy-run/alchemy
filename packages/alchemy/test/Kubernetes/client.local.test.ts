@@ -314,6 +314,42 @@ test.provider(
 );
 
 test.provider(
+  "a stalled HTTP attempt times out at the deadline",
+  () => {
+    const arrivals: number[] = [];
+    return serve(
+      (request, response) => {
+        arrivals.push(Date.now());
+        request.resume();
+        if (arrivals.length < 2) return;
+        response.writeHead(200);
+        response.end(JSON.stringify({ ...configMap, data: { token: "ok" } }));
+      },
+      (endpoint) =>
+        Effect.gen(function* () {
+          const transport = yield* connectCluster(connectionFor(endpoint));
+          const observed = yield* readObject({
+            transport,
+            object: {
+              apiVersion: "v1",
+              kind: "ConfigMap",
+              name: "token",
+              namespace: "default",
+            },
+          });
+          expect(arrivals.length).toBeGreaterThanOrEqual(2);
+          const gap = arrivals[1]! - arrivals[0]!;
+          // Each attempt dies at 10s, then the retry spacing starts the next one.
+          expect(gap).toBeGreaterThan(8_000);
+          expect(gap).toBeLessThan(22_000);
+          expect((observed as { data?: { token?: string } }).data?.token).toBe("ok");
+        }),
+    );
+  },
+  { tags: ["provider:kubernetes", "local"], timeout: 40_000 },
+);
+
+test.provider(
   "delete tolerates 404 and surfaces 403",
   () =>
     serve(
@@ -837,28 +873,6 @@ test.provider(
         },
       },
     };
-    const pinned = {
-      ...legacy,
-      metadata: { name: "pinned", namespace: "default" },
-      spec: { replicas: 2, ...legacy.spec },
-    };
-    const ordered = {
-      ...legacy,
-      metadata: { name: "ordered", namespace: "default" },
-      spec: {
-        ...legacy.spec,
-        template: {
-          metadata: { labels: { app: "web" } },
-          spec: {
-            initContainers: [
-              { name: "a", image: "a:1" },
-              { name: "b", image: "b:1" },
-            ],
-            containers: [{ name: "app", image: "app:1" }],
-          },
-        },
-      },
-    };
     const live: Record<string, unknown> = {
       legacy: {
         ...legacy,
@@ -931,26 +945,6 @@ test.provider(
           template: {
             ...noted.spec.template,
             metadata: { labels: { app: "web" } },
-          },
-        },
-      },
-      pinned: {
-        ...pinned,
-        spec: { ...pinned.spec, replicas: 9 },
-      },
-      ordered: {
-        ...ordered,
-        spec: {
-          ...ordered.spec,
-          template: {
-            ...ordered.spec.template,
-            spec: {
-              initContainers: [
-                { name: "b", image: "b:1" },
-                { name: "a", image: "a:1" },
-              ],
-              containers: [{ name: "app", image: "app:1" }],
-            },
           },
         },
       },
@@ -1203,54 +1197,6 @@ test.provider(
               ),
             ),
           ).toBe(true);
-
-          const scaled = yield* manifest.read({
-            id: "pinned",
-            fqn: "pinned",
-            instanceId: "i",
-            olds: { cluster: connection, manifest: pinned },
-            output: {
-              connection,
-              apiVersion: "apps/v1",
-              kind: "Deployment",
-              name: "pinned",
-              namespace: "default",
-              ref: {
-                apiVersion: "apps/v1",
-                kind: "Deployment",
-                name: "pinned",
-                namespace: "default",
-              },
-              uid: "u",
-              driftMask: driftMask(pinned),
-              baselineHash: yield* hashDriftSelection(pinned, pinned),
-            },
-          });
-          expect(drifted(scaled)).toBe(true);
-
-          const reversed = yield* manifest.read({
-            id: "ordered",
-            fqn: "ordered",
-            instanceId: "i",
-            olds: { cluster: connection, manifest: ordered },
-            output: {
-              connection,
-              apiVersion: "apps/v1",
-              kind: "Deployment",
-              name: "ordered",
-              namespace: "default",
-              ref: {
-                apiVersion: "apps/v1",
-                kind: "Deployment",
-                name: "ordered",
-                namespace: "default",
-              },
-              uid: "u",
-              driftMask: driftMask(ordered),
-              baselineHash: yield* hashDriftSelection(ordered, ordered),
-            },
-          });
-          expect(drifted(reversed)).toBe(true);
 
           const helmOutput = {
             connection,
@@ -1708,7 +1654,7 @@ test.provider(
 );
 
 test.provider(
-  "reversed initContainers drift",
+  "reversed initContainers are not drift",
   () => {
     const declared = appDeployment("ordered", {
       selector: { matchLabels: { app: "web" } },
@@ -1751,7 +1697,7 @@ test.provider(
               baselineHash: yield* hashDriftSelection(declared, declared),
             }),
           );
-          expect(drifted(read)).toBe(true);
+          expect(drifted(read)).toBe(false);
         }),
     );
   },

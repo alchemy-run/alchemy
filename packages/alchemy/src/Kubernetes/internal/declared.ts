@@ -5,16 +5,10 @@ import { isPlainObject } from "../../Util/data.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 
 /**
- * Strategic-merge list keys. The first tuple whose keys all resolve wins.
- * `ports` is `containerPort`+`protocol` on containers and `port`+`protocol`
- * on Services. Tolerations match the whole tuple: `key` alone collides
- * (Exists vs Equal). Anything not listed is atomic: Kubernetes' default
- * list type. Order and length count, including a `name` field on a CRD list.
- *
- * `initContainers` is the exception that keeps document order. The name
- * still identifies an item, and the sequence is the execution order.
- * `finalizers` is a set of strings: controllers append their own, and order
- * is not significant.
+ * Core list keys. Used only for the upstream groups in {@link builtinGroups}
+ * when `fieldsV1` did not describe that path. `ports` is `containerPort`+
+ * `protocol` on containers and `port`+`protocol` on Services. Every other
+ * list is atomic, Kubernetes' default — a CRD field named `containers` included.
  */
 const listKeys: Record<string, readonly (readonly string[])[]> = {
   containers: [["name"]],
@@ -30,12 +24,10 @@ const listKeys: Record<string, readonly (readonly string[])[]> = {
     ["port", "protocol"],
   ],
   readinessGates: [["conditionType"]],
-  tolerations: [["key", "operator", "value", "effect"]],
 };
 
-/** Absent apiserver defaults, so a declared `{ key }` matches `{ key, operator: Equal }`. */
+/** Absent apiserver default, so a declared port matches `{ protocol: TCP }`. */
 const listDefaults: Record<string, Record<string, string>> = {
-  tolerations: { operator: "Equal", value: "", effect: "" },
   ports: { protocol: "TCP" },
 };
 
@@ -138,17 +130,23 @@ const fieldValue = (
   field: string | undefined,
 ): string | number | undefined => {
   if (isPlainObject(item)) {
-    const value = item[key];
+    const raw = item[key];
+    const value = Redacted.isRedacted(raw) ? Redacted.value(raw) : raw;
     if (typeof value === "string") return key === "protocol" ? value.toUpperCase() : value;
     if (typeof value === "number") return value;
   }
   return field === undefined ? undefined : listDefaults[field]?.[key];
 };
 
+type ListKeys = readonly string[];
+/** Map key fields, `"set"` for a scalar set, or `"atomic"` when fieldsV1 said so. */
+type ListSpec = ListKeys | "set" | "atomic";
+type ListTopo = Map<string, ListSpec>;
+
 const alignKeys = (
   field: string | undefined,
   desired: ReadonlyArray<unknown>,
-): readonly string[] | undefined => {
+): ListKeys | undefined => {
   for (const keys of (field === undefined ? undefined : listKeys[field]) ?? []) {
     if (desired.every((item) => keys.every((key) => fieldValue(item, key, field) !== undefined))) {
       return keys;
@@ -157,37 +155,231 @@ const alignKeys = (
   return undefined;
 };
 
+const apiVersionOf = (value: unknown): string | undefined =>
+  isPlainObject(value) && typeof value.apiVersion === "string" ? value.apiVersion : undefined;
+
+/**
+ * Upstream groups whose OpenAPI matches {@link listKeys}. A CRD group is
+ * absent even when it ends in `.k8s.io`.
+ */
+const builtinGroups = new Set(["", "apps", "batch", "policy", "autoscaling"]);
+
+const builtinGroup = (apiVersion: string | undefined): boolean => {
+  if (apiVersion === undefined) return false;
+  const slash = apiVersion.indexOf("/");
+  const group = slash === -1 ? "" : apiVersion.slice(0, slash);
+  return builtinGroups.has(group);
+};
+
+const parseMapKeys = (encoded: string): ListKeys | undefined => {
+  try {
+    const value: unknown = JSON.parse(encoded);
+    return isPlainObject(value) ? Object.keys(value) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * List paths encoded by the apiserver in `metadata.managedFields[].fieldsV1`.
+ * `arrays` drops scalar leaves: an owned `{".":{}}` is a list only when the
+ * declaration has an array there.
+ */
+const fieldsV1Topo = (document: unknown, arrays: ReadonlySet<string>): ListTopo | undefined => {
+  if (!isPlainObject(document) || !isPlainObject(document.metadata)) return undefined;
+  const managed = document.metadata.managedFields;
+  if (!Array.isArray(managed)) return undefined;
+  const topo: ListTopo = new Map();
+  const visit = (node: unknown, path: string[]) => {
+    if (!isPlainObject(node)) return;
+    const id = path.join(".");
+    let mapKeys: ListKeys | undefined;
+    let set = false;
+    let atomic = false;
+    // `{".":{}}` is an owned list with no element yet. A scalar leaf looks the same.
+    let sawDot = false;
+    let sawOther = false;
+    for (const key of Object.keys(node)) {
+      if (key === ".") {
+        sawDot = true;
+        continue;
+      }
+      sawOther = true;
+      if (!mapKeys && key.startsWith("k:")) mapKeys = parseMapKeys(key.slice(2));
+      else if (key.startsWith("v:")) set = true;
+      else if (key.startsWith("i:")) atomic = true;
+    }
+    const ownedEmpty = sawDot && !sawOther;
+    const field = path[path.length - 1];
+    // `k:` is the list identity. A later `v:` or empty owner must not replace it.
+    const keyed = Array.isArray(topo.get(id));
+    if (id.length > 0 && mapKeys && mapKeys.length > 0) topo.set(id, mapKeys);
+    else if (
+      id.length > 0 &&
+      !keyed &&
+      (set || (ownedEmpty && arrays.has(id) && scalarSets.has(field ?? "")))
+    ) {
+      topo.set(id, "set");
+    } else if (id.length > 0 && (atomic || ownedEmpty) && arrays.has(id) && !topo.has(id)) {
+      topo.set(id, "atomic");
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key.startsWith("f:")) visit(child, [...path, key.slice(2)]);
+      else if (key.startsWith("k:") || key.startsWith("i:")) visit(child, path);
+    }
+  };
+  for (const entry of managed) {
+    if (!isPlainObject(entry) || !isPlainObject(entry.fieldsV1)) continue;
+    visit(entry.fieldsV1, []);
+  }
+  return topo;
+};
+
+const builtinTopo = (declaration: unknown): ListTopo => {
+  const topo: ListTopo = new Map();
+  const visit = (node: unknown, path: string[]) => {
+    if (Array.isArray(node)) return;
+    if (Redacted.isRedacted(node)) return visit(Redacted.value(node), path);
+    if (!isPlainObject(node)) return;
+    for (const [key, child] of Object.entries(node)) {
+      const next = [...path, key];
+      const value = Redacted.isRedacted(child) ? Redacted.value(child) : child;
+      if (Array.isArray(value)) {
+        const id = next.join(".");
+        if (scalarSets.has(key)) topo.set(id, "set");
+        else {
+          const keys = alignKeys(key, value);
+          if (keys) topo.set(id, keys);
+        }
+        for (const item of value) visit(item, next);
+        continue;
+      }
+      visit(value, next);
+    }
+  };
+  visit(declaration, []);
+  return topo;
+};
+
+/** Array paths in `declaration`. Scalar `{".":{}}` leaves are not lists. */
+const listPaths = (declaration: unknown): ReadonlySet<string> => {
+  const paths = new Set<string>();
+  const visit = (node: unknown, path: string[]) => {
+    const value = Redacted.isRedacted(node) ? Redacted.value(node) : node;
+    if (Array.isArray(value)) {
+      if (path.length > 0) paths.add(path.join("."));
+      for (const item of value) visit(item, path);
+      return;
+    }
+    if (!isPlainObject(value)) return;
+    for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
+  };
+  visit(declaration, []);
+  return paths;
+};
+
+/**
+ * The document (apply response or live GET) wins per path. The declaration
+ * fills paths it described and the document did not. Built-in groups then
+ * fill paths fieldsV1 left blank. An owned `{".":{}}` map list and an `i:`
+ * list stay atomic, so the built-in table cannot reclassify them. A `v:`
+ * member replaces that mark, and an empty scalar set is stored as a set.
+ */
+const topologyOf = (declaration: unknown, document: unknown): ListTopo => {
+  const lists: ListTopo = new Map();
+  const arrays = listPaths(declaration);
+  for (const source of [fieldsV1Topo(declaration, arrays), fieldsV1Topo(document, arrays)]) {
+    if (!source) continue;
+    for (const [path, keys] of source) lists.set(path, keys);
+  }
+  const version = apiVersionOf(declaration) ?? apiVersionOf(document);
+  if (builtinGroup(version)) {
+    for (const [path, keys] of builtinTopo(declaration)) {
+      if (!lists.has(path)) lists.set(path, keys);
+    }
+  }
+  return lists;
+};
+
+const storedTopology = (encoded: unknown): ListTopo => {
+  const lists: ListTopo = new Map();
+  if (!isPlainObject(encoded)) return lists;
+  for (const [path, keys] of Object.entries(encoded)) {
+    if (keys === "set" || keys === "atomic") {
+      lists.set(path, keys);
+      continue;
+    }
+    if (Array.isArray(keys) && keys.every((key): key is string => typeof key === "string")) {
+      lists.set(path, keys);
+    }
+  }
+  return lists;
+};
+
 const mergeKey = (item: unknown, keys: readonly string[], field: string | undefined): string =>
   keys.map((key) => String(fieldValue(item, key, field))).join("\0");
 
 const scalarIdentity = (item: unknown): string | undefined => {
   const value = Redacted.isRedacted(item) ? Redacted.value(item) : item;
-  return typeof value === "string" ? value : undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return JSON.stringify(value);
+  return undefined;
 };
 
 /**
  * Fields alchemy applied. Leaf `null` is a scalar slot filled from the
- * document. Merge-key scalars stay so list identity still matches.
- * Persisted instead of the document so a Secret value is not copied into state.
+ * document. Merge-key scalars and set members stay so list identity still
+ * matches. A Redacted identity stays wrapped; other secret leaves are null
+ * so they are not copied into state.
+ *
+ * When any list is a map or a set, the mask is `{ $fields, $lists }`. `$lists`
+ * is the topology taken from `witness` (the apply response's fieldsV1) so a
+ * later GET is classified the same way. A plain object mask has only atomic lists.
  */
-export const driftMask = (declaration: unknown): unknown => maskOf(declaration);
+export const driftMask = (declaration: unknown, witness?: unknown): unknown => {
+  const lists = topologyOf(declaration, witness ?? declaration);
+  const fields = maskOf(declaration, lists, []);
+  if (lists.size === 0) return fields;
+  return { $fields: fields, $lists: Object.fromEntries(lists) };
+};
 
-const maskOf = (declaration: unknown, field?: string, keep?: ReadonlySet<string>): unknown => {
-  if (Redacted.isRedacted(declaration)) return maskOf(Redacted.value(declaration), field, keep);
+const maskOf = (
+  declaration: unknown,
+  lists: ListTopo,
+  path: string[],
+  keep?: ReadonlySet<string>,
+  sensitive = false,
+): unknown => {
+  if (Redacted.isRedacted(declaration)) {
+    return maskOf(Redacted.value(declaration), lists, path, keep, true);
+  }
   if (Array.isArray(declaration)) {
-    if (field !== undefined && scalarSets.has(field)) {
-      return declaration.map((item) => scalarIdentity(item) ?? null);
+    const spec = lists.get(path.join("."));
+    if (spec === "set") {
+      return declaration.map((item) => {
+        const identity = scalarIdentity(item);
+        if (identity === undefined) return null;
+        return sensitive || Redacted.isRedacted(item) ? Redacted.make(identity) : identity;
+      });
     }
-    const keys = alignKeys(field, declaration);
-    const keepKeys = keys === undefined ? undefined : new Set(keys);
-    return declaration.map((item) => maskOf(item, undefined, keepKeys));
+    const keepKeys = Array.isArray(spec) ? new Set(spec) : undefined;
+    return declaration.map((item) =>
+      maskOf(item, lists, path, keepKeys, sensitive || Redacted.isRedacted(item)),
+    );
   }
   if (!isPlainObject(declaration)) return null;
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(declaration)) {
-    const value = Redacted.isRedacted(child) ? Redacted.value(child) : child;
+    const redacted = Redacted.isRedacted(child);
+    const value = redacted ? Redacted.value(child) : child;
     const leaf = !isPlainObject(value) && !Array.isArray(value);
-    out[key] = keep?.has(key) && leaf ? value : maskOf(child, key);
+    const secret = sensitive || redacted;
+    out[key] =
+      keep?.has(key) && leaf
+        ? secret
+          ? Redacted.make(value)
+          : value
+        : maskOf(child, lists, [...path, key], undefined, sensitive);
   }
   return out;
 };
@@ -195,79 +387,77 @@ const maskOf = (declaration: unknown, field?: string, keep?: ReadonlySet<string>
 /**
  * Declared paths, values taken from `document` (the apply response or a later
  * GET). Undeclared keys — HPA replicas, controller annotations, apiserver
- * defaults — are absent. `initContainers` keep the document's order.
+ * defaults — are absent. Map-list order is not significant.
  */
 const selectDeclared = (
   declaration: unknown,
   document: unknown,
-  field: string | undefined,
-  parent?: string,
+  lists: ListTopo,
+  path: string[],
 ): unknown => {
   if (Redacted.isRedacted(declaration)) {
-    return selectDeclared(Redacted.value(declaration), document, field, parent);
+    return selectDeclared(Redacted.value(declaration), document, lists, path);
   }
   if (Redacted.isRedacted(document)) {
-    return selectDeclared(declaration, Redacted.value(document), field, parent);
+    return selectDeclared(declaration, Redacted.value(document), lists, path);
   }
+  const field = path[path.length - 1];
   if (Array.isArray(declaration)) {
     const items = Array.isArray(document) ? document : [];
-    if (field !== undefined && scalarSets.has(field)) {
+    const spec = lists.get(path.join("."));
+    if (spec === "set") {
       const present = new Set(items.map(scalarIdentity).filter((value) => value !== undefined));
       return declaration
         .map(scalarIdentity)
         .filter((value): value is string => value !== undefined && present.has(value))
         .sort((left, right) => left.localeCompare(right));
     }
-    const keys = alignKeys(field, declaration);
-    if (keys === undefined) {
+    if (spec === undefined || spec === "atomic") {
       const length = Math.max(declaration.length, items.length);
       return Array.from({ length }, (_, index) =>
         index < declaration.length
-          ? selectDeclared(declaration[index], items[index], field)
+          ? selectDeclared(declaration[index], items[index], lists, path)
           : items[index],
       );
     }
     const match = (item: unknown) =>
       items.find((candidate) =>
-        keys.every((key) => fieldValue(candidate, key, field) === fieldValue(item, key, field)),
+        spec.every((key) => fieldValue(candidate, key, field) === fieldValue(item, key, field)),
       );
-    if (field === "initContainers") {
-      const declaredByKey = new Map(declaration.map((item) => [mergeKey(item, keys, field), item]));
-      const seen = new Set<string>();
-      const ordered: unknown[] = [];
-      for (const item of items) {
-        const key = mergeKey(item, keys, field);
-        const declaredItem = declaredByKey.get(key);
-        if (declaredItem === undefined || seen.has(key)) continue;
-        seen.add(key);
-        ordered.push(selectDeclared(declaredItem, item, field));
-      }
-      for (const item of declaration) {
-        const key = mergeKey(item, keys, field);
-        if (!seen.has(key)) ordered.push(selectDeclared(item, undefined, field));
-      }
-      return ordered;
-    }
     return declaration
       .map((item) => ({
-        key: mergeKey(item, keys, field),
-        value: selectDeclared(item, match(item), field),
+        key: mergeKey(item, spec, field),
+        value: selectDeclared(item, match(item), lists, path),
       }))
       .sort((left, right) => left.key.localeCompare(right.key))
       .map((entry) => entry.value);
   }
-  if (!isPlainObject(declaration)) return canonicalScalar(parent, field, document);
+  if (!isPlainObject(declaration)) {
+    return canonicalScalar(path[path.length - 2], field, document);
+  }
   const source = isPlainObject(document) ? document : {};
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(declaration)) {
-    out[key] = selectDeclared(child, source[key], key, field);
+    out[key] = selectDeclared(child, source[key], lists, [...path, key]);
   }
   return out;
 };
 
+const projection = (
+  declaration: unknown,
+  document: unknown,
+): { fields: unknown; lists: ListTopo } => {
+  if (isPlainObject(declaration) && "$fields" in declaration && isPlainObject(declaration.$lists)) {
+    return { fields: declaration.$fields, lists: storedTopology(declaration.$lists) };
+  }
+  return { fields: declaration, lists: topologyOf(declaration, document) };
+};
+
 /** Selection of `document` through `declaration` (or a {@link driftMask}). */
-export const selectDrift = (declaration: unknown, document: unknown): unknown =>
-  selectDeclared(declaration, normalizeApplied(document, declaration), undefined);
+export const selectDrift = (declaration: unknown, document: unknown): unknown => {
+  const { fields, lists } = projection(declaration, document);
+  return selectDeclared(fields, normalizeApplied(document, fields), lists, []);
+};
 
 /** True when a live object and a baseline agree on the declared fields. */
 export const appliedObjectsMatch = (live: unknown, preview: unknown, desired: unknown): boolean =>
