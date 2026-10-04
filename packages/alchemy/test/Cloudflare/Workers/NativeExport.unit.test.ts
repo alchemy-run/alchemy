@@ -2,7 +2,7 @@ import { virtualEntryPlugin } from "@/Bundle/Bundle";
 import { nativeExport } from "@/Cloudflare/Workers/NativeExport.ts";
 import {
   makeEffectVirtualEntry,
-  validateNativeExports,
+  WorkerBundle,
 } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
@@ -129,12 +129,23 @@ layer(NodeServices.layer)("Cloudflare.Workers.nativeExport", (it) => {
   );
 
   it.effect(
-    "rejects a relative module as a typed build error",
+    "fails the Worker bundle when a native export's module is a relative path",
     () =>
       Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const fixtures = yield* path.fromFileUrl(
+          new URL("./fixtures/native-export/", import.meta.url),
+        );
+        const exports = yield* capturedExports({ Sandbox: "./sandbox.ts" });
+        const bundler = yield* WorkerBundle;
         const error = yield* Effect.flip(
-          validateNativeExports({
-            Sandbox: nativeExport("./sandbox.ts"),
+          bundler.build({
+            id: "native-export-relative-module",
+            main: path.join(fixtures, "worker.ts"),
+            compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
+            entry: { kind: "effect", exports },
+            stack: { name: "native-export", stage: "test" },
+            extraOptions: undefined,
           }),
         );
         expect(error._tag).toBe("BundleError");
