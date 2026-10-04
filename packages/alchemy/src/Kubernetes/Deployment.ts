@@ -27,9 +27,9 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import {
   connectCluster,
   deleteObjects,
+  ifClusterExists,
   readObject,
   reconcileObjects,
-  KubernetesApiError,
 } from "./internal/client.ts";
 import {
   toKubernetesObjectRef,
@@ -39,6 +39,7 @@ import {
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
+  containerEnvValue,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -463,9 +464,6 @@ const retryUntilServiceReady = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.E
     schedule: loadBalancerRetrySchedule,
   });
 
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
-
 class ServiceStillExists extends Data.TaggedError("Kubernetes.ServiceStillExists")<{}> {}
 
 /**
@@ -479,7 +477,7 @@ const waitForServiceGone = (
   Effect.retry(
     readObject({ transport, object: service }).pipe(
       Effect.flatMap(() => Effect.fail(new ServiceStillExists())),
-      Effect.catchIf(isNotFound, () => Effect.void),
+      Effect.catchTag("KubernetesNotFound", () => Effect.void),
     ),
     { while: (error) => error instanceof ServiceStillExists, schedule: loadBalancerRetrySchedule },
   );
@@ -589,22 +587,14 @@ export const DeploymentProvider = () =>
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
-          const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
-            // Transient unreachability must not read as "gone" — keep the
-            // persisted state and let reconcile converge.
-            Effect.catch(() => Effect.succeed("unreachable" as const)),
-          );
-          if (transport === undefined) return undefined;
-          if (transport === "unreachable") return output;
+          const transport = yield* connectCluster(connection);
           // The ServiceAccount is the stable first object of the workload
           // (one-shot Job objects are content-addressed and may have been
           // TTL-collected, so they are not an existence signal).
           const anchor = (output.kubernetesObjects ?? [])[0];
           if (!anchor) return output;
           const observed = yield* readObject({ transport, object: anchor }).pipe(
-            Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-            Effect.catch(() => Effect.succeed(output)),
+            Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)),
           );
           if (observed === undefined) return undefined;
           return output;
@@ -716,7 +706,7 @@ export const DeploymentProvider = () =>
                     ports: [{ containerPort: port }],
                     env: Object.entries(containerEnv).map(([name, value]) => ({
                       name,
-                      value: typeof value === "string" ? value : JSON.stringify(value),
+                      value: containerEnvValue(value),
                     })),
                     resources: news.resources,
                   },
@@ -805,25 +795,18 @@ export const DeploymentProvider = () =>
           if (!connection) return;
           const adapter = yield* findClusterAdapter(connection.auth.kind);
 
-          // Delete the in-cluster objects. If the cluster is gone (or
-          // transiently unreachable) skip them — cluster-scoped state dies
-          // with the cluster — and still clean up the adapter-owned cloud
-          // resources that outlive it (image repository, identity role).
-          const transport = yield* adapter
-            .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          // Skip only a missing cluster, then still clean up adapter-owned
+          // cloud resources (image repository, identity role).
+          const transport = yield* ifClusterExists(adapter.connect(connection));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
-            yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] }).pipe(
-              Effect.catch(() => Effect.void),
-            );
+            yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] });
             // A LoadBalancer Service carries the cloud controller's cleanup
             // finalizer; wait for it so the cloud load balancer is gone
             // before the cluster (and its controller) can be deleted —
             // deleting the cluster first leaks the load balancer.
             yield* Effect.forEach(
               (output.kubernetesObjects ?? []).filter((object) => object.kind === "Service"),
-              (service) =>
-                waitForServiceGone(transport, service).pipe(Effect.catch(() => Effect.void)),
+              (service) => waitForServiceGone(transport, service),
               { discard: true },
             );
           }

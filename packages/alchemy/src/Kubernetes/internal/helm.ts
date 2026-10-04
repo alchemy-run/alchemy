@@ -18,12 +18,13 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as YAML from "yaml";
+import { unwrapRedacted } from "../../Util/data.ts";
 import type { KubernetesObjectDefinition } from "./objects.ts";
+import { collectRedactedSecrets, scrubSecrets } from "./redact.ts";
 
 /** A Helm invocation or render failure (bad chart ref, template error, …). */
 export class HelmError extends Data.TaggedError("HelmError")<{
   readonly message: string;
-  readonly cause?: unknown;
 }> {}
 
 const HelmBin = Config.String("HELM_BIN").pipe(Effect.orElseSucceed(() => "helm"));
@@ -65,80 +66,93 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const bin = yield* HelmBin;
-
-  const args = [
-    "template",
-    options.releaseName,
-    options.chart,
-    "--namespace",
-    options.namespace,
-    // Helm lifecycle hooks (`helm.sh/hook`) only make sense under Helm's own
-    // release events; HelmChart server-side applies the render and does not
-    // implement hook timing/weights/delete policies, so a hook (e.g. a
-    // pre-delete uninstall Job) must never enter the managed-object graph.
-    "--no-hooks",
-  ];
-  if (options.repo !== undefined) {
-    args.push("--repo", options.repo);
-  }
-  if (options.version !== undefined) {
-    args.push("--version", options.version);
-  }
-  if (options.includeCrds ?? true) {
-    args.push("--include-crds");
-  }
-  if (options.values !== undefined && Object.keys(options.values).length > 0) {
-    // JSON is valid YAML, so the literal values object round-trips through
-    // a temp values file without a YAML serializer.
-    const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-helm-" });
-    const valuesFile = path.join(dir, "values.json");
-    yield* fs.writeFileString(valuesFile, JSON.stringify(options.values));
-    args.push("--values", valuesFile);
-  }
-
-  const result = yield* ChildProcess.make(bin, args, {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    detached: false,
-    extendEnv: true,
-  }).pipe(
-    spawner.spawn,
-    Effect.flatMap((child) =>
-      Effect.all(
-        {
-          exitCode: child.exitCode,
-          stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
-          stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
-        },
-        { concurrency: "unbounded" },
-      ),
-    ),
-    // Scope the child to this render so it isn't tied to (and killed by)
-    // an enclosing scope that closes before helm exits.
-    Effect.scoped,
-    // A spawn failure (almost always ENOENT) means the helm CLI itself is
-    // missing — a machine-setup problem, not a resource error.
-    Effect.catchCause((cause) =>
-      Effect.die(
-        new Error(
-          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI; if it isn't installed, install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
-        ),
-      ),
-    ),
+  const secrets = yield* Effect.sync(() =>
+    options.values === undefined ? [] : collectRedactedSecrets(options.values),
   );
 
-  if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new HelmError({
-        message:
-          `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
-          result.stderr.trim(),
-      }),
-    );
-  }
+  // The values file holds unwrapped credentials. Close this scope when the
+  // render finishes, including on helm or parse failure, so the file is removed.
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const args = [
+        "template",
+        options.releaseName,
+        options.chart,
+        "--namespace",
+        options.namespace,
+        // Helm lifecycle hooks (`helm.sh/hook`) only make sense under Helm's own
+        // release events; HelmChart server-side applies the render and does not
+        // implement hook timing/weights/delete policies, so a hook (e.g. a
+        // pre-delete uninstall Job) must never enter the managed-object graph.
+        "--no-hooks",
+      ];
+      if (options.repo !== undefined) {
+        args.push("--repo", options.repo);
+      }
+      if (options.version !== undefined) {
+        args.push("--version", options.version);
+      }
+      if (options.includeCrds ?? true) {
+        args.push("--include-crds");
+      }
+      if (options.values !== undefined && Object.keys(options.values).length > 0) {
+        // JSON is valid YAML, so the literal values object round-trips through
+        // a temp values file without a YAML serializer.
+        const dir = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-helm-",
+        });
+        const valuesFile = path.join(dir, "values.json");
+        // JSON.stringify(Redacted) emits the display placeholder. Unwrap at the
+        // values file; the chart props stay wrapped for plan and state.
+        const valuesJson = yield* Effect.sync(() => JSON.stringify(unwrapRedacted(options.values)));
+        yield* fs.writeFileString(valuesFile, valuesJson);
+        args.push("--values", valuesFile);
+      }
 
-  return yield* parseRenderedManifests(options.chart, result.stdout);
+      const result = yield* ChildProcess.make(bin, args, {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        detached: false,
+        extendEnv: true,
+      }).pipe(
+        spawner.spawn,
+        Effect.flatMap((child) =>
+          Effect.all(
+            {
+              exitCode: child.exitCode,
+              stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
+              stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
+            },
+            { concurrency: "unbounded" },
+          ),
+        ),
+        // Scope the child to this render so it isn't tied to (and killed by)
+        // an enclosing scope that closes before helm exits.
+        Effect.scoped,
+        // A spawn failure (almost always ENOENT) means the helm CLI itself is
+        // missing — a machine-setup problem, not a resource error.
+        Effect.catchCause((cause) =>
+          Effect.die(
+            new Error(
+              `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI; if it isn't installed, install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
+            ),
+          ),
+        ),
+      );
+
+      if (result.exitCode !== 0) {
+        const detail =
+          `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
+          result.stderr.trim();
+        return yield* Effect.failSync(
+          () => new HelmError({ message: scrubSecrets(detail, secrets) }),
+        );
+      }
+
+      return yield* parseRenderedManifests(options.chart, result.stdout, secrets);
+    }),
+  );
 });
 
 /**
@@ -150,63 +164,82 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
 export const isHelmHook = (object: KubernetesObjectDefinition): boolean =>
   typeof object.metadata.annotations?.["helm.sh/hook"] === "string";
 
+const causeText = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
 /**
  * Parse `helm template` output (multi-document YAML) into definitions.
  * Hook-annotated objects are dropped — `renderHelmChart` already passes
  * `--no-hooks`, but the parser enforces the invariant independently of the
  * helm CLI's behavior.
+ *
+ * `secrets` scrubs credentials out of parser and validation diagnostics.
+ * Parsed objects stay plain; callers pass the same list to the request
+ * scrubber.
  */
 export const parseRenderedManifests = (
   chart: string,
   rendered: string,
+  secrets: readonly string[] = [],
 ): Effect.Effect<Array<KubernetesObjectDefinition>, HelmError> =>
-  Effect.gen(function* () {
-    // Helm 4 writes OCI pull metadata to stdout before the rendered YAML.
-    // Strip only that exact leading preamble; chart output remains subject to
-    // the same strict Kubernetes object validation below.
-    const manifests = chart.startsWith("oci://")
-      ? rendered.replace(/^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/, "")
-      : rendered;
-    const documents = yield* Effect.try({
-      try: () => YAML.parseAllDocuments(manifests),
-      catch: (cause) =>
-        new HelmError({
-          message: `Failed to parse rendered manifests from chart '${chart}'`,
-          cause,
-        }),
-    });
-
-    const objects: Array<KubernetesObjectDefinition> = [];
-    for (const document of documents) {
-      const value = document.toJS() as unknown;
-      // helm renders empty documents for templates that produce no output
-      // (conditionals, whitespace) — skip them.
-      if (value === null || value === undefined) continue;
-      if (typeof value !== "object" || Array.isArray(value)) {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered a non-object YAML document: ${JSON.stringify(value)}`,
+  Effect.try({
+    try: () => parseRenderedManifestsSync(chart, rendered, secrets),
+    catch: (cause) =>
+      cause instanceof HelmError
+        ? cause
+        : new HelmError({
+            message: scrubSecrets(
+              `Failed to parse rendered manifests from chart '${chart}': ${causeText(cause)}`,
+              secrets,
+            ),
           }),
-        );
-      }
-      const object = value as Partial<KubernetesObjectDefinition>;
-      if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered an object without apiVersion/kind: ${JSON.stringify(value).slice(0, 200)}`,
-          }),
-        );
-      }
-      if (typeof object.metadata?.name !== "string") {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name — server-side apply requires a concrete name (generateName is not supported)`,
-          }),
-        );
-      }
-      const definition = object as KubernetesObjectDefinition;
-      if (isHelmHook(definition)) continue;
-      objects.push(definition);
-    }
-    return objects;
   });
+
+const parseRenderedManifestsSync = (
+  chart: string,
+  rendered: string,
+  secrets: readonly string[],
+): Array<KubernetesObjectDefinition> => {
+  const fail = (message: string): never => {
+    throw new HelmError({ message: scrubSecrets(message, secrets) });
+  };
+  // Helm 4 writes OCI pull metadata to stdout before the rendered YAML.
+  // Strip only that exact leading preamble; chart output remains subject to
+  // the same strict Kubernetes object validation below.
+  const manifests = chart.startsWith("oci://")
+    ? rendered.replace(/^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/, "")
+    : rendered;
+  const documents = YAML.parseAllDocuments(manifests);
+  const objects: Array<KubernetesObjectDefinition> = [];
+  for (const document of documents) {
+    // parseAllDocuments records syntax errors on the document instead of
+    // throwing. toJS() can still throw (unresolved aliases, alias cycles).
+    if (document.errors.length > 0) {
+      const detail = document.errors.map((error) => error.message).join("\n");
+      fail(`Failed to parse rendered manifests from chart '${chart}': ${detail}`);
+    }
+    const value: unknown = document.toJS();
+    // helm renders empty documents for templates that produce no output
+    // (conditionals, whitespace) — skip them.
+    if (value === null || value === undefined) continue;
+    if (typeof value !== "object" || Array.isArray(value)) {
+      fail(`Chart '${chart}' rendered a non-object YAML document: ${JSON.stringify(value)}`);
+    }
+    const object = value as Partial<KubernetesObjectDefinition>;
+    if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
+      // Scrub the full JSON before truncating so a secret that crosses the
+      // 200-character boundary is removed entirely.
+      const snippet = scrubSecrets(JSON.stringify(value), secrets).slice(0, 200);
+      fail(`Chart '${chart}' rendered an object without apiVersion/kind: ${snippet}`);
+    }
+    if (typeof object.metadata?.name !== "string") {
+      fail(
+        `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name — server-side apply requires a concrete name (generateName is not supported)`,
+      );
+    }
+    const definition = object as KubernetesObjectDefinition;
+    if (isHelmHook(definition)) continue;
+    objects.push(definition);
+  }
+  return objects;
+};

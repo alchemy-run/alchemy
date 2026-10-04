@@ -10,6 +10,7 @@ import { packEnvValue, unpackEnvValue, RuntimeContext } from "../RuntimeContext.
 import type { HostRuntimeContext } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
+import { unwrapRedacted } from "../Util/data.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
   findClusterAdapter,
@@ -24,14 +25,15 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import {
   connectCluster,
   deleteObjects,
+  ifClusterExists,
   readObject,
   reconcileObjects,
-  KubernetesApiError,
 } from "./internal/client.ts";
 import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
+  containerEnvValue,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -401,9 +403,6 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
   },
 );
 
-const isNotFound = (error: unknown): error is KubernetesApiError =>
-  error instanceof KubernetesApiError && error.statusCode === 404;
-
 export const JobProvider = () =>
   Provider.effect(
     Job,
@@ -475,13 +474,7 @@ export const JobProvider = () =>
           if (!output) return undefined;
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
-          const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
-            // Transient unreachability must not read as "gone".
-            Effect.catch(() => Effect.succeed("unreachable" as const)),
-          );
-          if (transport === undefined) return undefined;
-          if (transport === "unreachable") return output;
+          const transport = yield* connectCluster(connection);
           // The ServiceAccount is the stable existence anchor: one-shot Job
           // objects are content-addressed and may have been TTL-collected.
           const anchor = (output.kubernetesObjects ?? [])[0];
@@ -489,10 +482,7 @@ export const JobProvider = () =>
           const observed = yield* readObject({
             transport,
             object: anchor,
-          }).pipe(
-            Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-            Effect.catch(() => Effect.succeed(output)),
-          );
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
           if (observed === undefined) return undefined;
           return output;
         }),
@@ -594,7 +584,7 @@ export const JobProvider = () =>
                     args: news.args,
                     env: Object.entries(containerEnv).map(([name, value]) => ({
                       name,
-                      value: typeof value === "string" ? value : JSON.stringify(value),
+                      value: containerEnvValue(value),
                     })),
                     resources: news.resources,
                   },
@@ -622,7 +612,7 @@ export const JobProvider = () =>
           // content-address suffix always fits.
           const jobName = news.schedule
             ? baseName.slice(0, 52).replace(/-+$/, "")
-            : `${baseName.slice(0, 54).replace(/-+$/, "")}-${(yield* sha256Object(jobSpec)).slice(0, 8)}`;
+            : `${baseName.slice(0, 54).replace(/-+$/, "")}-${(yield* sha256Object(unwrapRedacted(jobSpec))).slice(0, 8)}`;
 
           const workloadObject: KubernetesObjectDefinition = news.schedule
             ? {
@@ -673,17 +663,14 @@ export const JobProvider = () =>
           if (!connection) return;
           const adapter = yield* findClusterAdapter(connection.auth.kind);
 
-          // Delete the in-cluster objects; skip when the cluster is gone
-          // (cluster-scoped state dies with it) and still clean up the
-          // adapter-owned cloud resources that outlive it.
-          const transport = yield* adapter
-            .connect(connection)
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          // Skip only a missing cluster, then still clean up adapter-owned
+          // cloud resources (image repository, identity role).
+          const transport = yield* ifClusterExists(adapter.connect(connection));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport,
               objects: output.kubernetesObjects ?? [],
-            }).pipe(Effect.catch(() => Effect.void));
+            });
           }
 
           if (adapter.identity) {
