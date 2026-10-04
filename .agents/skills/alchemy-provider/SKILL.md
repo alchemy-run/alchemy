@@ -26,6 +26,16 @@ Cost is not a scoping reason: expensive resources are implemented like any
 other (see step 6 for running their tests). The user narrows scope; the
 agent does not.
 
+The whole provider also means its non-resource deliverables: bindings for
+every capability (step 5), a host runtime and event sources when the cloud
+runs code, framework websites (step 7), examples, and generated docs
+(step 10). They are rows in the same index as resources, with the same
+statuses. Never write "a later phase" into an agent contract without
+adding those rows: on Azure, the contract said "bindings are a later
+phase — do not build them", the phase never came, and 1,193 resources
+shipped with zero bindings, no runtime, no examples, and docs for 4
+services.
+
 `AGENTS.md` owns the doctrines this skill relies on; read these sections
 before writing code and follow them as written:
 
@@ -57,6 +67,40 @@ running. Use plain subagents only when no workflow tool exists. Either way,
 each agent gets the task contract from **What every agent task prompt must
 include** in `AGENTS.md`, owns one distilled service, and returns the
 structured result the coordinator turns into index statuses.
+
+Coordinator duties during a long run:
+
+- **Size agents to finish within an hour.** A service with more than about
+  25 resources runs as a chain of agents over resource batches. Agents that
+  run for hours hit the model's idle timeout and lose their context.
+- **Read the workflow state, not only file activity.** Each status check
+  counts agents by state and reads the error of every failed or cancelled
+  one. A model-API outage (`auth_unavailable`, idle timeouts) looks like a
+  quiet period from the file system; on Azure it went unnoticed for three
+  hours. Relaunch only the rows still `missing`, with an assess-first
+  contract, once the cause is gone.
+- **Offer periodic status updates** when the run will take more than an
+  hour, and include the index counts in each.
+
+## Branch, checkpoints, and PRs
+
+- Work in a fresh worktree on a branch from `origin/main`, with
+  `submodules/distilled` at the commit alchemy pins plus your distilled
+  branch. Never start from whatever branch the worktree happens to be on.
+- Open **draft** PRs in alchemy and distilled after the first wave that
+  passes live, and push a checkpoint at every wave boundary. The
+  description carries the current index counts.
+- Each checkpoint: rebase onto `origin/main` (distilled onto the pin
+  `main` uses), type-check, push, and confirm the PR's checks actually ran.
+  A PR with merge conflicts runs no `pull_request` workflows, so a stale
+  green check means nothing. Dependency bumps on `main` (Effect, Node
+  types) break new code; catch them at the checkpoint.
+- `tsc` reads distilled's built declarations, while the test runner reads
+  its `src/`. After distilled patches, rebuild that package before the
+  type check, or new error types show up as false type errors.
+- Commit with the repo's hooks. If signing or a hook hangs, ask the user;
+  if they approve skipping it, run `pnpm exec oxfmt` yourself and say the
+  commits are unsigned.
 
 ## Step 0 — get credentials first
 
@@ -213,6 +257,14 @@ are the mistakes that most often slip through review (each has a check in
   fields users see or that change behaviour.
 - **Shared helpers live once per provider** (operation waiter, not-found
   helper, label diffing). Copies per service drift apart.
+- **Enable what the account needs.** Clouds that require a service to be
+  switched on per account (Azure resource provider registration, GCP API
+  enablement) get an idempotent enable step inside `reconcile`, so a fresh
+  account deploys without manual setup.
+- **Clean up after a failed create.** `read` and `delete` work when `olds`
+  or parts of `output` are missing, so the next run's opening `destroy`
+  removes whatever a crashed run left behind. Prove it once by interrupting
+  a create.
 - **Implement `list`** filtered to Alchemy-owned resources, and declare
   `nuke: { dependsOn: [...] }` where delete order matters, so
   `alchemy unsafe nuke` can clean the test account.
