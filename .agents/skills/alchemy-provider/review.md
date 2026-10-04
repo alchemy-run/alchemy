@@ -24,6 +24,8 @@ Run this first; the other sections only judge the code that exists.
 | Nothing left unbuilt | count statuses in `processes/<P>/catalog/INDEX.md` | no `missing` or `implemented` rows; every `out-of-scope` and `blocked` row has a reason or exact error |
 | Index matches the code | every `tested` row has a `Resource<...>("<P>.<Service>.<Name>")` in `src/<P>` and a registered provider in `Providers.ts` | yes |
 | One test file per resource | every `tested` row has `test/<P>/<Service>/<Name>.test.ts` | yes |
+| Non-resource deliverables | index rows for bindings, runtime, event sources, websites, examples | none `missing`; `rg -l 'Binding.Service' src/<P>` is non-zero when the cloud has data-plane capabilities |
+| Docs generated for everything | `ls website/src/content/docs/providers/<P>` after `pnpm docs:gen` | one page per resource and binding page group, matching the index |
 | Out-of-scope list published | the overview page's "Out of scope" section | matches the `out-of-scope` rows |
 
 ## How to compare against what good looks like
@@ -89,7 +91,7 @@ reason the platform forces. References:
 
 | Check | Command | Expect |
 | --- | --- | --- |
-| Gating flags | `rg -oh 'process\.env\.\w+' test/<P> \| sort \| uniq -c` | one provider-wide slow flag plus entitlement flags; no per-service flags |
+| Gating flags | `rg -oh 'process\.env\.\w+' test/<P> \| sort \| uniq -c` | one provider-wide slow flag, entitlement flags, and ids of external systems a test needs; never sizes, regions, or other config as env vars |
 | Lifecycle by default | `rg -c 'skipIf' test/<P>` against the file count | most lifecycles ungated |
 | Accept-anything assertions | `rg -n 'expect\(\[' test/<P>` | each entitlement probe asserts one specific tag |
 | Always-true assertions | `rg -n 'Array\.isArray\(.*\?\? \[\]\)\|toBeDefined\(\)' test/<P>` | each one asserts a real value |
