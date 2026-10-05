@@ -39,6 +39,9 @@ interface ObservedConfig {
   readonly fightMode?: boolean | null;
   readonly aiBotsProtection?: string | null;
   readonly aiSearch?: string | null;
+  readonly aiUser?: string | null;
+  readonly aiTraining?: string | null;
+  readonly botPreferenceSyncEnabled?: boolean | null;
   readonly sbfmDefinitelyAutomated?: string | null;
   readonly sbfmVerifiedBots?: string | null;
   readonly sbfmStaticResourceProtection?: boolean | null;
@@ -66,6 +69,22 @@ const restoreSbfm = (zoneId: string, original: ObservedConfig) =>
     }
     if (original.sbfmStaticResourceProtection != null) {
       body.sbfmStaticResourceProtection = original.sbfmStaticResourceProtection;
+    }
+    if (Object.keys(body).length === 0) return;
+    yield* botManagement.putBotManagement({ zoneId, ...body });
+  }).pipe(Effect.ignore);
+
+const AI_CRAWLER_KEYS = ["aiSearch", "aiUser", "aiTraining", "botPreferenceSyncEnabled"] as const;
+
+/** The AI crawler policy fields of a config, attributes, or snapshot. */
+const pickAiCrawlers = (source: Pick<ObservedConfig, (typeof AI_CRAWLER_KEYS)[number]>) =>
+  Object.fromEntries(AI_CRAWLER_KEYS.map((key) => [key, source[key] ?? null]));
+
+const restoreAiCrawlers = (zoneId: string, original: ObservedConfig) =>
+  Effect.gen(function* () {
+    const body: Record<string, unknown> = {};
+    for (const key of AI_CRAWLER_KEYS) {
+      if (original[key] != null) body[key] = original[key];
     }
     if (Object.keys(body).length === 0) return;
     yield* botManagement.putBotManagement({ zoneId, ...body });
@@ -242,8 +261,11 @@ describe.sequential(
       { timeout: 240_000 },
     );
 
-    test.provider.skipIf(!destructive)(
-      "sets the AI search crawler policy and restores it on destroy",
+    // AI crawler policies only affect AI crawlers and the managed robots.txt,
+    // not the plain HTTP clients other live suites use against the zone, so
+    // this lifecycle runs ungated.
+    test.provider(
+      "manages the AI crawler policies and restores them on destroy",
       (stack) =>
         Effect.gen(function* () {
           const zoneId = yield* resolveZoneId;
@@ -251,31 +273,35 @@ describe.sequential(
           yield* stack.destroy();
 
           const original = yield* getConfig(zoneId);
-          const target =
-            original.aiSearch === "block" ? "disabled" : ("block" as const);
+          // Targets that differ from the live config so reconcile must write.
+          const target = {
+            aiSearch: original.aiSearch === "block" ? "disabled" : "block",
+            aiUser: original.aiUser === "block" ? "disabled" : "block",
+            aiTraining: original.aiTraining === "disallow" ? "disabled" : "disallow",
+            botPreferenceSyncEnabled: !(original.botPreferenceSyncEnabled ?? false),
+          } as const;
 
-          const created = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.BotManagement.BotManagement("Bots", {
-                zoneId,
-                aiSearch: target,
-              });
-            }),
-          );
-          expect(created.aiSearch).toEqual(target);
-          expect(created.initialSettings.aiSearch ?? null).toEqual(
-            original.aiSearch ?? null,
-          );
+          yield* Effect.gen(function* () {
+            const created = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.BotManagement.BotManagement("Bots", {
+                  zoneId,
+                  ...target,
+                });
+              }),
+            );
+            expect(pickAiCrawlers(created)).toEqual(target);
+            // The snapshot captured the pre-management values.
+            expect(pickAiCrawlers(created.initialSettings)).toEqual(pickAiCrawlers(original));
 
-          const live = yield* getConfig(zoneId);
-          expect(live.aiSearch).toEqual(target);
+            expect(pickAiCrawlers(yield* getConfig(zoneId))).toEqual(target);
+
+            yield* stack.destroy();
+
+            expect(pickAiCrawlers(yield* getConfig(zoneId))).toEqual(pickAiCrawlers(original));
+          }).pipe(Effect.ensuring(restoreAiCrawlers(zoneId, original)));
 
           yield* stack.destroy();
-
-          const after = yield* getConfig(zoneId);
-          if (original.aiSearch != null) {
-            expect(after.aiSearch).toEqual(original.aiSearch);
-          }
         }).pipe(logLevel),
       { timeout: 240_000 },
     );

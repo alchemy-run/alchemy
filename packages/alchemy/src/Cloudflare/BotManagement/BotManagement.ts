@@ -84,6 +84,9 @@ export interface Settings {
   /**
    * Action for AI scrapers and crawlers ("block AI bots"). Note
    * `only_on_ad_pages` is not available for Enterprise zones.
+   *
+   * Cloudflare deprecated this setting in favour of the per-class
+   * `aiSearch`, `aiUser`, and `aiTraining` policies.
    */
   aiBotsProtection?: AiBotsProtection;
   /**
@@ -107,6 +110,9 @@ export interface Settings {
   /**
    * Serve a Cloudflare-managed robots.txt. If the origin already serves
    * one, the managed file is prepended to it.
+   *
+   * Cloudflare deprecated this setting in favour of
+   * `botPreferenceSyncEnabled`.
    */
   isRobotsTxtManaged?: boolean;
   /**
@@ -232,7 +238,7 @@ export type BotManagement = Resource<TypeId, Props, Attributes, never, Providers
  * });
  * ```
  *
- **Example:** Allow AI search and agent crawlers, disallow training
+ * **Example:** Allow AI search and agent crawlers, disallow training
  * ```typescript
  * yield* Cloudflare.BotManagement.BotManagement("Bots", {
  *   zoneId: zone.zoneId,
