@@ -905,6 +905,116 @@ describe.concurrent(
       { tags: ["live"], timeout: 360_000 },
     );
 
+    test.provider(
+      "Issues survive code redeploys and can be disabled or removed",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+
+          const observability = {
+            enabled: true,
+            headSamplingRate: 0.5,
+            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0, persist: false },
+            traces: { enabled: false, headSamplingRate: 0.1, persist: false },
+          };
+          let original: workers.GetScriptScriptAndVersionSettingResponse | undefined;
+          let scriptName = "";
+          let tailName = "";
+          for (const [issues, version] of [
+            [true, "v1"],
+            [true, "v2"],
+            [false, "v2"],
+            [true, "v2"],
+            [undefined, "v2"],
+          ] as const) {
+            const { worker, tail } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const tail = yield* Cloudflare.Worker("IssuesTail", {
+                  script: "export default { tail() {} };",
+                  bundle: false,
+                });
+                const worker = yield* Cloudflare.Worker("IssuesWorker", {
+                  script: `export default { fetch() { return new Response("${version}"); } };`,
+                  bundle: false,
+                  logpush: true,
+                  tags: ["issues-preservation"],
+                  tailConsumers: [tail],
+                  compatibility: { date: "2024-01-01", flags: ["nodejs_als"] },
+                  limits: { cpuMs: 50 },
+                  env: { PRESERVED: "issues-preservation" },
+                  observability: {
+                    ...observability,
+                    issues: issues === undefined ? undefined : { enabled: issues },
+                  },
+                });
+                return { worker, tail };
+              }),
+            );
+            tailName = tail.workerName;
+            if (scriptName) expect(worker.workerName).toBe(scriptName);
+            scriptName = worker.workerName;
+
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(settings.observability?.issues?.enabled ?? false).toBe(issues ?? false);
+            expect(settings.observability?.enabled).toBe(true);
+            expect(settings.observability?.headSamplingRate).toBe(0.5);
+            expect(settings.observability?.logs).toMatchObject(observability.logs);
+            expect(settings.observability?.traces).toMatchObject(observability.traces);
+            expect(settings.logpush).toBe(true);
+            expect(settings.tags).toContain("issues-preservation");
+            expect(settings.tailConsumers).toEqual([{ service: tailName }]);
+            expect(settings.compatibilityDate).toBe("2024-01-01");
+            expect(settings.compatibilityFlags).toEqual(["nodejs_als"]);
+            expect(settings.limits).toMatchObject({ cpuMs: 50 });
+            expect(settings.bindings).toContainEqual({
+              type: "plain_text",
+              name: "PRESERVED",
+              text: "issues-preservation",
+            });
+            const unchanged = {
+              ...settings,
+              observability: { ...settings.observability!, issues: undefined },
+            };
+            if (original) expect(unchanged).toEqual(original);
+            else original = unchanged;
+            yield* expectUrlContains(worker.url!, version, { timeout: "30 seconds" });
+          }
+          // Exercise PATCH explicitly: a successful upload can make the fallback unnecessary.
+          for (const enabled of [true, false]) {
+            yield* workers.patchScriptSetting({
+              accountId,
+              scriptName,
+              observability: {
+                ...observability,
+                redactQueryString: true,
+                issues: { enabled },
+              },
+            });
+            const patched = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(patched.observability?.issues?.enabled).toBe(enabled);
+            expect({
+              ...patched,
+              observability: { ...patched.observability, issues: undefined },
+            }).toEqual({
+              ...original,
+              observability: { ...original!.observability, redactQueryString: true },
+            });
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(scriptName, accountId);
+          yield* waitForWorkerToBeDeleted(tailName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     // #874 regression: binding a tagged Worker identity (an Effect class) in
     // another Worker's `env` — the circular-bindings pattern — must converge.
     // The tag stays in the desired props (`news.env.TARGET` is an Effect) while
