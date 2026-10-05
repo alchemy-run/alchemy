@@ -10,7 +10,7 @@ const YANTRA = {
   viewBox: [0, 0, 24, 24],
   center: 12,
   circleRadius: 9.5,
-  binduRadius: 1.5,
+  binduRadius: 1.3,
   strokeWidth: 1.5,
 } as const;
 

@@ -15,7 +15,7 @@ import { Box, Text } from "../ui/index.ts";
 const VIEWBOX = 24;
 const CENTER = 12;
 const CIRCLE_R = 9.5;
-const BINDU_R = 1.5;
+const BINDU_R = 1.3;
 const STROKE_W = 1.5;
 // Strokes scale with the logo, but are snapped to whole braille dots so every
 // line renders at an even weight, and floored so small logos never break up.
