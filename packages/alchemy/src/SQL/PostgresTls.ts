@@ -62,3 +62,16 @@ export const resolveConnectionOptions = (
   }
   return { url, ssl: resolvedSsl };
 };
+
+/**
+ * The `@effect/sql-pg` pool config for a connection URL plus caller options.
+ * Options such as `prepare` or pool limits pass through; the URL and TLS come
+ * from {@link resolveConnectionOptions}, honoring an explicit `ssl` option.
+ */
+export const resolvePoolConfig = (
+  url: Redacted.Redacted<string>,
+  options?: Omit<PgClient.PgPoolConfig, "url">,
+): PgClient.PgPoolConfig => ({
+  ...options,
+  ...resolveConnectionOptions(url, options?.ssl),
+});
