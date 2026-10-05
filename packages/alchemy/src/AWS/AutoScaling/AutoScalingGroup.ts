@@ -59,7 +59,8 @@ export interface AutoScalingGroupProps {
    */
   maxSize: number;
   /**
-   * Desired number of instances.
+   * Desired number of instances. When omitted, updates leave the live value
+   * alone so external scalers (e.g. ECS managed scaling) keep control.
    * @default minSize
    */
   desiredCapacity?: number;
@@ -453,6 +454,14 @@ export const AutoScalingGroupProvider = () =>
                 Tags: toTags(autoScalingGroupName, desiredTags),
               } as any)
               .pipe(
+                // A just-created instance profile takes a few seconds to
+                // propagate; until then the launch template is rejected.
+                Effect.retry({
+                  while: (error: any) =>
+                    error?._tag === "ValidationError" &&
+                    /Invalid IAM Instance Profile/i.test(String(error?.message)),
+                  schedule: Schedule.max([Schedule.recurs(10), Schedule.exponential("1 second")]),
+                }),
                 Effect.catch((error: any) =>
                   error?._tag === "AlreadyExistsFault" ? Effect.void : Effect.fail(error),
                 ),
@@ -481,7 +490,7 @@ export const AutoScalingGroupProvider = () =>
             AutoScalingGroupName: autoScalingGroupName,
             MinSize: news.minSize,
             MaxSize: news.maxSize,
-            DesiredCapacity: news.desiredCapacity ?? news.minSize,
+            DesiredCapacity: news.desiredCapacity,
             LaunchTemplate: launchTemplate,
             VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
             HealthCheckType: healthCheckType,
