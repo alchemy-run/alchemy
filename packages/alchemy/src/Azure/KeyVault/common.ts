@@ -24,6 +24,15 @@ export const createObjectName = (id: string) =>
     Effect.map((name) => name.replace(/[^a-zA-Z0-9-]/g, "-")),
   );
 
+/**
+ * Generate a managed HSM key name. The service rejects names longer than 89
+ * characters (observed), despite the documented 127.
+ */
+export const createManagedHsmKeyName = (id: string) =>
+  createPhysicalName({ id, maxLength: 89, delimiter: "-" }).pipe(
+    Effect.map((name) => name.replace(/[^a-zA-Z0-9-]/g, "-")),
+  );
+
 export const getVault = (
   subscriptionId: string,
   resourceGroupName: string,

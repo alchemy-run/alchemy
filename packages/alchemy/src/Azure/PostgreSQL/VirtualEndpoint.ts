@@ -18,6 +18,7 @@ import {
   POSTGRES_NAMESPACE,
   serverOwnedByStack,
   type ServerRef,
+  waitServerSettled,
   whileServerBusy,
 } from "./common.ts";
 
@@ -217,24 +218,46 @@ export const VirtualEndpointProvider = () =>
       // Ensure, then sync members against the observed endpoint. The
       // service lists the primary among the members, so only check that
       // every desired member is present.
-      if (observed === undefined) {
-        yield* postgresql
-          .CreateVirtualEndpoint({ ...ref, properties })
-          .pipe(Effect.retry(whileServerBusy));
-      } else if (!hasMembers(observed.properties?.members, news.members)) {
-        yield* postgresql
-          .UpdateVirtualEndpoint({ ...ref, properties })
-          .pipe(Effect.retry(whileServerBusy));
-      }
-      const fresh = yield* waitForProvisioned(
-        `PostgreSQL virtual endpoint ${ref.virtualEndpointName}`,
-        getEndpoint(ref),
-        (endpoint) =>
-          hasMembers(endpoint.properties?.members, news.members)
-            ? undefined
-            : "Updating",
-        { interval: "10 seconds", times: 60 },
-      );
+      // The PUT is accepted (202) and applied asynchronously; it fails
+      // unreported (`VirtualEndpointOwnerServerNotInReadyState`) unless the
+      // primary and every member are Ready. Wait for them to settle, apply,
+      // and re-apply a bounded number of times if the change never lands.
+      const label = `PostgreSQL virtual endpoint ${ref.virtualEndpointName}`;
+      const applyOnce = Effect.gen(function* () {
+        yield* waitServerSettled(ref);
+        for (const member of news.members) {
+          yield* waitServerSettled({ ...ref, serverName: member });
+        }
+        const current = yield* getEndpoint(ref);
+        if (current === undefined) {
+          yield* postgresql
+            .CreateVirtualEndpoint({ ...ref, properties })
+            .pipe(Effect.retry(whileServerBusy));
+        } else if (!hasMembers(current.properties?.members, news.members)) {
+          yield* postgresql
+            .UpdateVirtualEndpoint({ ...ref, properties })
+            .pipe(Effect.retry(whileServerBusy));
+        }
+        return yield* waitForProvisioned(
+          label,
+          getEndpoint(ref),
+          (endpoint) =>
+            hasMembers(endpoint.properties?.members, news.members)
+              ? undefined
+              : "Updating",
+          { interval: "10 seconds", times: 18 },
+        );
+      });
+      const fresh =
+        observed !== undefined &&
+        hasMembers(observed.properties?.members, news.members)
+          ? observed
+          : yield* applyOnce.pipe(
+              Effect.retry({
+                while: (e) => e._tag === "Azure.ProvisioningTimedOut",
+                times: 4,
+              }),
+            );
       return toAttrs(ref, fresh);
     }),
 
@@ -246,15 +269,25 @@ export const VirtualEndpointProvider = () =>
         serverName: output.server,
         virtualEndpointName: output.virtualEndpointName,
       };
-      yield* ignoreNotFound(
-        postgresql
-          .DeleteVirtualEndpoint(ref)
-          .pipe(Effect.retry(whileServerBusy)),
-      );
-      yield* waitUntilGone(
-        `PostgreSQL virtual endpoint ${output.virtualEndpointName}`,
-        getEndpoint(ref),
-        { interval: "10 seconds", times: 60 },
+      // Like create, a drop fails unreported unless the server is Ready.
+      const deleteOnce = Effect.gen(function* () {
+        yield* waitServerSettled(ref);
+        yield* ignoreNotFound(
+          postgresql
+            .DeleteVirtualEndpoint(ref)
+            .pipe(Effect.retry(whileServerBusy)),
+        );
+        yield* waitUntilGone(
+          `PostgreSQL virtual endpoint ${output.virtualEndpointName}`,
+          getEndpoint(ref),
+          { interval: "10 seconds", times: 18 },
+        );
+      });
+      yield* deleteOnce.pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Azure.DeleteTimedOut",
+          times: 4,
+        }),
       );
     }),
 

@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import type { Input } from "@/Input";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import * as Effect from "effect/Effect";
@@ -83,6 +84,146 @@ export const emptyArmTemplate = JSON.stringify({
   parameters: {},
   resources: [],
 });
+
+/** Name and version of the VHD artifact declared by `withVhdStore`. */
+export const vhd = { name: "image-vhd", version: "1-0-0" } as const;
+
+/**
+ * A storage-account artifact store plus a manifest declaring one VHD image
+ * artifact. AOSM requires a VHD application in every Azure Core VNF.
+ */
+export const withVhdStore = (props: {
+  resourceGroup: Input<string>;
+  publisher: Input<string>;
+}) =>
+  Effect.gen(function* () {
+    const vhdStore = yield* Azure.HybridNetwork.ArtifactStore("VhdStore", {
+      resourceGroup: props.resourceGroup,
+      publisher: props.publisher,
+      location,
+      storeType: "AzureStorageAccount",
+    });
+    const vhdManifest = yield* Azure.HybridNetwork.ArtifactManifest(
+      "VhdManifest",
+      {
+        resourceGroup: props.resourceGroup,
+        publisher: props.publisher,
+        artifactStore: vhdStore.artifactStoreName,
+        location,
+        artifacts: [
+          {
+            artifactName: vhd.name,
+            artifactType: "VhdImageFile",
+            artifactVersion: vhd.version,
+          },
+        ],
+      },
+    );
+    return { vhdStore, vhdManifest };
+  });
+
+/** 1 GiB: the smallest whole-GiB disk; the page blob stays sparse. */
+const VHD_SIZE = 1024 * 1024 * 1024;
+
+/** The 512-byte footer of a fixed VHD of `size` bytes (VHD spec v1.0). */
+const vhdFooter = (size: number) => {
+  const footer = new Uint8Array(512);
+  const view = new DataView(footer.buffer);
+  const ascii = (offset: number, text: string) =>
+    footer.set(new TextEncoder().encode(text), offset);
+  ascii(0, "conectix");
+  view.setUint32(8, 2);
+  view.setUint32(12, 0x00010000);
+  view.setBigUint64(16, 0xffffffffffffffffn);
+  ascii(28, "alch");
+  view.setUint32(32, 0x00010000);
+  ascii(36, "Wi2k");
+  view.setBigUint64(40, BigInt(size));
+  view.setBigUint64(48, BigInt(size));
+  const total = Math.min(size / 512, 65535 * 16 * 255);
+  let spt: number;
+  let heads: number;
+  let cth: number;
+  if (total >= 65535 * 16 * 63) {
+    spt = 255;
+    heads = 16;
+    cth = Math.floor(total / spt);
+  } else {
+    spt = 17;
+    cth = Math.floor(total / spt);
+    heads = Math.max(4, Math.floor((cth + 1023) / 1024));
+    if (cth >= heads * 1024 || heads > 16) {
+      spt = 31;
+      heads = 16;
+      cth = Math.floor(total / spt);
+    }
+    if (cth >= heads * 1024) {
+      spt = 63;
+      heads = 16;
+      cth = Math.floor(total / spt);
+    }
+  }
+  view.setUint16(56, Math.floor(cth / heads));
+  view.setUint8(58, heads);
+  view.setUint8(59, spt);
+  view.setUint32(60, 2);
+  footer.set(new TextEncoder().encode("alchemy-aosm-vhd"), 68);
+  let sum = 0;
+  for (const byte of footer) sum += byte;
+  view.setUint32(64, ~sum >>> 0);
+  return footer;
+};
+
+/**
+ * Upload an empty fixed VHD as the manifest's VHD artifact (what
+ * `az aosm nfd publish` does: a page blob named `<name>-<version>.vhd` in
+ * the manifest's container). Storage-account manifests have no `Uploaded`
+ * state to set; re-uploading is idempotent.
+ */
+export const uploadVhd = (where: {
+  resourceGroupName: string;
+  publisherName: string;
+  artifactStoreName: string;
+  artifactManifestName: string;
+}) =>
+  Effect.gen(function* () {
+    const subscriptionId = yield* subscription;
+    const base = { subscriptionId, ...where };
+    const cred = yield* hybridnetwork.ListArtifactManifestCredential(base);
+    const sas = cred.containerCredentials?.[0]?.containerSasUri;
+    const sasUri =
+      sas === undefined ? "" : Redacted.isRedacted(sas) ? Redacted.value(sas) : sas;
+    const [prefix, token] = sasUri.split("?", 2);
+    const blobUrl = `${prefix}/${vhd.name.slice(0, -4).replaceAll("-", "")}-${vhd.version}.vhd?${token}`;
+    const client = (yield* HttpClient.HttpClient).pipe(
+      HttpClient.filterStatusOk,
+    );
+    const storage = HttpClientRequest.setHeader("x-ms-version", "2021-08-06");
+    yield* client.execute(
+      HttpClientRequest.put(blobUrl).pipe(
+        storage,
+        HttpClientRequest.setHeader("x-ms-blob-type", "PageBlob"),
+        HttpClientRequest.setHeader(
+          "x-ms-blob-content-length",
+          String(VHD_SIZE + 512),
+        ),
+      ),
+    );
+    yield* client.execute(
+      HttpClientRequest.put(`${blobUrl}&comp=page`).pipe(
+        storage,
+        HttpClientRequest.setHeader("x-ms-page-write", "update"),
+        HttpClientRequest.setHeader(
+          "x-ms-range",
+          `bytes=${VHD_SIZE}-${VHD_SIZE + 511}`,
+        ),
+        HttpClientRequest.bodyUint8Array(
+          vhdFooter(VHD_SIZE),
+          "application/octet-stream",
+        ),
+      ),
+    );
+  });
 
 const sha256 = (bytes: Uint8Array) =>
   Effect.sync(() => `sha256:${createHash("sha256").update(bytes).digest("hex")}`);

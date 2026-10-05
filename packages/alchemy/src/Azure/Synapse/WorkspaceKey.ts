@@ -8,6 +8,9 @@ import {
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
+  ProvisioningFailed,
+  ProvisioningTimedOut,
+  waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -16,7 +19,6 @@ import {
   getWorkspace,
   isWorkspaceOwnedByStack,
   lower,
-  syncSetting,
 } from "./common.ts";
 
 export interface WorkspaceKeyProps {
@@ -32,7 +34,9 @@ export interface WorkspaceKeyProps {
   /**
    * Key Vault key URL (without version), e.g.
    * `https://{vault}.vault.azure.net/keys/{key}`. Changing it replaces the
-   * key.
+   * key. Keep the Key Vault key name short: activation fails
+   * (`WorkspaceActivationFailed`) when `{vault}_{key}_{version}` exceeds
+   * ~128 characters, which a generated key name easily does.
    */
   keyVaultUrl: string;
   /**
@@ -76,17 +80,23 @@ export interface WorkspaceKey extends Resource<
  * ### Activating Double Encryption
  * **Example:** Activate the workspace's customer-managed key
  * ```typescript
+ * // A short key name keeps `{vault}_{key}_{version}` under Synapse's limit.
+ * const key = yield* Azure.KeyVault.Key("cmk", {
+ *   resourceGroup: group.resourceGroupName,
+ *   vault: vault.vaultName, // purge protection enabled
+ *   name: "synapse-cmk",
+ * });
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
  *   resourceGroup: group.resourceGroupName,
  *   defaultDataLakeStorage: { accountUrl, filesystem },
- *   customerManagedKey: { keyName: "cmk", keyVaultUrl: key.keyUrl },
+ *   customerManagedKey: { keyName: "cmk", keyVaultUrl: key.keyUri },
  * });
  * // grant workspace.principalId get/wrapKey/unwrapKey on the key, then:
  * yield* Azure.Synapse.WorkspaceKey("cmk", {
  *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   name: "cmk",
- *   keyVaultUrl: key.keyUrl,
+ *   keyVaultUrl: key.keyUri,
  *   isActiveCMK: true,
  * });
  * ```
@@ -188,20 +198,69 @@ export const WorkspaceKeyProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.Synapse");
       const { resourceGroup, workspace, name, keyVaultUrl } = news;
       const isActiveCMK = news.isActiveCMK ?? true;
-      const fresh = yield* syncSetting({
-        label: `synapse workspace key ${name}`,
-        get: getKey(subscriptionId, resourceGroup, workspace, name),
-        matches: (key: Observed) =>
-          sameUrl(key.properties?.keyVaultUrl, keyVaultUrl) &&
-          (key.properties?.isActiveCMK ?? false) === isActiveCMK,
-        put: synapse.KeysCreateOrUpdate({
+      const label = `synapse workspace key ${name}`;
+      const get = getKey(subscriptionId, resourceGroup, workspace, name);
+      const matches = (key: Observed) =>
+        sameUrl(key.properties?.keyVaultUrl, keyVaultUrl) &&
+        (key.properties?.isActiveCMK ?? false) === isActiveCMK;
+
+      // Observe; PUT only when the observed key differs.
+      const observed = yield* get;
+      if (observed === undefined || !matches(observed)) {
+        yield* synapse.KeysCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,
           workspaceName: workspace,
           keyName: name,
           properties: { keyVaultUrl, isActiveCMK },
-        }),
-      });
+        });
+      }
+
+      // Activation runs in the background and is reported on the workspace
+      // (`encryption.cmk.status`: ActivatingWorkspace → Consistent, or
+      // WorkspaceActivationFailed), so fail fast instead of polling the key
+      // until the budget runs out.
+      const fresh = yield* waitForProvisioned(
+        label,
+        Effect.all([get, getWorkspace(subscriptionId, resourceGroup, workspace)]),
+        ([key, ws]) => {
+          if (key === undefined) return "Updating";
+          if (matches(key)) return "Succeeded";
+          const cmk = ws?.properties?.encryption?.cmk;
+          return isActiveCMK &&
+            lower(cmk?.key?.name) === lower(name) &&
+            cmk?.status === "WorkspaceActivationFailed"
+            ? "Failed"
+            : "Updating";
+        },
+        { interval: "5 seconds", times: 120 },
+      ).pipe(
+        Effect.flatMap(([key]) =>
+          key === undefined
+            ? Effect.fail(
+                new ProvisioningTimedOut({
+                  resource: label,
+                  state: undefined,
+                  message: `${label} disappeared during activation`,
+                }),
+              )
+            : Effect.succeed(key),
+        ),
+        Effect.mapError((e) =>
+          e._tag === "Azure.ProvisioningFailed"
+            ? new ProvisioningFailed({
+                resource: e.resource,
+                state: e.state,
+                message:
+                  `${label}: workspace activation failed. Grant the workspace ` +
+                  "identity get/wrapKey/unwrapKey on the key, and keep the " +
+                  "vault name + key name short (Synapse stores the key as " +
+                  "'{vault}_{key}_{version}' and fails activation when that " +
+                  "exceeds ~128 characters).",
+              })
+            : e,
+        ),
+      );
       return toAttrs(resourceGroup, workspace, name, fresh);
     }),
 

@@ -53,7 +53,9 @@ export interface EmailTemplate extends Resource<
  * Customizes one of the built-in notification emails an API Management
  * service sends to developers (sign-up confirmation, subscription
  * approved, ...). Every template always exists; deleting the resource
- * restores Azure's default content. Not available on the Consumption tier.
+ * restores Azure's default content. Not available on the Consumption tier,
+ * and Pay-As-You-Go/MSDN subscriptions cannot customize templates at all
+ * (writes fail with `ApiManagementEmailTemplateWritesNotAllowed`).
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
@@ -125,8 +127,7 @@ export const EmailTemplateProvider = () =>
             description: news.description,
           },
         }).pipe(
-          // Template writes share a per-subscription throttle
-          // (`PerSubEmailTemplateWrites`); wait for the window to reopen.
+          // Generic ARM write throttles; wait for the window to reopen.
           Effect.retry({
             while: (e) => e._tag === "RequestRateLimitExceeded",
             schedule: Schedule.spaced("20 seconds"),

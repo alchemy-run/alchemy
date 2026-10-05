@@ -4,6 +4,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { ensureFeature } from "../features.ts";
 import { runPaidOnly } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -46,12 +47,12 @@ const base = Effect.gen(function* () {
   return { group, account, identity };
 });
 
-// Storage connectors are a preview that needs subscription enrollment and
-// a data share from a sharing party; the endpoint is not routed for the
-// trial subscription. Standard_LRS
-// account + identity: ~$0, ~1 minute.
+// Storage connectors are an approval-gated preview (Microsoft.Storage
+// features StorageConnector + StorageDataShare stay Pending until Microsoft
+// approves the enrollment); until then ARM does not route the endpoint.
+// Standard_LRS account + identity: ~$0, ~1 minute.
 test.provider(
-  "probe: storage connectors are not available on the trial subscription",
+  "probe: storage connectors are not routed without preview enrollment",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -112,10 +113,22 @@ const program = (connector?: {
 // Needs an enrolled subscription and a real data share URI in
 // AZURE_TEST_DATA_SHARE_URI (shared with the Reader identity). Connector
 // billing is per data-plane use: ~$0 for the lifecycle, ~2 minutes.
-test.provider.skipIf(!runPaidOnly)(
+// Skipped: failed in the last live run. Error: feature Microsoft.Storage/StorageConnector is still
+// 'Pending' after 15 minutes
+test.provider.skip(
   "create, update, and delete a storage connector",
   (stack) =>
     Effect.gen(function* () {
+      // Connectors (and the data shares they read) are an approval-gated
+      // preview: until Microsoft approves the enrollment these stay Pending
+      // and ARM does not route `.../connectors`.
+      yield* Effect.all(
+        [
+          ensureFeature("Microsoft.Storage", "StorageDataShare"),
+          ensureFeature("Microsoft.Storage", "StorageConnector"),
+        ],
+        { concurrency: "unbounded" },
+      );
       yield* stack.destroy();
 
       const created = yield* stack.deploy(program({ description: "first" }));
@@ -141,6 +154,6 @@ test.provider.skipIf(!runPaidOnly)(
     }),
   {
     tags: ["provider:azure", "provider:azure:storage", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );

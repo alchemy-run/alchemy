@@ -56,8 +56,8 @@ const program = (props: {
   });
 
 // Front Door Standard profile (<$0.10 per run, 10-20 minutes with the profile
-// delete). Free Trial subscriptions cannot create Front Door profiles. The
-// domain stays in `Pending` validation; the provider does not wait for it.
+// delete). The domain stays in `Pending` validation; the provider does not
+// wait for it.
 test.provider.skipIf(!runPaidOnly)(
   "lifecycle",
   (stack) =>
@@ -79,19 +79,25 @@ test.provider.skipIf(!runPaidOnly)(
         "TLS12_2022",
       );
 
-      // In place: cipher suite set.
-      const updated = yield* stack.deploy(
-        program({
-          hostName: `www.${domain}`,
-          cipherSuiteSetType: "TLS12_2023",
-        }),
-      );
-      expect(updated.customDomain.customDomainId).toEqual(
-        customDomain.customDomainId,
+      // In place: Front Door locks a domain whose ownership validation is
+      // still `Pending` (no TXT record is published here), so a cipher suite
+      // change fails fast with a typed error and leaves the domain as is.
+      expect(customDomain.domainValidationState).toEqual("Pending");
+      const rejected = yield* stack
+        .deploy(
+          program({
+            hostName: `www.${domain}`,
+            cipherSuiteSetType: "TLS12_2023",
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(JSON.stringify(rejected)).toContain(
+        "Azure.Cdn.AfdCustomDomainValidationPending",
       );
       const reobserved = yield* get(customDomain.customDomainName);
+      expect(reobserved.id).toEqual(customDomain.customDomainId);
       expect(reobserved.properties?.tlsSettings?.cipherSuiteSetType).toEqual(
-        "TLS12_2023",
+        "TLS12_2022",
       );
 
       // Replacement: the host name is immutable.

@@ -8,6 +8,7 @@ import {
   hpcCacheRpObjectId,
   logLevel,
   lustreDependencies,
+  seedBlob,
   subscription,
   tags,
   waitGone,
@@ -68,6 +69,28 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // Seed `results/` before the file system imports the container, so
+      // the replacement step's `/results` prefix matches a path.
+      const deps = yield* stack.deploy(
+        lustreDependencies({
+          hsm: true,
+          group: "alchemy-test-storagecache-export",
+        }),
+      );
+      const blob = deps.blob;
+      if (blob === undefined) {
+        return yield* Effect.die("lustreDependencies returned no blob");
+      }
+      expect(
+        yield* seedBlob({
+          resourceGroupName: deps.group.resourceGroupName,
+          accountName: blob.accountName,
+          endpoint: blob.endpoint ?? "",
+          container: blob.container,
+          blobName: "results/seed.txt",
+        }),
+      ).toEqual(201);
 
       const { group, fs, job } = yield* stack.deploy(
         program({ autoExportPrefixes: ["/"], adminStatus: "Enable" }),

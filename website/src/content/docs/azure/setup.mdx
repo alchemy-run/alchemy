@@ -49,14 +49,12 @@ and switched.
 
 ## Resource providers
 
-A new subscription may not have every Azure resource provider
-registered. If a deploy fails with `MissingRegistration`, register the
-namespace once:
-
-```sh
-az provider register --namespace Microsoft.Storage
-az provider register --namespace Microsoft.ManagedIdentity
-```
+A new subscription only has a handful of Azure resource provider
+namespaces registered. Alchemy registers the namespace a resource needs
+(for example `Microsoft.Storage`) the first time it deploys one, and
+waits up to three minutes for registration to finish. The service
+principal needs permission to register providers — `Contributor` or
+`Owner` on the subscription is enough.
 
 ## Next steps
 

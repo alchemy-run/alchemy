@@ -1,5 +1,6 @@
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -8,12 +9,14 @@ import {
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
+  ProvisioningTimedOut,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   isVaultOwnedByStack,
   RECOVERY_SERVICES_NAMESPACE,
+  updateVaultProperties,
 } from "./BackupShared.ts";
 
 export type SoftDeleteFeatureState = "Enabled" | "Disabled" | "AlwaysON";
@@ -77,15 +80,17 @@ export interface BackupVaultConfig extends Resource<
  * `Enabled`) unless soft delete was set to the irreversible `AlwaysON`.
  *
  * Vaults created with current API versions start with soft delete
- * `AlwaysON` set through the vault API; Azure Backup then rejects changes
- * through this API with the typed `BackupConfigManagedByVaultApi` error.
- * Manage soft delete on such vaults with {@link Vault}; settings that
- * already match converge without a write.
+ * `AlwaysON` set through the vault API, and Azure Backup rejects changes
+ * through the legacy `backupconfig` API for them; Alchemy then applies the
+ * change through the vault API instead. Leaving `AlwaysON` is impossible
+ * and fails with the typed `BackupConfigManagedByVaultApi` error, but the
+ * retention period stays editable. Settings that already match converge
+ * without a write.
  *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-security-feature-cloud
  *
  * ### Soft Delete
- * **Example:** Disable soft delete on a test vault
+ * **Example:** Keep soft-deleted backups for 30 days
  * ```typescript
  * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
  *   resourceGroup: group.resourceGroupName,
@@ -93,17 +98,16 @@ export interface BackupVaultConfig extends Resource<
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
  *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
- *   softDeleteFeatureState: "Disabled",
+ *   softDeleteRetentionPeriodInDays: 30,
  * });
  * ```
  *
- * **Example:** Keep soft-deleted backups for 30 days
+ * **Example:** Disable soft delete on a vault that is not `AlwaysON`
  * ```typescript
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
  *   resourceGroup: group.resourceGroupName,
- *   vault: vault.vaultName,
- *   softDeleteFeatureState: "Enabled",
- *   softDeleteRetentionPeriodInDays: 30,
+ *   vault: legacyVaultName,
+ *   softDeleteFeatureState: "Disabled",
  * });
  * ```
  *
@@ -178,18 +182,90 @@ const delta = (
   return changed;
 };
 
-const patchConfig = (
+/**
+ * Apply `changed` through the legacy `backupconfig` API, or through the
+ * vault API when Azure Backup reports the vault's soft delete is managed
+ * there (every vault created with current API versions). `AlwaysON` states
+ * are irreversible, so changing one keeps the original typed error.
+ */
+const applyChange = (
   subscriptionId: string,
   resourceGroupName: string,
   vaultName: string,
-  properties: backup.BackupResourceVaultConfig,
+  current: BackupVaultConfig["Attributes"],
+  changed: backup.BackupResourceVaultConfig,
 ) =>
-  backup.UpdateBackupResourceVaultConfig({
-    subscriptionId,
-    resourceGroupName,
-    vaultName,
-    properties,
-  });
+  backup
+    .UpdateBackupResourceVaultConfig({
+      subscriptionId,
+      resourceGroupName,
+      vaultName,
+      properties: changed,
+    })
+    .pipe(
+      Effect.asVoid,
+      Effect.catchTag("BackupConfigManagedByVaultApi", (error) =>
+        (changed.softDeleteFeatureState !== undefined &&
+          same(current.softDeleteFeatureState, "AlwaysON")) ||
+        (changed.enhancedSecurityState !== undefined &&
+          same(current.enhancedSecurityState, "AlwaysON"))
+          ? Effect.fail(error)
+          : updateVaultProperties(subscriptionId, resourceGroupName, vaultName, {
+              securitySettings: {
+                softDeleteSettings: {
+                  softDeleteState:
+                    changed.softDeleteFeatureState ??
+                    current.softDeleteFeatureState,
+                  softDeleteRetentionPeriodInDays:
+                    changed.softDeleteRetentionPeriodInDays ??
+                    current.softDeleteRetentionPeriodInDays,
+                  enhancedSecurityState:
+                    changed.enhancedSecurityState ??
+                    current.enhancedSecurityState,
+                },
+              },
+            }).pipe(Effect.asVoid),
+      ),
+    );
+
+/** The vault API applies changes asynchronously; poll until they show. */
+const waitConverged = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+  desired: Partial<BackupVaultConfigProps>,
+) =>
+  backup
+    .GetBackupResourceVaultConfig({
+      subscriptionId,
+      resourceGroupName,
+      vaultName,
+    })
+    .pipe(
+      Effect.flatMap((config) =>
+        Object.keys(
+          delta(toAttrs(resourceGroupName, vaultName, config), desired),
+        ).length === 0
+          ? Effect.succeed(config)
+          : Effect.fail("pending" as const),
+      ),
+      Effect.retry({
+        while: (e) => e === "pending",
+        schedule: Schedule.spaced("5 seconds"),
+        times: 24,
+      }),
+      Effect.catchIf(
+        (e): e is "pending" => e === "pending",
+        () =>
+          Effect.fail(
+            new ProvisioningTimedOut({
+              resource: `backup vault config of ${vaultName}`,
+              state: undefined,
+              message: `backup vault config of vault ${vaultName} did not converge after 2 minutes`,
+            }),
+          ),
+      ),
+    );
 
 export const BackupVaultConfigProvider = () =>
   Provider.succeed(BackupVaultConfig, {
@@ -240,17 +316,22 @@ export const BackupVaultConfigProvider = () =>
       const observed = yield* backup.GetBackupResourceVaultConfig(where);
 
       // Sync only the settings that differ.
-      const changed = delta(toAttrs(resourceGroup, vault, observed), news);
-      if (Object.keys(changed).length === 0) {
-        return toAttrs(resourceGroup, vault, observed);
-      }
-      yield* patchConfig(subscriptionId, resourceGroup, vault, changed);
-      const fresh = yield* backup.GetBackupResourceVaultConfig(where);
+      const current = toAttrs(resourceGroup, vault, observed);
+      const changed = delta(current, news);
+      if (Object.keys(changed).length === 0) return current;
+      yield* applyChange(subscriptionId, resourceGroup, vault, current, changed);
+      const fresh = yield* waitConverged(
+        subscriptionId,
+        resourceGroup,
+        vault,
+        news,
+      );
       return toAttrs(resourceGroup, vault, fresh);
     }),
 
     // Restore Azure's defaults for the managed settings; a missing vault
-    // means there is nothing left to reset. `AlwaysON` cannot be undone.
+    // means there is nothing left to reset. `AlwaysON` states cannot be
+    // undone, but the retention period of an `AlwaysON` vault can.
     delete: Effect.fn(function* ({ olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const observed = yield* getConfig(
@@ -260,22 +341,39 @@ export const BackupVaultConfigProvider = () =>
       );
       if (observed === undefined) return;
       const current = toAttrs(output.resourceGroup, output.vault, observed);
-      const alwaysOn = same(current.softDeleteFeatureState, "AlwaysON");
-      const reset = delta(current, {
+      const desired: Partial<BackupVaultConfigProps> = {
         softDeleteFeatureState:
-          olds?.softDeleteFeatureState !== undefined && !alwaysOn
+          olds?.softDeleteFeatureState !== undefined &&
+          !same(current.softDeleteFeatureState, "AlwaysON")
             ? "Enabled"
             : undefined,
         softDeleteRetentionPeriodInDays:
-          olds?.softDeleteRetentionPeriodInDays !== undefined && !alwaysOn
-            ? 14
-            : undefined,
+          olds?.softDeleteRetentionPeriodInDays !== undefined ? 14 : undefined,
         enhancedSecurityState:
-          olds?.enhancedSecurityState !== undefined ? "Enabled" : undefined,
-      });
+          olds?.enhancedSecurityState !== undefined &&
+          !same(current.enhancedSecurityState, "AlwaysON")
+            ? "Enabled"
+            : undefined,
+      };
+      const reset = delta(current, desired);
       if (Object.keys(reset).length === 0) return;
       yield* ignoreNotFound(
-        patchConfig(subscriptionId, output.resourceGroup, output.vault, reset),
+        applyChange(
+          subscriptionId,
+          output.resourceGroup,
+          output.vault,
+          current,
+          reset,
+        ).pipe(
+          Effect.andThen(
+            waitConverged(
+              subscriptionId,
+              output.resourceGroup,
+              output.vault,
+              desired,
+            ),
+          ),
+        ),
       );
     }),
 

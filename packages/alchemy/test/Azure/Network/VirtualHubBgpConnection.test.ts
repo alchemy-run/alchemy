@@ -74,7 +74,11 @@ test.provider.skipIf(!runExpensive)(
       expect(reobserved.properties?.peerAsn).toEqual(65020);
       expect(
         yield* untilGone(
-          getPeer(group.resourceGroupName, hub.virtualHubName, peer.connectionName),
+          getPeer(
+            group.resourceGroupName,
+            hub.virtualHubName,
+            peer.connectionName,
+          ),
         ),
       ).toEqual("gone");
 

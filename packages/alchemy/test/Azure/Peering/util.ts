@@ -32,7 +32,7 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
   );
 
 /**
- * A Peering Service partner that the free trial can create a peering
+ * A Peering Service partner that any subscription can create a peering
  * service against (from `ListPeeringServiceProviders`).
  */
 export const serviceProvider = {

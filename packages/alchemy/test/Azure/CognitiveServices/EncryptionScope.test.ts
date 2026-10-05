@@ -3,7 +3,6 @@ import * as Test from "@/Test/Alchemy";
 import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -34,9 +33,14 @@ const program = (props: { name: string; state: "Enabled" | "Disabled" }) =>
     return { group, account, scope };
   });
 
-// Encryption scopes are not offered to this subscription/region (see the
-// probe below); run on an eligible subscription. $0 idle, ~2 minutes.
-test.provider.skipIf(!runPaidOnly)(
+// Encryption scopes are allow-listed by Microsoft: the pay-as-you-go testing
+// subscription gets `EncryptionScopeNotSupported` for AIServices and OpenAI
+// accounts in eastus and swedencentral, on api-versions 2024-10-01 through
+// 2026-09-15-preview, with either key source, and with account-level CMK
+// configured (the probe below pins the typed rejection). Set
+// AZURE_TEST_COGNITIVE_ENCRYPTION_SCOPES=1 on an allow-listed subscription.
+// $0 idle, ~2 minutes.
+test.provider.skipIf(!process.env.AZURE_TEST_COGNITIVE_ENCRYPTION_SCOPES)(
   "create, update, replace, and delete an encryption scope",
   (stack) =>
     Effect.gen(function* () {

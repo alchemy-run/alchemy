@@ -17,10 +17,15 @@ const { test } = Test.make({ providers: Azure.providers() });
 const getWiki = (
   resourceGroupName: string,
   serviceName: string,
-  apiId: string,
+  productId: string,
 ) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
-    apim.GetApiWiki({ subscriptionId, resourceGroupName, serviceName, apiId }),
+    apim.GetProductWiki({
+      subscriptionId,
+      resourceGroupName,
+      serviceName,
+      productId,
+    }),
   );
 
 const program = (pages?: ("one" | "two")[]) =>
@@ -62,7 +67,12 @@ const program = (pages?: ("one" | "two")[]) =>
 // Documentation pages are not available on Consumption (PUT returns an
 // empty 404). A BasicV2 service bills ~$0.21/h and takes 5-15+ minutes to
 // create: est. ~$0.10 and ~25 minutes per run.
-test.provider.skipIf(!runExpensive)(
+// Blocked by the platform: Microsoft.ApiManagement does not serve the
+// documentations and wikis routes (empty 404 / "did not have proper uri
+// path format") on Developer, BasicV2 or Premium services at any
+// api-version, pinned by the probe below. Runs only with
+// AZURE_TEST_APIM_WIKIS=1 once the routes ship.
+test.provider.skipIf(!runExpensive || !process.env.AZURE_TEST_APIM_WIKIS)(
   "create, update, and delete a product wiki",
   (stack) =>
     Effect.gen(function* () {
@@ -93,4 +103,40 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
+);
+
+// Probe (BasicV2, est. ~$0.05 and ~10 minutes; Consumption answers every
+// documentation/wiki route with an empty 404 instead): the product
+// wiki route is not served.
+test.provider.skipIf(!runExpensive)(
+  "product wiki PUT is rejected as an unsupported route",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, service, product } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { group, service } = yield* basicV2Service;
+          const product = yield* Azure.ApiManagement.Product("Starter", {
+            resourceGroup: group.resourceGroupName,
+            serviceName: service.serviceName,
+            name: "alchemy-wiki-product",
+            displayName: "Wiki product",
+          });
+          return { group, service, product };
+        }),
+      );
+      const sub = yield* subscriptionId;
+      const error = yield* apim
+        .ProductWikiCreateOrUpdate({
+          subscriptionId: sub,
+          resourceGroupName: group.resourceGroupName,
+          serviceName: service.serviceName,
+          productId: product.productName,
+          properties: { documents: [] },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("ApiManagementRouteNotSupported");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 1_800_000 },
 );

@@ -52,10 +52,16 @@ const program = (props: { memoryMB: number; computerName: string }) =>
   });
 
 // Deploys a VM on an on-premises SCVMM behind an Arc resource bridge
-// (impossible on the free trial). Run with AZURE_TEST_PAID=1,
+// (Azure cannot provision SCVMM itself). Run with AZURE_TEST_PAID=1,
 // AZURE_TEST_SCVMM_CUSTOM_LOCATION, AZURE_TEST_SCVMM_VMM_SERVER,
 // AZURE_TEST_SCVMM_CLOUD and AZURE_TEST_SCVMM_TEMPLATE.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(
+  !runPaidOnly ||
+    !customLocationId() ||
+    !vmmServerId() ||
+    !cloudId() ||
+    !templateId(),
+)(
   "create, resize, replace, and delete an SCVMM VM",
   (stack) =>
     Effect.gen(function* () {

@@ -1,5 +1,6 @@
 import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -153,6 +154,9 @@ const getSetting = (
       workspaceName,
       settingsResourceName,
     }),
+  ).pipe(
+    // Sentinel answers GET of a missing setting with 200 and an empty `{}`.
+    Effect.map((setting) => (setting?.id === undefined ? undefined : setting)),
   );
 
 const toAttrs = (
@@ -275,7 +279,15 @@ export const SecurityMLAnalyticsSettingProvider = () =>
               "Anomaly") as securityinsights.SecurityMLAnalyticsSettingsKind,
             etag: observed?.etag,
             properties: desired,
-          });
+          }).pipe(
+            // Sentinel provisions the anomalies backend a few seconds after
+            // onboarding; until then PUT is rejected as "not supported".
+            Effect.retry({
+              while: (e) => e._tag === "SentinelAnomaliesNotSupported",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 18,
+            }),
+          );
       }
       return toAttrs(resourceGroup, workspace, name, observed);
     }),

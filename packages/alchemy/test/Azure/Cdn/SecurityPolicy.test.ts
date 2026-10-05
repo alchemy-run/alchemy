@@ -46,26 +46,33 @@ const ensureWafPolicy = (resourceGroupName: string) =>
     return policy.id!;
   });
 
-const program = (props: { wafPolicyId?: string; patternsToMatch: string[] }) =>
+const program = (props: { wafPolicyId?: string; bothEndpoints: boolean }) =>
   Effect.gen(function* () {
     const { group, profile } = yield* profileStack;
     const endpoint = yield* Azure.Cdn.AfdEndpoint("Web", {
       resourceGroup: group.resourceGroupName,
       profile: profile.profileName,
     });
-    if (props.wafPolicyId === undefined) return { group, profile, endpoint };
+    const api = yield* Azure.Cdn.AfdEndpoint("Api", {
+      resourceGroup: group.resourceGroupName,
+      profile: profile.profileName,
+    });
+    if (props.wafPolicyId === undefined)
+      return { group, profile, endpoint, api };
     const policy = yield* Azure.Cdn.SecurityPolicy("Waf", {
       resourceGroup: group.resourceGroupName,
       profile: profile.profileName,
       wafPolicyId: props.wafPolicyId,
       associations: [
         {
-          domainIds: [endpoint.endpointId],
-          patternsToMatch: props.patternsToMatch,
+          domainIds: props.bothEndpoints
+            ? [endpoint.endpointId, api.endpointId]
+            : [endpoint.endpointId],
+          patternsToMatch: ["/*"],
         },
       ],
     });
-    return { group, profile, endpoint, policy };
+    return { group, profile, endpoint, api, policy };
   });
 
 // Front Door Standard profile + WAF policy (<$0.20 per run, 10-20 minutes
@@ -78,11 +85,11 @@ test.provider.skipIf(!runPaidOnly)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const base = yield* stack.deploy(program({ patternsToMatch: ["/*"] }));
+      const base = yield* stack.deploy(program({ bothEndpoints: false }));
       const wafPolicyId = yield* ensureWafPolicy(base.group.resourceGroupName);
 
-      const { group, profile, endpoint, policy } = yield* stack.deploy(
-        program({ wafPolicyId, patternsToMatch: ["/*"] }),
+      const { group, profile, endpoint, api, policy } = yield* stack.deploy(
+        program({ wafPolicyId, bothEndpoints: false }),
       );
       const get = (name: string) =>
         getPolicy(group.resourceGroupName, profile.profileName, name);
@@ -90,17 +97,21 @@ test.provider.skipIf(!runPaidOnly)(
       expect(JSON.stringify(observed.properties?.parameters)).toContain(
         endpoint.endpointId.split("/").pop()!,
       );
+      expect(JSON.stringify(observed.properties?.parameters)).not.toContain(
+        api.endpointId.split("/").pop()!,
+      );
 
-      // In place: associated path patterns.
+      // In place: protect a second endpoint. Front Door Standard/Premium
+      // only accepts the "/*" path pattern, so domains are the mutable part.
       const updated = yield* stack.deploy(
-        program({ wafPolicyId, patternsToMatch: ["/api/*"] }),
+        program({ wafPolicyId, bothEndpoints: true }),
       );
       expect(updated.policy!.securityPolicyId).toEqual(
         policy!.securityPolicyId,
       );
       const reobserved = yield* get(policy!.securityPolicyName);
       expect(JSON.stringify(reobserved.properties?.parameters)).toContain(
-        "/api/*",
+        api.endpointId.split("/").pop()!,
       );
 
       yield* stack.destroy();

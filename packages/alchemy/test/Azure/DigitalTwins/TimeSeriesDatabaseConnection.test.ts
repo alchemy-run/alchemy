@@ -25,7 +25,11 @@ const getConnection = (
     });
   });
 
-const program = (props: { table: string; cleanup: boolean }) =>
+const program = (props: {
+  table: string;
+  cleanup: boolean;
+  dedicatedConsumerGroup?: boolean;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -51,6 +55,12 @@ const program = (props: { table: string; cleanup: boolean }) =>
       resourceGroup: group.resourceGroupName,
       namespace: namespace.namespaceName,
       partitionCount: 1,
+    });
+    // Deployed in every step so a replacement never removes a dependency.
+    const consumerGroup = yield* Azure.EventHub.ConsumerGroup("Adx", {
+      resourceGroup: group.resourceGroupName,
+      namespace: namespace.namespaceName,
+      eventHub: hub.eventHubName,
     });
     const cluster = yield* Azure.Kusto.Cluster("Cluster", {
       resourceGroup: group.resourceGroupName,
@@ -84,7 +94,7 @@ const program = (props: { table: string; cleanup: boolean }) =>
       role: "Admin",
     });
     const connection = yield* Azure.DigitalTwins.TimeSeriesDatabaseConnection(
-      "History",
+      "Connection",
       {
         resourceGroup: group.resourceGroupName,
         // Wait for the grants: the connection validates access on create.
@@ -104,6 +114,9 @@ const program = (props: { table: string; cleanup: boolean }) =>
         eventHubNamespaceResourceId: namespace.namespaceId,
         eventHubEndpointUri: Output.interpolate`sb://${namespace.namespaceName}.servicebus.windows.net`,
         eventHubEntityPath: hub.eventHubName,
+        eventHubConsumerGroup: props.dedicatedConsumerGroup
+          ? consumerGroup.consumerGroupName
+          : undefined,
         identity: {
           type: "UserAssigned",
           userAssignedIdentity: identity.identityId,
@@ -111,7 +124,7 @@ const program = (props: { table: string; cleanup: boolean }) =>
         cleanupConnectionArtifacts: props.cleanup,
       },
     );
-    return { group, instance, connection };
+    return { group, instance, consumerGroup, connection };
   });
 
 // Needs a Dev Kusto cluster (~$0.25/hour, 10-20 minutes to create, 5-10 to
@@ -140,15 +153,34 @@ test.provider.skipIf(!runExpensive)(
       expect(updated.connection.connectionId).toEqual(connection.connectionId);
       expect(updated.connection.cleanupConnectionArtifacts).toEqual(false);
 
-      // Replacement: every connection property is immutable.
+      // Flip the flag back in place so the replacement below deletes the old
+      // connection with its ADX artifacts.
+      const restored = yield* stack.deploy(
+        program({ table: "AdtPropertyEvents", cleanup: true }),
+      );
+      expect(restored.connection.connectionId).toEqual(connection.connectionId);
+      expect(restored.connection.cleanupConnectionArtifacts).toEqual(true);
+
+      // Replacement: every connection property is immutable. The old
+      // connection's ADX data connection may still hold its consumer group
+      // ("Cannot create data connection because the combination of the
+      // Event Hub consumer group and the Event Hub are already in use"), so
+      // the replacement reads from a dedicated one.
       const replaced = yield* stack.deploy(
-        program({ table: "TwinHistory", cleanup: true }),
+        program({
+          table: "TwinHistory",
+          cleanup: true,
+          dedicatedConsumerGroup: true,
+        }),
       );
       expect(replaced.connection.connectionName).not.toEqual(
         connection.connectionName,
       );
       const replacedObserved = yield* get(replaced.connection.connectionName);
       expect(replacedObserved.properties?.adxTableName).toEqual("TwinHistory");
+      expect(replacedObserved.properties?.eventHubConsumerGroup).toEqual(
+        replaced.consumerGroup.consumerGroupName,
+      );
       expect(yield* waitGone(get(connection.connectionName))).toEqual("gone");
 
       yield* stack.destroy();
@@ -156,5 +188,5 @@ test.provider.skipIf(!runExpensive)(
         yield* waitGone(get(replaced.connection.connectionName), 60),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );

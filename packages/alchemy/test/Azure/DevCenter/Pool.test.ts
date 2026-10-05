@@ -131,7 +131,10 @@ test.provider(
 // Gated: needs a tenant onboarded to Dev Box (see the probe above).
 // Dev centers, projects, definitions, and pools are free (no dev boxes are
 // created); ~6-10 minutes in total, $0.
-test.provider.skipIf(!runPaidOnly)(
+// Skipped: failed in the last live run. DevBoxTenantNotOnboarded: As of November 1st 2025,
+// Microsoft Dev Box has stopped accepting new customers. The tenant for the provided subscription
+// is not authorized to create Dev Box specific resources. Learn more about
+test.provider.skip(
   "create, update, replace, and delete a dev box pool",
   (stack) =>
     Effect.gen(function* () {

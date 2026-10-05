@@ -112,7 +112,10 @@ const program = (props: {
     const pool = yield* Azure.DevOpsInfrastructure.Pool("Pool", {
       resourceGroup: group.resourceGroupName,
       name: props.name,
-      location: "eastus",
+      // Managed DevOps Pools has its own per-SKU-family quota, separate from
+      // Compute quota. New subscriptions get 5 Dadsv5 cores in centralus and
+      // 0 in eastus (InsufficientCoreQuota on standardDADSv5Family).
+      location: "centralus",
       devCenterProjectResourceId: project.projectId,
       maximumConcurrency: props.maximumConcurrency,
       organizationProfile: {
@@ -127,10 +130,11 @@ const program = (props: {
   });
 
 // Gated: needs an Azure DevOps organization connected to the subscription's
-// Entra tenant (`AZURE_DEVOPS_ORG_URL`, see the probe above). The dev
+// Entra tenant (`AZURE_DEVOPS_ORG_URL`, see the probe above) in which the
+// test service principal is a Project Collection Administrator. The dev
 // center/project are free and an idle Stateless pool with no stand-by agents
-// costs ~$0, but each pool provision/update takes ~10-15 minutes, so this
-// may need longer than one test timeout on a slow region.
+// costs ~$0, but create, update, replace and delete each take several
+// minutes (~25-35 minutes end to end).
 test.provider.skipIf(!runPaidOnly || !process.env.AZURE_DEVOPS_ORG_URL)(
   "create, update, replace, and delete a managed devops pool",
   (stack) =>
@@ -138,9 +142,9 @@ test.provider.skipIf(!runPaidOnly || !process.env.AZURE_DEVOPS_ORG_URL)(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
-        program({ maximumConcurrency: 1, tags: { a: "1" } }),
+        program({ maximumConcurrency: 2, tags: { a: "1" } }),
       );
-      expect(created.pool.maximumConcurrency).toEqual(1);
+      expect(created.pool.maximumConcurrency).toEqual(2);
       expect(created.pool.organizationKind).toEqual("AzureDevOps");
       const observed = yield* getPool(
         created.group.resourceGroupName,
@@ -152,23 +156,33 @@ test.provider.skipIf(!runPaidOnly || !process.env.AZURE_DEVOPS_ORG_URL)(
       ).toEqual(created.project.projectId.toLowerCase());
       expect(observed.tags?.a).toEqual("1");
 
-      // In-place update of concurrency and tags.
+      // In-place update of concurrency and tags. Concurrency goes down so
+      // the create-before-delete replacement below fits the region's 5-core
+      // Managed DevOps Pools quota (2 cores per agent, old + new pool).
       const updated = yield* stack.deploy(
-        program({ maximumConcurrency: 2, tags: { a: "2" } }),
+        program({ maximumConcurrency: 1, tags: { a: "2" } }),
       );
       expect(updated.pool.poolId).toEqual(created.pool.poolId);
+      expect(updated.pool.maximumConcurrency).toEqual(1);
+      // ARM read replicas can briefly return the pre-PATCH pool.
       const afterUpdate = yield* getPool(
         updated.group.resourceGroupName,
         updated.pool.poolName,
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (pool) => pool.properties?.maximumConcurrency === 1,
+          times: 12,
+        }),
       );
-      expect(afterUpdate.properties?.maximumConcurrency).toEqual(2);
+      expect(afterUpdate.properties?.maximumConcurrency).toEqual(1);
       expect(afterUpdate.tags?.a).toEqual("2");
 
       // Renaming replaces the pool.
       const replaced = yield* stack.deploy(
         program({
           name: "alchemy-mdp-renamed",
-          maximumConcurrency: 2,
+          maximumConcurrency: 1,
           tags: { a: "2" },
         }),
       );
@@ -186,5 +200,5 @@ test.provider.skipIf(!runPaidOnly || !process.env.AZURE_DEVOPS_ORG_URL)(
         ),
       ).toEqual("gone");
     }),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 2_700_000 },
 );

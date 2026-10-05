@@ -58,7 +58,10 @@ export interface OnlineEndpointProps {
    * (omit for a managed endpoint). Changing it replaces the endpoint.
    */
   compute?: string;
-  /** Description of the endpoint. */
+  /**
+   * Description of the endpoint. Azure ignores description changes on an
+   * existing endpoint, so changing it replaces the endpoint.
+   */
   description?: string;
   /**
    * Percentage of live traffic per deployment name. Deployments must exist
@@ -232,7 +235,9 @@ export const OnlineEndpointProvider = () =>
         (news.location !== undefined &&
           !sameArm(news.location, output.location)) ||
         !sameArm(news.authMode ?? "Key", output.authMode) ||
-        (olds !== undefined && !sameArm(news.compute, olds.compute))
+        (olds !== undefined &&
+          (!sameArm(news.compute, olds.compute) ||
+            (news.description ?? "") !== (olds.description ?? "")))
       ) {
         return { action: "replace" } as const;
       }
@@ -275,7 +280,17 @@ export const OnlineEndpointProvider = () =>
       const waitReady = waitForProvisioned(
         `machine learning online endpoint ${name}`,
         get,
-        (endpoint) => endpoint.properties.provisioningState,
+        // Right after a PUT the GET can still report the previous tags and
+        // traffic split as `Succeeded`; only the desired state counts.
+        (endpoint) => {
+          const state = endpoint.properties.provisioningState;
+          if (state !== undefined && state !== "Succeeded") return state;
+          return !tagsDiffer(endpoint.tags, tags) &&
+            sameTraffic(endpoint.properties.traffic, news.traffic) &&
+            sameTraffic(endpoint.properties.mirrorTraffic, news.mirrorTraffic)
+            ? "Succeeded"
+            : "Updating";
+        },
         { interval: "5 seconds", times: 90 },
       );
 
@@ -289,8 +304,6 @@ export const OnlineEndpointProvider = () =>
       const drifted =
         observed === undefined ||
         props === undefined ||
-        (news.description !== undefined &&
-          props.description !== news.description) ||
         (news.publicNetworkAccess !== undefined &&
           props.publicNetworkAccess !== news.publicNetworkAccess) ||
         !sameTraffic(props.traffic, news.traffic) ||

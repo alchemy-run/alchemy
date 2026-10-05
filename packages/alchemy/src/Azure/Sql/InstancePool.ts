@@ -321,6 +321,43 @@ export const InstancePoolProvider = () =>
         getPool(subscriptionId, output.resourceGroup, output.instancePoolName),
         SLOW,
       );
+      // Unlike a managed instance, deleting the pool leaves its (now empty)
+      // virtual cluster behind, which keeps the subnet in use
+      // (`SubnetInUse`). Remove it once it holds nothing else.
+      const subnetId = output.subnetId;
+      if (subnetId === undefined) return;
+      const clusters = yield* orUndefinedIfNotFound(
+        sql
+          .ListVirtualClusterByResourceGroup({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+          })
+          .pipe(
+            Effect.flatMap((page) =>
+              requireSinglePage("ListVirtualClusterByResourceGroup", page),
+            ),
+          ),
+      );
+      for (const cluster of clusters?.value ?? []) {
+        if (
+          cluster.name === undefined ||
+          !sameId(cluster.properties?.subnetId, subnetId) ||
+          (cluster.properties?.childResources ?? []).length > 0
+        ) {
+          continue;
+        }
+        const where = {
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          virtualClusterName: cluster.name,
+        };
+        yield* ignoreNotFound(sql.DeleteVirtualCluster(where));
+        yield* waitUntilGone(
+          `sql virtual cluster ${cluster.name}`,
+          orUndefinedIfNotFound(sql.GetVirtualCluster(where)),
+          SLOW,
+        );
+      }
     }),
 
     nuke: {

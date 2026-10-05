@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { WaitBudget } from "../Arm.ts";
 
@@ -22,3 +23,23 @@ export const COLLECTOR_BUDGET: WaitBudget = {
   interval: "10 seconds",
   times: 90,
 };
+
+/**
+ * Retry a collector write while a previous operation on the collector is
+ * still running (Azure asks to "retry again in 10 minutes"); bounded to
+ * ~15 minutes.
+ */
+export const retryWhileCollectorBusy = <
+  A,
+  E extends { readonly _tag: string },
+  R,
+>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "TrafficCollectorOperationInProgress",
+      schedule: Schedule.spaced("30 seconds"),
+      times: 30,
+    }),
+  );

@@ -3,7 +3,6 @@ import * as Test from "@/Test/Alchemy";
 import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import { labFixture, logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -41,12 +40,17 @@ const program = (props: {
     return { group, lab, identity, runner };
   });
 
-// Free lab + identities; ~5 minutes for the lab. Gated: Azure deprecated
-// service runners and rejects every create with HTTP 400
+// Free lab + identities; ~5 minutes for the lab. Gated on its own flag, not
+// on a paid subscription: Azure deprecated service runners and rejects every
+// create on every subscription type (pay-as-you-go included) with HTTP 400
 // ServiceRunnerIsDeprecatedEnvironment "Service runner with
 // IdentityUsageType of 'Environment' is deprecated. Use
-// lab.Identity.UserAssignedIdentities instead." (see the probe below).
-test.provider.skipIf(!runPaidOnly)(
+// lab.Identity.UserAssignedIdentities instead." (asserted by the probe below).
+// Set AZURE_TEST_DEVTESTLABS_SERVICE_RUNNER=1 to re-check if Azure lifts it.
+const runServiceRunnerLifecycle =
+  !!process.env.AZURE_TEST_DEVTESTLABS_SERVICE_RUNNER;
+
+test.provider.skipIf(!runServiceRunnerLifecycle)(
   "create, update, replace, and delete a service runner",
   (stack) =>
     Effect.gen(function* () {

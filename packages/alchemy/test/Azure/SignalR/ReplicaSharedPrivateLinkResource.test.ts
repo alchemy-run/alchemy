@@ -1,9 +1,12 @@
 import * as Azure from "@/Azure";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import * as keyvault from "@distilled.cloud/azure/keyvault";
 import * as signalr from "@distilled.cloud/azure/signalr";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Schedule from "effect/Schedule";
 import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -25,7 +28,55 @@ const getLink = (
     });
   });
 
-const program = (props: { target: "A" | "B"; requestMessage: string }) =>
+/**
+ * Act as the vaults' owner: approve every pending private endpoint
+ * connection on them, every 10 seconds, until interrupted (bounded).
+ * Azure replicates a primary shared private link to replicas only once
+ * the target has approved it.
+ */
+const approvePending = (resourceGroupName: string, vaultNames: string[]) =>
+  Effect.gen(function* () {
+    const subscriptionId = yield* subscription;
+    for (const vaultName of vaultNames) {
+      const connections =
+        yield* keyvault.ListPrivateEndpointConnectionByResource({
+          subscriptionId,
+          resourceGroupName,
+          vaultName,
+        });
+      for (const connection of connections.value ?? []) {
+        if (
+          connection.name !== undefined &&
+          connection.properties?.privateLinkServiceConnectionState?.status ===
+            "Pending"
+        ) {
+          yield* Effect.logInfo(
+            `approving ${connection.name} on vault ${vaultName}`,
+          );
+          yield* keyvault.PutPrivateEndpointConnection({
+            subscriptionId,
+            resourceGroupName,
+            vaultName,
+            privateEndpointConnectionName: connection.name,
+            properties: {
+              privateLinkServiceConnectionState: {
+                status: "Approved",
+                description: "approved by the test",
+              },
+            },
+          });
+        }
+      }
+    }
+  }).pipe(
+    Effect.ignoreCause({ log: "Warn" }),
+    Effect.repeat({ schedule: Schedule.spaced("10 seconds"), times: 120 }),
+  );
+
+type Props = { target: "A" | "B"; requestMessage: string };
+
+/** Primary service, both vaults, and the primary link (no replica yet). */
+const base = (props: Props) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -59,7 +110,13 @@ const program = (props: { target: "A" | "B"; requestMessage: string }) =>
         requestMessage: props.requestMessage,
       },
     );
-    // Primary links replicate to replicas created after them.
+    return { group, service, vaultA, vaultB, target, primaryLink };
+  });
+
+const program = (props: Props) =>
+  Effect.gen(function* () {
+    const { group, service, vaultA, vaultB, target, primaryLink } =
+      yield* base(props);
     const replica = yield* Azure.SignalR.Replica("West", {
       resourceGroup: group.resourceGroupName,
       signalR: Output.all(
@@ -79,19 +136,28 @@ const program = (props: { target: "A" | "B"; requestMessage: string }) =>
         privateLinkResourceId: target.vaultId,
       },
     );
-    return { group, service, replica, target, link };
+    return { group, service, vaultA, vaultB, replica, target, link };
   });
 
 // Premium_P1 primary + replica (~$0.08/hour per unit) and two vaults:
-// ~$0.05 per run, but >15 minutes: on the test subscription the primary's
-// link (status `Pending`) was never replicated to the replica within 10
-// minutes, and a direct PUT on the replica fails with the typed
-// `SignalRReplicaLinkNotReplicated`. Runs only with AZURE_TEST_EXPENSIVE=1.
+// ~$0.05 per run, ~15 minutes. Azure replicates a primary link only after
+// the target approves it, so the test approves the vaults' pending
+// connections as their owner. Runs only with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "track, replace, and forget a replica shared private link resource",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        base({ target: "A", requestMessage: "first" }),
+      );
+      const approver = yield* Effect.forkChild(
+        approvePending(initial.group.resourceGroupName, [
+          initial.vaultA.vaultName,
+          initial.vaultB.vaultName,
+        ]),
+      );
 
       const { group, service, replica, target, link } = yield* stack.deploy(
         program({ target: "A", requestMessage: "first" }),
@@ -131,6 +197,7 @@ test.provider.skipIf(!runExpensive)(
       );
 
       // Replica links have no DELETE; they go away with the replica.
+      yield* Fiber.interrupt(approver);
       yield* stack.destroy();
       expect(
         yield* waitGone(
@@ -143,5 +210,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );

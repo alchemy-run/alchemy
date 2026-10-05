@@ -49,14 +49,19 @@ test.provider.skipIf(!runExpensive)(
       const { group, cache } = yield* stack.deploy(
         program({ tags: { env: "test" }, maxmemoryPolicy: "volatile-lru" }),
       );
-      expect(cache.hostName).toEqual(`${cache.cacheName}.redis.cache.windows.net`);
+      expect(cache.hostName).toEqual(
+        `${cache.cacheName}.redis.cache.windows.net`,
+      );
       expect(cache.sslPort).toEqual(6380);
       expect(cache.sku).toEqual("Basic");
       expect(cache.primaryKey).toBeDefined();
       expect(Redacted.value(cache.primaryConnectionString!)).toContain(
         `${cache.hostName}:6380,password=`,
       );
-      const observed = yield* getCache(group.resourceGroupName, cache.cacheName);
+      const observed = yield* getCache(
+        group.resourceGroupName,
+        cache.cacheName,
+      );
       expect(observed.properties.provisioningState).toEqual("Succeeded");
       expect(observed.properties.sku).toEqual({
         name: "Basic",

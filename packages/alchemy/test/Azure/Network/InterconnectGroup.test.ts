@@ -3,10 +3,17 @@ import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { ensureFeature } from "../features.ts";
 import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+// The Microsoft.Network/AllowInterconnectGroups preview feature needs Microsoft
+// approval: self-registration stays `Pending` on a pay-as-you-go subscription. The
+// lifecycle registers it and runs with AZURE_TEST_PAID=1 and AZURE_TEST_INTERCONNECT_GROUPS=1
+// once approved; otherwise the probe asserts the typed rejection.
+const allowListed = !!process.env.AZURE_TEST_INTERCONNECT_GROUPS;
 
 const getGroup = (resourceGroupName: string, interconnectGroupName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
@@ -17,11 +24,11 @@ const getGroup = (resourceGroupName: string, interconnectGroupName: string) =>
     }),
   );
 
-// Interconnect groups are not exposed to the trial subscription: ARM
-// answers `InvalidResourceType` ("The resource type could not be found in
+// Without the AllowInterconnectGroups feature the resource type is not
+// exposed to the subscription: ARM answers `InvalidResourceType` ("The resource type could not be found in
 // the namespace 'Microsoft.Network' for api version '2025-09-01'").
-test.provider(
-  "interconnect group creation is rejected on the trial subscription",
+test.provider.skipIf(allowListed)(
+  "interconnect group creation is rejected without the preview feature",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -75,10 +82,11 @@ const program = (props: { tags: Record<string, string> }) =>
 
 // Needs a subscription with interconnect-group (GPU InfiniBand) capacity.
 // Run with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete an interconnect group",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureFeature("Microsoft.Network", "AllowInterconnectGroups");
       yield* stack.destroy();
 
       const { group, interconnect } = yield* stack.deploy(

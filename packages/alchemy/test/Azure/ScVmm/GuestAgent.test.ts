@@ -34,9 +34,9 @@ const program = (action: "install" | "repair") =>
   });
 
 // Installs into a running VM on an on-premises SCVMM behind an Arc resource
-// bridge (impossible on the free trial). Run with AZURE_TEST_PAID=1,
+// bridge (Azure cannot provision SCVMM itself). Run with AZURE_TEST_PAID=1,
 // AZURE_TEST_SCVMM_VM_MACHINE and AZURE_TEST_SCVMM_VM_PASSWORD.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !vmMachineId())(
   "install, repair, and delete an SCVMM guest agent",
   (stack) =>
     Effect.gen(function* () {

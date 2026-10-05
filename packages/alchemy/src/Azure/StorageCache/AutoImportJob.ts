@@ -11,6 +11,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  ProvisioningFailed,
   requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
@@ -313,11 +314,27 @@ export const AutoImportJobProvider = () =>
         autoImportJobName: name,
       };
       const get = getJob(subscriptionId, resourceGroup, filesystem, name);
+      // A failed job explains itself only in its status; surface it.
       const settle = waitForProvisioned(
         `auto import job ${name}`,
         get,
         (job) => job.properties?.provisioningState,
         JOB_BUDGET,
+      ).pipe(
+        Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
+          get.pipe(
+            Effect.flatMap((job) => {
+              const status = job?.properties?.status;
+              return Effect.fail(
+                new ProvisioningFailed({
+                  resource: failure.resource,
+                  state: failure.state,
+                  message: `${failure.message}: ${status?.statusCode ?? "unknown"} ${status?.statusMessage ?? ""}`,
+                }),
+              );
+            }),
+          ),
+        ),
       );
 
       // Observe.
@@ -342,8 +359,11 @@ export const AutoImportJobProvider = () =>
           ...where,
           location,
           tags,
+          // The API refuses to create a job with adminStatus 'Disable'
+          // ("cannot be started with adminStatus set to 'Disable'"); a
+          // disabled job is created enabled and disabled by the sync below.
           properties: {
-            adminStatus,
+            adminStatus: "Enable",
             autoImportPrefixes: news.autoImportPrefixes,
             conflictResolutionMode: news.conflictResolutionMode,
             enableDeletions: news.enableDeletions,

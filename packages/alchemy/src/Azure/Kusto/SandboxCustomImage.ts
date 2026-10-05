@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
 import { Resource } from "../../Resource.ts";
 import {
   ensureRegistered,
@@ -14,7 +15,6 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  createKustoChildName,
   isClusterOwnedByStack,
   lower,
   untilConverged,
@@ -27,8 +27,10 @@ export interface SandboxCustomImageProps {
   /** Name of the cluster. Changing it replaces the image. */
   cluster: string;
   /**
-   * Image name. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the image.
+   * Image name. If omitted, a unique name (lowercase letters and digits,
+   * at most 22 characters; Azure rejects hyphenated child names here) is
+   * generated from the app, stage, and logical ID. Changing it replaces the
+   * image.
    */
   name?: string;
   /**
@@ -47,7 +49,10 @@ export interface SandboxCustomImageProps {
    */
   baseImageName?: string;
   /**
-   * Contents of a pip `requirements.txt` with the packages to install.
+   * Contents of a pip `requirements.txt` with the packages to install, one
+   * per line. Azure fails the build with a bare "Internal Server Error" for
+   * pins that conflict with the packages the base image already ships
+   * (e.g. `six==1.16.0`), so prefer unpinned names.
    */
   requirementsFileContent?: string;
 }
@@ -94,7 +99,7 @@ export interface SandboxCustomImage extends Resource<
  *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   languageVersion: "3.10.8",
- *   requirementsFileContent: "scikit-learn==1.3.0\n",
+ *   requirementsFileContent: "scikit-learn\nlightgbm",
  * });
  * ```
  *
@@ -134,6 +139,18 @@ const toAttrs = (
   baseImageName: image.properties?.baseImageName,
 });
 
+/** Image names reject the hyphenated format other Kusto children use. */
+const createImageName = Effect.fn(function* (id: string) {
+  const name = yield* createPhysicalName({
+    id,
+    maxLength: 22,
+    lowercase: true,
+    delimiter: "",
+  });
+  const clean = name.replace(/[^a-z0-9]/g, "");
+  return /^[a-z]/.test(clean) ? clean : `i${clean}`.slice(0, 22);
+});
+
 export const SandboxCustomImageProvider = () =>
   Provider.succeed(SandboxCustomImage, {
     stables: [
@@ -155,8 +172,9 @@ export const SandboxCustomImageProvider = () =>
         news.cluster !== output.cluster ||
         (news.name !== undefined &&
           news.name !== output.sandboxCustomImageName) ||
+        // Azure echoes the language upper-cased (`PYTHON`).
         (output.language !== "" &&
-          (news.language ?? "Python") !== output.language)
+          lower(news.language ?? "Python") !== lower(output.language))
       ) {
         return { action: "replace" } as const;
       }
@@ -173,7 +191,7 @@ export const SandboxCustomImageProvider = () =>
       const name =
         output?.sandboxCustomImageName ??
         olds?.name ??
-        (yield* createKustoChildName(id));
+        (yield* createImageName(id));
       const observed = yield* getImage(
         subscriptionId,
         resourceGroup,
@@ -195,7 +213,7 @@ export const SandboxCustomImageProvider = () =>
       const name =
         news.name ??
         output?.sandboxCustomImageName ??
-        (yield* createKustoChildName(id));
+        (yield* createImageName(id));
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,

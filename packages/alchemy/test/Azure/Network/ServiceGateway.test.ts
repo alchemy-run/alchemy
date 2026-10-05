@@ -8,6 +8,8 @@ import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
+const allowListed = !!process.env.AZURE_TEST_SERVICE_GATEWAYS;
+
 const getGateway = (resourceGroupName: string, serviceGatewayName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
     network.GetServiceGateway({
@@ -40,10 +42,12 @@ const program = (props: { tags: Record<string, string> }) =>
     return { group, vnet, subnet, gateway };
   });
 
-// The trial subscription rejects service gateways: "Subscription X is not
-// registered for feature Microsoft.Network/AllowServiceGateways" (preview,
-// allow-listed). Probe the typed rejection ungated.
-test.provider(
+// Service gateways need the Microsoft.Network/AllowServiceGateways preview
+// feature, which is allow-listed by Microsoft (self-registration fails with
+// "The feature 'AllowServiceGateways' does not support registration").
+// Without it ARM answers "Subscription X is not registered for feature
+// Microsoft.Network/AllowServiceGateways". Probe the typed rejection.
+test.provider.skipIf(allowListed)(
   "service gateway creation is rejected without the preview feature",
   (stack) =>
     Effect.gen(function* () {
@@ -79,8 +83,9 @@ test.provider(
 
 // Service gateways are preview; the Standard SKU bills per hour (cents
 // for a few minutes). Needs the AllowServiceGateways feature: run with
-// AZURE_TEST_PAID=1 on an allow-listed subscription.
-test.provider.skipIf(!runPaidOnly)(
+// AZURE_TEST_PAID=1 and AZURE_TEST_SERVICE_GATEWAYS=1 on an allow-listed
+// subscription.
+test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete a service gateway",
   (stack) =>
     Effect.gen(function* () {

@@ -1,7 +1,10 @@
 import * as Azure from "@/Azure";
 import * as Output from "@/Output";
 import type { AzureOpError } from "@distilled.cloud/azure";
+import * as storage from "@distilled.cloud/azure/storage";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -70,8 +73,20 @@ export const lustreDependencies = (opts: { hsm: boolean; group: string }) =>
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.42.0.0/24",
+      // New subnets are private by default; without outbound access the
+      // cluster never reaches Azure services and creation fails after ~20
+      // minutes with InitialDeploymentTimeout.
+      defaultOutboundAccess: true,
     });
-    if (!opts.hsm) return { group, subnet, hsm: undefined, grants: undefined };
+    if (!opts.hsm) {
+      return {
+        group,
+        subnet,
+        hsm: undefined,
+        grants: undefined,
+        blob: undefined,
+      };
+    }
     const account = yield* Azure.Storage.StorageAccount("Account", {
       resourceGroup: group.resourceGroupName,
     });
@@ -111,8 +126,54 @@ export const lustreDependencies = (opts: { hsm: boolean; group: string }) =>
       group,
       subnet,
       hsm: { container: data.containerId, loggingContainer: logs.containerId },
+      blob: {
+        accountName: account.storageAccountName,
+        endpoint: account.primaryEndpoints.blob,
+        container: data.containerName,
+      },
       // Referenced from the file system's tags so it is created only after
       // the resource provider holds both roles.
       grants: Output.interpolate`${accountGrant.roleAssignmentName},${blobGrant.roleAssignmentName}`,
     };
+  });
+
+/**
+ * Upload a small blob into the blob-integration container. A file system
+ * imports the container's namespace at creation, so seeding `results/x`
+ * first makes `/results` a path an auto export job may target (export
+ * prefixes that match no path fail with "User provided prefix for export
+ * doesn't match any path").
+ */
+export const seedBlob = (props: {
+  resourceGroupName: string;
+  accountName: string;
+  endpoint: string;
+  container: string;
+  blobName: string;
+}) =>
+  Effect.gen(function* () {
+    const subscriptionId = yield* subscription;
+    const expiry = yield* Effect.sync(() =>
+      new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    );
+    const { accountSasToken } = yield* storage.ListStorageAccountAccountSAS({
+      subscriptionId,
+      resourceGroupName: props.resourceGroupName,
+      accountName: props.accountName,
+      signedServices: "b",
+      signedResourceTypes: "o",
+      signedPermission: "rcw",
+      signedProtocol: "https",
+      signedExpiry: expiry,
+    });
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.execute(
+      HttpClientRequest.put(
+        `${props.endpoint}${props.container}/${props.blobName}?${accountSasToken}`,
+      ).pipe(
+        HttpClientRequest.setHeader("x-ms-blob-type", "BlockBlob"),
+        HttpClientRequest.bodyText("seed", "text/plain"),
+      ),
+    );
+    return response.status;
   });

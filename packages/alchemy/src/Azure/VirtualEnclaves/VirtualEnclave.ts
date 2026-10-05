@@ -162,7 +162,10 @@ export interface VirtualEnclave extends Resource<
  * resource group attached to a {@link Community}. Workloads, enclave
  * endpoints and enclave connections live inside it.
  *
- * Provisioning takes 20-40+ minutes.
+ * Provisioning takes 20-40+ minutes. The first enclave of a community
+ * deploys the community's virtual hub; create further enclaves after it
+ * (make them depend on its `virtualEnclaveId`), because enclaves created
+ * concurrently with it end in provisioning state `Failed`.
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *

@@ -1404,6 +1404,13 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/azure" },
             { label: "Setup", link: "/azure/setup" },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Overview", link: "/azure/frontend/websites" },
+                { label: "Vite", link: "/azure/frontend/vite" },
+              ],
+            },
             providerResourcesEntry("Azure"),
           ],
         },

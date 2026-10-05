@@ -72,7 +72,8 @@ export interface JobPrivateEndpoint extends Resource<
  * A service-managed private endpoint of an elastic job agent — lets the
  * agent reach a SQL server that has public network access disabled. The
  * endpoint creates a pending private endpoint connection on the target
- * server that must be approved.
+ * server that must be approved. An agent has at most one private endpoint
+ * per target server, so a replacement deletes the old endpoint first.
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/elastic-jobs-overview#elastic-job-private-endpoints
  *
@@ -142,7 +143,9 @@ export const JobPrivateEndpointProvider = () =>
           lower(news.name) !== lower(output.privateEndpointName)) ||
         lower(news.targetServerId) !== lower(output.targetServerId)
       ) {
-        return { action: "replace" } as const;
+        // An agent allows one private endpoint per target server: a second
+        // one to the same server is accepted but never materializes.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

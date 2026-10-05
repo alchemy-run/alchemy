@@ -9,3 +9,5 @@ export * from "./Rule.ts";
 export * from "./Subscription.ts";
 export * from "./Topic.ts";
 export * from "./TopicAuthorizationRule.ts";
+export * from "./QueueSend.ts";
+export * from "./QueueSendHttp.ts";

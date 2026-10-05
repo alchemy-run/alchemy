@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runPaidOnly, withVcpus } from "../gates.ts";
 import {
-  appInsightsId,
   baseDefault,
   logLevel,
   subscription,
@@ -48,6 +47,10 @@ const program = (props: { tags: Record<string, string>; timeout: string }) =>
       instanceType: "Standard_E2s_v3",
       instanceCount: 1,
       requestSettings: { requestTimeout: props.timeout },
+      // The MLflow no-code image pip-installs its server at startup, which
+      // can outlast the default probe budget (502s until it is up).
+      livenessProbe: { initialDelay: "PT20M", failureThreshold: 30 },
+      readinessProbe: { failureThreshold: 120 },
       tags: props.tags,
     });
     return { ...base, endpoint, deployment };
@@ -56,9 +59,9 @@ const program = (props: { tags: Record<string, string>; timeout: string }) =>
 // A managed deployment runs a dedicated Standard_E2s_v3 (2 vCPUs, ~$0.13/h;
 // the cheapest SKU the model allows; the 20% surge reservation needs 4 Ev3
 // ML cores) and takes 10-20 minutes to provision, plus a rolling update and
-// deletion (~30-45 minutes, ~$0.15 per run). The free trial has no managed online endpoint VM quota, and the
-// endpoint needs a `Default` workspace (AZURE_ML_APP_INSIGHTS_ID).
-test.provider.skipIf(!runPaidOnly || !appInsightsId)(
+// deletion (~30-45 minutes, ~$0.15 per run). The free trial has no managed
+// online endpoint VM quota, and the endpoint needs a `Default` workspace.
+test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete an online deployment",
   (stack) =>
     Effect.gen(function* () {

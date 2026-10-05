@@ -2,7 +2,6 @@ import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { expect } from "alchemy-test";
-import { runPaidOnly } from "../gates.ts";
 import * as Effect from "effect/Effect";
 import {
   createVault,
@@ -40,13 +39,11 @@ const getConfig = (resourceGroupName: string) =>
     });
   });
 
-// Vaults created with current API versions get soft delete `AlwaysON`
-// set through the vault API, after which this legacy API rejects every
-// soft delete change with `BMSUserErrorSoftDeleteUseVaultApi` (and the
-// vault API cannot leave `AlwaysON` either). The full lifecycle needs a
-// legacy vault whose soft delete was never set through the vault API,
-// which can no longer be created; run with AZURE_TEST_PAID=1 against one.
-test.provider.skipIf(!runPaidOnly)(
+// Free vault, ~5 minutes. Vaults created with current API versions have
+// soft delete `AlwaysON` managed by the vault API (Azure no longer lets new
+// vaults disable soft delete), so the retention changes below go through
+// the provider's vault-API fallback.
+test.provider(
   "manage and restore a vault's soft delete settings",
   (stack) =>
     Effect.gen(function* () {
@@ -55,25 +52,24 @@ test.provider.skipIf(!runPaidOnly)(
       const { group, owner } = yield* stack.deploy(groupOnly);
       const rg = group.resourceGroupName;
       yield* createVault(rg, VAULT, owner);
-      // New vaults start with soft delete AlwaysON (editable until changed).
-      const initial = yield* getConfig(rg);
-      expect(initial.properties?.isSoftDeleteFeatureStateEditable).toEqual(
-        true,
-      );
 
-      // Create: disable soft delete.
+      // Create: keep soft-deleted items for 20 days.
       const created = yield* stack.deploy(
-        program({ softDeleteFeatureState: "Disabled" }),
+        program({
+          softDeleteFeatureState: "AlwaysON",
+          softDeleteRetentionPeriodInDays: 20,
+        }),
       );
-      expect(created.config.softDeleteFeatureState).toEqual("Disabled");
-      expect((yield* getConfig(rg)).properties?.softDeleteFeatureState).toEqual(
-        "Disabled",
-      );
+      expect(created.config.softDeleteFeatureState).toEqual("AlwaysON");
+      expect(created.config.softDeleteRetentionPeriodInDays).toEqual(20);
+      expect(
+        (yield* getConfig(rg)).properties?.softDeleteRetentionPeriodInDays,
+      ).toEqual(20);
 
-      // In-place: re-enable with a 30-day retention.
+      // In-place: 30-day retention.
       const updated = yield* stack.deploy(
         program({
-          softDeleteFeatureState: "Enabled",
+          softDeleteFeatureState: "AlwaysON",
           softDeleteRetentionPeriodInDays: 30,
         }),
       );
@@ -81,15 +77,15 @@ test.provider.skipIf(!runPaidOnly)(
         created.config.vaultConfigId,
       );
       const reobserved = yield* getConfig(rg);
-      expect(reobserved.properties?.softDeleteFeatureState).toEqual("Enabled");
+      expect(reobserved.properties?.softDeleteFeatureState).toEqual("AlwaysON");
       expect(reobserved.properties?.softDeleteRetentionPeriodInDays).toEqual(
         30,
       );
 
-      // Delete restores Azure's defaults (Enabled, 14 days).
+      // Delete restores Azure's default retention (14 days).
       yield* stack.deploy(groupOnly);
       const restored = yield* getConfig(rg);
-      expect(restored.properties?.softDeleteFeatureState).toEqual("Enabled");
+      expect(restored.properties?.softDeleteFeatureState).toEqual("AlwaysON");
       expect(restored.properties?.softDeleteRetentionPeriodInDays).toEqual(14);
 
       yield* deleteVault(rg, VAULT);
@@ -98,9 +94,8 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe (free vault, ~2 minutes): matching settings converge
-// without a write, and a soft delete change on a new vault fails with the
-// typed error.
+// Free vault, ~2 minutes: matching settings converge without a write, and
+// leaving the irreversible `AlwaysON` fails with the typed error.
 test.provider(
   "a new vault rejects soft delete changes with a typed error",
   (stack) =>

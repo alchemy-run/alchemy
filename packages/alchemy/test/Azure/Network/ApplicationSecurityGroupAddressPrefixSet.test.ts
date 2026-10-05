@@ -22,8 +22,14 @@ const getSet = (
     }),
   );
 
-// Prefix sets are a preview the trial subscription has a limit of 0 for:
-// the lifecycle runs only with AZURE_TEST_PAID=1.
+// Prefix sets are a private preview: subscriptions that Microsoft has not
+// allow-listed (pay-as-you-go included) get NetworkFeatureNotSupported
+// ("cannot contain more than 0 address prefix sets"), and no
+// self-registrable feature flag or Microsoft.Network usage lifts the limit.
+// The lifecycle runs with AZURE_TEST_PAID=1 and AZURE_TEST_ASG_PREFIX_SETS=1
+// on an allow-listed subscription.
+const allowListed = !!process.env.AZURE_TEST_ASG_PREFIX_SETS;
+
 const program = (prefixes: string[]) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -43,7 +49,7 @@ const program = (prefixes: string[]) =>
     return { group, asg, set };
   });
 
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete an application security group address prefix set",
   (stack) =>
     Effect.gen(function* () {
@@ -82,8 +88,8 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 600_000 },
 );
 
-test.provider(
-  "address prefix sets are rejected with a typed error on the trial",
+test.provider.skipIf(allowListed)(
+  "address prefix sets are rejected with a typed error without the preview",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

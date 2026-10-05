@@ -90,13 +90,13 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 7_200_000 },
+  { tags, timeout: 14_400_000 },
 );
 
 // Free, but slow: ARM accepts a monitor whose subnet does not exist, the
-// managed App Service plan deployment fails after ~4 minutes
-// (`AppServicePlanDeploymentFailed`), and deleting the failed monitor takes
-// over 30 minutes. The provider surfaces the recorded error instead of
+// managed deployment fails after ~4 minutes (`ArmOperationFailed` for the
+// missing VNet, or `AppServicePlanDeploymentFailed` when the plan step
+// fails first), and deleting the failed monitor takes 80-125 minutes. The provider surfaces the recorded error instead of
 // hanging. Runs only with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "a monitor in a missing subnet fails provisioning with a typed error",
@@ -121,11 +121,13 @@ test.provider.skipIf(!runExpensive)(
         )
         .pipe(Effect.flip);
       expect(error._tag).toEqual("Azure.ProvisioningFailed");
-      expect(JSON.stringify(error)).toContain("AppServicePlanDeploymentFailed");
+      expect(JSON.stringify(error)).toMatch(
+        /ArmOperationFailed|AppServicePlanDeploymentFailed/,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 5_400_000 },
+  { tags, timeout: 14_400_000 },
 );
 
 // Ungated probe (free: one empty resource group): a missing monitor reads

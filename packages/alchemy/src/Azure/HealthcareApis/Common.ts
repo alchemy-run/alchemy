@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -7,16 +8,73 @@ import { stackAndStage, type WaitBudget } from "../Arm.ts";
  * Generate a Health Data Services name (workspace, FHIR or DICOM service):
  * 3-24 lowercase letters and digits, starting with a letter.
  */
-export const createHealthcareName = Effect.fn(function* (id: string) {
+export const createHealthcareName = Effect.fn(function* (
+  id: string,
+  maxLength = 24,
+) {
   const name = yield* createPhysicalName({
     id,
-    maxLength: 24,
+    maxLength,
     lowercase: true,
     delimiter: "",
   });
   const cleaned = name.replace(/[^a-z0-9]/g, "");
-  return /^[a-z]/.test(cleaned) ? cleaned : `h${cleaned}`.slice(0, 24);
+  return /^[a-z]/.test(cleaned) ? cleaned : `h${cleaned}`.slice(0, maxLength);
 });
+
+/**
+ * Generated workspace names stay short so the FHIR/DICOM service IDs below
+ * them leave room for a readable service name.
+ */
+export const WORKSPACE_NAME_LENGTH = 16;
+
+/**
+ * Longest FHIR/DICOM service ARM resource ID that provisions. Measured in
+ * eastus: services whose ID is at most 253 characters reach `Succeeded`;
+ * IDs of 257+ characters (e.g. a 90-character resource group, the engine
+ * default, plus 24-character workspace and service names) are accepted by
+ * ARM but sit in `Creating` for 30-40 minutes and then end in `Failed`
+ * with no error detail.
+ */
+export const MAX_SERVICE_ID_LENGTH = 253;
+
+export interface ServiceScope {
+  subscriptionId: string;
+  resourceGroup: string;
+  workspace: string;
+  /** ARM collection of the service type. */
+  collection: "fhirservices" | "dicomservices";
+}
+
+const serviceIdOf = (scope: ServiceScope, name: string) =>
+  `/subscriptions/${scope.subscriptionId}/resourceGroups/${scope.resourceGroup}/providers/Microsoft.HealthcareApis/workspaces/${scope.workspace}/${scope.collection}/${name}`;
+
+/** Generate a FHIR/DICOM service name whose resource ID fits the limit. */
+export const createServiceName = (id: string, scope: ServiceScope) =>
+  createHealthcareName(
+    id,
+    Math.max(
+      3,
+      Math.min(24, MAX_SERVICE_ID_LENGTH - serviceIdOf(scope, "").length),
+    ),
+  );
+
+/** The service's resource ID exceeds {@link MAX_SERVICE_ID_LENGTH}. */
+export class HealthcareServiceIdTooLong extends Data.TaggedError(
+  "Azure.HealthcareApis.ServiceIdTooLong",
+)<{ message: string }> {}
+
+/** Fail fast instead of waiting ~40 minutes for an async `Failed`. */
+export const checkServiceId = (scope: ServiceScope, name: string) => {
+  const length = serviceIdOf(scope, name).length;
+  return length > MAX_SERVICE_ID_LENGTH
+    ? Effect.fail(
+        new HealthcareServiceIdTooLong({
+          message: `the resource ID of ${scope.collection} '${scope.workspace}/${name}' is ${length} characters; Health Data Services only provisions services whose resource ID is at most ${MAX_SERVICE_ID_LENGTH} characters (longer ones end in provisioning state 'Failed'). Shorten the resource group, workspace, or service name.`,
+        }),
+      )
+    : Effect.void;
+};
 
 /** ARM names, IDs, and locations compare case-insensitively. */
 export const sameArm = (a: string | undefined, b: string | undefined) =>

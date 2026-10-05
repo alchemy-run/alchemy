@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
@@ -34,7 +35,7 @@ const program = (props: { enableInternetSecurity: boolean }) =>
         asn: 64512,
         enableInternetSecurity: props.enableInternetSecurity,
         routing: {
-          associatedRouteTableId: `${hub.virtualHubId}/hubRouteTables/defaultRouteTable`,
+          associatedRouteTableId: Output.interpolate`${hub.virtualHubId}/hubRouteTables/defaultRouteTable`,
           propagatedLabels: ["default"],
         },
       },

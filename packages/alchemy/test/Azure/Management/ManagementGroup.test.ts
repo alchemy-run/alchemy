@@ -29,6 +29,27 @@ const groupGone = (groupId: string) =>
       until: (status) => status === "gone",
       times: 36,
     }),
+    // GET answers 404 as soon as an asynchronous DELETE is accepted, even
+    // if that delete later fails and the group reappears: require the
+    // absence to hold for ~30s.
+    Effect.flatMap((status) =>
+      status === "gone"
+        ? management.GetManagementGroup({ groupId }).pipe(
+            Effect.as("found" as const),
+            Effect.catchTag(["ManagementGroupNotFound", "NotFound"], () =>
+              Effect.succeed("gone" as const),
+            ),
+            Effect.catchTag("AuthorizationFailed", () =>
+              Effect.succeed("gone" as const),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              while: (s) => s === "gone",
+              times: 6,
+            }),
+          )
+        : Effect.succeed(status),
+    ),
   );
 
 /**
@@ -74,9 +95,9 @@ const program = (child: {
   });
 
 // Free ($0), but slow: the creator's implicit Owner grant on a new
-// management group takes up to ~10 minutes to propagate through ARM when the
-// deploying identity has no role on the tenant root group, and the group is
-// unusable (reads/writes refused) until then. Whole lifecycle ~12-14 min.
+// management group takes seconds to ~8 minutes to propagate through ARM when
+// the deploying identity has no role on the tenant root group, and the group
+// is unusable (reads/writes refused) until then. Whole lifecycle ~7-15 min.
 test.provider.skipIf(!runExpensive)(
   "create, rename, move, replace and delete a management group",
   (stack) =>
@@ -154,6 +175,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:management", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );

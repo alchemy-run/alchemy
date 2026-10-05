@@ -23,6 +23,7 @@ import type { Providers } from "../Providers.ts";
 import {
   COLLECTOR_BUDGET,
   createNetworkFunctionName,
+  retryWhileCollectorBusy,
   sameArm,
 } from "./Common.ts";
 
@@ -241,15 +242,17 @@ export const AzureTrafficCollectorProvider = () =>
 
       // Ensure.
       if (observed === undefined) {
-        yield* networkfunction.AzureTrafficCollectorsCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          properties:
-            news.virtualHubId === undefined
-              ? {}
-              : { virtualHub: { id: news.virtualHubId } },
-        });
+        yield* retryWhileCollectorBusy(
+          networkfunction.AzureTrafficCollectorsCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            properties:
+              news.virtualHubId === undefined
+                ? {}
+                : { virtualHub: { id: news.virtualHubId } },
+          }),
+        );
       }
       observed = yield* waitForProvisioned(
         label,
@@ -260,10 +263,9 @@ export const AzureTrafficCollectorProvider = () =>
 
       // Sync tags against observed state (the only mutable aspect).
       if (tagsDiffer(observed.tags, tags)) {
-        yield* networkfunction.UpdateAzureTrafficCollectorTags({
-          ...where,
-          tags,
-        });
+        yield* retryWhileCollectorBusy(
+          networkfunction.UpdateAzureTrafficCollectorTags({ ...where, tags }),
+        );
         observed = yield* waitForProvisioned(
           label,
           get,
@@ -281,11 +283,13 @@ export const AzureTrafficCollectorProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        networkfunction.DeleteAzureTrafficCollector({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          azureTrafficCollectorName: output.azureTrafficCollectorName,
-        }),
+        retryWhileCollectorBusy(
+          networkfunction.DeleteAzureTrafficCollector({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            azureTrafficCollectorName: output.azureTrafficCollectorName,
+          }),
+        ),
       );
       yield* waitUntilGone(
         `Azure Traffic Collector ${output.azureTrafficCollectorName}`,

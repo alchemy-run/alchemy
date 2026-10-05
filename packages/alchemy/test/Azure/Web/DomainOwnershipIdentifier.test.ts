@@ -5,8 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runPaidOnly } from "../gates.ts";
-import { f1PlanCreateRejection } from "./fixtures/f1-plan.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -55,10 +53,11 @@ const program = (
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // The free trial has F1 quota in westus3 (and none for Flex Consumption).
+    // eastus has zero App Service quota; westus2 has F1/B1 quota (westus3
+    // and centralus plan creates are often AppServicePlanCreateThrottled).
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "westus3",
+      location: "westus2",
       sku: "F1",
       os: "linux",
     });
@@ -80,11 +79,13 @@ const program = (
     return { group, app, id };
   });
 
-// Needs a fresh F1 plan, and F1 plan creates are throttled for the
-// subscription (HTTP 429 AppServicePlanCreateThrottled, see
-// fixtures/f1-plan.ts), so this runs only with AZURE_TEST_PAID=1.
+// Microsoft.Web answers every domain ownership identifier PUT with HTTP 404
+// `NotFound` "Cannot find WebSiteDomainVerificationIdentifier with name
+// <name>." (observed on api-versions 2019-08-01 through 2026-07-15, any
+// name), so creates cannot succeed; the ungated probe below asserts that.
+// The lifecycle runs only with AZURE_TEST_WEB_DOMAIN_OWNERSHIP_IDENTIFIER=1.
 // Cost: $0 (F1 Free plan). Provisioning: ~1-2 minutes.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!process.env.AZURE_TEST_WEB_DOMAIN_OWNERSHIP_IDENTIFIER)(
   "create, update, replace, and delete a domain ownership identifier",
   (stack) =>
     Effect.gen(function* () {
@@ -142,31 +143,40 @@ test.provider.skipIf(!runPaidOnly)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );
 
-// Probe: F1 plan creates are throttled for the subscription (see
-// fixtures/f1-plan.ts).
-test.provider.skipIf(runPaidOnly)(
-  "F1 plan create is rejected with AppServicePlanCreateThrottled",
+// Probe: the identifier PUT is rejected with NotFound although the app
+// exists. Cost: $0 (F1 Free plan).
+test.provider(
+  "domain ownership identifier create is rejected with NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { group } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location: "eastus",
-          });
-          return { group };
-        }),
-      );
-      const error = yield* f1PlanCreateRejection(group.resourceGroupName);
-      expect(error._tag).toEqual("AppServicePlanCreateThrottled");
+      const { group, app } = yield* stack.deploy(program(undefined));
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const site = yield* web.GetWebApp({
+        subscriptionId,
+        resourceGroupName: group.resourceGroupName,
+        name: app.siteName,
+      });
+      expect(site.name).toEqual(app.siteName);
+      const error = yield* web
+        .WebAppsCreateOrUpdateDomainOwnershipIdentifier({
+          subscriptionId,
+          resourceGroupName: group.resourceGroupName,
+          name: app.siteName,
+          domainOwnershipIdentifierName: "alchemy-probe",
+          properties: { value: "value-one" },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("NotFound");
+      expect(error.message).toContain("WebSiteDomainVerificationIdentifier");
       yield* stack.destroy();
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
-    timeout: 600_000,
+    timeout: 1_800_000,
   },
 );

@@ -32,10 +32,12 @@ const program = (props: { name?: string; tags?: Record<string, string> }) =>
   });
 
 // F0 is the free tier (~$0, ~1-3 minutes on an eligible subscription). The
-// free-trial subscription cannot create Health Bots at all: every region
-// either rejects the PUT with BadGateway after ~90s or reports the region is
-// not accepting new customers (see the probe below), so the lifecycle runs
-// only on a paid subscription.
+// Health Bot backend refuses new bots on the alchemy-testing subscription, on
+// the free trial AND on Pay-As-You-Go (verified 2026-10-05): every offered
+// region (eastus, eastus2, westus2, westcentralus, southcentralus, uksouth,
+// northeurope, southeastasia, australiaeast, centralindia, uaenorth) fails
+// the PUT with BadGateway "Server failed to process the request" for F0, C0
+// and C1, and westeurope is not accepting new customers. See the probe below.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete a health bot",
   (stack) =>
@@ -77,11 +79,11 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe (free: a rejected PUT in an empty resource group). On the
-// free-trial subscription the Health Bot backend fails every create with a
-// typed BadGateway and nothing is provisioned.
+// Ungated probe (free: a rejected PUT in an empty resource group). The
+// Health Bot backend fails every create with a typed BadGateway and nothing
+// is provisioned.
 test.provider(
-  "a free-trial subscription cannot create health bots",
+  "the health bot backend rejects new bots with BadGateway",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

@@ -20,8 +20,10 @@ export interface NetworkVirtualApplianceConnectionProps {
    */
   networkVirtualAppliance: string;
   /**
-   * Name of the connection. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the connection.
+   * Name of the connection. Azure currently accepts only
+   * `defaultConnection` ("Only defaultConnection is allowed on NVA in this
+   * release"). Changing it replaces the connection.
+   * @default "defaultConnection"
    */
   name?: string;
   /** BGP ASN of the appliance side. */
@@ -100,6 +102,7 @@ export const NetworkVirtualApplianceConnectionProvider = () =>
       nameAttr: "connectionName",
       parents: ["networkVirtualAppliance"],
       tracked: false,
+      physicalName: () => Effect.succeed("defaultConnection"),
       get: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetNetworkVirtualApplianceConnection({
@@ -117,13 +120,22 @@ export const NetworkVirtualApplianceConnectionProvider = () =>
           connectionName: path.name,
           ...body,
         }),
+      // Azure creates `defaultConnection` with the NVA and refuses to delete
+      // it; it is removed with the appliance.
+      goneWithParent: true,
       del: (subscriptionId, path) =>
-        network.DeleteNetworkVirtualApplianceConnection({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          networkVirtualApplianceName: path.networkVirtualAppliance!,
-          connectionName: path.name,
-        }),
+        network
+          .DeleteNetworkVirtualApplianceConnection({
+            subscriptionId,
+            resourceGroupName: path.resourceGroup,
+            networkVirtualApplianceName: path.networkVirtualAppliance!,
+            connectionName: path.name,
+          })
+          .pipe(
+            Effect.catchTag("NvaDefaultConnectionUndeletable", () =>
+              Effect.void,
+            ),
+          ),
       ownerTags: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetNetworkVirtualAppliance({
@@ -132,13 +144,17 @@ export const NetworkVirtualApplianceConnectionProvider = () =>
             networkVirtualApplianceName: path.networkVirtualAppliance!,
           }),
         ).pipe(Effect.map((nva) => nva?.tags)),
-      body: (news, { path }) => ({
+      // The PUT replaces the implicit connection: carry the observed values
+      // of fields the props leave unset.
+      body: (news, { path, observed }) => ({
         name: path.name,
         properties: {
           name: path.name,
-          asn: news.asn,
-          tunnelIdentifier: news.tunnelIdentifier,
-          bgpPeerAddress: news.bgpPeerAddresses,
+          asn: news.asn ?? observed?.properties?.asn,
+          tunnelIdentifier:
+            news.tunnelIdentifier ?? observed?.properties?.tunnelIdentifier,
+          bgpPeerAddress:
+            news.bgpPeerAddresses ?? observed?.properties?.bgpPeerAddress,
           enableInternetSecurity: news.enableInternetSecurity ?? false,
           routingConfiguration: routingConfigurationInput(news.routing),
         },

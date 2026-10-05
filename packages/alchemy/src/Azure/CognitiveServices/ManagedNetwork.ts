@@ -93,6 +93,9 @@ export interface ManagedNetwork extends Resource<
  *
  * The account must opt in with
  * `networkInjections: [{ scenario: "agent", useMicrosoftManagedNetwork: true }]`.
+ * While that injection is in place the network lives and dies with the
+ * account: deleting this resource leaves it for the account's deletion,
+ * which takes 25-50 minutes.
  *
  * @see https://learn.microsoft.com/azure/ai-foundry/how-to/managed-network
  *

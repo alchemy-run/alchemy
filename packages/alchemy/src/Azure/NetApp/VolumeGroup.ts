@@ -1,5 +1,7 @@
 import * as netapp from "@distilled.cloud/azure/netapp";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -238,6 +240,83 @@ interface Where {
 const getVolumeGroup = (where: Where) =>
   orUndefinedIfNotFound(netapp.GetVolumeGroup(where));
 
+/** A member volume name is held by a volume outside this group. */
+export class VolumeGroupVolumeNameInUse extends Data.TaggedError(
+  "Azure.NetApp.VolumeGroupVolumeNameInUse",
+)<{ readonly volumeName: string; readonly message: string }> {}
+
+/** Pool coordinates of a member volume. */
+const memberOf = (where: Where, volume: VolumeGroupVolume) => {
+  const { resourceGroup, pool } = parseNetAppId(volume.capacityPoolResourceId);
+  return {
+    resourceGroupName: resourceGroup ?? where.resourceGroupName,
+    poolName: pool ?? "",
+    volumeName: volume.name,
+  };
+};
+
+/**
+ * A group create whose member name is taken is accepted (201) and then
+ * fails asynchronously ("There already exists a volume with name ..."),
+ * leaving no group to observe. Check every member name first: wait while
+ * the holder is a volume still being deleted (e.g. the old group of a
+ * delete-first replacement), and fail fast when a live volume holds it.
+ */
+const waitMemberNamesFree = Effect.fn(function* (
+  where: Where,
+  location: string,
+  volumes: ReadonlyArray<VolumeGroupVolume>,
+) {
+  for (const volume of volumes) {
+    const member = memberOf(where, volume);
+    const check = netapp.CheckNetAppResourceNameAvailability({
+      subscriptionId: where.subscriptionId,
+      location,
+      name: `${where.accountName}/${member.poolName}/${member.volumeName}`,
+      type: "Microsoft.NetApp/netAppAccounts/capacityPools/volumes",
+      resourceGroup: member.resourceGroupName,
+    });
+    const first = yield* check;
+    if (first.isAvailable !== false) continue;
+    const holder = yield* getVolume(
+      where.subscriptionId,
+      member.resourceGroupName,
+      where.accountName,
+      member.poolName,
+      member.volumeName,
+    );
+    // This group's own in-flight create (e.g. after an interrupted run).
+    if (
+      holder?.properties.volumeGroupName?.toLowerCase() ===
+      where.volumeGroupName.toLowerCase()
+    ) {
+      continue;
+    }
+    if (
+      holder !== undefined &&
+      holder.properties.provisioningState?.toLowerCase() !== "deleting"
+    ) {
+      return yield* new VolumeGroupVolumeNameInUse({
+        volumeName: member.volumeName,
+        message: `volume ${member.volumeName} already exists in pool ${member.poolName}; volume group members need unused names`,
+      });
+    }
+    const last = yield* check.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("15 seconds"),
+        until: (result) => result.isAvailable !== false,
+        times: 60,
+      }),
+    );
+    if (last.isAvailable === false) {
+      return yield* new VolumeGroupVolumeNameInUse({
+        volumeName: member.volumeName,
+        message: `volume name ${member.volumeName} is still in use after waiting 15 minutes for its deleting volume: ${last.message ?? ""}`,
+      });
+    }
+  }
+});
+
 const toAttrs = (
   where: Where,
   group: netapp.GetVolumeGroupResponse,
@@ -345,6 +424,7 @@ export const VolumeGroupProvider = () =>
           resourceGroupName: where.resourceGroupName,
           accountName: where.accountName,
         });
+        yield* waitMemberNamesFree(where, parent.location, news.volumes);
         yield* whileBusy(
           netapp.CreateVolumeGroup({
             ...where,

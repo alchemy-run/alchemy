@@ -350,7 +350,15 @@ export const ComputeProvider = () =>
       const waitReady = waitForProvisioned(
         `machine learning compute ${name}`,
         get,
-        (compute) => compute.properties?.provisioningState,
+        // Right after a PUT the GET can still report the previous tags as
+        // `Succeeded`; only the desired tags count.
+        (compute) => {
+          const state = compute.properties?.provisioningState;
+          if (state !== undefined && state !== "Succeeded") return state;
+          return tagsDiffer(compute.tags ?? undefined, tags)
+            ? "Updating"
+            : state;
+        },
         // Compute instances regularly take 10-20 minutes to provision.
         { interval: "10 seconds", times: 150 },
       ).pipe(

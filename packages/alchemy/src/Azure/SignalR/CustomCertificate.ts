@@ -50,7 +50,8 @@ export interface CustomCertificateProps {
   keyVaultSecretName: string;
   /**
    * Version of the secret. If omitted, the service tracks the latest
-   * version.
+   * version. Azure does not allow updating it, so changing it replaces the
+   * certificate.
    */
   keyVaultSecretVersion?: string;
 }
@@ -178,7 +179,9 @@ export const CustomCertificateProvider = () =>
         (news.name !== undefined &&
           lower(news.name) !== lower(output.certificateName)) ||
         !sameUri(news.keyVaultBaseUri, output.keyVaultBaseUri) ||
-        lower(news.keyVaultSecretName) !== lower(output.keyVaultSecretName)
+        lower(news.keyVaultSecretName) !== lower(output.keyVaultSecretName) ||
+        (news.keyVaultSecretVersion ?? "") !==
+          (output.keyVaultSecretVersion ?? "")
       ) {
         return { action: "replace" } as const;
       }

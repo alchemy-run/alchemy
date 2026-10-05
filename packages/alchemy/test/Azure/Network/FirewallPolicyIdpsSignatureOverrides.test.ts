@@ -39,14 +39,15 @@ const program = (
     return { group, policy, overrides };
   });
 
-// A Premium firewall policy without firewalls is free, but on the trial
-// subscription every signatureOverrides call (GET/PUT/PATCH on
-// `.../signatureOverrides/default`, api-version 2025-09-01 and 2024-05-01)
-// returns an empty-bodied 404 `NotFound` on a standalone, Succeeded Premium
-// policy, while `ListFirewallPolicyIdpsSignatures` works. The endpoint
-// likely needs the policy attached to a Premium Azure Firewall
-// (≈ $1.75/hour, 10+ minutes). Run with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// A Premium firewall policy without firewalls is free, but every
+// signatureOverrides call (GET/PUT/PATCH on `.../signatureOverrides/default`)
+// returns an empty-bodied 404 `NotFound` on this pay-as-you-go
+// subscription: api-versions 2021-12-01 through 2025-09-01, eastus and
+// westus2, IDPS mode `Alert`, and with the policy attached to a Premium
+// Azure Firewall (probed 2026-10). `ListFirewallPolicyIdpsSignatures` works.
+// Run with AZURE_TEST_PAID=1 and AZURE_TEST_IDPS_OVERRIDES=1 where the
+// endpoint is served.
+test.provider.skipIf(!runPaidOnly || !process.env.AZURE_TEST_IDPS_OVERRIDES)(
   "set, update, clear, and delete IDPS signature overrides",
   (stack) =>
     Effect.gen(function* () {

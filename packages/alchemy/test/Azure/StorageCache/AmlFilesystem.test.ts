@@ -87,6 +87,7 @@ test.provider.skipIf(!runExpensive)(
           maintenanceWindow: { dayOfWeek: "Saturday", timeOfDayUTC: "03:30" },
           rootSquashSettings: {
             mode: "RootOnly",
+            noSquashNidLists: "10.42.0.[4-5]@tcp",
             squashUID: 65534,
             squashGID: 65534,
           },
@@ -105,6 +106,9 @@ test.provider.skipIf(!runExpensive)(
       expect(reobserved.properties?.rootSquashSettings?.mode).toEqual(
         "RootOnly",
       );
+      expect(
+        reobserved.properties?.rootSquashSettings?.noSquashNidLists,
+      ).toEqual("10.42.0.[4-5]@tcp");
       expect(reobserved.tags?.team).toEqual("hpc");
 
       // Replacement: capacity can only grow through an expansion job.

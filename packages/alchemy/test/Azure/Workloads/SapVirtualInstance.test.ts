@@ -9,7 +9,10 @@ import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-const getInstance = (resourceGroupName: string, sapVirtualInstanceName: string) =>
+const getInstance = (
+  resourceGroupName: string,
+  sapVirtualInstanceName: string,
+) =>
   Effect.gen(function* () {
     return yield* workloads.GetSapVirtualInstance({
       subscriptionId: yield* subscription,
@@ -61,7 +64,9 @@ test.provider.skipIf(!runPaidOnly || !CENTRAL_VM_ID)(
       expect(observed.tags?.env).toEqual("test");
 
       const updated = yield* stack.deploy(program("prod"));
-      expect(updated.vis.sapVirtualInstanceId).toEqual(vis.sapVirtualInstanceId);
+      expect(updated.vis.sapVirtualInstanceId).toEqual(
+        vis.sapVirtualInstanceId,
+      );
       const reobserved = yield* getInstance(group.resourceGroupName, SAP_SID);
       expect(reobserved.tags?.env).toEqual("prod");
 
@@ -113,9 +118,7 @@ test.provider(
         )
         .pipe(Effect.flip);
       expect(error._tag).toEqual("Azure.ProvisioningFailed");
-      expect(JSON.stringify(error)).toContain(
-        "DiscoveryFailed",
-      );
+      expect(JSON.stringify(error)).toContain("DiscoveryFailed");
 
       yield* stack.destroy();
       expect(

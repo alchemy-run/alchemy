@@ -21,10 +21,7 @@ const getCollector = (
     }),
   );
 
-const program = (props: {
-  location: string;
-  tags: Record<string, string>;
-}) =>
+const program = (props: { location: string; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -42,7 +39,7 @@ const program = (props: {
 
 // The collector bills ≈ $0.60/hour of uptime (billed per started hour;
 // two collectors across the replacement step ≈ $1.20 per run) and takes
-// 5-10 minutes to provision.
+// 5-10 minutes to provision (≈ 25 minutes for the whole lifecycle).
 test.provider.skipIf(!runExpensive)(
   "create, update tags, replace, and delete an Azure Traffic Collector",
   (stack) =>
@@ -106,7 +103,8 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  // Two 6-minute provisions plus two deletes outlast the default budget.
+  { tags, timeout: 2_700_000 },
 );
 
 // Ungated, free probe: a missing collector reads as the typed

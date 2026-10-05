@@ -45,6 +45,9 @@ const program = (sapSid: string) =>
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.20.2.0/24",
+      // cloud-init installs node_exporter from the Ubuntu archive; new
+      // VNets get no default outbound internet access otherwise.
+      defaultOutboundAccess: true,
     });
     const nic = yield* Azure.Network.NetworkInterface("Nic", {
       resourceGroup: group.resourceGroupName,
@@ -73,7 +76,7 @@ const program = (sapSid: string) =>
     return { group, monitor, vm, instance };
   });
 
-// Needs an AMS monitor (~$0.25/hour, 10-20 minutes to create, ~10-30 to
+// Needs an AMS monitor (~$0.25/hour, 10-20 minutes to create, ~10-80 to
 // delete) plus an F1als_v7 VM running node_exporter (~$0.03/hour). Runs only with
 // AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
@@ -129,7 +132,7 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withVcpus(1), logLevel),
-  { tags, timeout: 7_200_000 },
+  { tags, timeout: 14_400_000 },
 );
 
 // Ungated probe (free: one empty resource group): reading a provider

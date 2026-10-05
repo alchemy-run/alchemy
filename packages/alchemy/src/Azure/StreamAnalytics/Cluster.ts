@@ -142,8 +142,8 @@ const toAttrs = (
   tags: userTags(cluster.tags),
 });
 
-/** Provisioning and scaling a cluster takes 30-60 minutes. */
-const SLOW = { interval: "30 seconds", times: 60 } as const;
+/** Provisioning and scaling a cluster takes 30-90 minutes. */
+const SLOW = { interval: "30 seconds", times: 180 } as const;
 
 export const ClusterProvider = () =>
   Provider.succeed(Cluster, {

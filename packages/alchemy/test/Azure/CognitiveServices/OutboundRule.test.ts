@@ -60,8 +60,8 @@ const program = (props: {
     return { group, account, rule };
   });
 
-// Needs the managed VNet (~5-10 minutes to create, ~30 minutes to delete
-// with the account, preview) plus a managed private endpoint
+// Needs the managed VNet (~5-10 minutes to create, ~25 minutes to delete
+// with the account, up to ~50, preview) plus a managed private endpoint
 // (~$0.01/hour): gated as slow.
 test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete a managed network outbound rule",
@@ -116,5 +116,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 5_400_000 },
+  { tags, timeout: 7_200_000 },
 );

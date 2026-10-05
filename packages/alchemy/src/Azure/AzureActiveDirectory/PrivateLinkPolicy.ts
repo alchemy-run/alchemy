@@ -144,7 +144,12 @@ const sameTenants = (a: string[] | undefined, b: string[]) => {
   return left.length === right.length && left.every((t, i) => t === right[i]);
 };
 
-/** The policy by name, or `undefined` when it does not exist. */
+/**
+ * The policy by name, or `undefined` when it does not exist. Where the
+ * subscription does not expose `privateLinkForAzureAd`, every call fails with
+ * `InvalidResourceType`: no policy can exist there, so reads and deletes treat
+ * it as absent; creates surface it.
+ */
 export const getAadPrivateLinkPolicy = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -156,6 +161,8 @@ export const getAadPrivateLinkPolicy = (
       resourceGroupName,
       policyName,
     }),
+  ).pipe(
+    Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
   );
 
 const toAttrs = (
@@ -192,6 +199,8 @@ export const PrivateLinkPolicyProvider = () =>
               ),
             ),
           ),
+      ).pipe(
+        Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
       );
       return (page?.value ?? []).flatMap((policy) => {
         const group = resourceGroupOf(policy.id) ?? policy.resourceGroup;
@@ -294,7 +303,7 @@ export const PrivateLinkPolicyProvider = () =>
           resourceGroupName: output.resourceGroup,
           policyName: output.policyName,
         }),
-      );
+      ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.void));
       yield* waitUntilGone(
         `Entra private link policy ${output.policyName}`,
         getAadPrivateLinkPolicy(

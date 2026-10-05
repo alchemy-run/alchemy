@@ -17,8 +17,10 @@ export const MANAGED_LOCATION = "centralus";
 export const managedInstance = (
   password: Redacted.Redacted<string>,
   extra: Pick<Azure.Sql.ManagedInstanceProps, "identity"> = {},
+  location: string = MANAGED_LOCATION,
 ) =>
   Effect.gen(function* () {
+    const MANAGED_LOCATION = location;
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: MANAGED_LOCATION,
     });

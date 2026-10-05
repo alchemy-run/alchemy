@@ -19,6 +19,7 @@ import {
   profileOwnedByStack,
   sameName,
   waitForAfd,
+  whileOriginGroupNotReady,
   whileProfileBusy,
 } from "./CdnCommon.ts";
 
@@ -173,6 +174,21 @@ const toAttrs = (
   deploymentStatus: route.properties?.deploymentStatus,
 });
 
+/** Whether two routes on one endpoint share a path pattern and protocol. */
+const routesOverlap = (news: RouteProps, olds: RouteProps | undefined) => {
+  if (olds === undefined) return true;
+  const intersects = (a: readonly string[], b: readonly string[]) =>
+    a.some((x) => b.some((y) => x.toLowerCase() === y.toLowerCase()));
+  const defaultProtocols = ["Http", "Https"];
+  return (
+    intersects(news.patternsToMatch ?? ["/*"], olds.patternsToMatch ?? ["/*"]) &&
+    intersects(
+      news.supportedProtocols ?? defaultProtocols,
+      olds.supportedProtocols ?? defaultProtocols,
+    )
+  );
+};
+
 const desiredProperties = (news: RouteProps) => ({
   originGroup: { id: news.originGroupId },
   customDomains: (news.customDomainIds ?? []).map((id) => ({ id })),
@@ -196,15 +212,23 @@ export const RouteProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      const sameEndpoint =
+        sameName(news.resourceGroup, output.resourceGroup) &&
+        sameName(news.profile, output.profile) &&
+        sameName(news.endpoint, output.endpoint);
       if (
-        !sameName(news.resourceGroup, output.resourceGroup) ||
-        !sameName(news.profile, output.profile) ||
-        !sameName(news.endpoint, output.endpoint) ||
+        !sameEndpoint ||
         (news.name !== undefined && !sameName(news.name, output.routeName))
       ) {
-        return { action: "replace" } as const;
+        // An endpoint rejects two routes matching the same path pattern and
+        // protocol: a renamed route that keeps an overlapping match can only
+        // be created after the old one is gone.
+        return {
+          action: "replace",
+          deleteFirst: sameEndpoint && routesOverlap(news, olds),
+        } as const;
       }
       return undefined;
     }),
@@ -271,7 +295,7 @@ export const RouteProvider = () =>
       if (observed === undefined) {
         yield* cdn
           .CreateRoute({ ...where, properties })
-          .pipe(Effect.retry(whileProfileBusy));
+          .pipe(Effect.retry(whileOriginGroupNotReady));
       }
       observed = yield* waitForAfd(
         label,
@@ -284,7 +308,7 @@ export const RouteProvider = () =>
       if (Object.keys(changed).length > 0) {
         yield* cdn
           .UpdateRoute({ ...where, properties: changed })
-          .pipe(Effect.retry(whileProfileBusy));
+          .pipe(Effect.retry(whileOriginGroupNotReady));
         observed = yield* waitForAfd(
           label,
           get,

@@ -668,10 +668,10 @@ export const ClusterProvider = () =>
       };
       const label = `HDInsight cluster ${name}`;
       const get = getCluster(subscriptionId, resourceGroup, name);
-      // Creation takes 20+ minutes; resizes and gateway updates 5-15.
+      // Creation takes 20-40 minutes; resizes and gateway updates 5-15.
       const settle = waitForProvisioned(label, get, clusterStateOf, {
         interval: "30 seconds",
-        times: 60,
+        times: 100,
       });
 
       // Observe.

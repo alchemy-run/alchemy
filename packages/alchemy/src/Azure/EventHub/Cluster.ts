@@ -1,5 +1,6 @@
 import * as eventhub from "@distilled.cloud/azure/eventhub";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -95,7 +96,8 @@ export interface Cluster extends Resource<
  *
  * Dedicated clusters bill per capacity unit-hour (several dollars per hour)
  * with a 4-hour minimum: a cluster cannot be deleted until 4 hours after it
- * was created. Provisioning can take an hour or more.
+ * was created, so a delete issued earlier blocks (retrying) until then.
+ * Provisioning can take an hour or more.
  *
  * @see https://learn.microsoft.com/azure/event-hubs/event-hubs-dedicated-overview
  *
@@ -237,7 +239,7 @@ export const ClusterProvider = () =>
         label,
         getCluster(subscriptionId, resourceGroup, name),
         readiness,
-        { interval: "30 seconds", times: 60 },
+        { interval: "30 seconds", times: 150 },
       );
 
       // Observe.
@@ -267,7 +269,21 @@ export const ClusterProvider = () =>
           sku: capacityChanged ? sku : undefined,
           tags: tagsChanged ? tags : undefined,
         });
-        observed = yield* waitReady;
+        // The PATCH is applied asynchronously: the cluster can still read
+        // back Active with the previous tags/capacity right after it.
+        observed = yield* waitForProvisioned(
+          label,
+          getCluster(subscriptionId, resourceGroup, name),
+          (cluster) => {
+            const state = readiness(cluster);
+            if (state !== undefined && state !== "Succeeded") return state;
+            return (cluster.sku?.capacity ?? 1) === sku.capacity &&
+              !tagsDiffer(cluster.tags, tags)
+              ? "Succeeded"
+              : "Updating";
+          },
+          { interval: "10 seconds", times: 90 },
+        );
       }
 
       return toAttrs(resourceGroup, name, observed);
@@ -275,11 +291,26 @@ export const ClusterProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // A cluster cannot be deleted until 4 hours after it was created;
+      // retry the typed refusal until that minimum has elapsed (~4h15m).
       yield* ignoreNotFound(
         eventhub.DeleteCluster({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           clusterName: output.clusterName,
+        }),
+      ).pipe(
+        Effect.tapError((e) =>
+          e._tag === "EventHubClusterDeleteTooSoon"
+            ? Effect.logInfo(
+                `event hubs cluster ${output.clusterName} is younger than 4 hours; retrying delete`,
+              )
+            : Effect.void,
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "EventHubClusterDeleteTooSoon",
+          schedule: Schedule.spaced("3 minutes"),
+          times: 85,
         }),
       );
       yield* waitUntilGone(

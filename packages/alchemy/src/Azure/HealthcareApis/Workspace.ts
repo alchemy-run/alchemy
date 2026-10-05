@@ -17,6 +17,7 @@ import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createHealthcareName,
+  WORKSPACE_NAME_LENGTH,
   sameArm,
   whileChildrenExist,
   WORKSPACE_BUDGET,
@@ -36,8 +37,10 @@ export interface WorkspaceProps {
   /**
    * Globally unique workspace name: 3-24 lowercase letters and digits,
    * starting with a letter. It prefixes the host names of the workspace's
-   * FHIR and DICOM services. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the workspace.
+   * FHIR and DICOM services, whose full resource IDs must stay within 253
+   * characters. If omitted, a unique 16-character name is
+   * generated from the app, stage, and logical ID. Changing it replaces
+   * the workspace.
    */
   name?: string;
   /**
@@ -194,7 +197,7 @@ export const WorkspaceProvider = () =>
       const name =
         output?.workspaceName ??
         olds?.name ??
-        (yield* createHealthcareName(id));
+        (yield* createHealthcareName(id, WORKSPACE_NAME_LENGTH));
       const observed = yield* getWorkspace(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -209,7 +212,9 @@ export const WorkspaceProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.HealthcareApis");
       const resourceGroup = news.resourceGroup;
       const name =
-        news.name ?? output?.workspaceName ?? (yield* createHealthcareName(id));
+        news.name ??
+        output?.workspaceName ??
+        (yield* createHealthcareName(id, WORKSPACE_NAME_LENGTH));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredMarkerTags(id, news.tags);
       const where = {

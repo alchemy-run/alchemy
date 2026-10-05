@@ -6,3 +6,5 @@ export * from "./ManagedHsmPrivateEndpointConnection.ts";
 export * from "./Secret.ts";
 export * from "./Vault.ts";
 export * from "./VaultPrivateEndpointConnection.ts";
+export * from "./SecretRead.ts";
+export * from "./SecretReadHttp.ts";

@@ -161,8 +161,9 @@ export interface ProviderInstanceProps {
   /** Name of the parent monitor. Changing it replaces the provider instance. */
   monitor: string;
   /**
-   * Provider instance name. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the provider instance.
+   * Provider instance name, 2-20 characters. If omitted, a unique name is
+   * generated from the app, stage, and logical ID. Changing it replaces the
+   * provider instance.
    */
   name?: string;
   /**
@@ -308,8 +309,9 @@ const secretFingerprint = (settings: ProviderInstanceSettings) =>
     }),
   );
 
+// Provider instance names are 2-20 characters long.
 const createInstanceName = (id: string) =>
-  createPhysicalName({ id, maxLength: 60 });
+  createPhysicalName({ id, maxLength: 20 });
 
 const getInstance = (
   subscriptionId: string,

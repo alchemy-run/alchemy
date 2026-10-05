@@ -8,3 +8,5 @@ export * from "./Namespace.ts";
 export * from "./NamespaceAuthorizationRule.ts";
 export * from "./NetworkRuleSet.ts";
 export * from "./SchemaGroup.ts";
+export * from "./Send.ts";
+export * from "./SendHttp.ts";

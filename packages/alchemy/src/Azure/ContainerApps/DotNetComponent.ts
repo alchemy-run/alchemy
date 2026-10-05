@@ -45,7 +45,8 @@ export interface DotNetComponentProps {
   /**
    * Component name: lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the component.
+   * it replaces the component; an environment holds one Aspire dashboard,
+   * so the old dashboard is deleted before the new one is created.
    */
   name?: string;
   /**
@@ -161,7 +162,15 @@ export const DotNetComponentProvider = () =>
         lower(news.componentType ?? "AspireDashboard") !==
           lower(output.componentType)
       ) {
-        return { action: "replace" } as const;
+        // An environment holds at most one Aspire dashboard ("Aspire
+        // dashboard with name 'x' already exists in this environment"), so
+        // the old one must go before its replacement is created.
+        return {
+          action: "replace",
+          deleteFirst:
+            lower(news.componentType ?? "AspireDashboard") ===
+            "aspiredashboard",
+        } as const;
       }
       return undefined;
     }),

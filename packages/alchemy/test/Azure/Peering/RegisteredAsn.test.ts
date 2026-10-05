@@ -45,8 +45,9 @@ const getRegisteredAsn = (
     });
   });
 
-// Needs a provisioned peering of an approved Peering Service provider.
-test.provider.skipIf(!runPaidOnly)(
+// Needs a provisioned peering of an approved Peering Service provider
+// (`AZURE_TEST_PEER_ASN_ID`, see util.ts).
+test.provider.skipIf(!runPaidOnly || !operator.peerAsnId)(
   "create, replace, and delete a registered ASN",
   (stack) =>
     Effect.gen(function* () {
@@ -81,7 +82,7 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: the trial cannot hold a peering, so a registered ASN has
+// Ungated probe: without an approved peer ASN there is no peering, so a registered ASN has
 // no parent and Azure reports the typed not-found.
 test.provider(
   "a registered ASN without a peering is rejected with a typed error",

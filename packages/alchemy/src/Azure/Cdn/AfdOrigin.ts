@@ -20,6 +20,7 @@ import {
   ref,
   sameName,
   waitForAfd,
+  whileOriginGroupInUse,
   whileProfileBusy,
 } from "./CdnCommon.ts";
 
@@ -323,7 +324,7 @@ export const AfdOriginProvider = () =>
             originGroupName: output.originGroup,
             originName: output.originName,
           })
-          .pipe(Effect.retry(whileProfileBusy)),
+          .pipe(Effect.retry(whileOriginGroupInUse)),
       );
       yield* waitUntilGone(
         `Front Door origin ${output.originName}`,

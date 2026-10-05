@@ -21,7 +21,9 @@ const getSqlVm = (resourceGroupName: string, sqlVirtualMachineName: string) =>
 
 /** Checked-in admin password for the throwaway test VM (no public IP). */
 const ADMIN_PASSWORD = Redacted.make("Alchemy-Sql-Test-2026!");
-const VM_SIZE = process.env.AZURE_TEST_SQLVM_SIZE ?? "Standard_D2s_v5";
+// Dv5/DSv5 family quota is 0 and the B-series is capacity-restricted
+// (`SkuNotAvailable`) in eastus; DASv4 is a 2-vCPU/8 GiB SCSI size.
+const VM_SIZE = process.env.AZURE_TEST_SQLVM_SIZE ?? "Standard_D2as_v4";
 
 const program = (props: {
   dayOfWeek: "Sunday" | "Saturday";
@@ -80,8 +82,9 @@ const program = (props: {
   });
 
 // A 2-vCPU Windows VM with SQL Server Developer (~$0.19/hour) plus a
-// Premium SSD for ~30 minutes: ~$0.15 per run, but VM creation plus SQL
-// IaaS Agent registration takes 15-20 minutes, past the ~10 minute budget.
+// Premium SSD for ~40 minutes: ~$0.15 per run. SQL IaaS Agent registration
+// waits for first-boot SQL setup (~20 minutes), the settings update takes
+// ~15 minutes and unregistering ~2 minutes: ~37 minutes end to end.
 test.provider.skipIf(!runExpensive)(
   "register, update, and unregister a SQL virtual machine",
   (stack) =>
@@ -125,7 +128,7 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );
 
 // Ungated probe (free, ~1 minute): registering a VM that does not exist

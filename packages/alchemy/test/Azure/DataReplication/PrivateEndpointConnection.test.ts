@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
+import { ensureFeature } from "../features.ts";
 import {
   LOCATION,
   logLevel,
@@ -61,12 +61,15 @@ const getConnection = (rg: string, vault: string, name: string) =>
 // Vault is free; private endpoint ~$0.01/h; VNet free. ~5 minutes.
 // Private endpoints to a data replication vault are refused unless the
 // subscription has the `Microsoft.Network/AllowPrivateEndpoints` feature
-// registered, which the test subscription does not. Run with
-// AZURE_TEST_PAID=1 on a subscription with the feature registered.
-test.provider.skipIf(!runPaidOnly)(
+// registered. That feature is `approvalType: ApprovalRequired`: registering
+// it leaves it `Pending` until Microsoft approves it (registration was
+// requested for the test subscription on 2026-10-05). Run with
+// AZURE_TEST_DATAREPLICATION_PRIVATE_ENDPOINTS=1 once it is `Registered`.
+test.provider.skipIf(!process.env.AZURE_TEST_DATAREPLICATION_PRIVATE_ENDPOINTS)(
   "approve, update, and delete a data replication private endpoint connection",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureFeature("Microsoft.Network", "AllowPrivateEndpoints");
       yield* stack.destroy();
 
       const { group, vault, endpoint, approval } = yield* stack.deploy(

@@ -1,0 +1,22 @@
+{
+  "name": "azure-storage-example",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/azure-storage"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "@distilled.cloud/azure": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

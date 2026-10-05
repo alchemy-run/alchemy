@@ -1,5 +1,6 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -14,7 +15,8 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createEntityName, sameName } from "./Common.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import { sameName } from "./Common.ts";
 
 export interface WorkspaceGatewayConfigConnectionProps {
   /** Resource group of the workspace gateway. Changing it replaces the connection. */
@@ -27,10 +29,13 @@ export interface WorkspaceGatewayConfigConnectionProps {
    * @default a name generated from the stack, stage, and logical ID
    */
   name?: string;
-  /** ARM resource ID of the {@link Workspace} served by the gateway (`Workspace.workspaceId`). Changing it replaces the connection. */
+  /**
+   * ARM resource ID of the {@link Workspace} served by the gateway
+   * (`Workspace.workspaceId`). Changing it replaces the connection.
+   * Workspace gateways serve workspaces on their generated
+   * `defaultHostname`; custom hostnames are not supported.
+   */
   workspaceId: string;
-  /** Hostnames the gateway serves for this workspace. */
-  hostnames?: string[];
 }
 
 export interface WorkspaceGatewayConfigConnection extends Resource<
@@ -78,6 +83,10 @@ export const WorkspaceGatewayConfigConnection =
     "Azure.ApiManagement.WorkspaceGatewayConfigConnection",
   );
 
+/** Connection names: 1-30 characters, letters, digits, and hyphens. */
+const createConnectionName = (id: string) =>
+  createPhysicalName({ id, maxLength: 30, lowercase: true });
+
 const getConnection = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -123,16 +132,6 @@ const toAttrs = (
   defaultHostname: connection.properties.defaultHostname,
 });
 
-const sameHostnames = (a: readonly string[], b: readonly string[]) =>
-  [...a]
-    .map((h) => h.toLowerCase())
-    .sort()
-    .join(",") ===
-  [...b]
-    .map((h) => h.toLowerCase())
-    .sort()
-    .join(",");
-
 export const WorkspaceGatewayConfigConnectionProvider = () =>
   Provider.succeed(WorkspaceGatewayConfigConnection, {
     stables: ["connectionName", "connectionId", "gatewayName", "resourceGroup"],
@@ -152,7 +151,12 @@ export const WorkspaceGatewayConfigConnectionProvider = () =>
         (output.workspaceId !== "" &&
           !sameName(news.workspaceId, output.workspaceId))
       ) {
-        return { action: "replace" } as const;
+        // A kept explicit name keeps the path: delete the old connection
+        // first so its delete cannot remove the replacement.
+        return news.name !== undefined &&
+          sameName(news.name, output.connectionName)
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       return undefined;
     }),
@@ -165,7 +169,7 @@ export const WorkspaceGatewayConfigConnectionProvider = () =>
         return undefined;
       }
       const name =
-        output?.connectionName ?? olds?.name ?? (yield* createEntityName(id));
+        output?.connectionName ?? olds?.name ?? (yield* createConnectionName(id));
       const observed = yield* getConnection(
         subscriptionId,
         resourceGroup,
@@ -184,7 +188,7 @@ export const WorkspaceGatewayConfigConnectionProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.ApiManagement");
       const { resourceGroup, gatewayName } = news;
       const name =
-        news.name ?? output?.connectionName ?? (yield* createEntityName(id));
+        news.name ?? output?.connectionName ?? (yield* createConnectionName(id));
       const get = getConnection(
         subscriptionId,
         resourceGroup,
@@ -192,21 +196,28 @@ export const WorkspaceGatewayConfigConnectionProvider = () =>
         name,
       );
 
-      // Observe, then create or converge the hostnames with one upsert.
+      // Observe, then create (or re-point a connection left on another
+      // workspace) with one upsert.
       const observed = yield* get;
       const inSync =
         observed !== undefined &&
-        sameName(observed.properties.sourceId, news.workspaceId) &&
-        (news.hostnames === undefined ||
-          sameHostnames(observed.properties.hostnames ?? [], news.hostnames));
+        sameName(observed.properties.sourceId, news.workspaceId);
       if (!inSync) {
         yield* apim.ApiGatewayConfigConnectionCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,
           gatewayName,
           configConnectionName: name,
-          properties: { sourceId: news.workspaceId, hostnames: news.hostnames },
-        });
+          properties: { sourceId: news.workspaceId },
+        }).pipe(
+          // A workspace created moments earlier is not yet visible to the
+          // gateway control plane, which answers with an empty 500.
+          Effect.retry({
+            while: (e) => e._tag === "InternalServerError",
+            schedule: Schedule.spaced("15 seconds"),
+            times: 12,
+          }),
+        );
       }
       const current = yield* waitForProvisioned(
         `workspace gateway connection ${name}`,

@@ -27,6 +27,7 @@ export * as Confluent from "./Confluent/index.ts";
 export * as ConnectedCache from "./ConnectedCache/index.ts";
 export * as Consumption from "./Consumption/index.ts";
 export * as ContainerApps from "./ContainerApps/index.ts";
+export * as Functions from "./Functions/index.ts";
 export * as ContainerInstance from "./ContainerInstance/index.ts";
 export * as ContainerRegistry from "./ContainerRegistry/index.ts";
 export * as ContainerService from "./ContainerService/index.ts";
@@ -57,6 +58,18 @@ export * as DnsResolver from "./DnsResolver/index.ts";
 export * as DomainRegistration from "./DomainRegistration/index.ts";
 export * as DomainServices from "./DomainServices/index.ts";
 export * as DurableTask from "./DurableTask/index.ts";
+export {
+  AzureDataPlaneError,
+  AzureDataRole,
+  AzureHost,
+  AzureManagedIdentityError,
+  isAzureHost,
+  managedIdentityToken,
+  registerAzureHostType,
+  type AzureBindingContract,
+  type AzureHostShape,
+  type AzureRoleAssignmentBinding,
+} from "./Binding.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
 export * as Edge from "./Edge/index.ts";
@@ -157,5 +170,6 @@ export * as VirtualEnclaves from "./VirtualEnclaves/index.ts";
 export * as VMware from "./VMware/index.ts";
 export * as Web from "./Web/index.ts";
 export * as WebPubSub from "./WebPubSub/index.ts";
+export * as Website from "./Website/index.ts";
 export * as WeightsAndBiases from "./WeightsAndBiases/index.ts";
 export * as Workloads from "./Workloads/index.ts";

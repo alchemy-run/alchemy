@@ -157,7 +157,9 @@ test.provider(
       const updated = yield* stack.deploy(
         program({ values: "One", tags: { env: "two" } }),
       );
-      expect(updated.sns.siteNetworkServiceId).toEqual(sns.siteNetworkServiceId);
+      expect(updated.sns.siteNetworkServiceId).toEqual(
+        sns.siteNetworkServiceId,
+      );
       expect((yield* get).tags?.env).toEqual("two");
 
       yield* stack.destroy();
@@ -167,8 +169,8 @@ test.provider(
 );
 
 // Redeploying with new configuration values runs a second AOSM deployment
-// (~4-5 minutes each); with create and delete the lifecycle takes ~20
-// minutes, past the test budget. A few cents per run.
+// (~4-7 minutes each); with create and delete the lifecycle takes ~20
+// minutes. A few cents per run.
 test.provider.skipIf(!runExpensive)(
   "redeploy a site network service with new configuration values",
   (stack) =>
@@ -198,7 +200,9 @@ test.provider.skipIf(!runExpensive)(
       const updated = yield* stack.deploy(
         program({ values: "Two", tags: { env: "one" } }),
       );
-      expect(updated.sns.siteNetworkServiceId).toEqual(sns.siteNetworkServiceId);
+      expect(updated.sns.siteNetworkServiceId).toEqual(
+        sns.siteNetworkServiceId,
+      );
       const reobserved = yield* get;
       expect(reobserved.properties?.provisioningState).toEqual("Succeeded");
       expect(
@@ -208,5 +212,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get)).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );

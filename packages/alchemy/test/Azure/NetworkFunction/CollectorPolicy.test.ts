@@ -31,20 +31,21 @@ const program = (props: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // Both circuits stay deployed across every step.
+    // Both circuits stay deployed across every step. Collector policies
+    // reject circuits under 1 Gbps (`CollectorPolicyCircuitBandwidthNotSupported`).
     const primary = yield* Azure.Network.ExpressRouteCircuit("Primary", {
       resourceGroup: group.resourceGroupName,
       location: "eastus",
       serviceProviderName: "Equinix",
       peeringLocation: "Washington DC",
-      bandwidthInMbps: 50,
+      bandwidthInMbps: 1000,
     });
     const secondary = yield* Azure.Network.ExpressRouteCircuit("Secondary", {
       resourceGroup: group.resourceGroupName,
       location: "eastus",
       serviceProviderName: "Equinix",
       peeringLocation: "Washington DC",
-      bandwidthInMbps: 50,
+      bandwidthInMbps: 1000,
     });
     const collector = yield* Azure.NetworkFunction.AzureTrafficCollector(
       "Collector",
@@ -62,9 +63,9 @@ const program = (props: {
     return { group, primary, secondary, collector, policy };
   });
 
-// Needs ExpressRoute circuits (≈ $55/month each, billed from creation and
-// only usable once a connectivity provider provisions them) plus the
-// collector (≈ $0.60/hour). Not runnable on the free trial.
+// Needs two 1 Gbps ExpressRoute circuits (≈ $0.60/hour each, billed from
+// creation) plus the collector (≈ $0.60/hour); ≈ $1-2 and ~25 minutes per
+// run. Not runnable on the free trial.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a collector policy",
   (stack) =>
@@ -107,7 +108,7 @@ test.provider.skipIf(!runPaidOnly)(
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 2_700_000 },
 );
 
 // Ungated, free probe: a missing policy reads as the typed

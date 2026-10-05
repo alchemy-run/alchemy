@@ -1,5 +1,7 @@
 import * as cdn from "@distilled.cloud/azure/cdn";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -131,6 +133,23 @@ export interface AfdCustomDomain extends Resource<
 export const AfdCustomDomain = Resource<AfdCustomDomain>(
   "Azure.Cdn.AfdCustomDomain",
 );
+
+/**
+ * Front Door locks a custom domain while its ownership validation is
+ * `Submitting` or `Pending` (until the `_dnsauth` TXT record is published or
+ * the token expires): every update is rejected with `Conflict`.
+ */
+export class AfdCustomDomainValidationPending extends Data.TaggedError(
+  "Azure.Cdn.AfdCustomDomainValidationPending",
+)<{
+  readonly customDomain: string;
+  readonly hostName: string;
+  readonly domainValidationState: string;
+  readonly message: string;
+}> {}
+
+const VALIDATION_LOCKED_STATES = ["Submitting", "Pending"];
+
 
 const createDomainName = (id: string) => createAfdName(id, 50);
 
@@ -279,9 +298,39 @@ export const AfdCustomDomainProvider = () =>
       // Sync TLS, mTLS, and DNS-zone settings against observed state.
       const changed = changedFields(properties, observed.properties);
       if (Object.keys(changed).length > 0) {
+        const state = observed.properties?.domainValidationState;
+        const lockedState =
+          state !== undefined && VALIDATION_LOCKED_STATES.includes(state)
+            ? state
+            : undefined;
+        const token =
+          observed.properties?.validationProperties?.validationToken ??
+          "<validationToken>";
         yield* cdn
           .UpdateAFDCustomDomain({ ...where, properties: changed })
-          .pipe(Effect.retry(whileProfileBusy));
+          .pipe(
+            Effect.retry(
+              lockedState !== undefined
+                ? {
+                    while: (e) => e._tag === "ResourceConflict",
+                    schedule: Schedule.spaced("10 seconds"),
+                    times: 6,
+                  }
+                : whileProfileBusy,
+            ),
+            Effect.catchTag("ResourceConflict", (e) =>
+              lockedState !== undefined
+                ? Effect.fail<AfdCustomDomainValidationPending | typeof e>(
+                    new AfdCustomDomainValidationPending({
+                      customDomain: name,
+                      hostName: news.hostName,
+                      domainValidationState: lockedState,
+                      message: `Front Door custom domain ${news.hostName} cannot be updated while its validation is ${lockedState}: publish the TXT record _dnsauth.${news.hostName} = ${token} first.`,
+                    }),
+                  )
+                : Effect.fail(e),
+            ),
+          );
         observed = yield* waitForAfd(
           label,
           get,

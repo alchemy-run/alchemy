@@ -23,18 +23,19 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
-export type GeoCatalogIdentityType =
-  | "None"
-  | "SystemAssigned"
-  | "UserAssigned"
-  | "SystemAssigned,UserAssigned";
+/**
+ * Microsoft.Orbital/geoCatalogs only supports user-assigned identities;
+ * `SystemAssigned` is rejected with 400 "does not support creation of
+ * 'SystemAssigned' resource identity".
+ */
+export type GeoCatalogIdentityType = "None" | "UserAssigned";
 
 export interface GeoCatalogIdentity {
   /** Kind of managed identity attached to the GeoCatalog. */
   type: GeoCatalogIdentityType;
   /**
    * ARM resource IDs of user-assigned identities (required when `type`
-   * includes `UserAssigned`). Used to read ingestion sources.
+   * is `UserAssigned`). Used to read ingestion sources.
    */
   userAssignedIdentities?: string[];
 }
@@ -106,7 +107,10 @@ export interface GeoCatalog extends Resource<
      * `https://{name}.{label}.{region}.geocatalog.spatio.azure.com`.
      */
     catalogUri: string | undefined;
-    /** Principal ID of the system-assigned identity, if any. */
+    /**
+     * Principal ID of a system-assigned identity. GeoCatalogs only support
+     * user-assigned identities, so this is normally `undefined`.
+     */
     principalId: string | undefined;
     /** Provisioning state reported by ARM. */
     provisioningState: string | undefined;
@@ -226,7 +230,8 @@ const identityInSync = (
   return want.length === have.length && want.every((id, i) => id === have[i]);
 };
 
-const PROVISION_BUDGET = { interval: "10 seconds", times: 90 } as const;
+/** Creation was observed to take longer than 15 minutes. */
+const PROVISION_BUDGET = { interval: "30 seconds", times: 120 } as const;
 
 /**
  * Microsoft.Orbital rejects a write while another operation on the same
@@ -246,10 +251,10 @@ const retryWhileBusy = <A, E extends { readonly _tag: string }, R>(
 
 /**
  * GeoCatalog deletion runs for a long time in the background while GET
- * still reports `Succeeded`. A DELETE rejected because another DELETE is
+ * still reports `Succeeded` (observed > 30 minutes). A DELETE rejected because another DELETE is
  * already running has, in effect, been accepted.
  */
-const DELETE_BUDGET = { interval: "30 seconds", times: 60 } as const;
+const DELETE_BUDGET = { interval: "30 seconds", times: 150 } as const;
 
 const deleteCatalog = (where: {
   subscriptionId: string;

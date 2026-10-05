@@ -1,5 +1,6 @@
 import * as fabric from "@distilled.cloud/azure/fabric";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -198,6 +199,21 @@ const waitSettled = (
     { interval: "5 seconds", times: 60 },
   );
 
+/**
+ * A freshly created administrator (e.g. a managed identity) takes a minute
+ * or two to replicate to Fabric; retry the typed rejection for ~4 minutes.
+ */
+const retryUntilPrincipalsVisible = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "FabricCapacityPrincipalNotFound",
+      schedule: Schedule.spaced("15 seconds"),
+      times: 16,
+    }),
+  );
+
 const toAttrs = (
   resourceGroup: string,
   name: string,
@@ -299,13 +315,15 @@ export const CapacityProvider = () =>
 
       // Ensure.
       if (observed === undefined) {
-        yield* fabric.FabricCapacitiesCreateOrUpdate({
-          ...ref,
-          location,
-          tags,
-          sku: { name: sku, tier: "Fabric" },
-          properties: { administration: { members: administrators } },
-        });
+        yield* fabric
+          .FabricCapacitiesCreateOrUpdate({
+            ...ref,
+            location,
+            tags,
+            sku: { name: sku, tier: "Fabric" },
+            properties: { administration: { members: administrators } },
+          })
+          .pipe(retryUntilPrincipalsVisible);
       }
       observed = yield* settle;
 
@@ -326,14 +344,16 @@ export const CapacityProvider = () =>
       );
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (skuChanged || adminsChanged || tagsChanged) {
-        yield* fabric.UpdateFabricCapacity({
-          ...ref,
-          ...(skuChanged ? { sku: { name: sku, tier: "Fabric" } } : {}),
-          ...(adminsChanged
-            ? { properties: { administration: { members: administrators } } }
-            : {}),
-          ...(tagsChanged ? { tags } : {}),
-        });
+        yield* fabric
+          .UpdateFabricCapacity({
+            ...ref,
+            ...(skuChanged ? { sku: { name: sku, tier: "Fabric" } } : {}),
+            ...(adminsChanged
+              ? { properties: { administration: { members: administrators } } }
+              : {}),
+            ...(tagsChanged ? { tags } : {}),
+          })
+          .pipe(retryUntilPrincipalsVisible);
         observed = yield* settle;
       }
 

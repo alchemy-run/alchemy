@@ -71,7 +71,7 @@ const program = (props: { env: string; enableDiagnosticSettings: boolean }) =>
 // Explorer, Cosmos DB, Event Hubs, Redis, and Azure OpenAI into a managed
 // resource group; it needs preview enrollment, gated OpenAI access, and a
 // real Entra application. ~1 hour to create and again to delete; roughly
-// $30-60 per run. Far beyond the free trial's vCPU quota and credit.
+// $30-60 per run.
 test.provider.skipIf(!runPaidOnly || !aadApplicationId)(
   "create, update in place, and delete a manufacturing data service",
   (stack) =>
@@ -105,13 +105,15 @@ test.provider.skipIf(!runPaidOnly || !aadApplicationId)(
 );
 
 // Ungated probe (free): `Microsoft.ManufacturingPlatform` is an
-// allow-listed namespace that the trial subscription cannot see, so
-// registration, GET and list all fail with the typed
-// `InvalidResourceNamespace` (HTTP 404, NOT a resource not-found). A probing
-// PUT is not attempted: on an enrolled subscription a request that passes
-// validation starts a billed ~$30-60 deployment.
+// allow-listed namespace. Until Microsoft approves the subscription's
+// `Microsoft.ManufacturingPlatform/DefaultFeature` registration (it stays
+// `Pending`; pay-as-you-go does not auto-approve it), registration, GET and
+// list all fail with the typed `InvalidResourceNamespace` (HTTP 404, NOT a
+// resource not-found). A probing PUT is not attempted: on an enrolled
+// subscription a request that passes validation starts a billed ~$30-60
+// deployment.
 test.provider(
-  "the trial cannot use the manufacturing platform namespace",
+  "an un-enrolled subscription cannot use the manufacturing platform namespace",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

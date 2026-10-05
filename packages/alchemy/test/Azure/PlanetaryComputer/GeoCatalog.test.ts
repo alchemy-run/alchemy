@@ -33,33 +33,44 @@ const catalogGone = (resourceGroupName: string, catalogName: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("30 seconds"),
       until: (status) => status === "gone",
-      times: 60,
+      times: 150,
     }),
   );
 
 const program = (props: {
   name?: string;
-  identity?: Azure.PlanetaryComputer.GeoCatalogIdentity;
+  attachIdentity?: boolean;
   tags: Record<string, string>;
 }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
+    // Deployed in every step so a replacement never removes a dependency.
+    const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity(
+      "Identity",
+      { resourceGroup: group.resourceGroupName, location: "eastus" },
+    );
     const catalog = yield* Azure.PlanetaryComputer.GeoCatalog("Catalog", {
       resourceGroup: group.resourceGroupName,
       location: "eastus",
       name: props.name,
-      identity: props.identity,
+      identity: props.attachIdentity
+        ? {
+            type: "UserAssigned",
+            userAssignedIdentities: [identity.identityId],
+          }
+        : undefined,
       tags: props.tags,
     });
-    return { group, catalog };
+    return { group, identity, catalog };
   });
 
 // Billing is usage based (storage, data operations, ingestion vCPU-hours),
-// so an empty catalog costs ~$0, but the lifecycle is slow: a DELETE runs
-// in the background for ~40 minutes (GET keeps reporting `Succeeded`), and
-// this test deletes twice (replacement + destroy). Expect ~60-90 minutes.
+// so an empty catalog costs ~$0, but the lifecycle is slow: a create takes
+// more than 15 minutes, a DELETE runs in the background for 30+ minutes
+// (GET keeps reporting `Succeeded`), and this test creates and deletes
+// twice (replacement + destroy). Expect ~2-3 hours.
 test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete a GeoCatalog",
   (stack) =>
@@ -80,23 +91,33 @@ test.provider.skipIf(!runExpensive)(
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Catalog");
 
-      // In place: system-assigned identity and tags.
+      expect(observed.identity?.type ?? "None").toEqual("None");
+
+      // In place: attach a user-assigned identity and change tags.
       const updated = yield* stack.deploy(
-        program({ identity: { type: "SystemAssigned" }, tags: { env: "prod" } }),
+        program({ attachIdentity: true, tags: { env: "prod" } }),
       );
       expect(updated.catalog.catalogId).toEqual(catalog.catalogId);
-      expect(updated.catalog.principalId).toBeDefined();
       const reobserved = yield* getCatalog(
         group.resourceGroupName,
         catalog.catalogName,
       );
-      expect(reobserved.identity?.type).toEqual("SystemAssigned");
+      expect(reobserved.identity?.type).toEqual("UserAssigned");
+      expect(
+        Object.keys(reobserved.identity?.userAssignedIdentities ?? {}).map(
+          (id) => id.toLowerCase(),
+        ),
+      ).toEqual([updated.identity.identityId.toLowerCase()]);
       expect(reobserved.tags?.env).toEqual("prod");
 
       // Replacement: a new name creates a new catalog and deletes the old.
       const replacementName = `${catalog.catalogName.slice(0, 21)}-r`;
       const replaced = yield* stack.deploy(
-        program({ name: replacementName, tags: { env: "prod" } }),
+        program({
+          name: replacementName,
+          attachIdentity: true,
+          tags: { env: "prod" },
+        }),
       );
       expect(replaced.catalog.catalogName).toEqual(replacementName);
       expect(replaced.catalog.catalogId).not.toEqual(catalog.catalogId);
@@ -111,6 +132,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:planetarycomputer", "live"],
-    timeout: 5_400_000,
+    timeout: 14_400_000,
   },
 );

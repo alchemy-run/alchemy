@@ -3,9 +3,10 @@ import * as Test from "@/Test/Alchemy";
 import * as datadog from "@distilled.cloud/azure/datadog";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import {
+  acceptDatadogTerms,
   logLevel,
+  runWithDatadogUser,
   monitorStack,
   subscription,
   tags,
@@ -44,13 +45,14 @@ const program = (props: { sendResourceLogs: boolean; automuting: boolean }) =>
   });
 
 // Needs a Datadog monitor (Marketplace SaaS purchase, ~3-10 minutes); the
-// free trial cannot create one (see the Monitor probe). Run only with
-// AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// free trial cannot create one. Run only with
+// AZURE_TEST_PAID=1 and AZURE_TEST_DATADOG_USER_TOKEN=1 (user sign-in).
+test.provider.skipIf(!runWithDatadogUser)(
   "create, update, and reset datadog tag rules",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* acceptDatadogTerms;
 
       const { group, monitor, rules } = yield* stack.deploy(
         program({ sendResourceLogs: false, automuting: false }),

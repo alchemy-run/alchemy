@@ -9,7 +9,8 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 /**
  * Keys need an *activated* managed HSM (security domain downloaded, a
- * data-plane step with RSA certificates). Provide one as
+ * data-plane step with RSA certificates) whose data-plane setting
+ * `AllowKeyManagementOperationsThroughARM` is `true`. Provide one as
  * `AZURE_TEST_MANAGED_HSM=<resourceGroup>/<hsmName>`; the test does not
  * create or delete the HSM.
  */

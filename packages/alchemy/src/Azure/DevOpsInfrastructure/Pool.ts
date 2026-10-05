@@ -1,6 +1,7 @@
 import * as mdp from "@distilled.cloud/azure/devopsinfrastructure";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -409,9 +410,15 @@ const covers = (observed: unknown, desired: unknown): boolean => {
   }
   if (typeof desired === "object") {
     if (observed === null || typeof observed !== "object") return false;
+    const record = observed as Record<string, unknown>;
     return Object.entries(desired as Record<string, unknown>).every(
       ([key, value]) =>
-        covers((observed as Record<string, unknown>)[key], value),
+        covers(record[key], value) ||
+        // ARM stores a well-known image by its canonical name and keeps the
+        // requested spelling (e.g. `ubuntu-22.04/latest`) in `aliases`.
+        (key === "wellKnownImageName" &&
+          Array.isArray(record.aliases) &&
+          record.aliases.some((alias) => covers(alias, value))),
     );
   }
   if (typeof desired === "string" && typeof observed === "string") {
@@ -464,6 +471,23 @@ const toAttrs = (
   provisioningState: pool.properties?.provisioningState,
   tags: userTags(pool.tags),
 });
+
+/**
+ * Right after a create or update the service finishes background writes on
+ * the pool, and a PUT/DELETE in that window fails with `Conflict` ("The
+ * operation was interrupted by a conflicting concurrent write on the same
+ * entity. Please retry later.").
+ */
+const retryConflict = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+) =>
+  self.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Conflict",
+      schedule: Schedule.spaced("15 seconds"),
+      times: 12,
+    }),
+  );
 
 /** Pools can take 10-15 minutes to provision their scale set. */
 const PROVISION_BUDGET = { interval: "15 seconds", times: 60 } as const;
@@ -580,7 +604,7 @@ export const PoolProvider = () =>
             : Effect.fail(
                 new PoolCreateRejected({
                   poolName: name,
-                  message: `${label} was accepted and then removed by the service; its asynchronous validation failed. Check that the Azure DevOps organization exists and is connected to this Microsoft Entra tenant, and that devCenterProjectResourceId, the SKU, and images are valid.`,
+                  message: `${label} was accepted and then removed by the service; its asynchronous validation failed. Check that the Azure DevOps organization exists and is connected to this Microsoft Entra tenant, that devCenterProjectResourceId, the SKU, and images are valid, and that the region has Managed DevOps Pools quota for the SKU family (Managed DevOps Pools quota is separate from Compute quota; see Microsoft.DevOpsInfrastructure/locations/{region}/usages). The activity log entry for the pool write has the exact error.`,
                 }),
               );
         }),
@@ -592,7 +616,8 @@ export const PoolProvider = () =>
         PROVISION_BUDGET,
       );
 
-      // Sync each mutable aspect against observed state; PATCH only deltas.
+      // Sync: compare each mutable aspect against observed state and PUT
+      // only when something differs.
       const current = observed.properties;
       const delta: mdp.PoolUpdateProperties = {
         devCenterProjectResourceId: sameArm(
@@ -628,16 +653,34 @@ export const PoolProvider = () =>
       const identityChanged = identityDiffers(observed.identity, news.identity);
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (propsChanged || identityChanged || tagsChanged) {
-        yield* mdp.UpdatePool({
-          ...where,
-          tags: tagsChanged ? tags : undefined,
-          identity: identityChanged ? identity : undefined,
-          properties: propsChanged ? delta : undefined,
-        });
+        // A PATCH of `maximumConcurrency` returns the new value but is not
+        // applied (later GETs keep reporting the old one), so converge with
+        // the full PUT, which the service documents as its update path.
+        yield* retryConflict(
+          mdp.PoolsCreateOrUpdate({
+            ...where,
+            location: observed.location ?? location,
+            tags,
+            identity: identity ?? observed.identity,
+            properties,
+          }),
+        );
+        // Reads lag the PUT (a GET can report `Succeeded` with the old
+        // values), so keep polling until the applied delta is visible.
+        const settled = (pool: ObservedPool) => {
+          const state = stateOf(pool);
+          if (state !== "Succeeded") return state;
+          const applied =
+            (delta.maximumConcurrency === undefined ||
+              pool.properties?.maximumConcurrency ===
+                delta.maximumConcurrency) &&
+            (!tagsChanged || !tagsDiffer(pool.tags, tags));
+          return applied ? state : "Updating";
+        };
         observed = yield* waitForProvisioned(
           label,
           get,
-          stateOf,
+          settled,
           PROVISION_BUDGET,
         );
       }
@@ -647,13 +690,26 @@ export const PoolProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        mdp.DeletePool({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          poolName: output.poolName,
-        }),
+      const existing = yield* getPool(
+        subscriptionId,
+        output.resourceGroup,
+        output.poolName,
       );
+      if (existing === undefined) return;
+      // A second DELETE on a pool that is already `Deleting` (e.g. after an
+      // interrupted destroy) is rejected with a generic BadRequest, so only
+      // issue it when no delete is in flight.
+      if (existing.properties?.provisioningState !== "Deleting") {
+        yield* ignoreNotFound(
+          retryConflict(
+            mdp.DeletePool({
+              subscriptionId,
+              resourceGroupName: output.resourceGroup,
+              poolName: output.poolName,
+            }),
+          ),
+        );
+      }
       yield* waitUntilGone(
         `managed devops pool ${output.poolName}`,
         getPool(subscriptionId, output.resourceGroup, output.poolName),

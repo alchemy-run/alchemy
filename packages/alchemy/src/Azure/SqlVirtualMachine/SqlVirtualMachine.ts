@@ -2,6 +2,7 @@ import * as sqlvm from "@distilled.cloud/azure/sqlvirtualmachine";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -351,12 +352,13 @@ export const SqlVirtualMachineProvider = () =>
       };
       const label = `SQL virtual machine ${name}`;
       const get = getSqlVm(subscriptionId, resourceGroup, name);
-      // Registering installs the SQL IaaS Agent on the VM: minutes.
+      // Registering installs the SQL IaaS Agent on the VM; on a freshly
+      // created SQL image it waits for first-boot SQL setup: 10-25 minutes.
       const wait = waitForProvisioned(
         label,
         get,
         (vm) => vm.properties?.provisioningState,
-        { interval: "10 seconds", times: 60 },
+        { interval: "30 seconds", times: 60 },
       );
 
       const desired = {
@@ -426,12 +428,23 @@ export const SqlVirtualMachineProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // While the RP uninstalls the SQL IaaS extension, GET and DELETE answer
+      // 409 "does not have SQL IaaS extension installed"; it settles to a
+      // not-found in a few minutes.
       yield* ignoreNotFound(
-        sqlvm.DeleteSqlVirtualMachine({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          sqlVirtualMachineName: output.sqlVirtualMachineName,
-        }),
+        sqlvm
+          .DeleteSqlVirtualMachine({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            sqlVirtualMachineName: output.sqlVirtualMachineName,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "SqlVirtualMachineExtensionMissing",
+              schedule: Schedule.spaced("15 seconds"),
+              times: 40,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `SQL virtual machine ${output.sqlVirtualMachineName}`,
@@ -439,6 +452,10 @@ export const SqlVirtualMachineProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.sqlVirtualMachineName,
+        ).pipe(
+          Effect.catchTag("SqlVirtualMachineExtensionMissing", () =>
+            Effect.succeed("deleting" as const),
+          ),
         ),
         { interval: "10 seconds", times: 60 },
       );

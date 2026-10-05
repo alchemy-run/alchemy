@@ -118,7 +118,10 @@ test.provider(
 // Everything here is free (no dev boxes are created); ~6-10 minutes, $0.
 // Schedules accept only the name `default` and type `StopDevBox`, so there
 // is no replacement step.
-test.provider.skipIf(!runPaidOnly)(
+// Skipped: failed in the last live run. DevBoxTenantNotOnboarded: As of November 1st 2025,
+// Microsoft Dev Box has stopped accepting new customers. The tenant for the provided subscription
+// is not authorized to create Dev Box specific resources. Learn more about
+test.provider.skip(
   "create, update, and delete a dev box pool schedule",
   (stack) =>
     Effect.gen(function* () {

@@ -37,10 +37,14 @@ const program = (connectionTags: Record<string, string>) =>
       group.resourceGroupName,
       hub.communityId,
     );
+    // The first enclave deploys the community vHub; a second enclave
+    // created concurrently ends in provisioningState `Failed`.
     const target = yield* enclave(
       "Target",
       group.resourceGroupName,
-      hub.communityId,
+      Output.all(hub.communityId, source.virtualEnclaveId).pipe(
+        Output.map(([communityId]) => communityId),
+      ),
     );
     const endpoint = yield* Azure.VirtualEnclaves.EnclaveEndpoint("Ingress", {
       resourceGroup: group.resourceGroupName,
@@ -87,7 +91,10 @@ test.provider.skipIf(!runExpensive)(
         group.resourceGroupName,
         connection.enclaveConnectionName,
       );
-      expect((yield* get).tags?.env).toEqual("test");
+      const observed = yield* get;
+      expect(observed.tags?.env).toEqual("test");
+      // Defaulted to the source enclave's address space.
+      expect(observed.properties?.sourceCidr).toMatch(/^10\./);
 
       // In-place: tags.
       const updated = yield* stack.deploy(program({ env: "prod" }));

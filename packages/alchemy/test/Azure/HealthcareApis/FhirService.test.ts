@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runPaidOnly } from "../gates.ts";
+import { runExpensive } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -51,7 +51,7 @@ const fhirGone = (
 const program = (props: { origins: string[]; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "westus2",
+      location: "eastus",
     });
     const workspace = yield* Azure.HealthcareApis.Workspace("Workspace", {
       resourceGroup: group.resourceGroupName,
@@ -71,13 +71,12 @@ const program = (props: { origins: string[]; tags: Record<string, string> }) =>
     return { group, workspace, fhir };
   });
 
-// Consumption billed (~$0 for an empty service). On the free-trial
-// subscription every FHIR create (eastus and westus2) sat in 'Creating' for
-// ~40 minutes and then ended in provisioning state 'Failed' (activity log:
-// ResourceOperationFailure, no further detail), so the lifecycle only runs
-// on an upgraded subscription. No ungated probe: the rejection is an async
-// provisioning failure after ~30 minutes, not a synchronous typed error.
-test.provider.skipIf(!runPaidOnly)(
+// Consumption billed (~$0 for an empty service), but first-time
+// provisioning takes ~10-25 minutes. The engine-default
+// resource group name is 90 characters, so the provider shortens generated
+// service names to keep the service's resource ID within 253 characters;
+// 257+ character IDs end in provisioning state 'Failed' after ~30-40 min.
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete a FHIR service",
   (stack) =>
     Effect.gen(function* () {
@@ -93,6 +92,7 @@ test.provider.skipIf(!runPaidOnly)(
       expect(fhir.serviceUrl).toEqual(
         `https://${workspace.workspaceName}-${fhir.fhirServiceName}.fhir.azurehealthcareapis.com`,
       );
+      expect(fhir.fhirServiceId.length).toBeLessThanOrEqual(253);
       expect(fhir.audience).toEqual(fhir.serviceUrl);
       expect(fhir.tags).toEqual({ env: "test" });
 
@@ -149,6 +149,7 @@ test.provider.skipIf(!runPaidOnly)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:healthcareapis", "live"],
-    timeout: 900_000,
+    // First-time FHIR/DICOM provisioning can take 25-40 minutes.
+    timeout: 5_400_000,
   },
 );

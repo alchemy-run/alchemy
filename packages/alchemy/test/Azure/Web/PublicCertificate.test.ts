@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { runPaidOnly } from "../gates.ts";
-import { f1PlanCreateRejection } from "./fixtures/f1-plan.ts";
 import { CER_BASE64, PFX_THUMBPRINT } from "./fixtures/certificate.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -62,11 +61,13 @@ const program = (
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
     });
-    // Public certificates need Windows. F1 quota exists in westus3
-    // (centralus plan creates are throttled).
+    // Public certificates need Windows. eastus has zero App Service quota;
+    // westcentralus has F1/B1 quota, and Microsoft.Web throttles plan
+    // creates per region for hours (AppServicePlanCreateThrottled), which the
+    // other Web tests often trip in westus3, centralus and westus2.
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "westus3",
+      location: "westcentralus",
       sku,
       os: "windows",
     });
@@ -89,11 +90,10 @@ const program = (
     return { group, app, publicCert };
   });
 
-// Free (F1) plans refuse public certificates and the free trial has zero
-// Basic (B1) quota, so the lifecycle needs a paid subscription. Cost there:
-// B1 ~$0.018/h, under $0.01 per run. Provisioning: ~2-3 minutes.
+// Free (F1) plans refuse public certificates, so the lifecycle needs a paid
+// Basic (B1) plan: ~$0.018/h, under $0.01 per run. Provisioning: ~2-3 minutes.
 test.provider.skipIf(!runPaidOnly)(
-  "upload, update, replace, and delete a public certificate",
+  "upload, replace, and delete a public certificate",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -113,27 +113,25 @@ test.provider.skipIf(!runPaidOnly)(
         "CurrentUserMy",
       );
 
-      // In-place update: the certificate store.
-      const updated = yield* stack.deploy(
-        program("B1", { name: undefined, location: "LocalMachineMy" }),
+      // A redeploy with unchanged props keeps the certificate. The store is
+      // the only mutable prop, and outside an App Service Environment
+      // Microsoft.Web accepts only CurrentUserMy ("The parameter
+      // publicCertificateLocation has an invalid value." for LocalMachineMy).
+      const redeployed = yield* stack.deploy(
+        program("B1", { name: undefined, location: "CurrentUserMy" }),
       );
-      expect(updated.publicCert!.publicCertificateName).toEqual(
+      expect(redeployed.publicCert!.publicCertificateName).toEqual(
         cert.publicCertificateName,
       );
-      const moved = yield* getCertificate(
-        group.resourceGroupName,
-        app.siteName,
-        cert.publicCertificateName,
-      );
-      expect(moved.properties?.publicCertificateLocation).toEqual(
-        "LocalMachineMy",
+      expect(redeployed.publicCert!.publicCertificateId).toEqual(
+        cert.publicCertificateId,
       );
 
       // Replacement: a new name.
       const replaced = yield* stack.deploy(
         program("B1", {
           name: "alchemy-renamed-ca",
-          location: "LocalMachineMy",
+          location: "CurrentUserMy",
         }),
       );
       expect(replaced.publicCert!.publicCertificateName).toEqual(
@@ -161,16 +159,14 @@ test.provider.skipIf(!runPaidOnly)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );
 
 // Probe: an F1 app rejects a public certificate upload with a typed error
 // (observed live: "Adding a Public Certificate failed because it would
-// exceed the allowed amount of Free connections."). It needs a fresh F1
-// plan, and F1 plan creates are throttled for the subscription (see
-// fixtures/f1-plan.ts), so it runs only with AZURE_TEST_PAID=1 for now.
-test.provider.skipIf(!runPaidOnly)(
+// exceed the allowed amount of Free connections."). Cost: $0 (F1 plan).
+test.provider(
   "free plan rejects a public certificate with WebPublicCertificateNotAllowedOnTier",
   (stack) =>
     Effect.gen(function* () {
@@ -194,31 +190,6 @@ test.provider.skipIf(!runPaidOnly)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
-    timeout: 600_000,
-  },
-);
-
-// Probe: F1 plan creates are throttled for the subscription (see
-// fixtures/f1-plan.ts).
-test.provider.skipIf(runPaidOnly)(
-  "F1 plan create is rejected with AppServicePlanCreateThrottled",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const { group } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location: "eastus",
-          });
-          return { group };
-        }),
-      );
-      const error = yield* f1PlanCreateRejection(group.resourceGroupName);
-      expect(error._tag).toEqual("AppServicePlanCreateThrottled");
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:azure", "provider:azure:web", "live"],
-    timeout: 600_000,
+    timeout: 1_800_000,
   },
 );

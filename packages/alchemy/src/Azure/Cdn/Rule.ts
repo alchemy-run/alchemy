@@ -205,13 +205,20 @@ export const RuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      const sameRuleSet =
+        sameName(news.resourceGroup, output.resourceGroup) &&
+        sameName(news.profile, output.profile) &&
+        sameName(news.ruleSet, output.ruleSet);
       if (
-        !sameName(news.resourceGroup, output.resourceGroup) ||
-        !sameName(news.profile, output.profile) ||
-        !sameName(news.ruleSet, output.ruleSet) ||
+        !sameRuleSet ||
         (news.name !== undefined && !sameName(news.name, output.ruleName))
       ) {
-        return { action: "replace" } as const;
+        // Orders are unique within a rule set: a renamed rule that keeps its
+        // order can only be created after the old one is gone.
+        return {
+          action: "replace",
+          deleteFirst: sameRuleSet && news.order === output.order,
+        } as const;
       }
       return undefined;
     }),

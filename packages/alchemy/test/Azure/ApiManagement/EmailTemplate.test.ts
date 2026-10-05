@@ -41,7 +41,13 @@ const program = (subject?: string) =>
 // Email templates are not available on Consumption ("Method not allowed
 // in Consumption pricing tier"). A BasicV2 service bills ~$0.21/h and
 // takes 5-15+ minutes to create: est. ~$0.10 and ~25 minutes per run.
-test.provider.skipIf(!runExpensive)(
+// Pay-As-You-Go and MSDN subscriptions cannot write templates at all
+// (`PerSubEmailTemplateWrites`, pinned by the probe below), so the
+// lifecycle also needs AZURE_TEST_APIM_EMAIL_TEMPLATES=1 on an offer that
+// allows them (e.g. Enterprise Agreement).
+test.provider.skipIf(
+  !runExpensive || !process.env.AZURE_TEST_APIM_EMAIL_TEMPLATES,
+)(
   "customize, update, and reset an email template",
   (stack) =>
     Effect.gen(function* () {
@@ -72,6 +78,30 @@ test.provider.skipIf(!runExpensive)(
       );
       expect(reset.properties?.isDefault).toEqual(true);
 
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 1_800_000 },
+);
+
+// Probe (BasicV2, est. ~$0.05 and ~10 minutes): on Pay-As-You-Go the
+// template write is refused with the typed, non-retryable error.
+test.provider.skipIf(!runExpensive)(
+  "email template writes are refused on Pay-As-You-Go subscriptions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, service } = yield* stack.deploy(program());
+      const sub = yield* subscriptionId;
+      const error = yield* apim
+        .EmailTemplateCreateOrUpdate({
+          subscriptionId: sub,
+          resourceGroupName: group.resourceGroupName,
+          serviceName: service.serviceName,
+          templateName: "applicationApprovedNotificationMessage",
+          properties: { subject: "Probe", body: body("Probe") },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("ApiManagementEmailTemplateWritesNotAllowed");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 1_800_000 },

@@ -24,6 +24,7 @@ import {
   createMissionName,
   FAST,
   getCommunity,
+  getVirtualEnclave,
   lastSegment,
   NAMESPACE,
   sameName,
@@ -54,7 +55,11 @@ export interface EnclaveConnectionProps {
    * replaces the connection.
    */
   destinationEndpointId: string;
-  /** CIDR within the source allowed to reach the destination. */
+  /**
+   * CIDR within the source allowed to reach the destination. Azure
+   * requires one.
+   * @default the address space of the source enclave
+   */
   sourceCidr?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
@@ -250,6 +255,20 @@ export const EnclaveConnectionProvider = () =>
         FAST,
       );
 
+      // Azure rejects a connection without a source CIDR; default to the
+      // address space of a source enclave.
+      const sourceCidr =
+        news.sourceCidr ??
+        (/\/providers\/microsoft\.mission\/virtualenclaves\//i.test(
+          news.sourceId,
+        )
+          ? (yield* getVirtualEnclave(
+              subscriptionId,
+              resourceGroupOf(news.sourceId) ?? resourceGroup,
+              lastSegment(news.sourceId) ?? "",
+            ))?.properties?.enclaveAddressSpaces?.enclaveAddressSpace
+          : undefined);
+
       // Observe.
       let observed = yield* get;
 
@@ -274,7 +293,7 @@ export const EnclaveConnectionProvider = () =>
             communityResourceId: news.communityId,
             sourceResourceId: news.sourceId,
             destinationEndpointId: news.destinationEndpointId,
-            sourceCidr: news.sourceCidr,
+            sourceCidr,
           },
         });
       }
@@ -282,13 +301,13 @@ export const EnclaveConnectionProvider = () =>
 
       // Sync the source CIDR and tags; PATCH only the deltas.
       const cidrChanged =
-        news.sourceCidr !== undefined &&
-        news.sourceCidr !== observed.properties?.sourceCidr;
+        sourceCidr !== undefined &&
+        sourceCidr !== observed.properties?.sourceCidr;
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (cidrChanged || tagsChanged) {
         yield* mission.UpdateEnclaveConnection({
           ...where,
-          properties: cidrChanged ? { sourceCidr: news.sourceCidr } : undefined,
+          properties: cidrChanged ? { sourceCidr } : undefined,
           tags: tagsChanged ? tags : undefined,
         });
         observed = yield* waitReady;

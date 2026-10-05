@@ -32,9 +32,10 @@ const program = (clusterTags: Record<string, string>) =>
   });
 
 // Dedicated clusters bill ~$6.85 per CU-hour with a 4-hour minimum (a
-// cluster cannot be deleted for 4 hours after creation), so one run costs
-// ~$27+ and provisioning can take over an hour. Not available on the free
-// trial; run only on a paid subscription with AZURE_TEST_PAID=1.
+// cluster cannot be deleted for 4 hours after creation, so the final
+// destroy blocks until then), so one run costs ~$28 and takes ~4h05m
+// (a 1-CU self-serve cluster provisions in under a minute). Not available
+// on the free trial; run only on a paid subscription with AZURE_TEST_PAID=1.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a dedicated event hubs cluster",
   (stack) =>
@@ -67,5 +68,5 @@ test.provider.skipIf(!runPaidOnly)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 600_000 },
+  { tags, timeout: 15_600_000 },
 );

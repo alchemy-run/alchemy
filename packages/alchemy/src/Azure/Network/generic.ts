@@ -96,6 +96,13 @@ export interface NetworkResourceSpec<
   readonly inUseTags?: ReadonlyArray<string>;
   /** Delete the old resource before creating its replacement. */
   readonly deleteFirst?: boolean;
+  /**
+   * Azure creates the resource implicitly with its parent and refuses to
+   * delete it: after `del` (which must swallow that refusal) the resource
+   * is left for the parent's delete to remove, so delete does not wait for
+   * it to disappear.
+   */
+  readonly goneWithParent?: boolean;
   /** Extra immutable-field check: true forces a replacement. */
   readonly immutable?: (
     news: Res["Props"],
@@ -478,6 +485,7 @@ export const networkProvider =
           }),
         );
         yield* deleteOnce;
+        if (spec.goneWithParent) return;
         // A delete that ends `Failed` leaves the resource in place (seen on
         // hub NVAs, where a second DELETE succeeds): re-issue it.
         yield* waitGone(

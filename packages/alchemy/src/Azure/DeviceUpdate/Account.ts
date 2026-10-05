@@ -208,6 +208,20 @@ const whileOperationInProgress = {
   times: 36,
 } as const;
 
+/**
+ * Deleting an account whose instance is still being created or deleted
+ * fails with `InstanceIsNotInTerminalState`
+ * (`DeviceUpdateInstanceNotTerminal`); instances can stay `Creating` for
+ * over 20 minutes, so wait up to 30.
+ */
+const whileAccountBusy = {
+  while: (e: { readonly _tag: string }) =>
+    whileOperationInProgress.while(e) ||
+    e._tag === "DeviceUpdateInstanceNotTerminal",
+  schedule: Schedule.spaced("10 seconds"),
+  times: 180,
+} as const;
+
 const normalizeType = (type: string | undefined) =>
   (type ?? "None").replace(/\s/g, "").toLowerCase();
 
@@ -408,7 +422,7 @@ export const AccountProvider = () =>
             resourceGroupName: output.resourceGroup,
             accountName: output.accountName,
           })
-          .pipe(Effect.retry(whileOperationInProgress)),
+          .pipe(Effect.retry(whileAccountBusy)),
       );
       yield* waitUntilGone(
         `device update account ${output.accountName}`,

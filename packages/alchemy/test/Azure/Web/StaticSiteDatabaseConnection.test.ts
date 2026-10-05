@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runPaidOnly } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -87,13 +86,15 @@ const reveal = (value: string | Redacted.Redacted<string> | undefined) =>
     ? value
     : Redacted.value(value);
 
-// Microsoft.Web no longer implements creating Static Web Apps database
-// connections (the preview was retired): the PUT answers HTTP 500 "The
-// requested method is not implemented." (WebMethodNotImplemented). Runs
-// only with AZURE_TEST_PAID=1 in case the API returns. Cost: Basic SQL
-// database ($4.90/month) + Standard static site ($9/month) for ~10 minutes:
-// about $0.01. Provisioning: ~4-6 minutes (SQL server).
-test.provider.skipIf(!runPaidOnly)(
+// Static Web Apps database connections were retired on 2025-11-30
+// (https://learn.microsoft.com/azure/static-web-apps/database-overview):
+// the PUT answers HTTP 500 "The requested method is not implemented."
+// (WebMethodNotImplemented), asserted by the ungated probe below. The
+// lifecycle runs only with AZURE_TEST_SWA_DATABASE_CONNECTIONS=1, for a
+// subscription that still has the feature. Cost: Basic SQL database
+// ($4.90/month) + Standard static site ($9/month) for ~10 minutes: about
+// $0.01. Provisioning: ~4-6 minutes (SQL server).
+test.provider.skipIf(!process.env.AZURE_TEST_SWA_DATABASE_CONNECTIONS)(
   "connect, update, and disconnect a static site database",
   (stack) =>
     Effect.gen(function* () {

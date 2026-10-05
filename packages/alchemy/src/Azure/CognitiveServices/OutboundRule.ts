@@ -214,10 +214,15 @@ export const OutboundRuleProvider = () =>
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         !sameArm(news.resourceGroup, output.resourceGroup) ||
-        !sameArm(news.account, output.account) ||
-        (news.name !== undefined && !sameArm(news.name, output.ruleName))
+        !sameArm(news.account, output.account)
       ) {
         return { action: "replace" } as const;
+      }
+      // A network holds one rule per destination ("There is already an
+      // outbound rule to the same destination"), so a renamed rule must
+      // release it first.
+      if (news.name !== undefined && !sameArm(news.name, output.ruleName)) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       // Azure rejects any change to an existing user-defined rule ("Outbound
       // rules are immutable after creation"); the name stays, so the old

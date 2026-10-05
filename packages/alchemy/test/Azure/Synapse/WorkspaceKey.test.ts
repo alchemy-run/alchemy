@@ -54,6 +54,9 @@ const program = Effect.gen(function* () {
   const key = yield* Azure.KeyVault.Key("Cmk", {
     resourceGroup: group.resourceGroupName,
     vault: vault.vaultName,
+    // Synapse fails activation when `{vault}_{key}_{version}` exceeds ~128
+    // characters, so the generated (long) key name cannot be used.
+    name: "synapse-cmk",
     kty: "RSA",
     keySize: 3072,
   });

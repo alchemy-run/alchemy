@@ -23,14 +23,13 @@ const getAttestation = (scope: string, attestationName: string) =>
     }),
   );
 
+// A scan triggered right after an assignment is created can run before
+// the assignment has propagated and report nothing, so re-trigger the scan
+// each round until the assignment's compliance records appear.
 const awaitComplianceData = (resourceGroupName: string, assignmentId: string) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-    yield* policyinsights.TriggerPolicyStateResourceGroupEvaluation({
-      subscriptionId,
-      resourceGroupName,
-    });
-    yield* policyinsights
+    const hasState = policyinsights
       .ListPolicyStateQueryResultsForResourceGroup({
         subscriptionId,
         resourceGroupName,
@@ -49,12 +48,24 @@ const awaitComplianceData = (resourceGroupName: string, assignmentId: string) =>
               assignmentId.toLowerCase(),
           ),
         ),
+      );
+    const round = Effect.gen(function* () {
+      yield* policyinsights.TriggerPolicyStateResourceGroupEvaluation({
+        subscriptionId,
+        resourceGroupName,
+      });
+      return yield* hasState.pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("15 seconds"),
+          schedule: Schedule.spaced("20 seconds"),
           until: (found) => found,
-          times: 44,
+          times: 18,
         }),
       );
+    });
+    const found = yield* round.pipe(
+      Effect.repeat({ until: (found) => found, times: 7 }),
+    );
+    expect(found).toBe(true);
   });
 
 const baseProgram = () =>
@@ -208,6 +219,6 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:policyinsights", "live"],
-    timeout: 900_000,
+    timeout: 3_600_000,
   },
 );

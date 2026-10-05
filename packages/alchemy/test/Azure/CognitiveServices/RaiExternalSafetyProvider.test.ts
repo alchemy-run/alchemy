@@ -3,7 +3,6 @@ import * as Test from "@/Test/Alchemy";
 import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -22,11 +21,14 @@ const program = (props: { name: string; url: string }) =>
     return { provider };
   });
 
-// Subscription-scoped, no other resources: $0, seconds. The testing
-// subscription answers the PUT (api-version 2026-07-15-preview) with
-// HTTP 405 and an empty body, so the preview feature is not enabled for
-// it; run with AZURE_TEST_PAID=1 on a subscription that has it.
-test.provider.skipIf(!runPaidOnly)(
+// Subscription-scoped, no other resources: $0, seconds. Not rolled out to the
+// pay-as-you-go testing subscription: the RP manifest lists
+// `raiExternalSafetyProviders` with no locations, and ARM answers GET with
+// 404 and PUT with 405 (both with an empty body) on every advertised
+// api-version (2025-10-01-preview through 2026-09-15-preview); no
+// Microsoft.CognitiveServices preview feature enables it. Set
+// AZURE_TEST_SUBSCRIPTION_RAI=1 on a subscription that has it.
+test.provider.skipIf(!process.env.AZURE_TEST_SUBSCRIPTION_RAI)(
   "create, update, replace, and delete an external safety provider",
   (stack) =>
     Effect.gen(function* () {

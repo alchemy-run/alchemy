@@ -35,7 +35,8 @@ const program = (ports: string[]) =>
           {
             name: "mgmt",
             protocol: "TCP",
-            sourceAddressPrefix: "203.0.113.0/24",
+            // Azure only accepts /30, /31, and /32 source prefixes here.
+            sourceAddressPrefix: "203.0.113.0/30",
             destinationPortRanges: ports,
           },
         ],
@@ -43,9 +44,17 @@ const program = (ports: string[]) =>
     return { group, nva, rules };
   });
 
-// Needs a marketplace NVA in a Standard hub (blocked on the trial, 30+
-// minutes, ~$0.25/hour + vendor licence). Run with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// Needs a marketplace NVA in a Standard hub (30+ minutes, ~$0.25/hour +
+// vendor licence). Inbound security rules are the DNAT (internet inbound)
+// preview: Azure only applies them on DNAT-capable partner NVAs (Check
+// Point, Fortinet NGFW / SD-WAN and NGFW) created with an internet ingress
+// public IP and configured by the vendor's orchestration. On the
+// connectivity-only Barracuda SD-WAN fixture the first rule PUT is accepted
+// but leaves the appliance `Updating` indefinitely (later writes fail with
+// "Previous request in-progress" / "Parent Nva ... is Updating"; probed
+// 2026-10). Run with AZURE_TEST_PAID=1 and AZURE_TEST_NVA_DNAT=1 against a
+// DNAT-capable appliance.
+test.provider.skipIf(!runPaidOnly || !process.env.AZURE_TEST_NVA_DNAT)(
   "set, update, and clear NVA inbound security rules",
   (stack) =>
     Effect.gen(function* () {

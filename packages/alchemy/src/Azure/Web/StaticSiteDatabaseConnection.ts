@@ -73,6 +73,10 @@ export interface StaticSiteDatabaseConnection extends Resource<
  * database through the site's Data API builder endpoint (`/data-api`).
  * Requires the `Standard` plan.
  *
+ * Microsoft retired Static Web Apps database connections on 2025-11-30;
+ * creating one now fails with `WebMethodNotImplemented`. Self-host Data API
+ * builder (e.g. on Container Apps) and link it as a backend instead.
+ *
  * @see https://learn.microsoft.com/azure/static-web-apps/database-overview
  *
  * ### Connecting a Database

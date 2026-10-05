@@ -148,7 +148,7 @@ export const ResourceGroupProvider = () =>
         );
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news = {}, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         news.name !== undefined &&
@@ -175,7 +175,7 @@ export const ResourceGroupProvider = () =>
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const env = yield* AzureEnvironment.current;
       const { subscriptionId } = env;
       const name =

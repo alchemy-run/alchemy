@@ -2,7 +2,6 @@ import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { expect } from "alchemy-test";
-import { runPaidOnly } from "../gates.ts";
 import * as Effect from "effect/Effect";
 import {
   createVault,
@@ -42,12 +41,10 @@ const getConfig = (resourceGroupName: string) =>
     });
   });
 
-// Vaults created with current API versions get their redundancy set
-// through the vault API, after which this legacy API rejects changes with
-// `BMSUserErrorRedundancySettingsUseVaultApi`. The full lifecycle needs a
-// legacy vault, which can no longer be created; run with AZURE_TEST_PAID=1
-// against one.
-test.provider.skipIf(!runPaidOnly)(
+// Free vault, ~5 minutes. Vaults created with current API versions have
+// their redundancy managed by the vault API, so every change below goes
+// through the provider's vault-API fallback.
+test.provider(
   "manage and restore a vault's backup storage redundancy",
   (stack) =>
     Effect.gen(function* () {
@@ -57,7 +54,14 @@ test.provider.skipIf(!runPaidOnly)(
       const rg = group.resourceGroupName;
       yield* createVault(rg, VAULT, owner);
 
-      // Create: locally redundant storage.
+      // Matching settings converge without a write.
+      const matching = yield* stack.deploy(program("GeoRedundant"));
+      expect(matching.config.storageType).toEqual("GeoRedundant");
+      expect(matching.config.storageConfigId).toContain(
+        `/vaults/${VAULT}/backupstorageconfig/vaultstorageconfig`,
+      );
+
+      // Update: locally redundant storage.
       const created = yield* stack.deploy(program("LocallyRedundant"));
       expect(created.config.storageType).toEqual("LocallyRedundant");
       expect(created.config.storageTypeState).toEqual("Unlocked");
@@ -80,40 +84,6 @@ test.provider.skipIf(!runPaidOnly)(
         "GeoRedundant",
       );
 
-      yield* deleteVault(rg, VAULT);
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags, timeout: 900_000 },
-);
-
-// Ungated probe (free vault, ~2 minutes): matching settings converge
-// without a write, and a redundancy change on a new vault fails with the
-// typed error.
-test.provider(
-  "a new vault rejects redundancy changes with a typed error",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const { group, owner } = yield* stack.deploy(groupOnly);
-      const rg = group.resourceGroupName;
-      yield* createVault(rg, VAULT, owner);
-
-      const matching = yield* stack.deploy(program("GeoRedundant"));
-      expect(matching.config.storageType).toEqual("GeoRedundant");
-      expect(matching.config.storageConfigId).toContain(
-        `/vaults/${VAULT}/backupstorageconfig/vaultstorageconfig`,
-      );
-
-      const error = yield* stack
-        .deploy(program("LocallyRedundant"))
-        .pipe(Effect.flip);
-      expect(JSON.stringify(error)).toContain("BackupConfigManagedByVaultApi");
-      expect((yield* getConfig(rg)).properties?.storageType).toEqual(
-        "GeoRedundant",
-      );
-
-      yield* stack.deploy(groupOnly);
       yield* deleteVault(rg, VAULT);
       yield* stack.destroy();
     }).pipe(logLevel),

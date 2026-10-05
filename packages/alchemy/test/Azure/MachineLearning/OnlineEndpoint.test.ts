@@ -4,7 +4,6 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import {
-  appInsightsId,
   baseDefault,
   logLevel,
   subscription,
@@ -48,9 +47,9 @@ const program = (props: {
 // An online endpoint without deployments has no compute and no hourly
 // charge; ~6-10 minutes including a replacement. Hub workspaces reject
 // online endpoints ("The request is invalid.") and in hub-based projects
-// provisioning ends in `Failed`, so this needs a `Default` workspace, which
-// needs an existing Application Insights component (AZURE_ML_APP_INSIGHTS_ID).
-test.provider.skipIf(!appInsightsId)(
+// provisioning ends in `Failed`, so this needs a `Default` workspace (with a
+// template-deployed Application Insights component).
+test.provider(
   "create, update, replace, and delete an online endpoint",
   (stack) =>
     Effect.gen(function* () {
@@ -69,16 +68,17 @@ test.provider.skipIf(!appInsightsId)(
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Scoring");
 
-      // In-place: description and tags.
+      // In-place: tags.
       const updated = yield* stack.deploy(
-        program({ authMode: "Key", description: "v2", tags: { env: "prod" } }),
+        program({ authMode: "Key", description: "v1", tags: { env: "prod" } }),
       );
       expect(updated.endpoint.endpointId).toEqual(endpoint.endpointId);
       const reobserved = yield* get(endpoint.endpointName);
-      expect(reobserved.properties.description).toEqual("v2");
+      expect(reobserved.properties.description).toEqual("v1");
       expect(reobserved.tags?.env).toEqual("prod");
 
-      // Replacement: a new auth mode.
+      // Replacement: a new auth mode and description (Azure ignores
+      // description changes on an existing endpoint).
       const replaced = yield* stack.deploy(
         program({
           authMode: "AMLToken",
@@ -89,6 +89,7 @@ test.provider.skipIf(!appInsightsId)(
       expect(replaced.endpoint.endpointName).not.toEqual(endpoint.endpointName);
       const replacedObserved = yield* get(replaced.endpoint.endpointName);
       expect(replacedObserved.properties.authMode).toEqual("AMLToken");
+      expect(replacedObserved.properties.description).toEqual("v2");
       expect(yield* waitGone(get(endpoint.endpointName))).toEqual("gone");
 
       yield* stack.destroy();

@@ -49,7 +49,7 @@ const getRegisteredPrefix = (
 
 // Needs a provisioned peering of an approved Peering Service provider
 // that announces `AZURE_TEST_PEERING_PREFIX`.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !operator.peerAsnId || !customerPrefix)(
   "create and delete a registered prefix",
   (stack) =>
     Effect.gen(function* () {
@@ -77,7 +77,7 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: the trial cannot hold a peering, so a registered prefix
+// Ungated probe: without an approved peer ASN there is no peering, so a registered prefix
 // has no parent and Azure reports the typed not-found.
 test.provider(
   "a registered prefix without a peering is rejected with a typed error",

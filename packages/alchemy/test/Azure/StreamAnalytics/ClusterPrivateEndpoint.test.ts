@@ -115,6 +115,7 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:streamanalytics", "live"],
-    timeout: 900_000,
+    // Cluster create + delete can each take up to 90 minutes.
+    timeout: 14_400_000,
   },
 );

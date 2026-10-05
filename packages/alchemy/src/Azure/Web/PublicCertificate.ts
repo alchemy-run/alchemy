@@ -37,7 +37,9 @@ export interface PublicCertificateProps {
    */
   blob: string;
   /**
-   * Certificate store the certificate is loaded into.
+   * Certificate store the certificate is loaded into. Outside an App Service
+   * Environment Microsoft.Web accepts only `CurrentUserMy`; `LocalMachineMy`
+   * is rejected as an invalid value.
    * @default "CurrentUserMy"
    */
   publicCertificateLocation?: PublicCertificateLocation;
@@ -79,7 +81,6 @@ export interface PublicCertificate extends Resource<
  *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   blob: rootCaDerBase64,
- *   publicCertificateLocation: "LocalMachineMy",
  * });
  * // ca.thumbprint
  * ```
@@ -138,14 +139,22 @@ export const PublicCertificateProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      const sameSite =
+        lower(news.resourceGroup) === lower(output.resourceGroup) &&
+        lower(news.siteName) === lower(output.siteName);
+      const sameBlob = olds === undefined || news.blob === olds.blob;
       if (
-        lower(news.resourceGroup) !== lower(output.resourceGroup) ||
-        lower(news.siteName) !== lower(output.siteName) ||
+        !sameSite ||
+        !sameBlob ||
         (news.name !== undefined &&
-          lower(news.name) !== lower(output.publicCertificateName)) ||
-        (olds !== undefined && news.blob !== olds.blob)
+          lower(news.name) !== lower(output.publicCertificateName))
       ) {
-        return { action: "replace" } as const;
+        // An app holds a certificate (thumbprint) once: renaming it on the
+        // same app must delete the old one first, or the create fails with
+        // "The parameter location,thumbprint has an invalid value."
+        return sameSite && sameBlob
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       return undefined;
     }),

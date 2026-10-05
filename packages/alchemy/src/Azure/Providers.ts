@@ -38,6 +38,7 @@ import * as ConfluentProviders from "./Confluent/Providers.ts";
 import * as ConnectedCacheProviders from "./ConnectedCache/Providers.ts";
 import * as ConsumptionProviders from "./Consumption/Providers.ts";
 import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
+import * as FunctionsProviders from "./Functions/Providers.ts";
 import * as ContainerInstanceProviders from "./ContainerInstance/Providers.ts";
 import * as ContainerRegistryProviders from "./ContainerRegistry/Providers.ts";
 import * as ContainerServiceProviders from "./ContainerService/Providers.ts";
@@ -165,6 +166,7 @@ import * as VirtualEnclavesProviders from "./VirtualEnclaves/Providers.ts";
 import * as VMwareProviders from "./VMware/Providers.ts";
 import * as WebProviders from "./Web/Providers.ts";
 import * as WebPubSubProviders from "./WebPubSub/Providers.ts";
+import * as WebsiteProviders from "./Website/Providers.ts";
 import * as WeightsAndBiasesProviders from "./WeightsAndBiases/Providers.ts";
 import * as WorkloadsProviders from "./Workloads/Providers.ts";
 
@@ -197,6 +199,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   ConnectedCacheProviders,
   ConsumptionProviders,
   ContainerAppsProviders,
+  FunctionsProviders,
   ContainerInstanceProviders,
   ContainerRegistryProviders,
   ContainerServiceProviders,
@@ -324,6 +327,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   VMwareProviders,
   WebProviders,
   WebPubSubProviders,
+  WebsiteProviders,
   WeightsAndBiasesProviders,
   WorkloadsProviders,
 ];

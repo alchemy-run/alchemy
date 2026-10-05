@@ -1,4 +1,6 @@
 import * as Azure from "@/Azure";
+import type { InputProps } from "@/Input";
+import * as Output from "@/Output";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -40,14 +42,24 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
 /**
  * The resource group, storage account, Key Vault, and workspace every
  * workspace-child test deploys (no hourly charge; ~2-4 minutes). A `Hub`
- * workspace: a `Default` workspace also requires an Application Insights
- * component, which Alchemy cannot create yet.
+ * workspace unless `props` (optionally derived from the group) say
+ * otherwise.
  */
-export const baseWorkspace = (
-  props: Partial<Azure.MachineLearning.WorkspaceProps> = {},
+export const baseWorkspace = <E = never, R = never>(
+  props:
+    | Partial<InputProps<Azure.MachineLearning.WorkspaceProps>>
+    | ((
+        group: Azure.Resources.ResourceGroup,
+      ) => Effect.Effect<
+        Partial<InputProps<Azure.MachineLearning.WorkspaceProps>>,
+        E,
+        R
+      >) = {},
 ) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", { location });
+    const extra =
+      typeof props === "function" ? yield* props(group) : props;
     const storage = yield* Azure.Storage.StorageAccount("Artifacts", {
       resourceGroup: group.resourceGroupName,
       location,
@@ -65,7 +77,7 @@ export const baseWorkspace = (
       storageAccount: storage.storageAccountId,
       keyVault: vault.vaultId,
       kind: "Hub",
-      ...props,
+      ...extra,
     });
     return { group, storage, vault, workspace };
   });
@@ -76,7 +88,7 @@ export const baseWorkspace = (
  * (returned as `workspace`). No hourly charge; ~2-4 minutes.
  */
 export const baseProject = (
-  props: Partial<Azure.MachineLearning.WorkspaceProps> = {},
+  props: Partial<InputProps<Azure.MachineLearning.WorkspaceProps>> = {},
 ) =>
   Effect.gen(function* () {
     const base = yield* baseWorkspace();
@@ -91,13 +103,66 @@ export const baseProject = (
   });
 
 /**
- * An existing Application Insights component (ARM ID) for `Default`
- * workspaces. Alchemy cannot create one yet (distilled has no
- * `Microsoft.Insights/components` API), so tests that need a `Default`
- * workspace (AmlCompute, managed online endpoints) skip without it.
+ * A workspace-based Application Insights component (plus its Log Analytics
+ * workspace) for `Default` workspaces. Distilled has no
+ * `Microsoft.Insights/components` API, so it is created by an ARM template
+ * deployment in the test's resource group and removed with the group (no
+ * charge without ingestion).
  */
-export const appInsightsId = process.env.AZURE_ML_APP_INSIGHTS_ID;
+const appInsightsTemplate = {
+  $schema:
+    "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  contentVersion: "1.0.0.0",
+  variables: { name: "[concat('mlai', uniqueString(resourceGroup().id))]" },
+  resources: [
+    {
+      type: "Microsoft.OperationalInsights/workspaces",
+      apiVersion: "2022-10-01",
+      name: "[variables('name')]",
+      location: "[resourceGroup().location]",
+      properties: { sku: { name: "PerGB2018" }, retentionInDays: 30 },
+    },
+    {
+      type: "Microsoft.Insights/components",
+      apiVersion: "2020-02-02",
+      name: "[variables('name')]",
+      location: "[resourceGroup().location]",
+      kind: "web",
+      dependsOn: [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('name'))]",
+      ],
+      properties: {
+        Application_Type: "web",
+        WorkspaceResourceId:
+          "[resourceId('Microsoft.OperationalInsights/workspaces', variables('name'))]",
+      },
+    },
+  ],
+  outputs: {
+    componentId: {
+      type: "string",
+      value: "[resourceId('Microsoft.Insights/components', variables('name'))]",
+    },
+  },
+};
 
-/** A `Default` workspace (needs {@link appInsightsId}). */
+/**
+ * A `Default` workspace with a template-deployed Application Insights
+ * component (`Default` workspaces require one). No hourly charge;
+ * ~3-5 minutes.
+ */
 export const baseDefault = () =>
-  baseWorkspace({ kind: "Default", applicationInsights: appInsightsId });
+  baseWorkspace((group) =>
+    Effect.gen(function* () {
+      const insights = yield* Azure.Resources.Deployment("AppInsights", {
+        resourceGroup: group.resourceGroupName,
+        template: appInsightsTemplate,
+      });
+      return {
+        kind: "Default" as const,
+        applicationInsights: Output.map(insights.outputs, (outputs) =>
+          String(outputs.componentId),
+        ),
+      };
+    }),
+  );

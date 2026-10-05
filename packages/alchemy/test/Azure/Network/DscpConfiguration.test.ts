@@ -2,11 +2,18 @@ import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
+import { ensureFeature } from "../features.ts";
 import { runPaidOnly } from "../gates.ts";
 import * as Effect from "effect/Effect";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+// The Microsoft.Network/EnableDscpConfiguration preview feature needs Microsoft
+// approval: self-registration stays `Pending` on a pay-as-you-go subscription. The
+// lifecycle registers it and runs with AZURE_TEST_PAID=1 and AZURE_TEST_DSCP=1
+// once approved; otherwise the probe asserts the typed rejection.
+const allowListed = !!process.env.AZURE_TEST_DSCP;
 
 const getDscp = (resourceGroupName: string, dscpConfigurationName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
@@ -17,9 +24,9 @@ const getDscp = (resourceGroupName: string, dscpConfigurationName: string) =>
     }),
   );
 
-// DSCP configurations are free but the trial subscription rejects them
-// ("DSCP Configuration is currently not supported"): the lifecycle runs only
-// with AZURE_TEST_PAID=1.
+// DSCP configurations are free; without the feature ARM answers
+// NetworkFeatureNotSupported ("DSCP Configuration is currently not
+// supported").
 const program = (props: { marking: number; env: string }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -42,10 +49,11 @@ const program = (props: { marking: number; env: string }) =>
     return { group, dscp };
   });
 
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete a DSCP configuration",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureFeature("Microsoft.Network", "EnableDscpConfiguration");
       yield* stack.destroy();
 
       const { group, dscp } = yield* stack.deploy(
@@ -85,8 +93,8 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 600_000 },
 );
 
-test.provider(
-  "DSCP configurations are rejected with a typed error on the trial",
+test.provider.skipIf(allowListed)(
+  "DSCP configurations are rejected with a typed error without the preview feature",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

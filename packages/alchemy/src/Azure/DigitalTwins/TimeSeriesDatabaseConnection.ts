@@ -211,17 +211,22 @@ export const TimeSeriesDatabaseConnectionProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      const sameInstance =
+        news.resourceGroup.toLowerCase() ===
+          output.resourceGroup.toLowerCase() &&
+        news.instance.toLowerCase() === output.instance.toLowerCase();
+      if (!sameInstance) return { action: "replace" } as const;
       if (
-        news.resourceGroup.toLowerCase() !==
-          output.resourceGroup.toLowerCase() ||
-        news.instance.toLowerCase() !== output.instance.toLowerCase() ||
         (news.name !== undefined &&
           news.name.toLowerCase() !== output.connectionName.toLowerCase()) ||
         (olds !== undefined &&
           JSON.stringify(immutableOf(news)) !==
             JSON.stringify(immutableOf(olds)))
       ) {
-        return { action: "replace" } as const;
+        // An instance holds at most one connection ("Cannot create more
+        // than one time series database connection"), so the old one must
+        // go before its replacement is created.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

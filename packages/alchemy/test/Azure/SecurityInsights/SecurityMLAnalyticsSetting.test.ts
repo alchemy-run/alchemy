@@ -3,7 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
+import * as Schedule from "effect/Schedule";
 import { pollGone, sentinelWorkspace, tags } from "./sentinel.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -26,7 +26,10 @@ const getSetting = (
 const settingGone = (rg: string, ws: string, name: string) =>
   pollGone(
     getSetting(rg, ws, name).pipe(
-      Effect.as("found" as const),
+      // A missing setting is a 200 with an empty `{}` body.
+      Effect.map((s) =>
+        s.id === undefined ? ("gone" as const) : ("found" as const),
+      ),
       Effect.catchTag(
         ["ResourceNotFound", "ResourceGroupNotFound", "NotFound"],
         () => Effect.succeed("gone" as const),
@@ -38,11 +41,20 @@ const settingGone = (rg: string, ws: string, name: string) =>
 const builtInDefinition = (resourceGroupName: string, workspaceName: string) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-    const page = yield* securityinsights.ListSecurityMLAnalyticsSettings({
-      subscriptionId,
-      resourceGroupName,
-      workspaceName,
-    });
+    // Built-in definitions are seeded a few seconds after onboarding.
+    const page = yield* securityinsights
+      .ListSecurityMLAnalyticsSettings({
+        subscriptionId,
+        resourceGroupName,
+        workspaceName,
+      })
+      .pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (p) => p.value.length > 0,
+          times: 18,
+        }),
+      );
     const builtIn = page.value[0];
     if (builtIn?.name === undefined) {
       return yield* Effect.die(new Error("no built-in anomaly settings yet"));
@@ -81,44 +93,9 @@ const program = (opts?: {
     return { group, logs, setting };
   });
 
-// The free-trial workspace in eastus is not enabled for Sentinel anomalies
-// (built-in definitions are seeded hours after onboarding on supported
-// workspaces), so creation fails with this typed error.
+// ~$0: a pay-as-you-go workspace seeds the built-in anomaly definitions
+// seconds after onboarding.
 test.provider(
-  "anomaly settings are rejected on a fresh trial workspace",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const out = yield* stack.deploy(program());
-      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-      const error = yield* securityinsights
-        .SecurityMLAnalyticsSettingsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: out.group.resourceGroupName,
-          workspaceName: out.logs.workspaceName,
-          settingsResourceName: "6b1d6a8e-2f43-4c1a-9d1e-0a5c3b7e9f21",
-          kind: "Anomaly",
-          properties: {
-            displayName: "probe",
-            enabled: false,
-            anomalyVersion: "1.0.0",
-            frequency: "PT1H",
-            settingsStatus: "Flighting",
-            isDefaultSettings: false,
-            settingsDefinitionId: "f209df4c-a1a8-4b2b-9b21-7b4f1a6ad7b6",
-            customizableObservations: {},
-          },
-        })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("SentinelAnomaliesNotSupported");
-      yield* stack.destroy();
-    }),
-  { tags, timeout: 900_000 },
-);
-
-// Needs a workspace with anomalies enabled and built-in definitions seeded
-// (hours after onboarding); ~$0 once available.
-test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete Sentinel anomaly settings",
   (stack) =>
     Effect.gen(function* () {

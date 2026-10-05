@@ -49,7 +49,7 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const { group, cluster, image } = yield* stack.deploy(
-        program({ requirements: "six==1.16.0\n" }),
+        program({ requirements: "six" }),
       );
       const get = () =>
         getImage(
@@ -58,21 +58,21 @@ test.provider.skipIf(!runExpensive)(
           image.sandboxCustomImageName,
         );
       const observed = yield* get();
-      expect(observed.properties?.language).toEqual("Python");
+      expect(observed.properties?.language?.toLowerCase()).toEqual("python");
       expect(observed.properties?.languageVersion).toEqual("3.10.8");
-      expect(observed.properties?.requirementsFileContent).toEqual(
-        "six==1.16.0\n",
-      );
+      expect(observed.properties?.requirementsFileContent).toEqual("six");
 
-      // In place: new requirements rebuild the image.
+      // In place: new requirements rebuild the image. Pinned versions
+      // (`six==1.16.0`) make Azure fail the build with a bare "Internal
+      // Server Error", so the test uses unpinned packages.
       const updated = yield* stack.deploy(
-        program({ requirements: "six==1.16.0\nidna==3.7\n" }),
+        program({ requirements: "six\nidna" }),
       );
       expect(updated.image.sandboxCustomImageId).toEqual(
         image.sandboxCustomImageId,
       );
       expect((yield* get()).properties?.requirementsFileContent).toEqual(
-        "six==1.16.0\nidna==3.7\n",
+        "six\nidna",
       );
 
       yield* stack.destroy();

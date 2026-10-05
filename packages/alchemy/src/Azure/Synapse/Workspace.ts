@@ -57,7 +57,11 @@ export interface WorkspaceIdentity {
 export interface WorkspaceCustomerManagedKey {
   /** Name of the workspace key that wraps the data encryption key. */
   keyName: string;
-  /** Key Vault key URL (without version), e.g. `https://{vault}.vault.azure.net/keys/{key}`. */
+  /**
+   * Key Vault key URL (without version), e.g.
+   * `https://{vault}.vault.azure.net/keys/{key}`. Keep the key name short:
+   * activation fails when `{vault}_{key}_{version}` exceeds ~128 characters.
+   */
   keyVaultUrl: string;
   /**
    * ARM resource ID of a user-assigned identity used to access the key.

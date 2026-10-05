@@ -18,6 +18,13 @@ export const subscription = Effect.map(
   (env) => env.subscriptionId,
 );
 
+/** HDInsight cores in eastus covering one minimal cluster resized to 2 workers. */
+export const hdinsightCores = {
+  provider: "Microsoft.HDInsight",
+  resourceName: "cores",
+  minimum: 24,
+} as const;
+
 /** Fixed test credential satisfying HDInsight's complexity rules. */
 export const gatewayPassword = Redacted.make("Alchemy-Hdi-Test-Pass1!");
 

@@ -12,7 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createObjectName, lower } from "./common.ts";
+import { createManagedHsmKeyName, lower } from "./common.ts";
 import {
   type KeyAttrs,
   type KeyCommonProps,
@@ -43,7 +43,11 @@ export interface ManagedHsmKey extends Resource<
  * A key in an Azure Key Vault Managed HSM, managed through Azure Resource
  * Manager.
  *
- * The HSM must be activated (security domain downloaded) first. Like vault
+ * The HSM must be activated (security domain downloaded) first, and an
+ * HSM administrator must enable its `AllowKeyManagementOperationsThroughARM`
+ * setting; until then ARM rejects key operations with
+ * `ManagedHsmArmKeyManagementDisabled`. Key names are limited to 89
+ * characters. Like vault
  * keys, ARM can only create these keys: every property change creates a
  * new key, and keys are removed together with their HSM. `kty` defaults
  * to `RSA-HSM`.
@@ -123,7 +127,7 @@ export const ManagedHsmKeyProvider = () =>
         return undefined;
       }
       const name =
-        output?.keyName ?? olds?.name ?? (yield* createObjectName(id));
+        output?.keyName ?? olds?.name ?? (yield* createManagedHsmKeyName(id));
       const observed = yield* getKey(
         subscriptionId,
         resourceGroup,
@@ -143,7 +147,7 @@ export const ManagedHsmKeyProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.KeyVault");
       const { resourceGroup, managedHsm } = news;
       const name =
-        news.name ?? output?.keyName ?? (yield* createObjectName(id));
+        news.name ?? output?.keyName ?? (yield* createManagedHsmKeyName(id));
 
       // Observe, then ensure; the PUT is create-if-not-exist.
       let observed = yield* getKey(

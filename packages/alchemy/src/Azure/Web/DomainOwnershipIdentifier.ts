@@ -57,6 +57,11 @@ export interface DomainOwnershipIdentifier extends Resource<
  * App Service accepts as proof of ownership when another app binds a custom
  * domain already verified for this one.
  *
+ * Microsoft.Web currently rejects every identifier create with HTTP 404
+ * `NotFound` ("Cannot find WebSiteDomainVerificationIdentifier with name
+ * ..."), on every api-version; existing identifiers can still be read,
+ * updated and deleted.
+ *
  * @see https://learn.microsoft.com/azure/app-service/app-service-web-tutorial-custom-domain
  *
  * ### Registering an Identifier

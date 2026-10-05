@@ -1,5 +1,6 @@
 import * as mission from "@distilled.cloud/azure/mission";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -280,8 +281,11 @@ export const TransitHubProvider = () =>
       // Observe.
       let observed = yield* get;
 
-      // Ensure.
-      if (observed === undefined) {
+      // Ensure. A hub whose last provisioning failed is re-PUT.
+      if (
+        observed === undefined ||
+        observed.properties?.provisioningState === "Failed"
+      ) {
         const parent = news.location
           ? undefined
           : yield* getCommunity(subscriptionId, resourceGroup, community);
@@ -298,16 +302,34 @@ export const TransitHubProvider = () =>
       }
       observed = yield* waitReady;
 
-      // Sync settings and tags; PATCH only the deltas.
+      // Sync settings and tags against observed state. Like dedicated
+      // hubs, a PATCH of a community hub's tags is accepted but not
+      // applied, so the delta is sent as a full PUT.
       const properties = changedProperties(desired, observed.properties);
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (properties !== undefined || tagsChanged) {
-        yield* mission.UpdateTransitHub({
-          ...where,
-          properties,
-          tags: tagsChanged ? tags : undefined,
-        });
-        // The PATCH is applied asynchronously and the hub may still report
+        const current = observed.properties;
+        yield* mission
+          .TransitHubCreateOrUpdate({
+            ...where,
+            location: observed.location,
+            tags,
+            properties: {
+              state: desired.state ?? current?.state,
+              transitOption: desired.transitOption ?? current?.transitOption,
+              securityProvider:
+                desired.securityProvider ?? current?.securityProvider,
+            },
+          })
+          // The create's ARM operation can outlive the `Succeeded` state.
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "HybridNetworkOperationInProgress",
+              schedule: Schedule.spaced("30 seconds"),
+              times: 60,
+            }),
+          );
+        // The PUT is applied asynchronously and the hub may still report
         // its previous `Succeeded` state; wait until the tags are visible.
         observed = yield* waitForProvisioned(
           `transit hub ${name}`,
@@ -319,7 +341,7 @@ export const TransitHubProvider = () =>
               ? "Updating"
               : state;
           },
-          SLOW,
+          { interval: "30 seconds", times: 40 },
         );
       }
 
@@ -328,23 +350,38 @@ export const TransitHubProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        mission.DeleteTransitHub({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          communityName: output.community,
-          transitHubName: output.transitHubName,
-        }),
+      const get = getTransitHub(
+        subscriptionId,
+        output.resourceGroup,
+        output.community,
+        output.transitHubName,
       );
-      yield* waitUntilGone(
-        `transit hub ${output.transitHubName}`,
-        getTransitHub(
-          subscriptionId,
-          output.resourceGroup,
-          output.community,
-          output.transitHubName,
-        ),
-        SLOW,
+      // A DELETE accepted while a failed create is still settling can be
+      // dropped: the hub stays in its old state. Re-issue it each round
+      // unless the hub is already deleting.
+      const deleteRound = Effect.gen(function* () {
+        const observed = yield* get;
+        if (observed === undefined) return;
+        if (observed.properties?.provisioningState !== "Deleting") {
+          yield* ignoreNotFound(
+            mission.DeleteTransitHub({
+              subscriptionId,
+              resourceGroupName: output.resourceGroup,
+              communityName: output.community,
+              transitHubName: output.transitHubName,
+            }),
+          );
+        }
+        yield* waitUntilGone(`transit hub ${output.transitHubName}`, get, {
+          interval: "30 seconds",
+          times: 30,
+        });
+      });
+      yield* deleteRound.pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Azure.DeleteTimedOut",
+          times: 4,
+        }),
       );
     }),
 

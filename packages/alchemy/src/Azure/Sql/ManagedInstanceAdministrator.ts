@@ -23,7 +23,12 @@ export interface ManagedInstanceAdministratorProps {
   resourceGroup: string;
   /** Name of the SQL managed instance. Changing it replaces the administrator. */
   managedInstance: string;
-  /** Display name of the Microsoft Entra user, group, or application. */
+  /**
+   * Display name of the Microsoft Entra user, group, or application. The
+   * instance rejects very long names (e.g. 128-character generated managed
+   * identity names) as invalid logins. The instance's identity must hold
+   * the Entra "Directory Readers" role to resolve the administrator.
+   */
   login: string;
   /** Object ID (user/group) or application ID of the administrator. */
   sid: string;

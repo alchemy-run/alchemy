@@ -75,9 +75,9 @@ export interface ServiceGroupMember extends Resource<
  *
  * The membership is an extension resource on the member and is deleted
  * with it. Memberships cannot be tagged; a generated name (derived from
- * the app, stage, and logical ID) identifies Alchemy's own. The tenant
- * must have Azure Service Groups enabled; otherwise Azure rejects the
- * write with `RelationshipCallbacksNotEnabled`.
+ * the app, stage, and logical ID) identifies Alchemy's own. Writes use the
+ * 2023-09-01-preview API, which works in tenants without relationship
+ * lifecycle callbacks (the GA write rejects those tenants).
  *
  * @see https://learn.microsoft.com/azure/governance/service-groups/create-service-group-member-rest-api
  *
@@ -220,8 +220,8 @@ export const ServiceGroupMemberProvider = () =>
           resourceUri: resourceId,
           name,
           properties: {
-            sourceId: serviceGroupId,
-            sourceTenant: news.sourceTenant,
+            targetId: serviceGroupId,
+            targetTenant: news.sourceTenant,
           },
         });
       }

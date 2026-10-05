@@ -21,10 +21,7 @@ const getProjectPolicy = (
     });
   });
 
-const program = (props: {
-  skus: "Allow" | "Deny";
-  scopedName?: string;
-}) =>
+const program = (props: { skus: "Allow" | "Deny"; scopedName?: string }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -89,9 +86,7 @@ test.provider(
       );
 
       // In place: the resource policies.
-      const updated = yield* stack.deploy(
-        program({ skus: "Deny" }),
-      );
+      const updated = yield* stack.deploy(program({ skus: "Deny" }));
       expect(updated.policy.projectPolicyId).toEqual(policy.projectPolicyId);
       const reobserved = yield* getProjectPolicy(
         group.resourceGroupName,

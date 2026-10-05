@@ -1,5 +1,6 @@
 import * as mission from "@distilled.cloud/azure/mission";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -280,16 +281,31 @@ export const DedicatedHubProvider = () =>
       }
       observed = yield* waitReady;
 
-      // Sync designation and tags; PATCH only the deltas.
+      // Sync designation and tags against observed state. Azure accepts a
+      // PATCH of a dedicated hub's tags but never applies it, so the
+      // delta is sent as a full PUT.
       const properties = changedProperties(desired, observed.properties);
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (properties !== undefined || tagsChanged) {
-        yield* mission.UpdateDedicatedHub({
-          ...where,
-          properties,
-          tags: tagsChanged ? tags : undefined,
-        });
-        // The PATCH is applied asynchronously and the hub may still report
+        yield* mission
+          .DedicatedHubCreateOrUpdate({
+            ...where,
+            location: observed.location,
+            tags,
+            properties: {
+              designation:
+                desired.designation ?? observed.properties?.designation,
+            },
+          })
+          // The create's ARM operation can outlive the `Succeeded` state.
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "HybridNetworkOperationInProgress",
+              schedule: Schedule.spaced("30 seconds"),
+              times: 60,
+            }),
+          );
+        // The PUT is applied asynchronously and the hub may still report
         // its previous `Succeeded` state; wait until the delta is visible.
         observed = yield* waitForProvisioned(
           `dedicated hub ${name}`,
@@ -303,7 +319,7 @@ export const DedicatedHubProvider = () =>
               ? "Updating"
               : state;
           },
-          SLOW,
+          { interval: "30 seconds", times: 40 },
         );
       }
 

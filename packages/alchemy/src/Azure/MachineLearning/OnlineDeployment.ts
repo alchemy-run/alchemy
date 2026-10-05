@@ -1,5 +1,6 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -242,6 +243,29 @@ const desiredProperties = (news: OnlineDeploymentProps) => ({
   description: news.description,
 });
 
+/**
+ * Azure resolves a model label (`.../models/<name>/labels/latest`) to a
+ * concrete version (`.../models/<name>/versions/<n>`), so a label matches
+ * any version of the same model.
+ */
+const sameModel = (observed: unknown, desired: string | undefined) => {
+  if (desired === undefined) return true;
+  if (typeof observed !== "string") return false;
+  const label = desired.toLowerCase().match(/^(.*\/models\/[^/]+)\/labels\/[^/]+$/);
+  return label === null
+    ? observed.toLowerCase() === desired.toLowerCase()
+    : observed.toLowerCase().startsWith(`${label[1]}/`);
+};
+
+/** Whether the observed definition already matches the desired one. */
+const matchesDefinition = (
+  observed: { model?: unknown } | undefined,
+  desired: ReturnType<typeof desiredProperties>,
+) => {
+  const { model, ...rest } = desired;
+  return containsValue(observed, rest) && sameModel(observed?.model, model);
+};
+
 export const OnlineDeploymentProvider = () =>
   Provider.succeed(OnlineDeployment, {
     stables: [
@@ -349,7 +373,15 @@ export const OnlineDeploymentProvider = () =>
       const waitReady = waitForProvisioned(
         `machine learning online deployment ${name}`,
         get,
-        (deployment) => deployment.properties.provisioningState,
+        // Right after a PUT the GET can still report the previous
+        // definition as `Succeeded`; only the desired definition counts.
+        (deployment) => {
+          const state = deployment.properties.provisioningState;
+          if (state !== undefined && state !== "Succeeded") return state;
+          return matchesDefinition(deployment.properties, properties)
+            ? "Succeeded"
+            : "Updating";
+        },
         { interval: "10 seconds", times: 150 },
       ).pipe(
         // A failed deployment carries no error on GET; surface the tail of
@@ -381,13 +413,26 @@ export const OnlineDeploymentProvider = () =>
         ),
       );
 
+      // The endpoint or deployment may still be finishing another
+      // operation (409 Conflict); bounded at 10 minutes.
+      const retryConflict = <A, E extends { _tag: string }, R>(
+        effect: Effect.Effect<A, E, R>,
+      ) =>
+        effect.pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceConflict",
+            schedule: Schedule.spaced("15 seconds"),
+            times: 40,
+          }),
+        );
+
       // Observe.
       let observed = yield* get;
 
       // Ensure + sync the deployment definition (PUT is a rolling update).
       if (
         observed === undefined ||
-        !containsValue(observed.properties, properties)
+        !matchesDefinition(observed.properties, properties)
       ) {
         const location =
           news.location ??
@@ -399,13 +444,15 @@ export const OnlineDeploymentProvider = () =>
             workspaceName: workspace,
             endpointName: endpoint,
           })).location;
-        yield* ml.OnlineDeploymentsCreateOrUpdate({
-          ...where,
-          location,
-          tags,
-          sku: { name: "Default", capacity: instanceCount },
-          properties,
-        });
+        yield* ml
+          .OnlineDeploymentsCreateOrUpdate({
+            ...where,
+            location,
+            tags,
+            sku: { name: "Default", capacity: instanceCount },
+            properties,
+          })
+          .pipe(retryConflict);
         observed = yield* waitReady;
       }
 
@@ -414,11 +461,13 @@ export const OnlineDeploymentProvider = () =>
         observed.sku?.capacity !== instanceCount ||
         tagsDiffer(observed.tags, tags)
       ) {
-        yield* ml.UpdateOnlineDeployment({
-          ...where,
-          tags,
-          sku: { name: "Default", capacity: instanceCount },
-        });
+        yield* ml
+          .UpdateOnlineDeployment({
+            ...where,
+            tags,
+            sku: { name: "Default", capacity: instanceCount },
+          })
+          .pipe(retryConflict);
         observed = yield* waitForProvisioned(
           `machine learning online deployment ${name}`,
           get,

@@ -27,8 +27,12 @@ const getConnection = (
 // connectivity provider has provisioned (AZURE_TEST_ER_RESOURCE_GROUP,
 // AZURE_TEST_ER_CIRCUIT, AZURE_TEST_ER_PEER_CIRCUIT_ID). An unprovisioned
 // circuit cannot even hold a private peering, so there is no ungated
-// probe. Run with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// probe. Run with AZURE_TEST_PAID=1 and the circuit variables set.
+test.provider.skipIf(
+  !runPaidOnly ||
+    !process.env.AZURE_TEST_ER_CIRCUIT ||
+    !process.env.AZURE_TEST_ER_PEER_CIRCUIT_ID,
+)(
   "create, replace, and delete an ExpressRoute Global Reach connection",
   (stack) =>
     Effect.gen(function* () {

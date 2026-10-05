@@ -613,6 +613,44 @@ const serverStateOf = (server: ObservedServer) => {
       : (state ?? "Provisioning");
 };
 
+const replicationRoleOf = (server: ObservedServer) =>
+  server.properties?.replica?.role ?? server.properties?.replicationRole;
+
+/**
+ * A new replica first reports `Ready` with role `Primary` while it is still
+ * being attached, and its source server stays `Updating` meanwhile; both
+ * reject further operations (e.g. virtual endpoints) until then. Wait until
+ * the replica is a `Ready` replica and its source has settled.
+ */
+const waitReplicaAttached = (
+  label: string,
+  ref: ServerRef,
+  sourceServerResourceId: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const attached = yield* waitForProvisioned(
+      label,
+      getServer(ref),
+      (server) => {
+        const role = replicationRoleOf(server);
+        return role === "Primary" || role === "None" || role === undefined
+          ? "Provisioning"
+          : serverStateOf(server);
+      },
+      { interval: "10 seconds", times: 90 },
+    );
+    const sourceGroup = resourceGroupOf(sourceServerResourceId);
+    const sourceName = sourceServerResourceId?.split("/").pop();
+    if (sourceGroup !== undefined && sourceName) {
+      yield* waitServerSettled({
+        subscriptionId: ref.subscriptionId,
+        resourceGroupName: sourceGroup,
+        serverName: sourceName,
+      });
+    }
+    return attached;
+  });
+
 export const FlexibleServerProvider = () =>
   Provider.succeed(FlexibleServer, {
     stables: [
@@ -854,6 +892,14 @@ export const FlexibleServerProvider = () =>
             while: (e) => e._tag === "Azure.ProvisioningTimedOut",
             times: 2,
           }),
+        );
+      }
+
+      if (news.createMode === "Replica") {
+        observed = yield* waitReplicaAttached(
+          label,
+          ref,
+          news.sourceServerResourceId,
         );
       }
 

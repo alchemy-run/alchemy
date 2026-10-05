@@ -41,27 +41,23 @@ const program = (hubTags: Record<string, string>) =>
       group.resourceGroupName,
       hub.communityId,
     );
-    const remote = yield* Azure.Network.VirtualNetwork("Remote", {
-      resourceGroup: group.resourceGroupName,
-      addressPrefixes: ["10.90.0.0/24"],
-    });
     const transit = yield* Azure.VirtualEnclaves.TransitHub("Transit", {
       resourceGroup: group.resourceGroupName,
       // Create the transit hub only after the enclave exists.
       community: Output.all(hub.communityName, spoke.virtualEnclaveId).pipe(
         Output.map(([communityName]) => communityName),
       ),
-      transitOption: {
-        type: "Peering",
-        remoteVirtualNetworkId: remote.virtualNetworkId,
-      },
+      // A `Peering` transit hub to a VNet in the same resource group ends
+      // in provisioningState `Failed` with no error detail; a one-unit VPN
+      // gateway needs no external network.
+      transitOption: { type: "Gateway", scaleUnits: 1 },
       tags: hubTags,
     });
     return { group, community: hub, transit };
   });
 
 // Needs a community (vWAN hub + firewall, 30-60+ min), an enclave (which
-// deploys the community vHub, ~60-90 min) and a peering transit hub: ~$3-6
+// deploys the community vHub, ~60-90 min) and a VPN transit hub: ~$3-6
 // and up to three hours per run. Run with
 // AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
@@ -81,7 +77,7 @@ test.provider.skipIf(!runExpensive)(
         transit.transitHubName,
       );
       const observed = yield* get;
-      expect(observed.properties?.transitOption?.type).toEqual("Peering");
+      expect(observed.properties?.transitOption?.type).toEqual("Gateway");
       expect(observed.tags?.env).toEqual("test");
 
       // In-place: tags.

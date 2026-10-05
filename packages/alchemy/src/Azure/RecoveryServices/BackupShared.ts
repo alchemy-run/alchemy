@@ -1,5 +1,6 @@
 import * as recoveryservices from "@distilled.cloud/azure/recoveryservices";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
@@ -28,6 +29,43 @@ export const isVaultOwnedByStack = Effect.fn(function* (
   const tags = tagRecord(vault.tags);
   return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
 });
+
+/**
+ * PATCH vault properties through the vault API, retrying while another
+ * vault operation is still running. Used by the `backupconfig` /
+ * `backupstorageconfig` singletons when Azure Backup reports
+ * `BackupConfigManagedByVaultApi` (every vault created with current API
+ * versions).
+ */
+export const updateVaultProperties = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+  properties: recoveryservices.VaultPropertiesInput,
+) =>
+  recoveryservices
+    .UpdateVault({ subscriptionId, resourceGroupName, vaultName, properties })
+    .pipe(
+      Effect.retry({
+        while: (e) => e._tag === "RecoveryServicesVaultOperationInProgress",
+        schedule: Schedule.spaced("10 seconds"),
+        times: 18,
+      }),
+    );
+
+/** Observed soft delete settings of a vault, read through the vault API. */
+export const getVaultSoftDeleteSettings = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+) =>
+  recoveryservices
+    .GetVault({ subscriptionId, resourceGroupName, vaultName })
+    .pipe(
+      Effect.map(
+        (vault) => vault.properties?.securitySettings?.softDeleteSettings,
+      ),
+    );
 
 /**
  * Deterministic name for a named backup sub-resource (policy, intent):

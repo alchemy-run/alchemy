@@ -41,9 +41,10 @@ const getPeering = (resourceGroupName: string, peeringName: string) =>
     });
   });
 
-// Free SKU, but needs an approved operator ASN and presence at the
-// exchange; provisioning is done by Microsoft and can take days.
-test.provider.skipIf(!runPaidOnly)(
+// Free SKU, but needs an operator ASN that Microsoft approved and presence
+// at the exchange (`AZURE_TEST_PEER_ASN_ID`, `AZURE_TEST_PEERING_FACILITY_ID`);
+// provisioning is done by Microsoft and can take days.
+test.provider.skipIf(!runPaidOnly || !operator.peerAsnId)(
   "create, update, and delete an exchange peering",
   (stack) =>
     Effect.gen(function* () {
@@ -85,7 +86,7 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: the trial has no approved peer ASN, so Azure rejects any
+// Ungated probe: without an approved peer ASN, so Azure rejects any
 // peering with the typed error.
 test.provider(
   "a peering without an approved peer ASN is rejected with a typed error",

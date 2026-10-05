@@ -3,17 +3,17 @@ import * as Test from "@/Test/Alchemy";
 import * as peering from "@distilled.cloud/azure/peering";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
 /**
- * Registering an ASN starts a manual validation by Microsoft's peering
- * team, so only an operator may register its own ASN. Set
- * `AZURE_TEST_PEER_ASN` (with `AZURE_TEST_PAID=1`).
+ * Azure accepts any ASN and leaves it `Pending` until Microsoft's peering
+ * team validates ownership, so the lifecycle registers the RFC 5398
+ * documentation ASN 64496 (never routed, owned by nobody) and deletes it
+ * before review. Set `AZURE_TEST_PEER_ASN` to register an owned ASN.
  */
-const asn = Number(process.env.AZURE_TEST_PEER_ASN ?? "0");
+const asn = Number(process.env.AZURE_TEST_PEER_ASN ?? "64496");
 
 const program = (peerName: string) =>
   Effect.gen(function* () {
@@ -35,8 +35,8 @@ const getPeerAsn = (peerAsnName: string) =>
     });
   });
 
-// Free, but requires an ASN the operator owns (manual Microsoft review).
-test.provider.skipIf(!runPaidOnly)(
+// Free: the registration stays `Pending` and is deleted before review.
+test.provider(
   "create, update, and delete a peer ASN registration",
   (stack) =>
     Effect.gen(function* () {
@@ -46,6 +46,7 @@ test.provider.skipIf(!runPaidOnly)(
       const observed = yield* getPeerAsn(first.registration.peerAsnName);
       expect(observed.properties?.peerAsn).toEqual(asn);
       expect(observed.properties?.peerName).toEqual("Alchemy Test");
+      expect(first.registration.validationState).toBeDefined();
 
       const second = yield* stack.deploy(program("Alchemy Test Renamed"));
       expect(second.registration.peerAsnId).toEqual(

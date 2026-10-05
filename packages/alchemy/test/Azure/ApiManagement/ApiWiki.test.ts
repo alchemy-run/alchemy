@@ -56,7 +56,12 @@ const program = (pages?: ("one" | "two")[]) =>
 // Documentation pages are not available on Consumption (PUT returns an
 // empty 404). A BasicV2 service bills ~$0.21/h and takes 5-15+ minutes to
 // create: est. ~$0.10 and ~25 minutes per run.
-test.provider.skipIf(!runExpensive)(
+// Blocked by the platform: Microsoft.ApiManagement does not serve the
+// documentations and wikis routes (empty 404 / "did not have proper uri
+// path format") on Developer, BasicV2 or Premium services at any
+// api-version, pinned by the probe below. Runs only with
+// AZURE_TEST_APIM_WIKIS=1 once the routes ship.
+test.provider.skipIf(!runExpensive || !process.env.AZURE_TEST_APIM_WIKIS)(
   "create, update, and delete an API wiki",
   (stack) =>
     Effect.gen(function* () {
@@ -87,4 +92,29 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
+);
+
+// Probe (BasicV2, est. ~$0.05 and ~10 minutes; Consumption answers every
+// documentation/wiki route with an empty 404 instead): the API wiki
+// route is not served.
+test.provider.skipIf(!runExpensive)(
+  "API wiki PUT is rejected as an unsupported route",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, service, api } = yield* stack.deploy(basicV2Api);
+      const sub = yield* subscriptionId;
+      const error = yield* apim
+        .ApiWikiCreateOrUpdate({
+          subscriptionId: sub,
+          resourceGroupName: group.resourceGroupName,
+          serviceName: service.serviceName,
+          apiId: api.apiName,
+          properties: { documents: [] },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("ApiManagementRouteNotSupported");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 1_800_000 },
 );

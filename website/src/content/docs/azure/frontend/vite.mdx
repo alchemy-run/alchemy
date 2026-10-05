@@ -1,0 +1,54 @@
+---
+title: Vite
+description: "Deploy a Vite SPA to Azure Container Apps with Azure.Website.Vite — static assets served from a container image pushed to Azure Container Registry, and Vite's own dev server under alchemy dev."
+sidebar:
+  order: 2
+---
+
+`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to Azure
+Container Apps. It runs `vite build`, bakes the output and a small Node
+static-file server into an image, pushes it to Azure Container Registry, and
+serves it from a Container App on port 3000.
+
+## Install
+
+```sh
+bun add -d @alchemy.run/frontend-frameworks
+```
+
+## Deploy
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Azure from "alchemy/Azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const web = yield* Azure.Website.Vite("Web", { location: "eastus" });
+    return { url: web.url };
+  }),
+);
+```
+
+Unknown paths fall back to `index.html` (SPA). Use
+`assets: { notFoundHandling: "404-page" }` for multi-page sites.
+
+## Share infrastructure
+
+```typescript
+const group = yield* Azure.Resources.ResourceGroup("Group");
+const environment = yield* Azure.ContainerApps.ManagedEnvironment("Env", {
+  resourceGroup: group.resourceGroupName,
+  environmentMode: "Express",
+});
+const web = yield* Azure.Website.Vite("Web", {
+  resourceGroup: group,
+  environment,
+});
+```
+
+See the [`azure-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vite)
+example.

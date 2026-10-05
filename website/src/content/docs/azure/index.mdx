@@ -1,6 +1,6 @@
 ---
 title: Azure
-description: Microsoft Azure resources — resource groups, storage, managed identities, and role assignments — declared as Effects and deployed through Azure Resource Manager.
+description: Microsoft Azure resources across ~165 Azure Resource Manager services, declared as Effects and deployed with a service principal.
 ---
 
 The Azure provider deploys resources through Azure Resource Manager (ARM)
@@ -11,9 +11,23 @@ can find and clean up what Alchemy created.
 New here? [Set up credentials](/azure/setup) first.
 
 :::caution
-The Azure provider is in early preview. It covers the resources below;
-more services are planned.
+The Azure provider is in preview. It covers about 1,190 resource types
+across roughly 165 services — each service has a reference page under
+**Resources** in the sidebar, e.g. [Azure.Storage](/providers/azure/storage).
 :::
+
+## How it works
+
+- **Authentication** — a Microsoft Entra service principal stored in an
+  Alchemy profile (`alchemy profile edit --add Azure`). Alchemy trades the
+  client secret for a short-lived ARM token. In CI, set
+  `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and
+  `AZURE_SUBSCRIPTION_ID` instead. See [Setup](/azure/setup).
+- **Resource providers** — new subscriptions only register a few
+  `Microsoft.*` namespaces. Alchemy registers the namespace a resource
+  needs on first deploy, so you never see `MissingRegistration`.
+- **Ownership** — every resource is branded with the stack, stage, and
+  logical ID that own it (see [Ownership markers](#ownership-markers)).
 
 ## Providers
 
@@ -82,18 +96,45 @@ Resources that support tags carry `alchemy::stack`, `alchemy::stage`, and
 
 ## Out of scope
 
-The Azure SDK covers every Azure Resource Manager provider. These areas
-are not planned as Alchemy resources:
+The Azure SDK covers every Azure Resource Manager resource type. About
+650 of them are deliberately not Alchemy resources:
 
-- Data-plane APIs for end-user content (blobs, queue messages, secrets
-  values) — these belong in bindings, not resources.
-- Billing, reservations, consumption, cost management, and support
-  tickets.
-- Microsoft Entra directory objects (users, groups, app registrations),
-  which live in Microsoft Graph rather than ARM.
-- Retired or deprecated services (for example Azure Dev Spaces, Time
-  Series Insights, and classic Scheduler).
+| Reason | Examples |
+| --- | --- |
+| Retired or closed to new customers | Dev Box (no new customers since Nov 1, 2025), Cosmos DB for PostgreSQL (new clusters can't be created), Spring Apps, Customer Insights, Time Series Insights, Data Lake Analytics, Data Lake Storage Gen1, Front Door (classic), classic CDN, HPC Cache, Disk Pools, Lab Services, Logic Apps ISE, MySQL Single Server, Orbital, Scheduler, Dev Spaces, ML Studio (classic), Maps Creator, Playwright Testing |
+| Data-plane or end-user data | Machine Learning job runs, Sentinel incidents, API Management portal content, migration and import/export jobs, runbook jobs, remediation tasks, what-if results |
+| Actions, not desired state | Private endpoint connection approvals (managed from `Network.PrivateEndpoint`), maintenance triggers, troubleshooting runs, upgrade jobs |
+| Billing and subscription objects | Billing accounts and profiles, reservations and savings plans, Marketplace terms, quota requests, support tickets, subscription creation, hardware orders (Data Box, Edge) |
+| Closed or allow-listed previews | Delegated Network, Microsoft Purview cross-tenant objects, tenant-level service groups, M365 compliance private links |
+| Read-only mirrors and system-managed objects | AWS Connector inventory (112 types), vCenter/Arc discovery projections, platform-created hardware inventory, subscription and tenant singletons without delete |
+| Duplicates | Property setters folded into their parent (e.g. VPN connection shared keys, Web App settings), legacy aliases of current types |
+
+## Requires external setup
+
+These are implemented, but their live tests only run with
+`AZURE_TEST_PAID=1` because they need something beyond a subscription:
+
+- **Microsoft Discovery** — an allow-listed preview.
+- **Confluent** — a signed-in user token, not a service principal.
+- **Azure Stack HCI** — physical hardware.
+- **VMware Solution** — host quota granted through a support ticket.
+- **Power BI and Fabric capacities** — a tenant sign-up.
+
+## Testing
+
+Live tests run against a real subscription:
+
+```sh
+pnpm test test/Azure --profile <profile>
+```
+
+Lifecycles that cost more than about $1 or take longer than ~10 minutes
+only run with `AZURE_TEST_EXPENSIVE=1`. Lifecycles that need a paid
+plan, a partner SaaS, hardware, or a gated preview only run with
+`AZURE_TEST_PAID=1`; without it, a probe test asserts the exact typed
+error Azure returns.
 
 ## Next steps
 
 - [Setup](/azure/setup) — create a service principal and a profile.
+- [Azure.Storage reference](/providers/azure/storage) — one page per service.

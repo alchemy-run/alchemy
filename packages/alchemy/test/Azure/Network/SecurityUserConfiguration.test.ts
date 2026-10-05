@@ -2,6 +2,7 @@ import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
+import { ensureFeature } from "../features.ts";
 import { runPaidOnly } from "../gates.ts";
 import * as Effect from "effect/Effect";
 import {
@@ -13,6 +14,12 @@ import {
 } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+// The Microsoft.Network/AllowAVNMPreviewJuly2022 preview feature needs Microsoft
+// approval: self-registration stays `Pending` on a pay-as-you-go subscription. The
+// lifecycle registers it and runs with AZURE_TEST_PAID=1 and AZURE_TEST_AVNM_SECURITY_USER=1
+// once approved; otherwise the probe asserts the typed rejection.
+const allowListed = !!process.env.AZURE_TEST_AVNM_SECURITY_USER;
 
 const getRule = (
   resourceGroupName: string,
@@ -45,9 +52,9 @@ const getConfiguration = (
     }),
   );
 
-// Undeployed security user configurations are free, but the feature is a
-// preview the trial subscription is not registered for
-// (AllowAVNMPreviewJuly2022): the lifecycle runs only with AZURE_TEST_PAID=1.
+// Undeployed security user configurations are free; without the
+// AllowAVNMPreviewJuly2022 feature ARM answers
+// SubscriptionFeatureNotRegistered.
 const program = (props: { description: string; ports: string[] }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -92,10 +99,11 @@ const program = (props: { description: string; ports: string[] }) =>
     return { group, manager, configuration, collection, rule };
   });
 
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete a security user configuration (with a collection and rule)",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureFeature("Microsoft.Network", "AllowAVNMPreviewJuly2022");
       yield* stack.destroy();
 
       const { group, manager, configuration, collection, rule } =
@@ -149,8 +157,8 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 600_000 },
 );
 
-test.provider(
-  "security user scope access is rejected with a typed preview-feature error on the trial",
+test.provider.skipIf(allowListed)(
+  "security user scope access is rejected with a typed preview-feature error",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

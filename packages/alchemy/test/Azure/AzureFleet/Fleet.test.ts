@@ -7,7 +7,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runPaidOnly, withVcpus } from "../gates.ts";
+import { withVcpus } from "../gates.ts";
+import { ensureQuota } from "../quota.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -19,10 +20,12 @@ const logLevel = Effect.provideService(
 );
 
 /**
- * B-series sizes are capacity-restricted on the trial subscription; the
- * 1-vCPU F-series v7 sizes are not.
+ * Compute Fleet runs its own capacity check, stricter than plain VMs/scale
+ * sets: on this subscription it rejects every size tried in eastus, eastus2,
+ * westus2, westus3, centralus and northeurope with `SkuNotAvailable`, but
+ * accepts the 1-vCPU F-series v7 sizes in swedencentral.
  */
-const LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "eastus";
+const LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "swedencentral";
 const SIZE = process.env.AZURE_TEST_VM_SIZE ?? "Standard_F1als_v7";
 const SIZE_ALT = process.env.AZURE_TEST_VM_SIZE_ALT ?? "Standard_F1as_v7";
 
@@ -153,13 +156,21 @@ const program = (props: {
   });
 
 // At most two 1-vCPU VMs (~$0.03/hour each) for ~20 minutes: < $0.05.
-// Paid-only: the free trial rejects every Compute Fleet with
-// `SkuNotAvailable` (all sizes, all regions tried), even for sizes a plain
-// scale set can allocate. See the probe below.
-test.provider.skipIf(!runPaidOnly)(
+test.provider(
   "create, replace, scale, and delete a compute fleet",
   (stack) =>
     Effect.gen(function* () {
+      for (const resourceName of [
+        "StandardFalsv7Family",
+        "StandardFasv7Family",
+      ]) {
+        yield* ensureQuota({
+          provider: "Microsoft.Compute",
+          resourceName,
+          minimum: 2,
+          location: LOCATION,
+        });
+      }
       yield* stack.destroy();
 
       const { group, fleet } = yield* stack.deploy(
@@ -221,37 +232,4 @@ test.provider.skipIf(!runPaidOnly)(
       ).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
   { tags, timeout: 900_000 },
-);
-
-// Ungated probe (free: a VNet and subnet, the fleet PUT is rejected
-// synchronously): the trial subscription cannot allocate any VM size for
-// Compute Fleet.
-test.provider(
-  "the free trial rejects compute fleets with SkuNotAvailable",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const { group, subnet } = yield* stack.deploy(network);
-      const error = yield* Effect.flatMap(subscriptionId, (subscriptionId) =>
-        azurefleet.FleetsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: group.resourceGroupName,
-          fleetName: "probe",
-          location: LOCATION,
-          properties: {
-            vmSizesProfile: [{ name: SIZE }],
-            regularPriorityProfile: { capacity: 1, minCapacity: 1 },
-            computeProfile: computeProfile(subnet.subnetId, "probe"),
-          },
-        }),
-      ).pipe(Effect.flip);
-      expect(error._tag).toEqual("SkuNotAvailable");
-      expect(
-        yield* untilGone(getFleet(group.resourceGroupName, "probe")),
-      ).toEqual("gone");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags, timeout: 600_000 },
 );

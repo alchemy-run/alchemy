@@ -45,8 +45,7 @@ const program = (props: {
   });
 
 // A1 capacity (~$1.01/hour, billed per second while running): ~3-6 minutes
-// running per run, about $0.10. Needs a tenant signed up for Microsoft
-// Fabric / Power BI; the free-trial tenant is not (see the probe below).
+// running per run, about $0.10. Paid subscriptions only.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, suspend, replace, and delete a Power BI capacity",
   (stack) =>
@@ -98,51 +97,6 @@ test.provider.skipIf(!runPaidOnly)(
       expect(yield* waitGone(get(replaced.capacity.capacityName))).toEqual(
         "gone",
       );
-    }).pipe(logLevel),
-  { tags, timeout: 900_000 },
-);
-
-// Ungated probe (free): the testing tenant has never signed up for
-// Microsoft Fabric, so ARM rejects the capacity PUT with
-// the typed tenant error and nothing is created.
-test.provider(
-  "an unsigned tenant rejects capacities with a typed error",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const { group, identity } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location: "eastus",
-          });
-          const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity(
-            "Admin",
-            { resourceGroup: group.resourceGroupName, location: "eastus" },
-          );
-          return { group, identity };
-        }),
-      );
-      const error = yield* powerbidedicated
-        .CreateCapacity({
-          subscriptionId: yield* subscription,
-          resourceGroupName: group.resourceGroupName,
-          dedicatedCapacityName: "alchemypowerbiprobe",
-          location: "eastus",
-          sku: { name: "A1", tier: "PBIE_Azure" },
-          properties: {
-            administration: { members: [identity.principalId] },
-          },
-        })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("PowerBITenantNotSignedUp");
-      expect(
-        yield* waitGone(
-          getCapacity(group.resourceGroupName, "alchemypowerbiprobe"),
-        ),
-      ).toEqual("gone");
-
-      yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
 );

@@ -17,6 +17,10 @@ const getCapacity = (resourceGroupName: string, capacityName: string) =>
     });
   });
 
+// The subscription's Fabric CU quota is 0 in eastus and 4 in westus2: two
+// F2 capacities (2 CU each) fit there across the create-first replacement.
+const location = "westus2";
+
 const program = (props: {
   name?: string;
   state?: "Active" | "Paused";
@@ -24,7 +28,7 @@ const program = (props: {
 }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "eastus",
+      location,
     });
     // A managed identity is a service principal in the tenant, so it is a
     // valid capacity administrator without a real user account.
@@ -35,6 +39,7 @@ const program = (props: {
     const capacity = yield* Azure.Fabric.Capacity("Capacity", {
       resourceGroup: group.resourceGroupName,
       name: props.name,
+      location,
       sku: "F2",
       administrators: [identity.principalId],
       state: props.state,
@@ -45,8 +50,6 @@ const program = (props: {
 
 // F2 pay-as-you-go ≈ $0.36/hour billed per second while Active; the run
 // keeps a capacity alive ~5-10 minutes (< $0.10). Provisions in ~1-2 min.
-// Gated: the testing tenant has never signed up for Microsoft Fabric, so
-// every create fails with `PowerBITenantNotSignedUp` (see the probe below).
 test.provider.skipIf(!runPaidOnly)(
   "create, update, pause, replace, and delete a Fabric capacity",
   (stack) =>
@@ -104,28 +107,24 @@ test.provider.skipIf(!runPaidOnly)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );
 
-// Ungated probe (free, ~1-2 minutes): a tenant that has not signed up for
-// Microsoft Fabric rejects capacity creation with the typed error, and no
-// capacity is left behind.
+// Ungated probe (free, < 1 minute of Azure time): Fabric rejects
+// administrators that are not existing Entra users or service principals
+// with a typed error, and no capacity is left behind.
 test.provider(
-  "a tenant without Fabric sign-up rejects capacities with a typed error",
+  "a capacity with an unknown administrator is rejected with a typed error",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, identity } = yield* stack.deploy(
+      const { group } = yield* stack.deploy(
         Effect.gen(function* () {
           const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location: "eastus",
+            location,
           });
-          const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity(
-            "Admin",
-            { resourceGroup: group.resourceGroupName },
-          );
-          return { group, identity };
+          return { group };
         }),
       );
       const subscriptionId = yield* subscription;
@@ -134,12 +133,16 @@ test.provider(
           subscriptionId,
           resourceGroupName: group.resourceGroupName,
           capacityName: "alchemyfabricprobe",
-          location: "eastus",
+          location,
           sku: { name: "F2", tier: "Fabric" },
-          properties: { administration: { members: [identity.principalId] } },
+          properties: {
+            administration: {
+              members: ["00000000-0000-0000-0000-00000000a1c4"],
+            },
+          },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("PowerBITenantNotSignedUp");
+      expect(error._tag).toEqual("FabricCapacityPrincipalNotFound");
       expect(
         yield* waitGone(
           getCapacity(group.resourceGroupName, "alchemyfabricprobe"),

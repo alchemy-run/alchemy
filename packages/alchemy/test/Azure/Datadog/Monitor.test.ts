@@ -1,13 +1,13 @@
 import * as Azure from "@/Azure";
-import { ensureRegistered } from "@/Azure/Arm";
 import * as Test from "@/Test/Alchemy";
 import * as datadog from "@distilled.cloud/azure/datadog";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import {
+  acceptDatadogTerms,
   location,
   logLevel,
+  runWithDatadogUser,
   subscription,
   tags,
   userInfo,
@@ -45,16 +45,18 @@ const program = (props: {
     return { group, monitor };
   });
 
-// Subscribes to the Datadog pay-as-you-go Marketplace plan (Datadog bills
-// per host / log GB; ~$0 for an idle org, but it creates a real Datadog
-// organization). Provisioning ~3-10 minutes. The free trial cannot
-// purchase Marketplace SaaS plans; run only with AZURE_TEST_PAID=1 on a
-// subscription that accepted the Datadog Marketplace terms.
-test.provider.skipIf(!runPaidOnly)(
+// Subscribes to the Datadog pay-as-you-go Marketplace plan ($0 list price;
+// Datadog bills per host / log GB, ~$0 for a minutes-old org, but it creates
+// a real Datadog organization). Provisioning ~3-10 minutes. Free trial and
+// sponsored subscriptions cannot purchase Marketplace SaaS plans; run only
+// with AZURE_TEST_PAID=1 and AZURE_TEST_DATADOG_USER_TOKEN=1 (user sign-in).
+// The test accepts the Datadog Marketplace terms.
+test.provider.skipIf(!runWithDatadogUser)(
   "create, update, replace, and delete a datadog monitor",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* acceptDatadogTerms;
 
       const { group, monitor } = yield* stack.deploy(
         program({ monitoringStatus: "Enabled", tags: { env: "test" } }),
@@ -105,41 +107,19 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Probe: the free trial rejects the Datadog Marketplace purchase before
-// any monitor is created. Skipped on paid subscriptions, where the
-// purchase would succeed.
-test.provider.skipIf(runPaidOnly)(
-  "free trial rejects the datadog marketplace purchase",
+// Probe ($0, nothing is created): with the Marketplace terms accepted and a
+// valid pay-as-you-go plan, Datadog still rejects creating a new
+// organization for the service-principal test identity.
+test.provider.skipIf(runWithDatadogUser)(
+  "datadog rejects a new organization for a service principal",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { group } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location,
-          });
-          return { group };
-        }),
-      );
-      const subscriptionId = yield* subscription;
-      yield* ensureRegistered(subscriptionId, "Microsoft.Datadog");
-      const error = yield* datadog
-        .CreateMonitor({
-          subscriptionId,
-          resourceGroupName: group.resourceGroupName,
-          monitorName: "alchemy-datadog-probe",
-          location,
-          sku: { name: "payg_v2_Monthly" },
-          identity: { type: "SystemAssigned" },
-          properties: { monitoringStatus: "Enabled", userInfo },
-        })
+      yield* acceptDatadogTerms;
+      const error = yield* stack
+        .deploy(program({ monitoringStatus: "Enabled", tags: {} }))
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("DatadogMonitorCreationValidateFailed");
-      expect(
-        yield* waitGone(
-          getMonitor(group.resourceGroupName, "alchemy-datadog-probe"),
-        ),
-      ).toEqual("gone");
+      expect(error._tag).toEqual("DatadogMonitorCreationFailed");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 300_000 },

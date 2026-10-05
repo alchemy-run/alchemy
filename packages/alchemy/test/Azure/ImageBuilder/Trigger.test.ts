@@ -38,8 +38,10 @@ const triggerGone = (
 ) =>
   getTrigger(resourceGroupName, imageTemplateName, triggerName).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["ResourceNotFound", "ResourceGroupNotFound"], () =>
-      Effect.succeed("gone" as const),
+    // `NotFound`: the parent template is already gone with the trigger.
+    Effect.catchTag(
+      ["ResourceNotFound", "ResourceGroupNotFound", "NotFound"],
+      () => Effect.succeed("gone" as const),
     ),
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),

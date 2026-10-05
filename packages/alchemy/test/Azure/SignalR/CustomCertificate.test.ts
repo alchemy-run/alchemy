@@ -1,14 +1,28 @@
+import * as ACME from "@/ACME";
 import * as Azure from "@/Azure";
+import * as Cloudflare from "@/Cloudflare";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as signalr from "@distilled.cloud/azure/signalr";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { runPaidOnly } from "../gates.ts";
 import { makeCertificateStack } from "./fixtures/certificate-stack.ts";
+import {
+  publicCertificate,
+  resolvePublicZoneId,
+  toPfxBase64,
+} from "./fixtures/public-certificate.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
-const { test } = Test.make({ providers: Azure.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(
+    Azure.providers(),
+    ACME.providers(),
+    Cloudflare.providers(),
+  ),
+});
 
 const getCertificate = (
   resourceGroupName: string,
@@ -24,16 +38,17 @@ const getCertificate = (
     });
   });
 
-/**
- * Base64 PFX (no password) of a CA-issued certificate. Azure loads the
- * checked-in self-signed fixture into state `Failed` (no further detail on
- * the resource), so the lifecycle needs a real certificate.
- */
-const externalPfx = process.env.AZURE_TEST_SIGNALR_DOMAIN_PFX;
+const CERTIFICATE_LABEL = "azure-signalr-custom-certificate";
 
-const program = (props: { secret: "A" | "B"; pinVersion: boolean }) =>
+const program = (props: {
+  zoneId: string;
+  pfxBase64: string;
+  secret: "A" | "B";
+  pinVersion: boolean;
+}) =>
   Effect.gen(function* () {
-    const base = yield* makeCertificateStack({ pfxBase64: externalPfx });
+    const publicTls = yield* publicCertificate(props.zoneId, CERTIFICATE_LABEL);
+    const base = yield* makeCertificateStack({ pfxBase64: props.pfxBase64 });
     const secret = base.secrets[props.secret];
     const certificate = yield* Azure.SignalR.CustomCertificate("Tls", {
       resourceGroup: base.group.resourceGroupName,
@@ -46,21 +61,27 @@ const program = (props: { secret: "A" | "B"; pinVersion: boolean }) =>
           )
         : undefined,
     });
-    return { ...base, secret, certificate };
+    return { ...base, publicTls, secret, certificate };
   });
 
-// Premium_P1 unit (~$0.08/hour) for ~10 minutes, a vault and two secrets:
-// ~$0.02 per run, but it needs an externally issued certificate
-// (needs-external-systems), so it runs only with AZURE_TEST_PAID=1 and
-// AZURE_TEST_SIGNALR_DOMAIN_PFX.
-test.provider.skipIf(!runPaidOnly || !externalPfx)(
-  "create, update, replace, and delete a SignalR custom certificate",
+// Premium_P1 unit (~$0.08/hour) for ~15 minutes, a vault and two secrets:
+// ~$0.03 per run. Azure rejects self-signed certificates, so the test
+// issues a free Let's Encrypt certificate through DNS-01 in the Cloudflare
+// test zone. Runs only with AZURE_TEST_PAID=1.
+test.provider.skipIf(!runPaidOnly)(
+  "create, replace, and delete a SignalR custom certificate",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const zoneId = yield* resolvePublicZoneId;
+      const issued = yield* stack.deploy(
+        publicCertificate(zoneId, CERTIFICATE_LABEL),
+      );
+      const pfxBase64 = yield* toPfxBase64(issued.chain, issued.privateKey);
+
       const { group, service, secret, certificate } = yield* stack.deploy(
-        program({ secret: "A", pinVersion: false }),
+        program({ zoneId, pfxBase64, secret: "A", pinVersion: false }),
       );
       const get = (name: string) =>
         getCertificate(group.resourceGroupName, service.signalRName, name);
@@ -69,31 +90,38 @@ test.provider.skipIf(!runPaidOnly || !externalPfx)(
       expect(observed.properties.keyVaultSecretName).toEqual(secret.secretName);
       expect(observed.properties.provisioningState).toEqual("Succeeded");
 
-      // In place: pin the secret version.
-      const updated = yield* stack.deploy(
-        program({ secret: "A", pinVersion: true }),
+      // Replacement: Azure rejects updating the secret version.
+      const pinned = yield* stack.deploy(
+        program({ zoneId, pfxBase64, secret: "A", pinVersion: true }),
       );
-      expect(updated.certificate.certificateId).toEqual(
-        certificate.certificateId,
+      expect(pinned.certificate.certificateName).not.toEqual(
+        certificate.certificateName,
       );
-      const reobserved = yield* get(certificate.certificateName);
-      expect(reobserved.properties.keyVaultSecretVersion).toBeDefined();
-      expect(updated.secret.secretUriWithVersion).toContain(
-        reobserved.properties.keyVaultSecretVersion!,
+      const pinnedObserved = yield* get(pinned.certificate.certificateName);
+      expect(pinnedObserved.properties.provisioningState).toEqual("Succeeded");
+      expect(pinnedObserved.properties.keyVaultSecretVersion).toBeDefined();
+      expect(pinned.secret.secretUriWithVersion).toContain(
+        pinnedObserved.properties.keyVaultSecretVersion!,
       );
+      expect(yield* waitGone(get(certificate.certificateName))).toEqual("gone");
 
       // Replacement: the secret name is immutable.
       const replaced = yield* stack.deploy(
-        program({ secret: "B", pinVersion: false }),
+        program({ zoneId, pfxBase64, secret: "B", pinVersion: false }),
       );
       expect(replaced.certificate.certificateName).not.toEqual(
-        certificate.certificateName,
+        pinned.certificate.certificateName,
       );
       const replacedObserved = yield* get(replaced.certificate.certificateName);
       expect(replacedObserved.properties.keyVaultSecretName).toEqual(
         replaced.secret.secretName,
       );
-      expect(yield* waitGone(get(certificate.certificateName))).toEqual("gone");
+      expect(replacedObserved.properties.provisioningState).toEqual(
+        "Succeeded",
+      );
+      expect(yield* waitGone(get(pinned.certificate.certificateName))).toEqual(
+        "gone",
+      );
 
       yield* stack.destroy();
       expect(
@@ -106,7 +134,7 @@ test.provider.skipIf(!runPaidOnly || !externalPfx)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );
 
 // Ungated probe (Free_F1, free, ~2 minutes): tiers below Premium reject

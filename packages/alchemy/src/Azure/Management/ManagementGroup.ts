@@ -1,4 +1,5 @@
 import * as management from "@distilled.cloud/azure/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -107,6 +108,14 @@ const PREFIX = "/providers/Microsoft.Management/managementGroups/";
 export const managementGroupIdOf = (nameOrId: string) =>
   nameOrId.startsWith("/") ? nameOrId : `${PREFIX}${nameOrId}`;
 
+/**
+ * A management group kept reappearing after DELETE: its asynchronous delete
+ * operation failed (for example, because a child had not finished deleting).
+ */
+export class ManagementGroupDeleteNotSettled extends Data.TaggedError(
+  "Azure.Management.ManagementGroupDeleteNotSettled",
+)<{ readonly groupName: string }> {}
+
 /** Bare management group name from its ARM ID or name. */
 export const managementGroupNameOf = (nameOrId: string) =>
   nameOrId.replace(/\/+$/, "").split("/").pop() ?? nameOrId;
@@ -136,6 +145,28 @@ const getGroupAfterWrite = (groupId: string) =>
   getGroup(groupId).pipe(
     Effect.catchTag("AuthorizationFailed", () => Effect.succeed(undefined)),
   );
+
+/**
+ * Whether a group with this name exists in the tenant. A GET on a group
+ * that does not exist yet (`ManagementGroupNotFound`) poisons ARM's
+ * authorization cache for that name: after a later create, every read and
+ * write is refused with `AuthorizationFailed` for 20+ minutes, versus ~15 s
+ * otherwise. The tenant-level name check has no such side effect. An
+ * `Invalid` name reports "missing" so the PUT surfaces Azure's validation
+ * error.
+ */
+const groupExists = (name: string) =>
+  management
+    .CheckNameAvailability({
+      name,
+      type: "Microsoft.Management/managementGroups",
+    })
+    .pipe(
+      Effect.map(
+        (result) =>
+          result.nameAvailable === false && result.reason === "AlreadyExists",
+      ),
+    );
 
 const generatedName = (id: string, instanceId: string) =>
   createPhysicalName({ id, instanceId, maxLength: 90 });
@@ -174,6 +205,7 @@ export const ManagementGroupProvider = () =>
       const { tenantId } = yield* AzureEnvironment.current;
       const generated = yield* generatedName(id, instanceId);
       const name = output?.groupName ?? olds?.name ?? generated;
+      if (!(yield* groupExists(name))) return undefined;
       const observed = yield* getGroup(name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(name, tenantId, observed);
@@ -194,8 +226,15 @@ export const ManagementGroupProvider = () =>
       const parentId = managementGroupIdOf(news.parentId ?? tenantId);
       const displayName = news.displayName ?? name;
 
-      // Observe.
-      let observed = yield* getGroupAfterWrite(name);
+      // Observe without a GET on a missing group (see `groupExists`).
+      let observed = (yield* groupExists(name))
+        ? yield* waitForProvisioned(
+            `management group ${name}`,
+            getGroupAfterWrite(name),
+            () => undefined,
+            { interval: "15 seconds", times: 120 },
+          )
+        : undefined;
 
       // Ensure: the PUT is accepted asynchronously (202); the group is
       // usable once it is readable.
@@ -209,7 +248,8 @@ export const ManagementGroupProvider = () =>
           `management group ${name}`,
           getGroupAfterWrite(name),
           () => undefined,
-          { interval: "15 seconds", times: 60 },
+          // The creator's Owner grant can take ~8 min to reach every front end.
+          { interval: "15 seconds", times: 120 },
         );
       }
 
@@ -241,8 +281,8 @@ export const ManagementGroupProvider = () =>
       // observe first. Without a role on the tenant root, ARM refuses both
       // calls for minutes at a time (the creator's Owner grant propagates
       // slowly and inconsistently across front ends); retry those refusals.
-      yield* Effect.gen(function* () {
-        if ((yield* getGroup(name)) === undefined) return;
+      const deleteOnce = Effect.gen(function* () {
+        if (!(yield* groupExists(name))) return;
         yield* ignoreNotFound(
           management.DeleteManagementGroup({ groupId: name }),
         );
@@ -253,14 +293,42 @@ export const ManagementGroupProvider = () =>
           times: 60,
         }),
       );
-      yield* waitUntilGone(
-        `management group ${name}`,
-        getGroup(name).pipe(
-          Effect.catchTag("AuthorizationFailed", () =>
-            Effect.succeed("unauthorized" as const),
-          ),
-        ),
-        { interval: "5 seconds", times: 60 },
+      // DELETE is asynchronous (`status: "NotStarted"`) and GET answers 404
+      // as soon as it is accepted, yet the operation can still fail (e.g. a
+      // child's own delete has not finished) and the group reappears. Only
+      // an absence that holds across a settle window counts as gone.
+      const settledGone = getGroup(name).pipe(
+        Effect.map((group) => group === undefined),
+        Effect.catchTag("AuthorizationFailed", () => Effect.succeed(false)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          while: (absent) => absent,
+          times: 8,
+        }),
       );
+      const gone = yield* Effect.gen(function* () {
+        yield* deleteOnce;
+        yield* waitUntilGone(
+          `management group ${name}`,
+          getGroup(name).pipe(
+            Effect.catchTag("AuthorizationFailed", () =>
+              Effect.succeed("unauthorized" as const),
+            ),
+          ),
+          { interval: "5 seconds", times: 60 },
+        );
+        return yield* settledGone;
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("15 seconds"),
+          until: (absent) => absent,
+          times: 6,
+        }),
+      );
+      if (!gone) {
+        return yield* Effect.fail(
+          new ManagementGroupDeleteNotSettled({ groupName: name }),
+        );
+      }
     }),
   });

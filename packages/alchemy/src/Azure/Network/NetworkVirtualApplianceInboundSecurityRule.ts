@@ -1,5 +1,6 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -162,6 +163,16 @@ const toAttrs = (
   ),
 });
 
+/**
+ * The NVA answers "Previous request in-progress" for minutes after it (or a
+ * prior rule write) reports `Succeeded`.
+ */
+const whileNvaBusy = {
+  ...whileNetworkBusy,
+  schedule: Schedule.spaced("15 seconds"),
+  times: 40,
+} as const;
+
 export const NetworkVirtualApplianceInboundSecurityRuleProvider = () =>
   Provider.succeed(NetworkVirtualApplianceInboundSecurityRule, {
     stables: [
@@ -261,7 +272,7 @@ export const NetworkVirtualApplianceInboundSecurityRuleProvider = () =>
             name: path.ruleCollectionName,
             properties: { ruleType, rules: desired },
           })
-          .pipe(Effect.retry(whileNetworkBusy));
+          .pipe(Effect.retry(whileNvaBusy));
       }
       const final = yield* waitNetworkProvisioned(
         `NVA inbound security rule ${path.ruleCollectionName}`,
@@ -286,7 +297,7 @@ export const NetworkVirtualApplianceInboundSecurityRuleProvider = () =>
       };
       const observed = yield* orUndefinedIfNotFound(
         network.GetInboundSecurityRule(path),
-      );
+      ).pipe(Effect.retry(whileNvaBusy));
       if (
         observed === undefined ||
         (observed.properties?.rules ?? []).length === 0
@@ -299,7 +310,7 @@ export const NetworkVirtualApplianceInboundSecurityRuleProvider = () =>
           name: output.ruleCollectionName,
           properties: { ruleType: observed.properties?.ruleType, rules: [] },
         }),
-      ).pipe(Effect.retry(whileNetworkBusy));
+      ).pipe(Effect.retry(whileNvaBusy));
     }),
 
     nuke: {

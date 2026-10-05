@@ -49,7 +49,12 @@ export interface PrivateEndpointConnectionProps {
    * @default "Approved"
    */
   status?: PrivateEndpointConnectionStatus;
-  /** Reason shown to the private endpoint owner. */
+  /**
+   * Reason shown to the private endpoint owner. Service Bus records it only
+   * with a status transition (it rejects same-state updates), so changing
+   * only the description leaves the recorded one in place until the status
+   * next changes.
+   */
   description?: string;
 }
 
@@ -262,11 +267,11 @@ export const PrivateEndpointConnectionProvider = () =>
 
       // Sync the approval state against the observed state.
       const state = observed.properties?.privateLinkServiceConnectionState;
-      if (
-        !sameName(state?.status, status) ||
-        (news.description !== undefined &&
-          state?.description !== news.description)
-      ) {
+      // Service Bus rejects same-state transitions ("A state change from
+      // Approved to Approved is not valid") and treats an omitted status as
+      // `Disconnected`, so the description is only written with a status
+      // transition.
+      if (!sameName(state?.status, status)) {
         yield* servicebus.PrivateEndpointConnectionsCreateOrUpdate({
           ...parent,
           privateEndpointConnectionName: name,

@@ -47,10 +47,12 @@ const program = (doc?: { name: string; content: string }) =>
 // Documentation pages are not available on Consumption (PUT returns an
 // empty 404). A BasicV2 service bills ~$0.21/h and takes 5-15+ minutes to
 // create: est. ~$0.10 and ~25 minutes per run.
-// Blocked by the platform: the documentations PUT also returns an empty
-// 404 on BasicV2 and Developer services (api-version 2024-05-01), which the
-// probe below pins on a free Consumption service.
-test.provider.skipIf(!runExpensive)(
+// Blocked by the platform: the documentations routes (GET list and PUT)
+// return an empty 404 on Developer, BasicV2 and Premium services at every
+// api-version from 2022-08-01 to 2024-06-01-preview, which the probe below
+// pins on a free Consumption service. Runs only with
+// AZURE_TEST_APIM_WIKIS=1 once the routes ship.
+test.provider.skipIf(!runExpensive || !process.env.AZURE_TEST_APIM_WIKIS)(
   "create, update, replace, and delete a documentation page",
   (stack) =>
     Effect.gen(function* () {

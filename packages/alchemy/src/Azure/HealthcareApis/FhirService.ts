@@ -17,7 +17,8 @@ import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   covers,
-  createHealthcareName,
+  checkServiceId,
+  createServiceName,
   type HealthcareIdentity,
   identityBody,
   sameArm,
@@ -124,7 +125,10 @@ export interface FhirServiceProps {
   workspace: string;
   /**
    * Service name: 3-24 lowercase letters and digits, starting with a
-   * letter. The service URL is
+   * letter. The service's full ARM resource ID must be at most 253
+   * characters: longer ones are accepted by ARM but end in provisioning
+   * state `Failed`, so reconcile rejects them up front. Generated names
+   * are shortened to fit. The service URL is
    * `https://{workspace}-{name}.fhir.azurehealthcareapis.com`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the service.
@@ -401,7 +405,12 @@ export const FhirServiceProvider = () =>
       const name =
         output?.fhirServiceName ??
         olds?.name ??
-        (yield* createHealthcareName(id));
+        (yield* createServiceName(id, {
+          subscriptionId,
+          resourceGroup,
+          workspace,
+          collection: "fhirservices",
+        }));
       const observed = yield* getFhir(
         subscriptionId,
         resourceGroup,
@@ -420,10 +429,17 @@ export const FhirServiceProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.HealthcareApis");
       const { resourceGroup, workspace } = news;
+      const scope = {
+        subscriptionId,
+        resourceGroup,
+        workspace,
+        collection: "fhirservices",
+      } as const;
       const name =
         news.name ??
         output?.fhirServiceName ??
-        (yield* createHealthcareName(id));
+        (yield* createServiceName(id, scope));
+      yield* checkServiceId(scope, name);
       const tags = yield* desiredMarkerTags(id, news.tags);
       const where = {
         subscriptionId,

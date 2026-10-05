@@ -49,8 +49,8 @@ const getPrefix = (
     });
   });
 
-// Free, but the trial has no partner-issued prefix key.
-test.provider.skipIf(!runPaidOnly)(
+// Free, but needs a prefix key issued by the Peering Service partner.
+test.provider.skipIf(!runPaidOnly || !providerPrefix.key)(
   "create and delete a peering service prefix",
   (stack) =>
     Effect.gen(function* () {

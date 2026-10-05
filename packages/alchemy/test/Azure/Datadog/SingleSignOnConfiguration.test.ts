@@ -3,9 +3,10 @@ import * as Test from "@/Test/Alchemy";
 import * as datadog from "@distilled.cloud/azure/datadog";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import {
+  acceptDatadogTerms,
   logLevel,
+  runWithDatadogUser,
   monitorStack,
   subscription,
   tags,
@@ -40,14 +41,16 @@ const program = (singleSignOnState: "Enable" | "Disable") =>
   });
 
 // Needs a Datadog monitor (Marketplace SaaS purchase, ~3-10 minutes; the
-// free trial cannot create one, see the Monitor probe) and an Entra ID
-// enterprise app from the Datadog gallery. Run only with AZURE_TEST_PAID=1
+// free trial cannot create one) and an Entra ID
+// enterprise app from the Datadog gallery. Run only with AZURE_TEST_PAID=1,
+// AZURE_TEST_DATADOG_USER_TOKEN=1 (user sign-in)
 // and AZURE_TEST_DATADOG_ENTERPRISE_APP_ID.
-test.provider.skipIf(!runPaidOnly || !enterpriseAppId)(
+test.provider.skipIf(!runWithDatadogUser || !enterpriseAppId)(
   "enable and disable datadog single sign-on",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* acceptDatadogTerms;
 
       const { group, monitor, sso } = yield* stack.deploy(program("Enable"));
       expect(sso.singleSignOnState).toEqual("Enable");

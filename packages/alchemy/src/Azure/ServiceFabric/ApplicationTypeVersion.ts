@@ -128,13 +128,16 @@ const toAttrs = (
   applicationType: string,
   version: string,
   observed: ObservedVersion,
+  knownPackageUrl?: string,
 ): ApplicationTypeVersion["Attributes"] => ({
   version,
   applicationTypeVersionId: observed.id ?? "",
   applicationType,
   cluster,
   resourceGroup,
-  appPackageUrl: observed.properties?.appPackageUrl ?? "",
+  // ARM returns an empty `appPackageUrl` (the SAS URL is not echoed back),
+  // so fall back to the URL this version was provisioned from.
+  appPackageUrl: observed.properties?.appPackageUrl || (knownPackageUrl ?? ""),
   location: observed.location,
   tags: userTags(observed.tags),
 });
@@ -252,6 +255,7 @@ export const ApplicationTypeVersionProvider = () =>
         applicationType,
         version,
         observed,
+        output?.appPackageUrl ?? olds?.appPackageUrl,
       );
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
@@ -327,6 +331,7 @@ export const ApplicationTypeVersionProvider = () =>
         applicationType,
         version,
         observed,
+        news.appPackageUrl,
       );
     }),
 

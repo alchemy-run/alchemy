@@ -148,5 +148,5 @@ test.provider.skipIf(!runExpensive)(
         "gone",
       );
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );

@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import {
-  appInsightsId,
   baseDefault,
   logLevel,
   subscription,
@@ -61,9 +60,9 @@ const program = (props: {
   });
 
 // The deployment and the minNodeCount-0 cluster are free until a job runs
-// (none does). Needs AmlCompute, i.e. a `Default` workspace with an existing
-// Application Insights component (AZURE_ML_APP_INSIGHTS_ID); ~8-12 minutes.
-test.provider.skipIf(!runExpensive || !appInsightsId)(
+// (none does). Needs AmlCompute, i.e. a `Default` workspace (with a
+// template-deployed Application Insights component); ~8-12 minutes.
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete a batch deployment",
   (stack) =>
     Effect.gen(function* () {

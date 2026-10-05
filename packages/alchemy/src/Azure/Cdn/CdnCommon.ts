@@ -43,6 +43,30 @@ export const whileProfileBusy = {
 } as const;
 
 /**
+ * Route writes are rejected (`AfdOriginGroupNotReady`) until the origin
+ * group has an enabled, provisioned origin, which a sibling `AfdOrigin` may
+ * still be deploying; also waits out a busy profile.
+ */
+export const whileOriginGroupNotReady = {
+  while: (e: { readonly _tag: string }) =>
+    e._tag === "ResourceConflict" || e._tag === "AfdOriginGroupNotReady",
+  schedule: Schedule.spaced("10 seconds"),
+  times: 60,
+} as const;
+
+/**
+ * The last origin of a group cannot be deleted while a route or rule still
+ * references the group (`AfdLastOriginInUse`); a route deleted in the same
+ * destroy releases it within a minute or two.
+ */
+export const whileOriginGroupInUse = {
+  while: (e: { readonly _tag: string }) =>
+    e._tag === "ResourceConflict" || e._tag === "AfdLastOriginInUse",
+  schedule: Schedule.spaced("10 seconds"),
+  times: 60,
+} as const;
+
+/**
  * Deterministic AFD child name: letters, digits, and single hyphens,
  * starting and ending with a letter or digit.
  */

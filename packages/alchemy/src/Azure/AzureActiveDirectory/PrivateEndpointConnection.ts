@@ -151,6 +151,10 @@ const getConnection = (
       policyName,
       privateEndpointConnectionName,
     }),
+  ).pipe(
+    // No policy, hence no connection, can exist where the subscription does
+    // not expose `privateLinkForAzureAd`.
+    Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
   );
 
 /** The policy's connection for the given private endpoint. */
@@ -172,6 +176,8 @@ const findConnection = Effect.fn(function* (
           requireSinglePage("ListPrivateEndpointConnectionByPolicyName", page),
         ),
       ),
+  ).pipe(
+    Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),
@@ -353,7 +359,7 @@ export const PrivateEndpointConnectionProvider = () =>
           policyName: output.policy,
           privateEndpointConnectionName: output.privateEndpointConnectionName,
         }),
-      );
+      ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.void));
       yield* waitUntilGone(
         `Entra private endpoint connection ${output.privateEndpointConnectionName}`,
         getConnection(

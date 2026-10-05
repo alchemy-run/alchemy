@@ -475,8 +475,8 @@ const NO_CREDENTIALS = {
 const DEFAULT_POD_CIDR = "10.128.0.0/14";
 const DEFAULT_SERVICE_CIDR = "172.30.0.0/16";
 
-// Install takes 35-45 minutes; delete 20-30.
-const CREATE_BUDGET = { interval: "60 seconds", times: 60 } as const;
+// Install takes 35-45 minutes (up to ~75 seen); delete 20-30.
+const CREATE_BUDGET = { interval: "60 seconds", times: 90 } as const;
 const DELETE_BUDGET = { interval: "60 seconds", times: 45 } as const;
 
 export const ClusterProvider = () =>

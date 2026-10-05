@@ -33,10 +33,14 @@ const program = (props: { owner: string }) =>
   });
 
 // Connects a real on-premises VMM server through an Arc resource bridge
-// (impossible on the free trial). Run with AZURE_TEST_PAID=1,
+// (Azure cannot provision SCVMM itself). Run with AZURE_TEST_PAID=1,
 // AZURE_TEST_SCVMM_CUSTOM_LOCATION, AZURE_TEST_SCVMM_FQDN,
 // AZURE_TEST_SCVMM_USERNAME and AZURE_TEST_SCVMM_PASSWORD.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(
+  !runPaidOnly ||
+    !customLocationId() ||
+    !process.env.AZURE_TEST_SCVMM_FQDN,
+)(
   "connect, retag, and disconnect a VMM server",
   (stack) =>
     Effect.gen(function* () {

@@ -254,14 +254,15 @@ const toAttrs = (
 
 /**
  * Microsoft.Web budgets plan creates per subscription; a burst of creates
- * is throttled. Each attempt already includes the SDK's own backoff, so a
- * few spaced retries cover ~6 minutes before the typed error surfaces.
+ * is throttled, and the throttle window often lasts well over 10 minutes.
+ * Each attempt already includes the SDK's own backoff, so spaced retries
+ * cover ~25 minutes before the typed error surfaces.
  */
 const whileCreateThrottled = {
   while: (e: { readonly _tag: string }) =>
     e._tag === "AppServicePlanCreateThrottled",
-  schedule: Schedule.spaced("30 seconds"),
-  times: 4,
+  schedule: Schedule.spaced("60 seconds"),
+  times: 15,
 } as const;
 
 export const AppServicePlanProvider = () =>

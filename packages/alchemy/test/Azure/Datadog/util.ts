@@ -1,8 +1,10 @@
 import * as Azure from "@/Azure";
 import type { AzureOpError } from "@distilled.cloud/azure";
+import * as datadog from "@distilled.cloud/azure/datadog";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { runPaidOnly } from "../gates.ts";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -10,6 +12,16 @@ export const logLevel = Effect.provideService(
 );
 
 export const tags = ["provider:azure", "provider:azure:datadog", "live"];
+
+/**
+ * Creating a new Datadog organization is a Marketplace SaaS purchase that
+ * Datadog rejects for service-principal callers (`DatadogMonitorCreationFailed`
+ * "ResourceCreationFailed: Bad Request"). Monitor lifecycles run only with
+ * `AZURE_TEST_DATADOG_USER_TOKEN=1` on a profile that signs in as a user;
+ * otherwise the Monitor probe asserts the rejection.
+ */
+export const runWithDatadogUser =
+  runPaidOnly && !!process.env.AZURE_TEST_DATADOG_USER_TOKEN;
 
 /** Datadog monitors are only offered in a few regions. */
 export const location = "westus2";
@@ -25,6 +37,18 @@ export const userInfo = {
   emailAddress:
     process.env.AZURE_TEST_DATADOG_EMAIL ?? "alchemy-test@example.com",
 };
+
+/**
+ * Accept the Microsoft Marketplace + Datadog terms for the subscription
+ * (idempotent). Without it every monitor PUT fails with
+ * `ResourceCreationValidateFailed`.
+ */
+export const acceptDatadogTerms = Effect.gen(function* () {
+  yield* datadog.MarketplaceAgreementsCreateOrUpdate({
+    subscriptionId: yield* subscription,
+    properties: { accepted: true },
+  });
+});
 
 /** Poll an out-of-band GET until it reports a typed not-found. */
 export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>

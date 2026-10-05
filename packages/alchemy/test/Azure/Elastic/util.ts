@@ -18,10 +18,14 @@ export const subscription = Effect.map(
   (env) => env.subscriptionId,
 );
 
-/** Owner of the test Elastic Cloud organization. */
+/**
+ * Owner of the test Elastic Cloud organization. Elastic fails deployment
+ * creation (after ~45 minutes, with a generic 500) for reserved domains
+ * such as example.com, so the default is a real domain.
+ */
 export const userInfo = {
   emailAddress:
-    process.env.AZURE_TEST_ELASTIC_EMAIL ?? "alchemy-test@example.com",
+    process.env.AZURE_TEST_ELASTIC_EMAIL ?? "alchemy-elastic@alchemy.run",
   firstName: "Alchemy",
   lastName: "Test",
   companyName: "Alchemy",

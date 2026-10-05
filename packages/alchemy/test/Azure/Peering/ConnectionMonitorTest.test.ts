@@ -50,8 +50,9 @@ const getTest = (
     });
   });
 
-// Free, but needs an on-premises Log Analytics agent the trial lacks.
-test.provider.skipIf(!runPaidOnly)(
+// Free, but needs a Log Analytics agent at the customer site connected to
+// the peering service's Connection Monitor workspace.
+test.provider.skipIf(!runPaidOnly || !agent)(
   "create, update, and delete a connection monitor test",
   (stack) =>
     Effect.gen(function* () {

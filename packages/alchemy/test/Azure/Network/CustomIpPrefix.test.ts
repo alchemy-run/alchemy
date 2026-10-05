@@ -8,6 +8,8 @@ import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
+const byoipCidr = process.env.AZURE_TEST_BYOIP_CIDR;
+
 const getPrefix = (resourceGroupName: string, customIpPrefixName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
     network.GetCustomIPPrefix({
@@ -24,7 +26,7 @@ const program = (props: { tags: Record<string, string> }) =>
     });
     const prefix = yield* Azure.Network.CustomIpPrefix("Prefix", {
       resourceGroup: group.resourceGroupName,
-      cidr: process.env.AZURE_TEST_BYOIP_CIDR ?? "",
+      cidr: byoipCidr ?? "",
       authorizationMessage: process.env.AZURE_TEST_BYOIP_AUTH_MESSAGE,
       signedMessage: process.env.AZURE_TEST_BYOIP_SIGNED_MESSAGE,
       zones: ["1", "2", "3"],
@@ -40,8 +42,9 @@ const program = (props: { tags: Record<string, string> }) =>
 // time and cannot be deleted until validation settles).
 // Needs an owned public range (AZURE_TEST_BYOIP_CIDR, ..._AUTH_MESSAGE,
 // ..._SIGNED_MESSAGE); provisioning takes ~30 minutes to hours. Free while
-// provisioned (not commissioned). Run with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// provisioned (not commissioned). Run with AZURE_TEST_PAID=1 and the
+// BYOIP variables set.
+test.provider.skipIf(!runPaidOnly || !byoipCidr)(
   "create, update, and delete a custom IP prefix",
   (stack) =>
     Effect.gen(function* () {

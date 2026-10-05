@@ -37,7 +37,7 @@ const program = (
   });
 
 // The managed VNet (preview) provisions in ~5-10 minutes, deleting the
-// injected account takes ~30 minutes, and AllowOnlyApprovedOutbound
+// injected account takes 25-50 minutes, and AllowOnlyApprovedOutbound
 // deploys an Azure Firewall (~$1.25/hour): gated, ~$1 per run.
 test.provider.skipIf(!runExpensive)(
   "create, tighten, and delete a foundry managed network",
@@ -78,5 +78,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 5_400_000 },
+  { tags, timeout: 7_200_000 },
 );

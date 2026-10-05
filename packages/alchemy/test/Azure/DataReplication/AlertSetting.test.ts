@@ -4,7 +4,6 @@ import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { runPaidOnly } from "../gates.ts";
 import { logLevel, subscription, tags, vaultStack } from "./shared.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -34,13 +33,16 @@ const getAlerts = (rg: string, vault: string) =>
     });
   });
 
-// Alert settings are free, but Microsoft.DataReplication refuses every
-// alertSettings PUT on a fresh vault (DisasterRecovery and Migrate vault
-// types, api-versions 2024-09-01 and 2026-05-01, names "default" and "0",
-// retried for ~2 minutes) with `ResourceNotFound: Resource 'default' does
-// not exist.` — the setting appears to need a vault already onboarded to an
-// Azure Migrate project. The probe below pins that rejection; run the
-// lifecycle (~3 minutes) with AZURE_TEST_PAID=1 on an onboarded subscription.
+// Alert settings are free, but Microsoft.DataReplication answers every
+// alertSettings PUT/PATCH with `ResourceNotFound: Resource '<name>' does not
+// exist.` — the operation behaves as update-only and nothing creates the
+// record. Reproduced on a pay-as-you-go subscription (2026-10) for
+// DisasterRecovery and Migrate vaults in westus2 and centralus, api-versions
+// 2024-09-01 and 2026-05-01, names "default"/"0"/"1"/vault name/service
+// resource id, after adding a replication policy, and after linking the vault
+// to an Azure Migrate project's ServerMigration_DataReplication solution.
+// The probe below pins that rejection; the lifecycle (~3 minutes) runs with
+// AZURE_TEST_DATAREPLICATION_ALERTS=1 once the service accepts the PUT.
 test.provider(
   "probe: alert settings PUT on a fresh vault is rejected",
   (stack) =>
@@ -72,7 +74,7 @@ test.provider(
   { tags, timeout: 900_000 },
 );
 
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!process.env.AZURE_TEST_DATAREPLICATION_ALERTS)(
   "configure, update, and reset data replication alert settings",
   (stack) =>
     Effect.gen(function* () {

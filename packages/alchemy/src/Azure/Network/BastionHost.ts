@@ -3,7 +3,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
-import { ref, sameId, sameSet } from "./common.ts";
+import { createNetworkName, ref, sameId, sameSet } from "./common.ts";
 import { networkProvider, subsetDiffers } from "./generic.ts";
 
 export type BastionSku = "Developer" | "Basic" | "Standard" | "Premium";
@@ -19,9 +19,11 @@ export interface BastionHostProps {
   /** Resource group of the bastion. Changing it replaces the bastion. */
   resourceGroup: string;
   /**
-   * Name of the bastion: 1-80 letters, digits, `_`, `.`, and `-`. If
-   * omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the bastion.
+   * Name of the bastion: letters, digits, `_`, `.`, and `-`. ARM accepts up
+   * to 80 characters, but a Basic bastion with an 80-character name ends
+   * provisioning `Failed` (a short name succeeds), so keep it short. If
+   * omitted, a unique 40-character name is generated from the app, stage,
+   * and logical ID. Changing it replaces the bastion.
    */
   name?: string;
   /**
@@ -150,6 +152,8 @@ export const BastionHostProvider = () =>
       nameAttr: "bastionHostName",
       tracked: true,
       slow: true,
+      // Long names make provisioning end `Failed` with no error detail.
+      physicalName: (id) => createNetworkName(id, 40),
       // A bastion owns its subnet and public IP exclusively.
       deleteFirst: true,
       immutable: (news, output) =>

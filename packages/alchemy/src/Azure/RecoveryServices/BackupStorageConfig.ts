@@ -16,6 +16,7 @@ import type { Providers } from "../Providers.ts";
 import {
   isVaultOwnedByStack,
   RECOVERY_SERVICES_NAMESPACE,
+  updateVaultProperties,
 } from "./BackupShared.ts";
 
 export type BackupStorageType =
@@ -76,10 +77,10 @@ export interface BackupStorageConfig extends Resource<
  * unlocked; Cross Region Restore cannot be turned off.
  *
  * Vaults created with current API versions get their redundancy set
- * through the vault API; Azure Backup then rejects changes through this
- * API with the typed `BackupConfigManagedByVaultApi` error. Manage
- * redundancy on such vaults with {@link Vault}; settings that already
- * match converge without a write.
+ * through the vault API, and Azure Backup rejects changes through the
+ * legacy `backupstorageconfig` API for them; Alchemy then applies the
+ * change through the vault API instead. Settings that already match
+ * converge without a write.
  *
  * @see https://learn.microsoft.com/azure/backup/backup-create-recovery-services-vault#set-storage-redundancy
  *
@@ -169,6 +170,81 @@ const delta = (
   return changed;
 };
 
+/**
+ * Apply `changed` through the legacy `backupstorageconfig` API, or through
+ * the vault API when Azure Backup reports the vault's redundancy is managed
+ * there (every vault created with current API versions).
+ */
+const applyChange = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+  current: BackupStorageConfig["Attributes"],
+  changed: backup.BackupResourceConfig,
+) =>
+  backup
+    .PatchBackupResourceStorageConfigsNonCRR({
+      subscriptionId,
+      resourceGroupName,
+      vaultName,
+      properties: changed,
+    })
+    .pipe(
+      Effect.asVoid,
+      Effect.catchTag("BackupConfigManagedByVaultApi", () =>
+        updateVaultProperties(subscriptionId, resourceGroupName, vaultName, {
+          // ARM rejects redundancy settings that omit either field.
+          redundancySettings: {
+            standardTierStorageRedundancy:
+              changed.storageType ?? current.storageType,
+            crossRegionRestore:
+              (changed.crossRegionRestoreFlag ?? current.crossRegionRestoreFlag)
+                ? "Enabled"
+                : "Disabled",
+          },
+        }).pipe(Effect.asVoid),
+      ),
+    );
+
+/** Both APIs apply the change asynchronously; poll until it shows. */
+const waitConverged = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+  desired: Partial<BackupStorageConfigProps>,
+) =>
+  backup
+    .GetBackupResourceStorageConfigsNonCRR({
+      subscriptionId,
+      resourceGroupName,
+      vaultName,
+    })
+    .pipe(
+      Effect.flatMap((config) =>
+        Object.keys(
+          delta(toAttrs(resourceGroupName, vaultName, config), desired),
+        ).length === 0
+          ? Effect.succeed(config)
+          : Effect.fail("pending" as const),
+      ),
+      Effect.retry({
+        while: (e) => e === "pending",
+        schedule: Schedule.spaced("5 seconds"),
+        times: 24,
+      }),
+      Effect.catchIf(
+        (e): e is "pending" => e === "pending",
+        () =>
+          Effect.fail(
+            new ProvisioningTimedOut({
+              resource: `backup storage config of ${vaultName}`,
+              state: undefined,
+              message: `backup storage config of vault ${vaultName} did not converge after 2 minutes`,
+            }),
+          ),
+      ),
+    );
+
 export const BackupStorageConfigProvider = () =>
   Provider.succeed(BackupStorageConfig, {
     stables: ["vault", "resourceGroup", "storageConfigId"],
@@ -219,41 +295,16 @@ export const BackupStorageConfigProvider = () =>
         yield* backup.GetBackupResourceStorageConfigsNonCRR(where);
 
       // Sync only the settings that differ (PATCH keeps the rest).
-      const changed = delta(toAttrs(resourceGroup, vault, observed), news);
-      if (Object.keys(changed).length === 0) {
-        return toAttrs(resourceGroup, vault, observed);
-      }
-      yield* backup.PatchBackupResourceStorageConfigsNonCRR({
-        ...where,
-        properties: changed,
-      });
-      // The PATCH (204) applies asynchronously.
-      const fresh = yield* backup
-        .GetBackupResourceStorageConfigsNonCRR(where)
-        .pipe(
-          Effect.flatMap((config) =>
-            Object.keys(delta(toAttrs(resourceGroup, vault, config), news))
-              .length === 0
-              ? Effect.succeed(config)
-              : Effect.fail("pending" as const),
-          ),
-          Effect.retry({
-            while: (e) => e === "pending",
-            schedule: Schedule.spaced("5 seconds"),
-            times: 24,
-          }),
-          Effect.catchIf(
-            (e): e is "pending" => e === "pending",
-            () =>
-              Effect.fail(
-                new ProvisioningTimedOut({
-                  resource: `backup storage config of ${vault}`,
-                  state: undefined,
-                  message: `backup storage config of vault ${vault} did not converge after 2 minutes`,
-                }),
-              ),
-          ),
-        );
+      const current = toAttrs(resourceGroup, vault, observed);
+      const changed = delta(current, news);
+      if (Object.keys(changed).length === 0) return current;
+      yield* applyChange(subscriptionId, resourceGroup, vault, current, changed);
+      const fresh = yield* waitConverged(
+        subscriptionId,
+        resourceGroup,
+        vault,
+        news,
+      );
       return toAttrs(resourceGroup, vault, fresh);
     }),
 
@@ -270,15 +321,26 @@ export const BackupStorageConfigProvider = () =>
       if (observed === undefined) return;
       const current = toAttrs(output.resourceGroup, output.vault, observed);
       if (!same(current.storageTypeState, "Unlocked")) return;
-      const reset = delta(current, { storageType: "GeoRedundant" });
+      const desired = { storageType: "GeoRedundant" } as const;
+      const reset = delta(current, desired);
       if (Object.keys(reset).length === 0) return;
       yield* ignoreNotFound(
-        backup.PatchBackupResourceStorageConfigsNonCRR({
+        applyChange(
           subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          vaultName: output.vault,
-          properties: reset,
-        }),
+          output.resourceGroup,
+          output.vault,
+          current,
+          reset,
+        ).pipe(
+          Effect.andThen(
+            waitConverged(
+              subscriptionId,
+              output.resourceGroup,
+              output.vault,
+              desired,
+            ),
+          ),
+        ),
       );
     }),
 

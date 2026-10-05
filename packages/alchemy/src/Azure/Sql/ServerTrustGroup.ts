@@ -241,6 +241,10 @@ export const ServerTrustGroupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // Right after a create, the group is still being applied to its
+      // members for a long time (over an hour observed) and a DELETE in
+      // that window does not complete; re-issue it until the group is
+      // gone: up to 24 rounds of 5 minutes.
       yield* ignoreNotFound(
         sql.DeleteServerTrustGroup({
           subscriptionId,
@@ -248,16 +252,23 @@ export const ServerTrustGroupProvider = () =>
           locationName: output.location,
           serverTrustGroupName: output.serverTrustGroupName,
         }),
-      );
-      yield* waitUntilGone(
-        `sql server trust group ${output.serverTrustGroupName}`,
-        getGroup(
-          subscriptionId,
-          output.resourceGroup,
-          output.location,
-          output.serverTrustGroupName,
+      ).pipe(
+        Effect.andThen(
+          waitUntilGone(
+            `sql server trust group ${output.serverTrustGroupName}`,
+            getGroup(
+              subscriptionId,
+              output.resourceGroup,
+              output.location,
+              output.serverTrustGroupName,
+            ),
+            { interval: "30 seconds", times: 10 },
+          ),
         ),
-        BUDGET,
+        Effect.retry({
+          while: (e) => e._tag === "Azure.DeleteTimedOut",
+          times: 23,
+        }),
       );
     }),
 

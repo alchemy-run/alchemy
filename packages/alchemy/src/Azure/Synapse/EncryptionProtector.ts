@@ -14,9 +14,11 @@ import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 const PROTECTOR_NAME = "current";
 
 /**
- * The workspace has no encryption protector endpoint: Azure answers every
- * GET/PUT on `encryptionProtector` with an empty-bodied 404 unless the
- * workspace was created with a customer-managed key.
+ * The workspace exposes no encryption protector: Azure answers every
+ * GET/PUT on `encryptionProtector` with an empty-bodied 404. Observed on
+ * service-managed workspaces and also on activated customer-managed-key
+ * workspaces with a dedicated SQL pool (api-versions 2019-06-01-preview
+ * through 2021-06-01-preview, Oct 2026).
  */
 export class EncryptionProtectorUnavailable extends Data.TaggedError(
   "Azure.Synapse.EncryptionProtectorUnavailable",
@@ -63,9 +65,10 @@ export interface EncryptionProtector extends Resource<
 /**
  * The TDE protector of a Synapse workspace's dedicated SQL pools — the key
  * that wraps every pool's database encryption key. Requires a workspace
- * created with a customer-managed key: on any other workspace Azure
- * answers with an empty 404 and reconcile fails with
- * `EncryptionProtectorUnavailable`.
+ * created with a customer-managed key. Azure currently answers the
+ * protector endpoint with an empty 404 even on activated CMK workspaces
+ * (the workspace key, see `WorkspaceKey`, is what actually protects
+ * them); reconcile then fails with `EncryptionProtectorUnavailable`.
  *
  * This is a singleton setting that always exists on a CMK workspace. Azure
  * cannot remove a protector, so destroying the resource leaves the current
@@ -188,7 +191,7 @@ export const EncryptionProtectorProvider = () =>
           Effect.catchTag("NotFound", () =>
             Effect.fail(
               new EncryptionProtectorUnavailable({
-                message: `workspace ${workspace} has no encryption protector; create it with a customerManagedKey`,
+                message: `workspace ${workspace} exposes no encryption protector (Azure answered 404); it needs a customer-managed key, and Azure may not expose the protector even then`,
               }),
             ),
           ),

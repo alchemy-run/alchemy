@@ -51,7 +51,10 @@ const connectionGone = (
     }),
   );
 
-const program = (description: string) =>
+const program = (
+  description: string,
+  status: Azure.ServiceBus.PrivateEndpointConnectionStatus = "Approved",
+) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -83,6 +86,7 @@ const program = (description: string) =>
         resourceGroup: group.resourceGroupName,
         namespace: bus.namespaceName,
         privateEndpointId: endpoint.privateEndpointId,
+        status,
         description,
       },
     );
@@ -118,8 +122,16 @@ test.provider.skipIf(!runExpensive)(
         observed.properties?.privateLinkServiceConnectionState?.description,
       ).toEqual("approved by alchemy");
 
-      // In place: description.
-      const updated = yield* stack.deploy(program("re-approved"));
+      // Description-only change: Service Bus rejects same-state transitions,
+      // so the deploy succeeds and the recorded description is kept.
+      const unchanged = yield* stack.deploy(program("re-approved"));
+      expect(unchanged.approval.status).toEqual("Approved");
+      expect(unchanged.approval.description).toEqual("approved by alchemy");
+
+      // In place: status transition carries the new description.
+      const updated = yield* stack.deploy(
+        program("rejected by alchemy", "Rejected"),
+      );
       expect(updated.approval.privateEndpointConnectionName).toEqual(
         approval.privateEndpointConnectionName,
       );
@@ -129,8 +141,11 @@ test.provider.skipIf(!runExpensive)(
         approval.privateEndpointConnectionName,
       );
       expect(
+        reobserved.properties?.privateLinkServiceConnectionState?.status,
+      ).toEqual("Rejected");
+      expect(
         reobserved.properties?.privateLinkServiceConnectionState?.description,
-      ).toEqual("re-approved");
+      ).toEqual("rejected by alchemy");
 
       yield* stack.destroy();
       expect(

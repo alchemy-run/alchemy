@@ -4,7 +4,13 @@ import * as workloads from "@distilled.cloud/azure/workloads";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
-import { logLevel, monitorStack, subscription, tags, waitGone } from "./util.ts";
+import {
+  logLevel,
+  monitorStack,
+  subscription,
+  tags,
+  waitGone,
+} from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -32,7 +38,7 @@ const program = (green: number) =>
     return { group, monitor, landscape };
   });
 
-// Needs an AMS monitor (~$0.25/hour, 10-20 minutes to create, ~10-30 to
+// Needs an AMS monitor (~$0.25/hour, 10-20 minutes to create, ~10-80 to
 // delete). Runs only with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete the landscape monitor configuration",
@@ -65,10 +71,12 @@ test.provider.skipIf(!runExpensive)(
 
       yield* stack.destroy();
       expect(
-        yield* waitGone(getLandscape(group.resourceGroupName, monitor.monitorName)),
+        yield* waitGone(
+          getLandscape(group.resourceGroupName, monitor.monitorName),
+        ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 5_400_000 },
+  { tags, timeout: 14_400_000 },
 );
 
 // Ungated probe (free: one empty resource group): the landscape monitor of
@@ -88,9 +96,10 @@ test.provider(
           return { group };
         }),
       );
-      const error = yield* getLandscape(group.resourceGroupName, "missing").pipe(
-        Effect.flip,
-      );
+      const error = yield* getLandscape(
+        group.resourceGroupName,
+        "missing",
+      ).pipe(Effect.flip);
       expect(error._tag).toEqual("NotFound");
       const deleteError = yield* Effect.gen(function* () {
         return yield* workloads.DeleteSapLandscapeMonitor({

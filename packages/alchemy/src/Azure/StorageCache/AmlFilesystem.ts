@@ -1,5 +1,6 @@
 import * as storagecache from "@distilled.cloud/azure/storagecache";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -80,7 +81,12 @@ export interface AmlFilesystemRootSquash {
    * squashes every user on non-trusted systems.
    */
   mode: "None" | "RootOnly" | "All";
-  /** Semicolon-separated NID lists of trusted systems that are not squashed. */
+  /**
+   * Semicolon-separated NID lists of trusted systems that are not squashed
+   * (e.g. `"10.0.2.4@tcp;10.0.2.[6-8]@tcp"`). Required when `mode` is
+   * `RootOnly` or `All`: the API rejects a missing or empty list with
+   * `InvalidParameter` ("Required parameter 'noSquashNidLists' is missing").
+   */
   noSquashNidLists?: string;
   /** User ID to squash to. */
   squashUID?: number;
@@ -134,7 +140,10 @@ export interface AmlFilesystemProps {
   /**
    * Resource ID of the subnet used for the file system and client traffic.
    * Use a dedicated subnet of at least /24 (see
-   * `GetRequiredAmlFSSubnetsSize`). Changing it replaces the file system.
+   * `GetRequiredAmlFSSubnetsSize`). The subnet needs outbound access to
+   * Azure services (`defaultOutboundAccess: true`, a NAT gateway, or a
+   * firewall route); a private subnet fails creation with
+   * `InitialDeploymentTimeout`. Changing it replaces the file system.
    */
   filesystemSubnet: string;
   /** Weekly 30-minute maintenance window. */
@@ -525,7 +534,15 @@ export const AmlFilesystemProvider = () =>
         observed === undefined ||
         identityDiffers(observed.identity, news.userAssignedIdentityIds)
       ) {
-        yield* put;
+        // The HSM container is briefly inaccessible while the resource
+        // provider's freshly granted storage roles propagate.
+        yield* put.pipe(
+          Effect.retry({
+            while: (e) => e._tag === "AmlFilesystemContainerInaccessible",
+            schedule: Schedule.spaced("15 seconds"),
+            times: 20,
+          }),
+        );
         observed = yield* settle;
       }
 

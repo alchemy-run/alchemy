@@ -28,7 +28,11 @@ export interface SecurityPolicyAssociation {
    * (`AfdCustomDomain.customDomainId`) the WAF policy protects.
    */
   domainIds: string[];
-  /** Path patterns the policy applies to. @default ["/*"] */
+  /**
+   * Path patterns the policy applies to. Front Door Standard/Premium only
+   * accepts `["/*"]`.
+   * @default ["/*"]
+   */
   patternsToMatch?: string[];
 }
 

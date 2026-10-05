@@ -2,6 +2,7 @@ import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
+import { ensureFeature } from "../features.ts";
 import { runExpensive, withVcpus } from "../gates.ts";
 import * as Effect from "effect/Effect";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
@@ -14,6 +15,13 @@ const { test } = Test.make({ providers: Azure.providers() });
 // Azure auto-creates it (NetworkWatcher_<region> in NetworkWatcherRG) with
 // the first VNet, so the test uses eastus's existing watcher: other regions
 // refuse this subscription small VM sizes (SkuNotAvailable).
+//
+// Connection Analyzer is a preview: even with the AllowConnectionAnalyzer
+// feature registered, every PUT answers a bare 500 InternalServerError
+// ("An error occurred.") on this subscription (api-versions 2025-09-01 and
+// 2026-05-01, ExternalAddress IP or FQDN destinations, ConnectivityCheck or
+// NextHop; probed 2026-10). Set AZURE_TEST_CONNECTION_ANALYZER=1 where the
+// service accepts analyzers.
 const REGION = "eastus";
 const WATCHER_GROUP = "NetworkWatcherRG";
 const WATCHER = "NetworkWatcher_eastus";
@@ -96,10 +104,14 @@ const program = (props: {
     return { group, watcher, analyzer };
   });
 
-test.provider.skipIf(!runExpensive)(
+test.provider.skipIf(
+  !runExpensive || !process.env.AZURE_TEST_CONNECTION_ANALYZER,
+)(
   "create, update, and delete a connection analyzer",
   (stack) =>
     Effect.gen(function* () {
+      // Without the preview flag ARM answers a bare InternalServerError.
+      yield* ensureFeature("Microsoft.Network", "AllowConnectionAnalyzer");
       yield* stack.destroy();
 
       const { watcher, analyzer } = yield* stack.deploy(

@@ -329,6 +329,9 @@
       "path": "./examples/hetzner-server/tsconfig.json"
     },
     {
+      "path": "./examples/azure-storage/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-app/tsconfig.json"
     },
     {

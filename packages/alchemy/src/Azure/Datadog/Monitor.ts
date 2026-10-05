@@ -39,7 +39,10 @@ export interface DatadogUserInfo {
  * `apiKey`, and `applicationKey`) to link an existing one.
  */
 export interface DatadogOrganization {
-  /** Name of the Datadog organization. */
+  /**
+   * Name of the Datadog organization. A new organization needs one.
+   * @default the monitor name when creating a new organization
+   */
   name?: string;
   /** ID of an existing Datadog organization to link. */
   id?: string;
@@ -77,9 +80,9 @@ export interface MonitorProps {
   location?: string;
   /**
    * Azure Marketplace plan ID of the Datadog subscription, e.g.
-   * `payg_v2_Monthly`, or `Linked` when linking an existing organization.
+   * `payg_v3_Monthly`, or `Linked` when linking an existing organization.
    * Changing it replaces the monitor.
-   * @default "payg_v2_Monthly"
+   * @default "payg_v3_Monthly"
    */
   sku?: string;
   /**
@@ -162,8 +165,12 @@ export interface Monitor extends Resource<
  *
  * The subscription must allow Marketplace purchases (free trial and
  * sponsored subscriptions cannot) and have accepted the Datadog
- * Marketplace terms. Tag rules, single sign-on, and monitored
- * subscriptions are managed as children of the monitor.
+ * Marketplace terms. Creating a new organization is a Marketplace SaaS
+ * purchase that Datadog rejects for service-principal callers
+ * (`DatadogMonitorCreationFailed`); deploy it signed in as a user, or link
+ * an existing organization with `sku: "Linked"`. Tag rules, single
+ * sign-on, and monitored subscriptions are managed as children of the
+ * monitor.
  *
  * @see https://learn.microsoft.com/azure/partner-solutions/datadog/overview
  *
@@ -211,7 +218,7 @@ export const Monitor = Resource<Monitor>("Azure.Datadog.Monitor");
 
 type ObservedMonitor = datadog.GetMonitorResponse;
 
-const DEFAULT_SKU = "payg_v2_Monthly";
+const DEFAULT_SKU = "payg_v3_Monthly";
 
 const createMonitorName = (id: string) =>
   createPhysicalName({ id, maxLength: 32 });
@@ -347,6 +354,13 @@ export const MonitorProvider = () =>
       // (or links) the Datadog organization in the background.
       if (observed === undefined) {
         const org = organizationIdentity(news.organization);
+        // A new organization needs a name (Datadog rejects the PUT with
+        // `ResourceCreationValidateFailed` otherwise); linking does not.
+        const linking =
+          org.id !== undefined ||
+          org.linkingAuthCode !== undefined ||
+          org.apiKey !== undefined;
+        if (!linking && org.name === undefined) org.name = name;
         yield* datadog.CreateMonitor({
           subscriptionId,
           resourceGroupName: resourceGroup,

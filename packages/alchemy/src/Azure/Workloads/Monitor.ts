@@ -372,42 +372,20 @@ export const MonitorProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const issueDelete = ignoreNotFound(
+      yield* ignoreNotFound(
         workloads.DeleteMonitor({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           monitorName: output.monitorName,
         }),
       );
-      yield* issueDelete;
-      // Deleting the monitor also tears down its managed resource group,
-      // which can take over 30 minutes. A delete that fails asynchronously
-      // returns the monitor to its previous state (typically `Failed` for a
-      // monitor whose provisioning failed) instead of removing it, so the
-      // DELETE is re-issued (at most every 5 minutes) while the monitor is
-      // observed outside `Deleting`.
-      let pollsSinceDelete = 0;
+      // Deleting the monitor also tears down its managed resource group.
+      // A monitor whose provisioning failed has taken 80-125 minutes to
+      // delete (GET keeps reporting `Failed` meanwhile): allow 3 hours.
       yield* waitUntilGone(
         `SAP monitor ${output.monitorName}`,
-        getMonitor(
-          subscriptionId,
-          output.resourceGroup,
-          output.monitorName,
-        ).pipe(
-          Effect.tap((monitor) => {
-            pollsSinceDelete++;
-            if (
-              monitor === undefined ||
-              monitor.properties?.provisioningState === "Deleting" ||
-              pollsSinceDelete < 10
-            ) {
-              return Effect.void;
-            }
-            pollsSinceDelete = 0;
-            return issueDelete;
-          }),
-        ),
-        { interval: "30 seconds", times: 120 },
+        getMonitor(subscriptionId, output.resourceGroup, output.monitorName),
+        { interval: "30 seconds", times: 360 },
       );
     }),
 

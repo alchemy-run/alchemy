@@ -191,7 +191,8 @@ const toAttrs = (
   capacityName: name,
   capacityId: capacity.id ?? "",
   resourceGroup,
-  location: capacity.location,
+  // ARM returns the display name ("West US 2"); expose the canonical name.
+  location: capacity.location.toLowerCase().replace(/\s/g, ""),
   sku: capacity.sku.name,
   mode: capacity.properties?.mode ?? "Gen2",
   administrators: [...(capacity.properties?.administration?.members ?? [])],
