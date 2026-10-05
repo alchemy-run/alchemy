@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
@@ -49,7 +50,12 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  const verified = yield* retryAuthBlip(
+    token.startsWith("cfat_")
+      ? // Account-owned tokens verify against the account route.
+        accounts.verifyToken({ accountId: creds.accountId })
+      : user.verifyToken({}),
+  );
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -106,19 +112,19 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Create — engine-generated name, default http/workerBinding.
+      // Create — engine-generated name, default http/workerBinding. The
+      // secure default is no public HTTP endpoint.
       const initial = yield* retryAuthBlip(stack.deploy(Cloudflare.Pipelines.Stream("Stream", {})));
 
       expect(initial.streamId).toBeTruthy();
       expect(initial.accountId).toEqual(accountId);
-      expect(initial.httpEnabled).toEqual(true);
-      expect(initial.httpAuthentication).toEqual(false);
+      expect(initial.httpEnabled).toEqual(false);
       expect(initial.workerBindingEnabled).toEqual(true);
-      expect(initial.endpoint).toBeTruthy();
 
       const live = yield* getStream(accountId, initial.streamId);
       expect(live.id).toEqual(initial.streamId);
       expect(live.name).toEqual(initial.name);
+      expect(live.http.enabled).toEqual(false);
 
       // Patch http in place — same streamId.
       const updated = yield* retryAuthBlip(
@@ -134,6 +140,8 @@ test.provider(
       );
 
       expect(updated.streamId).toEqual(initial.streamId);
+      expect(updated.httpEnabled).toEqual(true);
+      expect(updated.endpoint).toBeTruthy();
       expect(updated.httpAuthentication).toEqual(true);
       expect(updated.corsOrigins).toEqual(["https://example.com"]);
 

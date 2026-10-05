@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -50,7 +51,12 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  const verified = yield* retryAuthBlip(
+    token.startsWith("cfat_")
+      ? // Account-owned tokens verify against the account route.
+        accounts.verifyToken({ accountId: creds.accountId })
+      : user.verifyToken({}),
+  );
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );

@@ -25,6 +25,7 @@ import { isApp } from "../Flagship/App.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
+import { isStream as isK2Stream } from "../K2/Stream.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
@@ -659,6 +660,12 @@ const toBinding = (
       type: "pipelines",
       name: bindingName,
       pipeline: binding.name,
+    };
+  } else if (isK2Stream(binding)) {
+    return {
+      type: "k2",
+      name: bindingName,
+      stream: binding.streamId,
     };
   } else if (Output.isOutput(binding)) {
     return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>

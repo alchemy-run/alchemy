@@ -153,12 +153,19 @@ export type DataCatalog = Resource<
  * Iceberg tables stored in R2. The catalog is a singleton per bucket: this
  * resource enables it, keeps its maintenance configuration in sync, and
  * disables it on destroy (table data in the bucket is never deleted).
+ *
+ * Also exported as `Cloudflare.Basin.Catalog` — the catalog of Cloudflare's
+ * Basin product (Pipelines + Catalog + SQL). The warehouse is named
+ * `<accountId>_<bucket>` and served at
+ * `https://catalog.cloudflarestorage.com/<accountId>/<bucket>`. Pass the
+ * catalog resource to a catalog `Cloudflare.Basin.Sink` (`catalog: Catalog`)
+ * so the sink is created after it.
  * ### Enabling a catalog
  * **Example:** Enable the catalog on an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("LakehouseBucket");
  *
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  * });
  *
@@ -170,7 +177,7 @@ export type DataCatalog = Resource<
  * ### Maintenance
  * **Example:** Configure compaction and snapshot expiration
  * ```typescript
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  *   compaction: { state: "enabled", targetSizeMb: "256" },
  *   snapshotExpiration: {
@@ -184,7 +191,7 @@ export type DataCatalog = Resource<
  * **Example:** Register a maintenance credential
  * ```typescript
  * // Maintenance jobs need an API token with R2 read/write on the bucket.
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
  *   bucketName: bucket.bucketName,
  *   compaction: { state: "enabled" },
  *   token: maintenanceToken, // Redacted<string>
@@ -200,7 +207,7 @@ export type DataCatalog = Resource<
 export const DataCatalog = Resource<DataCatalog>(TypeId);
 
 /**
- * Returns true if the given value is an R2DataCatalog resource.
+ * Returns true if the given value is a DataCatalog (Basin Catalog) resource.
  */
 export const isDataCatalog = (value: unknown): value is DataCatalog =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
