@@ -340,7 +340,8 @@ Failure-path tests assert the typed error and finish in minutes. Give them
 a short timeout and never let them wait out a slow provisioning or delete;
 a single test case that runs for an hour is a bug in the test.
 
-Stop chasing the long tail once fix rounds stop paying off. When the
+Stop chasing the long tail after the three-iteration budget from the
+**Speed doctrine** in `AGENTS.md`, or as soon as the user says so. When the
 remaining failures are slow provisioning, platform behavior, or test
 infrastructure the cloud needs (a reachable endpoint, a custom image),
 let the current run finish, then skip-gate each failing case with its
@@ -435,8 +436,8 @@ A draft PR for an early wave is fine; its description states the index
 counts and that the provider is incomplete.
 
 A provider is done when every SDK service is cataloged, every in-scope
-resource has its own passing live test (or is `blocked: cost` and the user
-has the list),
+resource has its own passing live test (or is `blocked: cost` or
+`blocked: skipped` and the user has the list),
 bindings follow the AWS/Cloudflare patterns and are least privilege, the
 framework websites deploy, examples deploy, docs are generated, the review
 gate is clean, the test account is clean after a full run, and every SDK
