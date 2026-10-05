@@ -639,6 +639,11 @@ export interface WorkerProps<
    * If omitted, defaults to `{ enabled: true, logs: { enabled: true,
    * invocationLogs: true } }`. Traces are off by default — opt in via
    * `traces: { enabled: true, ... }`.
+   *
+   * Set `issues: { enabled: true }` to enable Workers Issues error detection
+   * across full deployments. Setting it to `false` or omitting `issues`
+   * disables Issues on the next full deployment. Version-only uploads and
+   * gradual rollouts keep the parent's live observability settings.
    */
   observability?: WorkerObservability;
   /**
@@ -2084,6 +2089,23 @@ export const isSelf = (value: unknown): value is Self =>
  *   },
  * }
  * ```
+ *
+ * **Example:** Enabling Workers Issues
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   observability: {
+ *     issues: { enabled: true },
+ *   },
+ * });
+ * ```
+ *
+ * Workers Issues groups recurring failures in the Cloudflare dashboard.
+ * Alchemy includes the flag in upload metadata and reconciles it through
+ * script settings after a full deployment so it survives redeploys. Set
+ * `issues.enabled` to `false` or remove `issues` to disable detection.
+ * Configure logs and traces alongside `issues` when you need those channels.
+ * Version-only uploads and gradual rollouts retain the parent's settings.
  *
  * ### Tail Workers
  * A [Tail Worker](https://developers.cloudflare.com/workers/observability/logs/tail-workers/)

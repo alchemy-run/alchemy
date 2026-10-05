@@ -66,6 +66,7 @@ import {
   type WorkerSettingsBinding,
   withoutDevOnlyBindings,
 } from "./WorkerBinding.ts";
+import { syncWorkerIssues } from "./WorkerIssues.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -3659,6 +3660,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
+        const observability = resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -3676,7 +3678,7 @@ export const LiveWorkerProvider = () =>
           logpush: news.logpush,
           mainModule: bundle.main,
           migrations,
-          observability: resolveObservability(news, bindings),
+          observability,
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -3786,6 +3788,9 @@ export const LiveWorkerProvider = () =>
             );
           }
           worker = yield* putWorkerScriptWithMigrationRecovery();
+          if (!dispatchNamespace) {
+            yield* syncWorkerIssues(accountId, name, observability);
+          }
         }
 
         function putWorkerScriptWithMigrationRecovery() {
