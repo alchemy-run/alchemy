@@ -268,16 +268,11 @@ export const EnvironmentProvider = () =>
       });
 
       // Ensure & Sync — the PUT is a full upsert of the environment's
-      // protection configuration. The reviewer-family fields (wait_timer,
-      // prevent_self_review, reviewers) are OMITTED unless the prop is set now
-      // or was set before: on a private repository without an Enterprise plan
-      // that field family is plan-gated, and GitHub 422s ("Failed to create
-      // the environment protection rule") when the fields are PRESENT at all —
-      // even carrying their default values 0/false/null. When a previously-set
-      // prop is removed, the explicit default IS sent so removal still
-      // converges (a repo that held the value demonstrably supports the
-      // field). deployment_branch_policy is available on all plans and keeps
-      // its explicit null.
+      // configuration. Each protection field is sent only while managed (set
+      // now, or set before so removal resets it to its default): private
+      // repos below GitHub Enterprise (e.g. Team plan) reject these fields
+      // with 422 even at their default values. deployment_branch_policy works
+      // on every plan and sends an explicit null so its removal converges.
       const environment = yield* Effect.tryPromise({
         try: async () => {
           const { data } = await octokit.rest.repos.createOrUpdateEnvironment({
@@ -290,11 +285,9 @@ export const EnvironmentProvider = () =>
             ...(news.preventSelfReview !== undefined || olds?.preventSelfReview !== undefined
               ? { prevent_self_review: news.preventSelfReview ?? false }
               : {}),
-            ...(reviewers !== null && reviewers.length > 0
-              ? { reviewers }
-              : olds?.reviewers !== undefined
-                ? { reviewers: null }
-                : {}),
+            ...(news.reviewers !== undefined || olds?.reviewers !== undefined
+              ? { reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers }
+              : {}),
             deployment_branch_policy:
               news.deploymentBranchPolicy === undefined
                 ? null
