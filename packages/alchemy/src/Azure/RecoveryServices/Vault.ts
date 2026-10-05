@@ -1,4 +1,6 @@
 import * as recoveryservices from "@distilled.cloud/azure/recoveryservices";
+import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -39,10 +41,7 @@ export interface VaultIdentity {
   userAssignedIdentities?: string[];
 }
 
-export type VaultStorageRedundancy =
-  | "LocallyRedundant"
-  | "GeoRedundant"
-  | "ZoneRedundant";
+export type VaultStorageRedundancy = "LocallyRedundant" | "GeoRedundant" | "ZoneRedundant";
 
 export type VaultAlertsState = "Enabled" | "Disabled";
 
@@ -251,11 +250,7 @@ const createVaultName = Effect.fn(function* (id: string) {
   return /^[A-Za-z]/.test(cleaned) ? cleaned : `v${cleaned.slice(0, 49)}`;
 });
 
-const getVault = (
-  subscriptionId: string,
-  resourceGroupName: string,
-  vaultName: string,
-) =>
+const getVault = (subscriptionId: string, resourceGroupName: string, vaultName: string) =>
   orUndefinedIfNotFound(
     recoveryservices.GetVault({ subscriptionId, resourceGroupName, vaultName }),
   );
@@ -277,8 +272,7 @@ const toAttrs = (
     publicNetworkAccess: props?.publicNetworkAccess,
     storageRedundancy: props?.redundancySettings?.standardTierStorageRedundancy,
     crossRegionRestore: props?.redundancySettings?.crossRegionRestore,
-    softDeleteState:
-      props?.securitySettings?.softDeleteSettings?.softDeleteState,
+    softDeleteState: props?.securitySettings?.softDeleteSettings?.softDeleteState,
     immutabilityState: props?.securitySettings?.immutabilitySettings?.state,
     backupStorageVersion: props?.backupStorageVersion,
     secureScore: props?.secureScore,
@@ -292,9 +286,7 @@ const lower = (value: string | undefined) => value?.toLowerCase();
 const normalizeType = (type: string | undefined) =>
   (type ?? "None").replace(/\s+/g, "").toLowerCase();
 
-const toIdentity = (
-  identity: VaultIdentity,
-): recoveryservices.IdentityDataInput => ({
+const toIdentity = (identity: VaultIdentity): recoveryservices.IdentityDataInput => ({
   type: identity.type,
   userAssignedIdentities: identity.userAssignedIdentities?.length
     ? Object.fromEntries(identity.userAssignedIdentities.map((id) => [id, {}]))
@@ -312,9 +304,7 @@ const identityDiffers = (
   const have = Object.keys(observed?.userAssignedIdentities ?? {})
     .map((id) => id.toLowerCase())
     .sort();
-  const want = (desired.userAssignedIdentities ?? [])
-    .map((id) => id.toLowerCase())
-    .sort();
+  const want = (desired.userAssignedIdentities ?? []).map((id) => id.toLowerCase()).sort();
   return have.length !== want.length || have.some((id, i) => id !== want[i]);
 };
 
@@ -326,9 +316,7 @@ const differs = <T extends object>(observed: T | undefined, desired: T) =>
 
 /** `value` without its `undefined` fields. */
 const defined = <T extends object>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, v]) => v !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 
 /** The vault-property delta between observed and desired state. */
 const propertiesDelta = (
@@ -355,16 +343,13 @@ const propertiesDelta = (
         observed?.redundancySettings?.standardTierStorageRedundancy ??
         "GeoRedundant",
       crossRegionRestore:
-        news.crossRegionRestore ??
-        observed?.redundancySettings?.crossRegionRestore ??
-        "Disabled",
+        news.crossRegionRestore ?? observed?.redundancySettings?.crossRegionRestore ?? "Disabled",
     };
   }
 
   if (news.crossSubscriptionRestore !== undefined) {
     const state =
-      observed?.restoreSettings?.crossSubscriptionRestoreSettings
-        ?.crossSubscriptionRestoreState;
+      observed?.restoreSettings?.crossSubscriptionRestoreSettings?.crossSubscriptionRestoreState;
     if (state !== news.crossSubscriptionRestore) {
       delta.restoreSettings = {
         crossSubscriptionRestoreSettings: {
@@ -380,8 +365,7 @@ const propertiesDelta = (
   const softDelete = observed?.securitySettings?.softDeleteSettings;
   if (
     news.softDeleteRetentionPeriodInDays !== undefined &&
-    softDelete?.softDeleteRetentionPeriodInDays !==
-      news.softDeleteRetentionPeriodInDays
+    softDelete?.softDeleteRetentionPeriodInDays !== news.softDeleteRetentionPeriodInDays
   ) {
     security.softDeleteSettings = {
       softDeleteState: softDelete?.softDeleteState,
@@ -391,8 +375,7 @@ const propertiesDelta = (
   }
   if (
     news.immutability !== undefined &&
-    observed?.securitySettings?.immutabilitySettings?.state !==
-      news.immutability
+    observed?.securitySettings?.immutabilitySettings?.state !== news.immutability
   ) {
     security.immutabilitySettings = { state: news.immutability };
   }
@@ -406,10 +389,8 @@ const propertiesDelta = (
       alertsForAllFailoverIssues: monitoring.alertsForAllFailoverIssues,
     };
     const classic: recoveryservices.ClassicAlertSettings = {
-      alertsForCriticalOperations:
-        monitoring.classicAlertsForCriticalOperations,
-      emailNotificationsForSiteRecovery:
-        monitoring.emailNotificationsForSiteRecovery,
+      alertsForCriticalOperations: monitoring.classicAlertsForCriticalOperations,
+      emailNotificationsForSiteRecovery: monitoring.emailNotificationsForSiteRecovery,
     };
     const observedMonitoring = observed?.monitoringSettings;
     if (
@@ -440,8 +421,7 @@ const propertiesDelta = (
       lower(observedEncryption?.kekIdentity?.userAssignedIdentity) !==
         lower(encryption.userAssignedIdentity) ||
       (encryption.infrastructureEncryption !== undefined &&
-        observedEncryption?.infrastructureEncryption !==
-          encryption.infrastructureEncryption)
+        observedEncryption?.infrastructureEncryption !== encryption.infrastructureEncryption)
     ) {
       delta.encryption = {
         keyVaultProperties: { keyUri: encryption.keyUri },
@@ -457,9 +437,100 @@ const propertiesDelta = (
 const SKU = { name: "RS0", tier: "Standard" } as const;
 
 /** Identity and network updates keep a vault `Updating` for about a minute. */
+
+/**
+ * A vault still holds backup items in soft delete. New vaults get the
+ * irreversible `AlwaysON` soft delete, so Azure refuses to delete the vault
+ * (`BMSUserErrorVaultDeletionNotAllowed`) until the retention ends.
+ */
+export class VaultSoftDeleteRetention extends Data.TaggedError("Azure.VaultSoftDeleteRetention")<{
+  readonly message: string;
+}> {}
+
+const BACKUP_MANAGEMENT_TYPES = [
+  "AzureWorkload",
+  "AzureIaasVM",
+  "AzureStorage",
+  "MAB",
+  "DPM",
+  "AzureBackupServer",
+] as const;
+
+const containerAndItem = (id: string | undefined) => {
+  const m = id?.match(
+    /\/backupFabrics\/([^/]+)\/protectionContainers\/([^/]+)(?:\/protectedItems\/([^/]+))?/i,
+  );
+  return m === null || m === undefined
+    ? undefined
+    : { fabric: m[1]!, container: m[2]!, item: m[3] };
+};
+
+/**
+ * Empty a vault so it can be deleted: stop protection of every backup item
+ * (deleting its data), then unregister every protection container. Items
+ * already in soft delete cannot be removed early; fail with the time the
+ * retention ends.
+ */
+const emptyVault = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vaultName: string,
+) {
+  const where = { subscriptionId, resourceGroupName, vaultName };
+  let retainedUntil: string | undefined;
+  for (const type of BACKUP_MANAGEMENT_TYPES) {
+    const items = yield* orUndefinedIfNotFound(
+      backup.ListBackupProtectedItems({
+        ...where,
+        _filter: `backupManagementType eq '${type}'`,
+      }),
+    );
+    for (const item of items?.value ?? []) {
+      const path = containerAndItem(item.id);
+      if (path?.item === undefined) continue;
+      if (item.properties?.isScheduledForDeferredDelete) {
+        const until = item.properties.deferredDeleteTimeInUTC;
+        if (until !== undefined && (retainedUntil ?? "") < until) retainedUntil = until;
+        continue;
+      }
+      yield* ignoreNotFound(
+        backup.DeleteProtectedItem({
+          ...where,
+          fabricName: path.fabric,
+          containerName: path.container,
+          protectedItemName: path.item,
+        }),
+      );
+    }
+  }
+  if (retainedUntil !== undefined) {
+    return yield* new VaultSoftDeleteRetention({
+      message: `vault ${vaultName} holds soft-deleted backup items; Azure blocks deleting it until their 14-day retention (deleted at ${retainedUntil}) ends`,
+    });
+  }
+  for (const type of BACKUP_MANAGEMENT_TYPES) {
+    const containers = yield* orUndefinedIfNotFound(
+      backup.ListBackupProtectionContainers({
+        ...where,
+        _filter: `backupManagementType eq '${type}'`,
+      }),
+    );
+    for (const container of containers?.value ?? []) {
+      const path = containerAndItem(container.id);
+      if (path === undefined) continue;
+      yield* ignoreNotFound(
+        backup.UnregisterProtectionContainer({
+          ...where,
+          fabricName: path.fabric,
+          containerName: path.container,
+        }),
+      );
+    }
+  }
+});
+
 const whileVaultBusy = {
-  while: (e: { readonly _tag: string }) =>
-    e._tag === "RecoveryServicesVaultOperationInProgress",
+  while: (e: { readonly _tag: string }) => e._tag === "RecoveryServicesVaultOperationInProgress",
   schedule: Schedule.spaced("10 seconds"),
   times: 18,
 } as const;
@@ -472,16 +543,10 @@ export const VaultProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* recoveryservices
         .ListVaultBySubscriptionId({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListVaultBySubscriptionId", page),
-          ),
-        );
+        .pipe(Effect.flatMap((page) => requireSinglePage("ListVaultBySubscriptionId", page)));
       return (page.value ?? []).flatMap((vault) => {
         const group = resourceGroupOf(vault.id);
-        return hasAnyAlchemyTag(vault.tags) &&
-          group !== undefined &&
-          vault.name !== undefined
+        return hasAnyAlchemyTag(vault.tags) && group !== undefined && vault.name !== undefined
           ? [toAttrs(group, vault.name, vault)]
           : [];
       });
@@ -491,8 +556,7 @@ export const VaultProvider = () =>
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
-        (news.name !== undefined &&
-          lower(news.name) !== lower(output.vaultName)) ||
+        (news.name !== undefined && lower(news.name) !== lower(output.vaultName)) ||
         (news.location !== undefined &&
           news.location.replace(/\s+/g, "").toLowerCase() !==
             output.location.replace(/\s+/g, "").toLowerCase())
@@ -506,8 +570,7 @@ export const VaultProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
-      const name =
-        output?.vaultName ?? olds?.name ?? (yield* createVaultName(id));
+      const name = output?.vaultName ?? olds?.name ?? (yield* createVaultName(id));
       const observed = yield* getVault(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -519,8 +582,7 @@ export const VaultProvider = () =>
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.RecoveryServices");
       const resourceGroup = news.resourceGroup;
-      const name =
-        news.name ?? output?.vaultName ?? (yield* createVaultName(id));
+      const name = news.name ?? output?.vaultName ?? (yield* createVaultName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const where = {
@@ -566,10 +628,7 @@ export const VaultProvider = () =>
           .UpdateVault({
             ...where,
             tags: tagsChanged ? tags : undefined,
-            identity:
-              identityChanged && news.identity
-                ? toIdentity(news.identity)
-                : undefined,
+            identity: identityChanged && news.identity ? toIdentity(news.identity) : undefined,
             properties: Object.keys(delta).length > 0 ? delta : undefined,
           })
           .pipe(Effect.retry(whileVaultBusy));
@@ -581,6 +640,9 @@ export const VaultProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const existing = yield* getVault(subscriptionId, output.resourceGroup, output.vaultName);
+      if (existing === undefined) return;
+      yield* emptyVault(subscriptionId, output.resourceGroup, output.vaultName);
       yield* ignoreNotFound(
         recoveryservices
           .DeleteVault({

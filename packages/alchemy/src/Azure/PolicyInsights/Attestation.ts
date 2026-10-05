@@ -1,4 +1,5 @@
 import * as policyinsights from "@distilled.cloud/azure/policyinsights";
+import * as resources from "@distilled.cloud/azure/resources";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -13,6 +14,7 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   requireSinglePage,
+  resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -27,10 +29,7 @@ import {
 } from "../Resources/Shared.ts";
 
 /** Compliance state an attestation sets on the resources in its scope. */
-export type AttestationComplianceState =
-  | "Compliant"
-  | "NonCompliant"
-  | "Unknown";
+export type AttestationComplianceState = "Compliant" | "NonCompliant" | "Unknown";
 
 /** A piece of evidence supporting an attestation. */
 export interface AttestationEvidence {
@@ -175,9 +174,7 @@ export interface Attestation extends Resource<
  *
  * @resource
  */
-export const Attestation = Resource<Attestation>(
-  "Azure.PolicyInsights.Attestation",
-);
+export const Attestation = Resource<Attestation>("Azure.PolicyInsights.Attestation");
 
 const SEGMENT = "/providers/Microsoft.PolicyInsights/attestations/";
 
@@ -226,27 +223,38 @@ export const AttestationProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* policyinsights
         .ListAttestationForSubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListAttestationForSubscription", page),
-          ),
+        .pipe(Effect.flatMap((page) => requireSinglePage("ListAttestationForSubscription", page)));
+      // Azure keeps attestation records after their scope's resource group
+      // is deleted, and a DELETE on them returns ResourceGroupNotFound, so
+      // attestations whose resource group is gone are already torn down.
+      const groups = [
+        ...new Set(
+          page.value.flatMap((a) => {
+            const group = resourceGroupOf(a.id);
+            return group === undefined ? [] : [group.toLowerCase()];
+          }),
+        ),
+      ];
+      const live = new Set<string>();
+      for (const group of groups) {
+        const found = yield* orUndefinedIfNotFound(
+          resources.GetResourceGroup({
+            subscriptionId,
+            resourceGroupName: group,
+          }),
         );
+        if (found !== undefined) live.add(group);
+      }
       return page.value.flatMap((attestation) => {
-        const index = attestation.id
-          ?.toLowerCase()
-          .indexOf(SEGMENT.toLowerCase());
+        const group = resourceGroupOf(attestation.id)?.toLowerCase();
+        if (group !== undefined && !live.has(group)) return [];
+        const index = attestation.id?.toLowerCase().indexOf(SEGMENT.toLowerCase());
         return attestation.id !== undefined &&
           attestation.name !== undefined &&
           index !== undefined &&
           index >= 0 &&
           hasAnyAlchemyTag(metadataTags(attestation.properties.metadata))
-          ? [
-              toAttrs(
-                attestation.id.slice(0, index),
-                attestation.name,
-                attestation,
-              ),
-            ]
+          ? [toAttrs(attestation.id.slice(0, index), attestation.name, attestation)]
           : [];
       });
     }),
@@ -283,8 +291,7 @@ export const AttestationProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const scope = output?.scope ?? olds?.scope;
       if (scope === undefined) return undefined;
-      const name =
-        output?.attestationName ?? (yield* attestationName(id, olds?.name));
+      const name = output?.attestationName ?? (yield* attestationName(id, olds?.name));
       const observed = yield* getAttestation(scope, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(scope, name, observed);
@@ -297,8 +304,7 @@ export const AttestationProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.PolicyInsights");
       const scope = trimScope(news.scope);
-      const name =
-        output?.attestationName ?? (yield* attestationName(id, news.name));
+      const name = output?.attestationName ?? (yield* attestationName(id, news.name));
       const metadata = yield* metadataWithMarker(id, news.metadata);
       const complianceState = news.complianceState ?? "Unknown";
 
@@ -310,8 +316,7 @@ export const AttestationProvider = () =>
       if (
         current === undefined ||
         !sameId(current.policyAssignmentId, news.policyAssignmentId) ||
-        (current.policyDefinitionReferenceId ?? undefined) !==
-          news.policyDefinitionReferenceId ||
+        (current.policyDefinitionReferenceId ?? undefined) !== news.policyDefinitionReferenceId ||
         (current.complianceState ?? "Unknown") !== complianceState ||
         !sameTime(current.expiresOn, news.expiresOn) ||
         current.owner !== news.owner ||
@@ -382,9 +387,6 @@ export const AttestationProvider = () =>
 
     nuke: {
       // The attested assignment and the scope must outlive the attestation.
-      dependsOn: [
-        "Azure.Policy.PolicyAssignment",
-        "Azure.Resources.ResourceGroup",
-      ],
+      dependsOn: ["Azure.Policy.PolicyAssignment", "Azure.Resources.ResourceGroup"],
     },
   });
