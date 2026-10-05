@@ -30,10 +30,7 @@ export interface ListResourceEvaluations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: config.ListResourceEvaluationsRequest,
-    ) => Effect.Effect<
-      config.ListResourceEvaluationsResponse,
-      config.ListResourceEvaluationsError
-    >
+    ) => Effect.Effect<config.ListResourceEvaluationsResponse, config.ListResourceEvaluationsError>
   >
 > {}
 

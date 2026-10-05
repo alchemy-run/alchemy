@@ -11,14 +11,9 @@ import type { EventBus } from "./EventBus.ts";
  * `DetailType`, `Detail`, `Time`, `Resources`, and `TraceHeader` — no
  * auto-marshalling.
  */
-export interface BusSinkEntry extends Omit<
-  eventbridge.PutEventsRequestEntry,
-  "EventBusName"
-> {}
+export interface BusSinkEntry extends Omit<eventbridge.PutEventsRequestEntry, "EventBusName"> {}
 
-export type BusSinkError =
-  | eventbridge.PutEventsError
-  | BatchRetryExhaustedError<BusSinkEntry>;
+export type BusSinkError = eventbridge.PutEventsError | BatchRetryExhaustedError<BusSinkEntry>;
 
 /**
  * A batching sink over EventBridge `PutEvents` (10 entries / 256 KiB per
@@ -57,9 +52,7 @@ export interface BusSink extends Binding.Service<
   "AWS.EventBridge.BusSink",
   (
     bus?: EventBus,
-  ) => Effect.Effect<
-    Sink.Sink<void, BusSinkEntry, readonly BusSinkEntry[], BusSinkError>
-  >
+  ) => Effect.Effect<Sink.Sink<void, BusSinkEntry, readonly BusSinkEntry[], BusSinkError>>
 > {}
 
 export const BusSink = Binding.Service<BusSink>("AWS.EventBridge.BusSink");

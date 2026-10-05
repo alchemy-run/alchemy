@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import { S3BucketEventSource } from "@/Server/S3BucketEventSource.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { S3BucketEventSource } from "@/Server/S3BucketEventSource.ts";
 
 export const INCOMING_PREFIX = "incoming/";
 export const INCOMING_SUFFIX = ".txt";
@@ -15,11 +15,7 @@ export const ServerEventBucket = AWS.S3.Bucket("ServerEventBucket", {
   forceDestroy: true,
 });
 
-export const artifactKey = (
-  key: string,
-  eventName: string,
-  versionId: string,
-) =>
+export const artifactKey = (key: string, eventName: string, versionId: string) =>
   `${PROCESSED_PREFIX}${[key, eventName, versionId].map(encodeURIComponent).join("/")}.txt`;
 
 // Preserve the wire body for replay without competing with the ECS consumer.
@@ -112,13 +108,9 @@ export default class ServerEventTask extends AWS.ECS.Task<ServerEventTask>()(
             Effect.gen(function* () {
               const versionId = event.versionId;
               if (!versionId) {
-                return yield* Effect.fail(
-                  new Error("Versioned S3 event omitted versionId"),
-                );
+                return yield* Effect.fail(new Error("Versioned S3 event omitted versionId"));
               }
-              const key = yield* Effect.sync(() =>
-                artifactKey(event.key, event.type, versionId),
-              );
+              const key = yield* Effect.sync(() => artifactKey(event.key, event.type, versionId));
               // Redelivery can arrive after the source version was deleted.
               const recorded = yield* getObject({ Key: key }).pipe(
                 Effect.flatMap(({ Body }) => Stream.runDrain(Body!)),
@@ -157,9 +149,5 @@ export default class ServerEventTask extends AWS.ECS.Task<ServerEventTask>()(
     );
 
     return { run: Effect.never };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(serverEvents, AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(serverEvents, AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp))),
 ) {}

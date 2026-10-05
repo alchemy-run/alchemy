@@ -1,3 +1,7 @@
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   CachePolicy,
@@ -12,10 +16,6 @@ import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -52,12 +52,8 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const bucket = yield* Bucket("SmokeBucket", {
-                forceDestroy: true,
-              });
-              const oac = yield* OriginAccessControl("SmokeOac", {
-                originType: "s3",
-              });
+              const bucket = yield* Bucket("SmokeBucket", { forceDestroy: true });
+              const oac = yield* OriginAccessControl("SmokeOac", { originType: "s3" });
 
               const cachePolicy = yield* CachePolicy("SmokeCachePolicy", {
                 comment: "smoke",
@@ -73,15 +69,12 @@ describe(
                 },
               });
 
-              const originRequestPolicy = yield* OriginRequestPolicy(
-                "SmokeOriginRequestPolicy",
-                {
-                  comment: "smoke",
-                  headersConfig: { HeaderBehavior: "none" },
-                  cookiesConfig: { CookieBehavior: "none" },
-                  queryStringsConfig: { QueryStringBehavior: "all" },
-                },
-              );
+              const originRequestPolicy = yield* OriginRequestPolicy("SmokeOriginRequestPolicy", {
+                comment: "smoke",
+                headersConfig: { HeaderBehavior: "none" },
+                cookiesConfig: { CookieBehavior: "none" },
+                queryStringsConfig: { QueryStringBehavior: "all" },
+              });
 
               const responseHeadersPolicy = yield* ResponseHeadersPolicy(
                 "SmokeResponseHeadersPolicy",
@@ -127,10 +120,8 @@ describe(
                   allowedMethods: ["GET", "HEAD"],
                   cachedMethods: ["GET", "HEAD"],
                   cachePolicyId: cachePolicy.cachePolicyId,
-                  originRequestPolicyId:
-                    originRequestPolicy.originRequestPolicyId,
-                  responseHeadersPolicyId:
-                    responseHeadersPolicy.responseHeadersPolicyId,
+                  originRequestPolicyId: originRequestPolicy.originRequestPolicyId,
+                  responseHeadersPolicyId: responseHeadersPolicy.responseHeadersPolicyId,
                 },
               });
 
@@ -140,15 +131,13 @@ describe(
                 Action: ["s3:GetObject"],
                 Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
                 Condition: {
-                  StringEquals: {
-                    "AWS:SourceArn": distribution.distributionArn as any,
-                  },
+                  StringEquals: { "AWS:SourceArn": distribution.distributionArn as any },
                 },
               };
 
-              yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-                { policyStatements: [statement] },
-              );
+              yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+                policyStatements: [statement],
+              });
 
               return {
                 bucket,
@@ -168,11 +157,8 @@ describe(
           });
           expect(dist.Distribution?.Status).toEqual("Deployed");
 
-          const defaultBehavior =
-            dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
-          expect(defaultBehavior?.CachePolicyId).toEqual(
-            deployed.cachePolicy.cachePolicyId,
-          );
+          const defaultBehavior = dist.Distribution?.DistributionConfig?.DefaultCacheBehavior;
+          expect(defaultBehavior?.CachePolicyId).toEqual(deployed.cachePolicy.cachePolicyId);
           expect(defaultBehavior?.OriginRequestPolicyId).toEqual(
             deployed.originRequestPolicy.originRequestPolicyId,
           );
@@ -183,9 +169,7 @@ describe(
           const cachePolicy = yield* cloudfront.getCachePolicy({
             Id: deployed.cachePolicy.cachePolicyId,
           });
-          expect(cachePolicy.CachePolicy?.Id).toEqual(
-            deployed.cachePolicy.cachePolicyId,
-          );
+          expect(cachePolicy.CachePolicy?.Id).toEqual(deployed.cachePolicy.cachePolicyId);
 
           const originRequestPolicy = yield* cloudfront.getOriginRequestPolicy({
             Id: deployed.originRequestPolicy.originRequestPolicyId,
@@ -194,25 +178,20 @@ describe(
             deployed.originRequestPolicy.originRequestPolicyId,
           );
 
-          const responseHeadersPolicy =
-            yield* cloudfront.getResponseHeadersPolicy({
-              Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
-            });
+          const responseHeadersPolicy = yield* cloudfront.getResponseHeadersPolicy({
+            Id: deployed.responseHeadersPolicy.responseHeadersPolicyId,
+          });
           expect(responseHeadersPolicy.ResponseHeadersPolicy?.Id).toEqual(
             deployed.responseHeadersPolicy.responseHeadersPolicyId,
           );
 
-          const keyGroup = yield* cloudfront.getKeyGroup({
-            Id: deployed.keyGroup.keyGroupId,
-          });
+          const keyGroup = yield* cloudfront.getKeyGroup({ Id: deployed.keyGroup.keyGroupId });
           expect(keyGroup.KeyGroup?.KeyGroupConfig?.Items).toEqual([
             deployed.publicKey.publicKeyId,
           ]);
 
           yield* stack.destroy();
-          yield* assertDistributionDeleted(
-            deployed.distribution.distributionId,
-          );
+          yield* assertDistributionDeleted(deployed.distribution.distributionId);
           yield* assertCachePolicyDeleted(deployed.cachePolicy.cachePolicyId);
           yield* assertOriginRequestPolicyDeleted(
             deployed.originRequestPolicy.originRequestPolicyId,
@@ -230,8 +209,7 @@ describe(
 
 const retrying = (label: string) =>
   Effect.retry({
-    while: (error: unknown) =>
-      error instanceof Error && error.message === label,
+    while: (error: unknown) => error instanceof Error && error.message === label,
     schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
   });
 
@@ -251,18 +229,14 @@ const assertCachePolicyDeleted = (id: string) =>
 
 const assertOriginRequestPolicyDeleted = (id: string) =>
   cloudfront.getOriginRequestPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("OriginRequestPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("OriginRequestPolicyStillExists"))),
     Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.void),
     retrying("OriginRequestPolicyStillExists"),
   );
 
 const assertResponseHeadersPolicyDeleted = (id: string) =>
   cloudfront.getResponseHeadersPolicy({ Id: id }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("ResponseHeadersPolicyStillExists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("ResponseHeadersPolicyStillExists"))),
     Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void),
     retrying("ResponseHeadersPolicyStillExists"),
   );

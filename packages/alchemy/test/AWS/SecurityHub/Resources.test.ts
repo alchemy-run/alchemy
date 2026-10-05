@@ -1,3 +1,6 @@
+import * as securityhub from "@distilled.cloud/aws/securityhub";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ActionTarget } from "@/AWS/SecurityHub/ActionTarget.ts";
 import { AutomationRule } from "@/AWS/SecurityHub/AutomationRule.ts";
@@ -5,9 +8,6 @@ import { FindingAggregator } from "@/AWS/SecurityHub/FindingAggregator.ts";
 import { Hub } from "@/AWS/SecurityHub/Hub.ts";
 import { Insight } from "@/AWS/SecurityHub/Insight.ts";
 import * as Test from "@/Test/Alchemy";
-import * as securityhub from "@distilled.cloud/aws/securityhub";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -189,9 +189,7 @@ test.provider(
       const updatedInsight = yield* securityhub.getInsights({
         InsightArns: [created.insightArn],
       });
-      expect(updatedInsight.Insights?.[0]?.GroupByAttribute).toBe(
-        "SeverityLabel",
-      );
+      expect(updatedInsight.Insights?.[0]?.GroupByAttribute).toBe("SeverityLabel");
 
       const updatedRule = yield* securityhub.batchGetAutomationRules({
         AutomationRulesArns: [created.ruleArn],
@@ -207,10 +205,7 @@ test.provider(
         FindingAggregatorArn: created.aggregatorArn,
       });
       // The API returns Regions in normalized order.
-      expect([...(updatedAggregator.Regions ?? [])].sort()).toEqual([
-        "eu-central-1",
-        "eu-west-1",
-      ]);
+      expect([...(updatedAggregator.Regions ?? [])].sort()).toEqual(["eu-central-1", "eu-west-1"]);
 
       // Destroy — every resource is removed and Security Hub is disabled
       // (which also proves delete-idempotence via the InvalidAccess catches:

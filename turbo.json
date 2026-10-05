@@ -1,11 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "cacheDir": ".turbo/cache",
-  "globalDependencies": [
-    "bun.lock",
-    "tsconfig.base.json",
-    "tsconfig.cloudflare.json"
-  ],
+  "globalDependencies": ["bun.lock", "tsconfig.base.json", "tsconfig.cloudflare.json"],
+  // tsgo is a Go program, so its heap is tuned with GOMEMLIMIT/GOGC rather
+  // than NODE_OPTIONS. Tasks run in strict env mode and would not see them.
+  "globalPassThroughEnv": ["GOMEMLIMIT", "GOGC"],
   "ui": "tui",
   "tasks": {
     "build": {
@@ -26,16 +25,9 @@
       "inputs": ["$TURBO_DEFAULT$", "!fixtures/**"],
       "outputs": ["dist/**", ".cache/**/*.tsbuildinfo"]
     },
-    "dev": {
-      "persistent": true,
-      "cache": false
-    },
-    "format": {
-      "cache": false
-    },
-    "lint": {
-      "cache": false
-    },
+    "dev": { "persistent": true, "cache": false },
+    "format": { "cache": false },
+    "lint": { "cache": false },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]

@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory } from "../AlchemyContext.ts";
-import { isPathWithin } from "../Util/isPathWithin.ts";
 import type { PlatformError } from "effect/PlatformError";
 import { convertPathToPattern, glob } from "tinyglobby";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { gitignoreRulesToGlobs } from "../Util/gitignore-rules-to-globs.ts";
+import { isPathWithin } from "../Util/isPathWithin.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 
@@ -92,8 +92,7 @@ const Memo = Effect.gen(function* () {
     const rules = yield* fs.readFileString(path.join(cwd, ".gitignore")).pipe(
       Effect.map((file) => file.split("\n")),
       Effect.catchIf(
-        (error) =>
-          error._tag === "PlatformError" && error.reason._tag === "NotFound",
+        (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
         () => Effect.succeed([]),
       ),
     );
@@ -144,9 +143,7 @@ const Memo = Effect.gen(function* () {
             ignore: [
               ...options.exclude,
               ...(excludeRuntime
-                ? [
-                    `${convertPathToPattern(path.resolve(runtimeBase, dotAlchemy))}/**`,
-                  ]
+                ? [`${convertPathToPattern(path.resolve(runtimeBase, dotAlchemy))}/**`]
                 : []),
             ],
             onlyFiles: true,
@@ -180,15 +177,9 @@ const Memo = Effect.gen(function* () {
       .filter(
         (file) =>
           !excludeRuntime ||
-          !isPathWithin(
-            dotAlchemy,
-            path.resolve(options.cwd, file),
-            runtimeBase,
-          ),
+          !isPathWithin(dotAlchemy, path.resolve(options.cwd, file), runtimeBase),
       )
-      .map((file) =>
-        path.isAbsolute(file) ? path.relative(options.cwd, file) : file,
-      )
+      .map((file) => (path.isAbsolute(file) ? path.relative(options.cwd, file) : file))
       .sort();
   });
 
@@ -225,10 +216,7 @@ export const hashDirectory = Effect.fn(function* (props: {
   memo?: MemoOptions;
 }): Effect.fn.Return<string, PlatformError, FileSystem.FileSystem | Path.Path> {
   const service = yield* Memo;
-  const resolvedOptions = yield* service.resolveMemoOptions(
-    props.cwd,
-    props.memo ?? {},
-  );
+  const resolvedOptions = yield* service.resolveMemoOptions(props.cwd, props.memo ?? {});
   const files = yield* service.listFiles(resolvedOptions);
   const hash = yield* service.hashFiles(resolvedOptions.cwd, files);
   return hash;

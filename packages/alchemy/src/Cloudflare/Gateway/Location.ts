@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -32,9 +31,7 @@ export interface LocationNetwork {
  * and token requirement, DoT, IPv4/IPv6 toggles) is available without
  * re-declaring the structure.
  */
-export type LocationEndpoints = NonNullable<
-  zeroTrust.UpdateGatewayLocationRequest["endpoints"]
->;
+export type LocationEndpoints = NonNullable<zeroTrust.UpdateGatewayLocationRequest["endpoints"]>;
 
 export interface LocationProps {
   /**
@@ -111,13 +108,7 @@ export interface LocationAttributes {
   updatedAt: string | undefined;
 }
 
-export type Location = Resource<
-  TypeId,
-  LocationProps,
-  LocationAttributes,
-  never,
-  Providers
->;
+export type Location = Resource<TypeId, LocationProps, LocationAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust Gateway DNS location — a configured source of
@@ -181,8 +172,7 @@ const isTransientFeatureAccessBlip = (e: {
   readonly _tag: string;
   readonly message?: string;
 }): boolean =>
-  e._tag === "Unauthorized" &&
-  (e.message ?? "").includes("does not have access to this feature");
+  e._tag === "Unauthorized" && (e.message ?? "").includes("does not have access to this feature");
 
 export const LocationProvider = () =>
   Provider.succeed(Location, {
@@ -293,10 +283,8 @@ export const LocationProvider = () =>
         (observed.ecsSupport ?? false) !== desired.ecsSupport ||
         (news.dnsDestinationIpsId !== undefined &&
           observed.dnsDestinationIpsId !== news.dnsDestinationIpsId) ||
-        (news.networks !== undefined &&
-          !sameNetworks(observed.networks ?? [], news.networks)) ||
-        (news.endpoints !== undefined &&
-          !sameEndpoints(observed.endpoints, news.endpoints));
+        (news.networks !== undefined && !sameNetworks(observed.networks ?? [], news.networks)) ||
+        (news.endpoints !== undefined && !sameEndpoints(observed.endpoints, news.endpoints));
       if (dirty) {
         const updated = yield* zeroTrust
           .updateGatewayLocation({
@@ -413,15 +401,10 @@ const sameEndpoints = (
   );
 };
 
-type ListedLocation = NonNullable<
-  zeroTrust.ListGatewayLocationsResponse["result"]
->[number];
+type ListedLocation = NonNullable<zeroTrust.ListGatewayLocationsResponse["result"]>[number];
 
 const toAttributes = (
-  location:
-    | ObservedLocation
-    | zeroTrust.UpdateGatewayLocationResponse
-    | ListedLocation,
+  location: ObservedLocation | zeroTrust.UpdateGatewayLocationResponse | ListedLocation,
   accountId: string,
 ): LocationAttributes => ({
   locationId: location.id ?? "",

@@ -1,20 +1,16 @@
-import { providers } from "@/Neon/Providers.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  bodyContaining,
-  exampleRoot,
-  updatedBodyContaining,
-} from "./Fixture.ts";
+import { providers } from "@/Neon/Providers.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { functionRolloutTimeout } from "../FunctionRollout.ts";
-import { frameworks } from "./Frameworks.ts";
 import { browserRoundtrip } from "./Browser.ts";
+import { bodyContaining, exampleRoot, updatedBodyContaining } from "./Fixture.ts";
+import { frameworks } from "./Frameworks.ts";
 
 const { test } = Test.make({ providers: providers() });
 const deployments = Semaphore.makeUnsafe(1);
@@ -82,24 +78,15 @@ describe.concurrent(
               branch_id: fn.branchId,
               slug: fn.slug,
             });
-            expect(found.function.active_deployment?.id).toBe(
-              fn.activeDeploymentId,
-            );
+            expect(found.function.active_deployment?.id).toBe(fn.activeDeploymentId);
             const unchanged = yield* deploy;
-            expect(unchanged.function!.activeDeploymentId).toBe(
-              fn.activeDeploymentId,
-            );
+            expect(unchanged.function!.activeDeploymentId).toBe(fn.activeDeploymentId);
             yield* Effect.logInfo(`Website ${slug}: initial no-op verified`);
-            yield* fs.writeFileString(
-              asset,
-              '{"framework":"Neon Website lifecycle updated"}',
-            );
+            yield* fs.writeFileString(asset, '{"framework":"Neon Website lifecycle updated"}');
             const updated = yield* deploy;
             expect(updated.function!.functionId).toBe(fn.functionId);
             expect(updated.url).toBe(site.url);
-            expect(updated.function!.activeDeploymentId).not.toBe(
-              fn.activeDeploymentId,
-            );
+            expect(updated.function!.activeDeploymentId).not.toBe(fn.activeDeploymentId);
             yield* Effect.logInfo(
               `Website ${slug}: update accepted deployment=${updated.function!.activeDeploymentId}`,
             );
@@ -109,9 +96,7 @@ describe.concurrent(
             );
             yield* Effect.logInfo(`Website ${slug}: updated content verified`);
             const settled = yield* deploy;
-            expect(settled.function!.activeDeploymentId).toBe(
-              updated.function!.activeDeploymentId,
-            );
+            expect(settled.function!.activeDeploymentId).toBe(updated.function!.activeDeploymentId);
             yield* stack.destroy();
             expect(
               yield* getProject({ project_id: fn.projectId }).pipe(

@@ -13,11 +13,7 @@ import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireMillis, toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  retryConcurrentModification,
-  syncAppSyncTags,
-  tagRecord,
-} from "./common.ts";
+import { retryConcurrentModification, syncAppSyncTags, tagRecord } from "./common.ts";
 
 /**
  * The primary authentication mode of a GraphQL API.
@@ -294,17 +290,13 @@ export interface GraphqlApi extends Resource<
 export const GraphqlApi = Resource<GraphqlApi>("AWS.AppSync.GraphqlApi");
 
 /** Schema creation finished in the `FAILED` state. */
-export class SchemaCreationFailed extends Data.TaggedError(
-  "SchemaCreationFailed",
-)<{
+export class SchemaCreationFailed extends Data.TaggedError("SchemaCreationFailed")<{
   readonly apiId: string;
   readonly details: string | undefined;
 }> {}
 
 /** Schema creation did not settle within the bounded polling window. */
-export class SchemaCreationTimedOut extends Data.TaggedError(
-  "SchemaCreationTimedOut",
-)<{
+export class SchemaCreationTimedOut extends Data.TaggedError("SchemaCreationTimedOut")<{
   readonly apiId: string;
   readonly status: string | undefined;
 }> {}
@@ -364,9 +356,7 @@ const toWireAdditionalProviders = (
                 appIdClientRegex: provider.userPoolConfig.appIdClientRegex,
               },
         openIDConnectConfig: toWireOidcConfig(provider.openIDConnectConfig),
-        lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(
-          provider.lambdaAuthorizerConfig,
-        ),
+        lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(provider.lambdaAuthorizerConfig),
       }));
 
 /**
@@ -400,19 +390,17 @@ const authSurface = (api: {
             ? undefined
             : (api.lambdaAuthorizerConfig.authorizerResultTtlInSeconds ?? 300),
       },
-      additionalAuthenticationProviders:
-        api.additionalAuthenticationProviders?.map((p) => ({
-          ...p,
-          lambdaAuthorizerConfig:
-            p.lambdaAuthorizerConfig === undefined
-              ? undefined
-              : {
-                  ...p.lambdaAuthorizerConfig,
-                  authorizerResultTtlInSeconds:
-                    p.lambdaAuthorizerConfig.authorizerResultTtlInSeconds ??
-                    300,
-                },
-        })),
+      additionalAuthenticationProviders: api.additionalAuthenticationProviders?.map((p) => ({
+        ...p,
+        lambdaAuthorizerConfig:
+          p.lambdaAuthorizerConfig === undefined
+            ? undefined
+            : {
+                ...p.lambdaAuthorizerConfig,
+                authorizerResultTtlInSeconds:
+                  p.lambdaAuthorizerConfig.authorizerResultTtlInSeconds ?? 300,
+              },
+      })),
       xrayEnabled: api.xrayEnabled ?? false,
       introspectionConfig: api.introspectionConfig ?? "ENABLED",
       queryDepthLimit: api.queryDepthLimit ?? 0,
@@ -425,10 +413,7 @@ export const GraphqlApiProvider = () =>
   Provider.effect(
     GraphqlApi,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<GraphqlApiProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<GraphqlApiProps, "name">) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -440,17 +425,13 @@ export const GraphqlApiProvider = () =>
 
       /** Find an API by exact name (fallback when no apiId is cached). */
       const findApiByName = Effect.fn(function* (name: string) {
-        const pages = yield* appsync.listGraphqlApis
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* appsync.listGraphqlApis.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.graphqlApis ?? [])
           .find((api) => api.name === name);
       });
 
-      const toAttributes = (
-        api: appsync.GraphqlApi,
-      ): GraphqlApi["Attributes"] => ({
+      const toAttributes = (api: appsync.GraphqlApi): GraphqlApi["Attributes"] => ({
         apiId: api.apiId!,
         apiArn: api.arn!,
         name: api.name!,
@@ -465,12 +446,8 @@ export const GraphqlApiProvider = () =>
        * schema creation is normally seconds).
        */
       const applySchema = Effect.fn(function* (apiId: string, schema: string) {
-        const definition = yield* Effect.sync(() =>
-          new TextEncoder().encode(schema),
-        );
-        yield* retryConcurrentModification(
-          appsync.startSchemaCreation({ apiId, definition }),
-        );
+        const definition = yield* Effect.sync(() => new TextEncoder().encode(schema));
+        yield* retryConcurrentModification(appsync.startSchemaCreation({ apiId, definition }));
         const final = yield* appsync.getSchemaCreationStatus({ apiId }).pipe(
           Effect.repeat({
             schedule: Schedule.fixed("1 second"),
@@ -497,10 +474,7 @@ export const GraphqlApiProvider = () =>
        * missing, update on drift, delete when no longer desired. Creation
        * is asynchronous and NOT awaited (10–20 minutes to AVAILABLE).
        */
-      const syncCache = Effect.fn(function* (
-        apiId: string,
-        desired: ApiCacheConfig | undefined,
-      ) {
+      const syncCache = Effect.fn(function* (apiId: string, desired: ApiCacheConfig | undefined) {
         const observed = yield* appsync.getApiCache({ apiId }).pipe(
           Effect.map((response) => response.apiCache),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
@@ -578,9 +552,7 @@ export const GraphqlApiProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* appsync.listGraphqlApis
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* appsync.listGraphqlApis.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.graphqlApis ?? [])
               .filter((api) => api.apiId != null)
@@ -621,9 +593,7 @@ export const GraphqlApiProvider = () =>
             authenticationType,
             userPoolConfig: toWireUserPoolConfig(news.userPoolConfig, region),
             openIDConnectConfig: toWireOidcConfig(news.openIDConnectConfig),
-            lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(
-              news.lambdaAuthorizerConfig,
-            ),
+            lambdaAuthorizerConfig: toWireLambdaAuthorizerConfig(news.lambdaAuthorizerConfig),
             additionalAuthenticationProviders: toWireAdditionalProviders(
               news.additionalAuthenticationProviders,
               region,
@@ -661,10 +631,7 @@ export const GraphqlApiProvider = () =>
 
           // 3. SYNC — one update call when the observed auth/limit surface
           //    drifted from the desired one.
-          if (
-            !justCreated &&
-            !deepEqual(authSurface(observed), authSurface(desired))
-          ) {
+          if (!justCreated && !deepEqual(authSurface(observed), authSurface(desired))) {
             const updated = yield* retryConcurrentModification(
               appsync.updateGraphqlApi({ apiId, ...desired }),
             );
@@ -678,9 +645,7 @@ export const GraphqlApiProvider = () =>
           //     previous props are only a hint to skip the no-op call.
           if (
             news.schema !== undefined &&
-            (justCreated ||
-              output === undefined ||
-              olds?.schema !== news.schema)
+            (justCreated || output === undefined || olds?.schema !== news.schema)
           ) {
             yield* applySchema(apiId, news.schema);
             yield* session.note(`Applied schema to ${apiId}`);

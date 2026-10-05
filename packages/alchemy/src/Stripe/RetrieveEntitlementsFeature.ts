@@ -34,15 +34,10 @@ export interface RetrieveEntitlementsFeature extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveEntitlementsFeatureRequest,
-    ) => Effect.Effect<
-      StripeEntitlementsFeature,
-      GetEntitlementsFeatureError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeEntitlementsFeature, GetEntitlementsFeatureError, RuntimeContext>
   >
 > {}
 
-export const RetrieveEntitlementsFeature =
-  Binding.Service<RetrieveEntitlementsFeature>(
-    "Stripe.RetrieveEntitlementsFeature",
-  );
+export const RetrieveEntitlementsFeature = Binding.Service<RetrieveEntitlementsFeature>(
+  "Stripe.RetrieveEntitlementsFeature",
+);

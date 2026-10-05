@@ -1,7 +1,6 @@
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -70,13 +69,7 @@ export interface ConfigAttributes {
   warpDevices: WarpDevice[];
 }
 
-export type Config = Resource<
-  TypeId,
-  ConfigProps,
-  ConfigAttributes,
-  never,
-  Providers
->;
+export type Config = Resource<TypeId, ConfigProps, ConfigAttributes, never, Providers>;
 
 /**
  * The Magic Network Monitoring (MNM) account configuration — the singleton
@@ -186,11 +179,7 @@ export const ConfigProvider = () =>
         const created = observe(
           yield* mnm
             .createConfig(desired)
-            .pipe(
-              Effect.catchTag("MnmConfigAlreadyExists", () =>
-                mnm.updateConfig(desired),
-              ),
-            ),
+            .pipe(Effect.catchTag("MnmConfigAlreadyExists", () => mnm.updateConfig(desired))),
         );
         // `updateConfig` answers `result: null` if the config vanished
         // again mid-flight — fall back to one fresh create.
@@ -268,10 +257,7 @@ const sameStrings = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
-const sameWarpDevices = (
-  observed: readonly WarpDevice[],
-  desired: readonly WarpDevice[],
-) =>
+const sameWarpDevices = (observed: readonly WarpDevice[], desired: readonly WarpDevice[]) =>
   observed.length === desired.length &&
   serializeWarpDevices(observed) === serializeWarpDevices(desired);
 
@@ -281,10 +267,7 @@ const serializeWarpDevices = (devices: readonly WarpDevice[]) =>
     .sort()
     .join(",");
 
-const toAttributes = (
-  config: ObservedConfig,
-  accountId: string,
-): ConfigAttributes => ({
+const toAttributes = (config: ObservedConfig, accountId: string): ConfigAttributes => ({
   accountId,
   name: config.name,
   defaultSampling: config.defaultSampling,

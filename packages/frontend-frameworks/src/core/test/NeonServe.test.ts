@@ -7,10 +7,7 @@ import { makeNeonServeEntrySource } from "../NeonServe.ts";
 import type { NodeServeEntryOptions } from "../NodeServe.ts";
 
 type Entry = { default: { fetch(request: Request): Promise<Response> } };
-const entry = (
-  options: NodeServeEntryOptions,
-  files: Record<string, string> = {},
-) =>
+const entry = (options: NodeServeEntryOptions, files: Record<string, string> = {}) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -26,31 +23,18 @@ const entry = (
     const source = makeNeonServeEntrySource({
       clientDirExpression: JSON.stringify(root),
       ...options,
-    }).replace(
-      'from "srvx/node"',
-      `from ${JSON.stringify(import.meta.resolve("srvx/node"))}`,
-    );
+    }).replace('from "srvx/node"', `from ${JSON.stringify(import.meta.resolve("srvx/node"))}`);
     const specifier = yield* Effect.sync(
-      () =>
-        `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`,
+      () => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`,
     );
     return yield* Effect.tryPromise(() => import(specifier) as Promise<Entry>);
   });
 const run = <A, E>(
-  effect: Effect.Effect<
-    A,
-    E,
-    FileSystem.FileSystem | Path.Path | import("effect/Scope").Scope
-  >,
-) =>
-  Effect.runPromise(
-    effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
+  effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | import("effect/Scope").Scope>,
+) => Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 const call = (module: Entry, pathname: string, method = "GET") =>
   Effect.tryPromise(() =>
-    module.default.fetch(
-      new Request(`https://function.neon.run${pathname}`, { method }),
-    ),
+    module.default.fetch(new Request(`https://function.neon.run${pathname}`, { method })),
   );
 const text = (response: Response) => Effect.tryPromise(() => response.text());
 
@@ -73,16 +57,10 @@ describe("Neon Fetch entry", () => {
         expect(yield* text(response)).toBe("<h1>Neon</h1>");
         const head = yield* call(module, "/deep/link", "HEAD");
         expect(head.status).toBe(200);
-        expect(head.headers.get("content-type")).toBe(
-          response.headers.get("content-type"),
-        );
-        expect(head.headers.get("content-length")).toBe(
-          response.headers.get("content-length"),
-        );
+        expect(head.headers.get("content-type")).toBe(response.headers.get("content-type"));
+        expect(head.headers.get("content-length")).toBe(response.headers.get("content-length"));
         expect(yield* text(head)).toBe("");
-        expect(
-          (yield* call(module, "/app.css")).headers.get("content-type"),
-        ).toContain("text/css");
+        expect((yield* call(module, "/app.css")).headers.get("content-type")).toContain("text/css");
         expect((yield* call(module, "/", "POST")).status).toBe(404);
       }),
     ));
@@ -188,9 +166,7 @@ describe("Neon Fetch entry", () => {
             expr: "async (req, res) => {res.setHeader('content-type','text/event-stream'); res.write('data: first\\n\\n'); await new Promise(resolve=>setTimeout(resolve,1000)); res.end('data: last\\n\\n');}",
           },
         });
-        const response = yield* call(module, "/stream").pipe(
-          Effect.timeout("250 millis"),
-        );
+        const response = yield* call(module, "/stream").pipe(Effect.timeout("250 millis"));
         expect(response.headers.get("content-type")).toBe("text/event-stream");
         expect(yield* text(response)).toContain("data: last");
       }),
@@ -205,9 +181,7 @@ describe("Neon Fetch entry", () => {
             expr: "(req, res, parsedUrl) => {res.end(parsedUrl === undefined ? req.url : 'incorrect middleware callback')}",
           },
         });
-        expect(yield* text(yield* call(module, "/route?x=1"))).toBe(
-          "/route?x=1",
-        );
+        expect(yield* text(yield* call(module, "/route?x=1"))).toBe("/route?x=1");
       }),
     ));
   it("reconstructs the trusted custom hostname without changing path or query", () =>
@@ -227,9 +201,7 @@ describe("Neon Fetch entry", () => {
             }),
           ),
         );
-        expect(yield* text(response)).toBe(
-          "https://app.example.com/account?q=1",
-        );
+        expect(yield* text(response)).toBe("https://app.example.com/account?q=1");
       }),
     ));
 });

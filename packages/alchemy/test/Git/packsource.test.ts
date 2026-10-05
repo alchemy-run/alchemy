@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 /**
  * The spilled-pack reader (src/Git/Store/PackSource.ts): windowed random
  * access over blob storage. Reads within a window must be VIEWS of the
@@ -5,34 +8,19 @@
  * a parse through tiny windows — many window boundaries, straddling
  * entries — must produce exactly what the in-memory parse produces.
  */
-import {
-  hashObject,
-  makeSha1,
-  encodeTypeSize,
-  type Oid,
-} from "@/Git/Protocol/ObjectCodec.ts";
-import {
-  bufferRandomAccess,
-  ingestPack,
-  SINK_BATCH,
-} from "@/Git/Protocol/PackParser.ts";
+import { hashObject, makeSha1, encodeTypeSize, type Oid } from "@/Git/Protocol/ObjectCodec.ts";
+import { bufferRandomAccess, ingestPack, SINK_BATCH } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
 import { blobRandomAccess, sliceRandomAccess } from "@/Git/Store/PackSource.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import * as Fiber from "effect/Fiber";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
 /** A synthetic non-delta pack of `n` blobs with sizes cycling 100..5000. */
-const buildPack = (
-  n: number,
-  options?: { readonly incompressible?: boolean },
-) =>
+const buildPack = (n: number, options?: { readonly incompressible?: boolean }) =>
   Effect.gen(function* () {
     const pieces: Array<Uint8Array> = [packHeader(n)];
     const oids: Array<Oid> = [];
@@ -59,11 +47,7 @@ const parseWith = (source: ReturnType<typeof bufferRandomAccess>) =>
       repoId: "R",
     });
     const seen: Array<string> = [];
-    const offsets: Array<{
-      dataOffset: number;
-      zdata: Uint8Array;
-      fromDelta: boolean;
-    }> = [];
+    const offsets: Array<{ dataOffset: number; zdata: Uint8Array; fromDelta: boolean }> = [];
     const summary = yield* ingestPack({
       source,
       store,
@@ -140,10 +124,7 @@ describe("blobRandomAccess", { tags: ["unit", "local"] }, () => {
         // relies on this): reading it back yields exactly zdata.
         for (const entry of windowed.offsets.slice(0, 50)) {
           expect(entry.fromDelta).toBe(false);
-          const span = yield* spilled.read(
-            entry.dataOffset,
-            entry.zdata.length,
-          );
+          const span = yield* spilled.read(entry.dataOffset, entry.zdata.length);
           expect(Array.from(span)).toEqual(Array.from(entry.zdata));
         }
         expect(windowed.seen).toEqual(memory.seen);
@@ -215,77 +196,68 @@ describe("synchronous fast path", { tags: ["unit", "local"] }, () => {
   });
 });
 
-describe(
-  "parsing a pack while it streams in (DESIGN §22.6)",
-  { tags: ["unit", "local"] },
-  () => {
-    test(
-      "parse runs concurrently with the feed, in random chunk sizes, and verifies the trailer",
-      async () => {
-        await Effect.runPromise(
-          Effect.gen(function* () {
-            const { pack, oids } = yield* buildPack(500, {
-              incompressible: true,
-            });
-            const feeder = makeStreamingSource({
-              slabBytes: 64 * 1024,
-              retainBytes: 256 * 1024,
-              backpressureBytes: 128 * 1024,
-            });
-            const prefix = new TextEncoder().encode(
-              "0021push refs/heads/main x\n0000".padEnd(37, "\0"),
-            );
-            const parse = yield* Effect.forkChild(
-              parseWith(sliceRandomAccess(feeder.source, prefix.length)),
-            );
-            const body = concat([prefix, pack]);
-            let at = 0;
-            let seed = 7;
-            while (at < body.length) {
-              seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-              const n = 1 + (seed % 20_000);
-              yield* feeder.push(body.subarray(at, at + n));
-              at += n;
-              if (seed % 5 === 0) yield* Effect.yieldNow;
-            }
-            feeder.end();
-            const parsed = yield* Fiber.join(parse);
-            expect(parsed.count).toBe(500);
-            expect(new Set(parsed.seen)).toEqual(new Set(oids));
-          }),
-        );
-      },
-      { timeout: 30_000 },
-    );
-
-    test("a body that ends early is a truncated-pack error, not a hang", async () => {
+describe("parsing a pack while it streams in (DESIGN §22.6)", { tags: ["unit", "local"] }, () => {
+  test(
+    "parse runs concurrently with the feed, in random chunk sizes, and verifies the trailer",
+    async () => {
       await Effect.runPromise(
         Effect.gen(function* () {
-          const { pack } = yield* buildPack(50);
-          const feeder = makeStreamingSource({ slabBytes: 4096 });
-          const parse = yield* Effect.forkChild(
-            Effect.result(parseWith(feeder.source)),
+          const { pack, oids } = yield* buildPack(500, { incompressible: true });
+          const feeder = makeStreamingSource({
+            slabBytes: 64 * 1024,
+            retainBytes: 256 * 1024,
+            backpressureBytes: 128 * 1024,
+          });
+          const prefix = new TextEncoder().encode(
+            "0021push refs/heads/main x\n0000".padEnd(37, "\0"),
           );
-          yield* feeder.push(pack.subarray(0, Math.floor(pack.length / 2)));
+          const parse = yield* Effect.forkChild(
+            parseWith(sliceRandomAccess(feeder.source, prefix.length)),
+          );
+          const body = concat([prefix, pack]);
+          let at = 0;
+          let seed = 7;
+          while (at < body.length) {
+            seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+            const n = 1 + (seed % 20_000);
+            yield* feeder.push(body.subarray(at, at + n));
+            at += n;
+            if (seed % 5 === 0) yield* Effect.yieldNow;
+          }
           feeder.end();
-          const r = yield* Fiber.join(parse);
-          expect(r._tag).toBe("Failure");
+          const parsed = yield* Fiber.join(parse);
+          expect(parsed.count).toBe(500);
+          expect(new Set(parsed.seen)).toEqual(new Set(oids));
         }),
       );
-    });
+    },
+    { timeout: 30_000 },
+  );
 
-    test("a corrupted trailer is rejected even though the hash is accumulated incrementally", async () => {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const { pack } = yield* buildPack(20);
-          const bad = Uint8Array.from(pack);
-          bad[bad.length - 1] ^= 0xff;
-          const r = yield* Effect.result(parseWith(bufferRandomAccess(bad)));
-          expect(r._tag).toBe("Failure");
-          if (r._tag === "Failure")
-            expect(String(r.failure._tag)).toBe("PackChecksumMismatch");
-        }),
-      );
-    });
-  },
-);
+  test("a body that ends early is a truncated-pack error, not a hang", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack } = yield* buildPack(50);
+        const feeder = makeStreamingSource({ slabBytes: 4096 });
+        const parse = yield* Effect.forkChild(Effect.result(parseWith(feeder.source)));
+        yield* feeder.push(pack.subarray(0, Math.floor(pack.length / 2)));
+        feeder.end();
+        const r = yield* Fiber.join(parse);
+        expect(r._tag).toBe("Failure");
+      }),
+    );
+  });
+
+  test("a corrupted trailer is rejected even though the hash is accumulated incrementally", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pack } = yield* buildPack(20);
+        const bad = Uint8Array.from(pack);
+        bad[bad.length - 1] ^= 0xff;
+        const r = yield* Effect.result(parseWith(bufferRandomAccess(bad)));
+        expect(r._tag).toBe("Failure");
+        if (r._tag === "Failure") expect(String(r.failure._tag)).toBe("PackChecksumMismatch");
+      }),
+    );
+  });
+});

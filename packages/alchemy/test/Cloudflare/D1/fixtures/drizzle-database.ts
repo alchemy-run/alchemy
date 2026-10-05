@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Drizzle from "@/Drizzle/index.ts";
-import * as Effect from "effect/Effect";
 
 /**
  * The full deploy-time Drizzle flywheel on D1:

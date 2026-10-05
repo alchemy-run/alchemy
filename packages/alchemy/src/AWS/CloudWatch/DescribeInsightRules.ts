@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DescribeInsightRulesRequest
-  extends cloudwatch.DescribeInsightRulesInput {}
+export interface DescribeInsightRulesRequest extends cloudwatch.DescribeInsightRulesInput {}
 
 /**
  * Runtime binding for `cloudwatch:DescribeInsightRules` — list the
@@ -30,10 +29,7 @@ export interface DescribeInsightRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DescribeInsightRulesRequest,
-    ) => Effect.Effect<
-      cloudwatch.DescribeInsightRulesOutput,
-      cloudwatch.DescribeInsightRulesError
-    >
+    ) => Effect.Effect<cloudwatch.DescribeInsightRulesOutput, cloudwatch.DescribeInsightRulesError>
   >
 > {}
 

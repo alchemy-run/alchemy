@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import CloudWatchTestFunctionLive, {
-  CloudWatchTestFunction,
-  METRIC_NAME,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import CloudWatchTestFunctionLive, { CloudWatchTestFunction, METRIC_NAME } from "./handler";
 
 // Runtime binding coverage for every CloudWatch capability that can be
 // exercised against fixture-deployable resources. Two bindings have no
@@ -34,10 +31,7 @@ const sharedStack = Core.scratchStack(testOptions, "CloudWatchBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load. Budget ~150s of
 // readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let fixtureFunctionName: string | undefined;
@@ -57,48 +51,30 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe(
   "CloudWatch Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:cloudwatch",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:cloudwatch", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "CloudWatch test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("CloudWatch test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("CloudWatch test setup: deploying fixture");
@@ -112,16 +88,12 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         fixtureFunctionName = functionName;
 
-        yield* Effect.logInfo(
-          `CloudWatch test setup: probing readiness at ${baseUrl}/health`,
-        );
+        yield* Effect.logInfo(`CloudWatch test setup: probing readiness at ${baseUrl}/health`);
         yield* HttpClient.get(`${baseUrl}/health`).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -140,9 +112,7 @@ describe(
           const gone = yield* Core.withProviders(
             lambda.getFunction({ FunctionName: fixtureFunctionName }).pipe(
               Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             ),
             testOptions,
             "CloudWatchBindings",
@@ -169,9 +139,7 @@ describe(
         Effect.gen(function* () {
           // Freshly-put metric data can take minutes to appear in ListMetrics —
           // assert the authorized call returns a well-formed collection.
-          const response = (yield* getJson("/list-metrics")) as {
-            metrics: unknown[];
-          };
+          const response = (yield* getJson("/list-metrics")) as { metrics: unknown[] };
           expect(Array.isArray(response.metrics)).toBe(true);
         }),
       );
@@ -180,9 +148,7 @@ describe(
     describe("GetMetricData", () => {
       test.provider("queries the fixture metric", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/get-metric-data")) as {
-            results: { Id?: string }[];
-          };
+          const response = (yield* getJson("/get-metric-data")) as { results: { Id?: string }[] };
           expect(response.results.length).toBe(1);
           expect(response.results[0].Id).toBe("m1");
         }),
@@ -205,9 +171,7 @@ describe(
     describe("GetMetricWidgetImage", () => {
       test.provider("renders a metric widget image", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/get-metric-widget-image")) as {
-            bytes: number;
-          };
+          const response = (yield* getJson("/get-metric-widget-image")) as { bytes: number };
           expect(response.bytes).toBeGreaterThan(0);
         }),
       );
@@ -251,9 +215,7 @@ describe(
     describe("DescribeAlarmHistory", () => {
       test.provider("returns history for the bound alarm", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/describe-alarm-history")) as {
-            items: unknown[];
-          };
+          const response = (yield* getJson("/describe-alarm-history")) as { items: unknown[] };
           expect(Array.isArray(response.items)).toBe(true);
         }),
       );
@@ -272,10 +234,7 @@ describe(
           if (response.ok) {
             expect(Array.isArray(response.contributors)).toBe(true);
           } else {
-            expect([
-              "ResourceNotFoundException",
-              "ValidationException",
-            ]).toContain(response.error);
+            expect(["ResourceNotFoundException", "ValidationException"]).toContain(response.error);
           }
         }),
       );
@@ -369,9 +328,7 @@ describe(
     describe("DisableInsightRules", () => {
       test.provider("disables the deployed rule without failures", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/disable-insight-rules")) as {
-            failures: unknown[];
-          };
+          const response = (yield* postJson("/disable-insight-rules")) as { failures: unknown[] };
           expect(response.failures).toEqual([]);
         }),
       );
@@ -380,9 +337,7 @@ describe(
     describe("EnableInsightRules", () => {
       test.provider("re-enables the deployed rule without failures", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/enable-insight-rules")) as {
-            failures: unknown[];
-          };
+          const response = (yield* postJson("/enable-insight-rules")) as { failures: unknown[] };
           expect(response.failures).toEqual([]);
         }),
       );
@@ -434,9 +389,7 @@ describe(
     describe("ListAlarmMuteRules", () => {
       test.provider("lists alarm mute rules in the region", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/list-alarm-mute-rules")) as {
-            summaries: unknown[];
-          };
+          const response = (yield* getJson("/list-alarm-mute-rules")) as { summaries: unknown[] };
           expect(Array.isArray(response.summaries)).toBe(true);
         }),
       );
@@ -445,9 +398,7 @@ describe(
     describe("ListMetricStreams", () => {
       test.provider("lists metric streams in the region", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/list-metric-streams")) as {
-            entries: unknown[];
-          };
+          const response = (yield* getJson("/list-metric-streams")) as { entries: unknown[] };
           expect(Array.isArray(response.entries)).toBe(true);
         }),
       );
