@@ -31,11 +31,9 @@ export interface GenerateCredentialReport extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iam.GenerateCredentialReportRequest,
-    ) => Effect.Effect<
-      iam.GenerateCredentialReportResponse,
-      iam.GenerateCredentialReportError
-    >
+    ) => Effect.Effect<iam.GenerateCredentialReportResponse, iam.GenerateCredentialReportError>
   >
 > {}
-export const GenerateCredentialReport =
-  Binding.Service<GenerateCredentialReport>("AWS.IAM.GenerateCredentialReport");
+export const GenerateCredentialReport = Binding.Service<GenerateCredentialReport>(
+  "AWS.IAM.GenerateCredentialReport",
+);

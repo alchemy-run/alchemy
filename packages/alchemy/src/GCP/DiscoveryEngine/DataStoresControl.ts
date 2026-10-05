@@ -205,8 +205,7 @@ export class DataStoresControlNotResolved extends Data.TaggedError(
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
 const DEFAULT_USE_CASES = ["SEARCH_USE_CASE_SEARCH"];
 
-const resourceName = (dataStore: string, controlId: string) =>
-  `${dataStore}/controls/${controlId}`;
+const resourceName = (dataStore: string, controlId: string) => `${dataStore}/controls/${controlId}`;
 
 const actionKind = (props: {
   redirectAction?: unknown;
@@ -310,8 +309,7 @@ export const DataStoresControlProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousSolution =
-        olds?.solutionType ?? output?.solutionType ?? DEFAULT_SOLUTION;
+      const previousSolution = olds?.solutionType ?? output?.solutionType ?? DEFAULT_SOLUTION;
       const nextSolution = news.solutionType ?? previousSolution;
       if (previousSolution !== nextSolution) {
         return { action: "replace" as const, deleteFirst: true };
@@ -343,21 +341,11 @@ export const DataStoresControlProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const controlId = yield* toPhysical(
-        id,
-        olds?.controlId,
-        output?.controlId,
-        controlIdOf,
-      );
+      const controlId = yield* toPhysical(id, olds?.controlId, output?.controlId, controlIdOf);
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
-      const name =
-        output?.name ?? (parent ? resourceName(parent, controlId) : "");
+      const name = output?.name ?? (parent ? resourceName(parent, controlId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -367,17 +355,8 @@ export const DataStoresControlProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
-      const controlId = yield* toPhysical(
-        id,
-        news.controlId,
-        output?.controlId,
-        controlIdOf,
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
+      const controlId = yield* toPhysical(id, news.controlId, output?.controlId, controlIdOf);
       const name = resourceName(parent, controlId);
       const displayName = news.displayName ?? controlId;
 
@@ -403,21 +382,19 @@ export const DataStoresControlProvider = () =>
       const useCasesChanged =
         fingerprint([...(current.useCases ?? [])].sort()) !==
         fingerprint([...(desired.useCases ?? [])].sort());
-      const conditionsChanged =
-        fingerprint(current.conditions) !== fingerprint(desired.conditions);
+      const conditionsChanged = fingerprint(current.conditions) !== fingerprint(desired.conditions);
       if (displayChanged || useCasesChanged || conditionsChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsDataStoresControls({
-            name: current.name ?? name,
-            updateMask: [
-              displayChanged ? "display_name" : undefined,
-              useCasesChanged ? "use_cases" : undefined,
-              conditionsChanged ? "conditions" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: { ...desired, name: current.name ?? name },
-          });
+        current = yield* discoveryengine.patchProjectsLocationsDataStoresControls({
+          name: current.name ?? name,
+          updateMask: [
+            displayChanged ? "display_name" : undefined,
+            useCasesChanged ? "use_cases" : undefined,
+            conditionsChanged ? "conditions" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: { ...desired, name: current.name ?? name },
+        });
       }
 
       return toAttrs(current, env.project, parent);

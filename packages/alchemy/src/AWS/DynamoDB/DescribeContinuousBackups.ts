@@ -43,7 +43,6 @@ export interface DescribeContinuousBackups extends Binding.Service<
     >
   >
 > {}
-export const DescribeContinuousBackups =
-  Binding.Service<DescribeContinuousBackups>(
-    "AWS.DynamoDB.DescribeContinuousBackups",
-  );
+export const DescribeContinuousBackups = Binding.Service<DescribeContinuousBackups>(
+  "AWS.DynamoDB.DescribeContinuousBackups",
+);

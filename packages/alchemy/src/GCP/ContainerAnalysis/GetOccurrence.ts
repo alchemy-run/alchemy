@@ -43,6 +43,4 @@ export interface GetOccurrence extends Binding.Service<
   >
 > {}
 
-export const GetOccurrence = Binding.Service<GetOccurrence>(
-  "GCP.ContainerAnalysis.GetOccurrence",
-);
+export const GetOccurrence = Binding.Service<GetOccurrence>("GCP.ContainerAnalysis.GetOccurrence");

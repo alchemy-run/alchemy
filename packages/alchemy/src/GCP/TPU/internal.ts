@@ -3,10 +3,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { alchemyLabelKeys, stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 // A zone, not a region: TPUs (and the v2-8 default) exist only in a few zones.
 export const DEFAULT_LOCATION = "us-central1-c";
@@ -15,21 +15,15 @@ export const DEFAULT_RUNTIME = "tpu-ubuntu2204-base";
 export const DEFAULT_NETWORK = "default";
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.TPU.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.TPU.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.TPU.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.TPU.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.TPU.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.TPU.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -60,10 +54,8 @@ export const rfc1035 = (name: string, fallback = "tpu"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback = DEFAULT_LOCATION,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback = DEFAULT_LOCATION) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const toPhysicalId = (
   id: string,
@@ -90,16 +82,10 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -107,38 +93,28 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const stringMapOf = (
   map: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-export const mapKey = (
-  map: Record<string, string | undefined> | null | undefined,
-) =>
+export const mapKey = (map: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
     Object.fromEntries(
-      Object.entries(stringMapOf(map)).sort(([left], [right]) =>
-        left.localeCompare(right),
-      ),
+      Object.entries(stringMapOf(map)).sort(([left], [right]) => left.localeCompare(right)),
     ),
   );
 
-export const stringsOf = (
-  values: ReadonlyArray<string | undefined> | null | undefined,
-): string[] =>
+export const stringsOf = (values: ReadonlyArray<string | undefined> | null | undefined): string[] =>
   (values ?? []).filter((value): value is string => value !== undefined);
 
-export const stringsKey = (
-  values: ReadonlyArray<string | undefined> | null | undefined,
-) => JSON.stringify([...stringsOf(values)].sort());
+export const stringsKey = (values: ReadonlyArray<string | undefined> | null | undefined) =>
+  JSON.stringify([...stringsOf(values)].sort());
 
 export const encodeDescription = (
   labels: Record<string, string>,
@@ -171,14 +147,10 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -209,10 +181,7 @@ export const replaceOnIdentity = (input: {
  * (large slices longer). An operation that finished with `ALREADY_EXISTS`
  * (6) is a lost create race; `notFoundOk` also accepts `NOT_FOUND` (5).
  */
-export const waitForOperation = (
-  operation: tpu.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: tpu.Operation, options?: { notFoundOk?: boolean }) =>
   waitForGcpOperation(
     operation,
     (name) =>
@@ -230,8 +199,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -271,30 +239,18 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   );
 
 const READY_STATES = new Set(["READY", "ACTIVE", "ACCEPTED"]);
-const FAILED_STATES = new Set([
-  "FAILED",
-  "ERROR",
-  "TERMINATED",
-  "PREEMPTED",
-  "UNKNOWN",
-]);
+const FAILED_STATES = new Set(["FAILED", "ERROR", "TERMINATED", "PREEMPTED", "UNKNOWN"]);
 
-const isReadyState = (state: string | undefined) =>
-  READY_STATES.has((state ?? "").toUpperCase());
+const isReadyState = (state: string | undefined) => READY_STATES.has((state ?? "").toUpperCase());
 
-const isFailedState = (state: string | undefined) =>
-  FAILED_STATES.has((state ?? "").toUpperCase());
+const isFailedState = (state: string | undefined) => FAILED_STATES.has((state ?? "").toUpperCase());
 
 export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
   stateOf: (value: NonNullable<A>) => string | undefined,
   messageOf?: (value: NonNullable<A>) => string | undefined,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
@@ -322,8 +278,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.TPU.ResourceNotReady" ||
-        error._tag === "GCP.TPU.ResourceNotResolved",
+        error._tag === "GCP.TPU.ResourceNotReady" || error._tag === "GCP.TPU.ResourceNotResolved",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),

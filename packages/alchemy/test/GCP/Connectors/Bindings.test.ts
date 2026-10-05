@@ -1,16 +1,13 @@
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as connectors from "@distilled.cloud/gcp/connectors_v2";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import * as connectors from "@distilled.cloud/gcp/connectors_v2";
-import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import ConnectorsBindingsHost, {
-  Account,
-  ENTITY_TYPE_PARENT,
-} from "./fixtures/bindings-host.ts";
+import ConnectorsBindingsHost, { Account, ENTITY_TYPE_PARENT } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -25,12 +22,7 @@ let entityName: string;
 describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
   "Connectors Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:connectors",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:connectors", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -61,14 +53,10 @@ describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
         "reads the entity as the host's service account, granted on the project",
         (_stack) =>
           Effect.gen(function* () {
-            const entity = yield* expectProbe<connectors.Entity>(
-              baseUrl,
-              "getEntity",
-            );
-            const live =
-              yield* connectors.getProjectsLocationsConnectionsEntityTypesEntities(
-                { name: entityName },
-              );
+            const entity = yield* expectProbe<connectors.Entity>(baseUrl, "getEntity");
+            const live = yield* connectors.getProjectsLocationsConnectionsEntityTypesEntities({
+              name: entityName,
+            });
             expect(entity.name).toEqual(entityName);
             expect(entity.fields).toMatchObject({ Name: "Alchemy Binding" });
             expect(entity.fields).toEqual(live.fields);
@@ -81,9 +69,7 @@ describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/connectors.invoker"]);

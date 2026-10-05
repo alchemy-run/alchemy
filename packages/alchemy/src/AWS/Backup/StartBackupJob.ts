@@ -60,6 +60,4 @@ export interface StartBackupJob extends Binding.Service<
     ) => Effect.Effect<backup.StartBackupJobOutput, backup.StartBackupJobError>
   >
 > {}
-export const StartBackupJob = Binding.Service<StartBackupJob>(
-  "AWS.Backup.StartBackupJob",
-);
+export const StartBackupJob = Binding.Service<StartBackupJob>("AWS.Backup.StartBackupJob");

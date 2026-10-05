@@ -166,11 +166,7 @@ export class EnvironmentsTargetserverNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organizationId: string,
-  environmentId: string,
-  targetserverId: string,
-) =>
+const resourceName = (organizationId: string, environmentId: string, targetserverId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/targetservers/${targetserverId}`;
 
 const tlsOf = (
@@ -222,9 +218,7 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsTargetservers({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsTargetservers({ name }));
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
@@ -245,8 +239,7 @@ export const EnvironmentsTargetserverProvider = () =>
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -266,18 +259,11 @@ export const EnvironmentsTargetserverProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const targetserverId = yield* toResourceId(
-        id,
-        olds?.targetserverId,
-        output?.targetserverId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
-      const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, targetserverId);
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const targetserverId = yield* toResourceId(id, olds?.targetserverId, output?.targetserverId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
+      const name = output?.name ?? resourceName(organizationId, environmentId, targetserverId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organizationId, environmentId);
@@ -290,9 +276,7 @@ export const EnvironmentsTargetserverProvider = () =>
         const environments = yield* listProjectEnvironments();
         const found: EnvironmentsTargetserver["Attributes"][] = [];
         for (const item of environments) {
-          const ids = namesFromConfig(
-            (yield* deployedConfig(item.parent))?.targets,
-          );
+          const ids = namesFromConfig((yield* deployedConfig(item.parent))?.targets);
           for (const raw of ids) {
             const name = raw.includes("/")
               ? raw
@@ -300,9 +284,7 @@ export const EnvironmentsTargetserverProvider = () =>
             const server = yield* getByName(name);
             if (server === undefined) continue;
             if (!hasOwnershipMarker(server.description)) continue;
-            found.push(
-              toAttrs(server, item.organizationId, item.environmentId),
-            );
+            found.push(toAttrs(server, item.organizationId, item.environmentId));
           }
         }
         return found;
@@ -312,12 +294,9 @@ export const EnvironmentsTargetserverProvider = () =>
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(news.organization, project);
       const environmentId = environmentIdOf(news.environment);
-      const targetserverId = yield* toResourceId(
-        id,
-        news.targetserverId,
-        output?.targetserverId,
-        { maxLength: MAX_NAME_LENGTH },
-      );
+      const targetserverId = yield* toResourceId(id, news.targetserverId, output?.targetserverId, {
+        maxLength: MAX_NAME_LENGTH,
+      });
       const parent = environmentNameOf(organizationId, environmentId);
       const name = resourceName(organizationId, environmentId, targetserverId);
       const ownership = yield* createInternalLabels(id);
@@ -352,21 +331,11 @@ export const EnvironmentsTargetserverProvider = () =>
 
       const hostChanged = !sameText(current.host, news.host);
       const portChanged = (current.port ?? 0) !== news.port;
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
       const enabledChanged = (current.isEnabled !== false) !== desiredEnabled;
-      const tlsChanged =
-        jsonOf(tlsOf(current.sSLInfo)) !== jsonOf(news.sSLInfo);
+      const tlsChanged = jsonOf(tlsOf(current.sSLInfo)) !== jsonOf(news.sSLInfo);
 
-      if (
-        hostChanged ||
-        portChanged ||
-        descriptionChanged ||
-        enabledChanged ||
-        tlsChanged
-      ) {
+      if (hostChanged || portChanged || descriptionChanged || enabledChanged || tlsChanged) {
         current = yield* apigee.updateOrganizationsEnvironmentsTargetservers({
           name,
           body,
@@ -379,11 +348,6 @@ export const EnvironmentsTargetserverProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsEnvironmentsTargetservers({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

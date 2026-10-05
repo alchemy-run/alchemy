@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import RedshiftBindingsTestFunctionLive, {
   RedshiftBindingsTestFunction,
 } from "./fixtures/bindings-handler";
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "RedshiftBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -30,30 +27,18 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
 describe.sequential(
   "Redshift Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:redshift",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:redshift", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Redshift bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Redshift bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("Redshift bindings setup: deploying fixture");
@@ -71,9 +56,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -93,13 +76,11 @@ describe.sequential(
     });
 
     describe("DescribeClusters", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent cluster",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/clusters");
-            expect((response as any).tag).toBe("ClusterNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent cluster", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/clusters");
+          expect((response as any).tag).toBe("ClusterNotFoundFault");
+        }),
       );
     });
 
@@ -122,13 +103,11 @@ describe.sequential(
     });
 
     describe("DeleteClusterSnapshot", () => {
-      test.provider(
-        "surfaces the typed not-found tag for a nonexistent snapshot",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = yield* getJson("/delete-snapshot-probe");
-            expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
-          }),
+      test.provider("surfaces the typed not-found tag for a nonexistent snapshot", (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/delete-snapshot-probe");
+          expect((response as any).tag).toBe("ClusterSnapshotNotFoundFault");
+        }),
       );
     });
 

@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { currentProject, entitled, logLevel, missingNameOf } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -91,10 +91,9 @@ test.provider.skipIf(!entitled || !!process.env.FAST)(
         expect.arrayContaining(["Apparel", "T-Shirts"]),
       );
 
-      const fetched =
-        yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems({
-          name: created.name,
-        });
+      const fetched = yield* recommendationengine.getProjectsLocationsCatalogsCatalogItems({
+        name: created.name,
+      });
       expect(fetched.id).toEqual(created.catalogItemId);
       // Description and tags feed recommendations: no ownership marker.
       expect(fetched.description).toEqual("test tee");

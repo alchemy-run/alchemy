@@ -1,38 +1,16 @@
 import { promises as fs } from "node:fs";
-import type {
-  IncomingMessage,
-  OutgoingHttpHeaders,
-  ServerResponse,
-} from "node:http";
+import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
-import {
-  annotate,
-  applyEdit,
-  ATTR,
-  inlineSource,
-  strip,
-  writeInline,
-} from "./source.ts";
+import { annotate, applyEdit, ATTR, inlineSource, strip, writeInline } from "./source.ts";
 import { CopyEditError, type TextEdit } from "./text.ts";
 
 export { CopyEditError, applyRuns, htmlDialect, normalize } from "./text.ts";
-export type {
-  Dialect,
-  EscapeContext,
-  Run,
-  RunKind,
-  TextEdit,
-  TextToken,
-} from "./text.ts";
+export type { Dialect, EscapeContext, Run, RunKind, TextEdit, TextToken } from "./text.ts";
 export { markdownDialect, markdownRuns } from "./markdown.ts";
 export type { Atomic, MarkdownOptions } from "./markdown.ts";
-export {
-  MARKDOWN_FILE_SCHEME,
-  markdownBlocks,
-  markdownFiles,
-} from "./markdown-files.ts";
+export { MARKDOWN_FILE_SCHEME, markdownBlocks, markdownFiles } from "./markdown-files.ts";
 export type { MarkdownFilesOptions } from "./markdown-files.ts";
 
 const CLIENT_ID = "virtual:copy-editor/client";
@@ -46,10 +24,7 @@ const REFRESH_EVENT = "copy-editor:refresh";
 const REFRESH_DELAY_MS = 1500;
 // Resolves to the TypeScript source under bun and the compiled file otherwise.
 const CLIENT_FILE = fileURLToPath(
-  new URL(
-    import.meta.url.endsWith(".ts") ? "./client.ts" : "./client.js",
-    import.meta.url,
-  ),
+  new URL(import.meta.url.endsWith(".ts") ? "./client.ts" : "./client.js", import.meta.url),
 );
 
 /** How long after a save to swallow the full-page reload it triggers. */
@@ -84,10 +59,7 @@ export interface SaveResult {
  */
 export interface CopyEditHandler {
   /** Saves an inline text edit to a `data-copy` element. */
-  edit?(
-    edit: TextEdit & { id: string },
-    context: CopyEditContext,
-  ): Promise<SaveResult>;
+  edit?(edit: TextEdit & { id: string }, context: CopyEditContext): Promise<SaveResult>;
   /** Returns the markdown behind a `data-copy-format="markdown"` section. */
   readSource?(id: string, context: CopyEditContext): Promise<string>;
   /**
@@ -191,8 +163,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
     !id.includes("/node_modules/") &&
     include.test(fileOf(id)) &&
     !/[?&](raw|url)\b/.test(id);
-  const relative = (file: string) =>
-    path.relative(config.root, file).split(path.sep).join("/");
+  const relative = (file: string) => path.relative(config.root, file).split(path.sep).join("/");
 
   const rewrite = (code: string, file: string) =>
     dev ? annotate(code, relative(file)) : strip(code);
@@ -233,10 +204,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
     configureServer(server) {
       let suppressReloadUntil = 0;
       let pendingWork = 0;
-      suppressFullReloads(
-        server,
-        () => pendingWork > 0 || Date.now() < suppressReloadUntil,
-      );
+      suppressFullReloads(server, () => pendingWork > 0 || Date.now() < suppressReloadUntil);
       const context: CopyEditContext = {
         root: config.root,
         logger: config.logger,
@@ -273,8 +241,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
           },
           (error: unknown) => {
             const status = error instanceof CopyEditError ? error.status : 500;
-            const message =
-              error instanceof Error ? error.message : String(error);
+            const message = error instanceof Error ? error.message : String(error);
             config.logger.warn(`copy-editor: ${message}`, { timestamp: true });
             res.statusCode = status;
             res.setHeader("content-type", "application/json");
@@ -310,8 +277,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
       server.middlewares.use(SOURCE_ENDPOINT, (req, res) =>
         respond(res, async () => {
           if (req.method === "GET") {
-            const id =
-              new URL(req.url ?? "", "http://x").searchParams.get("id") ?? "";
+            const id = new URL(req.url ?? "", "http://x").searchParams.get("id") ?? "";
             const handler = handlerFor(id);
             if (!handler) {
               const { index, file } = templateElement(id);
@@ -323,8 +289,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
             }
             return { source: await handler.readSource(id, context) };
           }
-          if (req.method !== "POST")
-            throw new CopyEditError("GET or POST only", 405);
+          if (req.method !== "POST") throw new CopyEditError("GET or POST only", 405);
           const edit = JSON.parse(await readBody(req)) as {
             id: string;
             source: string;
@@ -373,13 +338,9 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
           };
           const handler = handlerFor(id);
           if (handler) {
-            if (!handler.edit)
-              throw new CopyEditError(`${id} can't be edited inline`);
+            if (!handler.edit) throw new CopyEditError(`${id} can't be edited inline`);
             suppressReloadUntil = Date.now() + RELOAD_SUPPRESS_MS;
-            return reply(
-              200,
-              logSave(await handler.edit({ id, before, after }, context)),
-            );
+            return reply(200, logSave(await handler.edit({ id, before, after }, context)));
           }
           const hash = id.lastIndexOf("#");
           const rel = id.slice(0, hash);
@@ -407,8 +368,7 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
           reply(200, { file: rel, changed: next !== code });
         } catch (error) {
           const status = error instanceof CopyEditError ? error.status : 500;
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error ? error.message : String(error);
           config.logger.warn(`copy-editor: ${message}`, { timestamp: true });
           reply(status, { error: message });
         }
@@ -431,22 +391,17 @@ const readBody = (req: IncomingMessage) =>
  */
 const injectIntoHtml = (res: ServerResponse, tag: string) => {
   let html: boolean | undefined;
-  const isHtml = () =>
-    (html ??= String(res.getHeader("content-type") ?? "").includes(
-      "text/html",
-    ));
+  const isHtml = () => (html ??= String(res.getHeader("content-type") ?? "").includes("text/html"));
 
   const writeHead = res.writeHead;
   res.writeHead = function (this: ServerResponse, ...args: unknown[]) {
     const headers = args.find(
-      (a): a is OutgoingHttpHeaders =>
-        typeof a === "object" && a !== null && !Array.isArray(a),
+      (a): a is OutgoingHttpHeaders => typeof a === "object" && a !== null && !Array.isArray(a),
     );
     if (headers) {
       for (const key of Object.keys(headers)) {
         const lower = key.toLowerCase();
-        if (lower === "content-type")
-          html = String(headers[key]).includes("text/html");
+        if (lower === "content-type") html = String(headers[key]).includes("text/html");
       }
       if (isHtml()) {
         for (const key of Object.keys(headers)) {
@@ -460,13 +415,9 @@ const injectIntoHtml = (res: ServerResponse, tag: string) => {
 
   const end = res.end;
   res.end = function (this: ServerResponse, ...args: unknown[]) {
-    if (!isHtml())
-      return (end as (...a: unknown[]) => ServerResponse).apply(this, args);
+    if (!isHtml()) return (end as (...a: unknown[]) => ServerResponse).apply(this, args);
     if (!res.headersSent) res.removeHeader("content-length");
-    const cb =
-      typeof args[args.length - 1] === "function"
-        ? (args.pop() as () => void)
-        : undefined;
+    const cb = typeof args[args.length - 1] === "function" ? (args.pop() as () => void) : undefined;
     const [chunk, encoding] = args as [unknown, BufferEncoding | undefined];
     if (chunk != null) res.write(chunk, encoding as BufferEncoding);
     res.write(tag);

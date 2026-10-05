@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androidenterprise from "@distilled.cloud/gcp/androidenterprise_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  enterpriseId,
-  logLevel,
-  probeEnterpriseId,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { enterpriseId, logLevel, probeEnterpriseId, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -90,14 +85,11 @@ test.provider.skipIf(!runLifecycle)(
             enterpriseId: enterpriseId!,
             name: [{ locale: "en-US", text: "Home" }],
           });
-          const cluster = yield* GCP.AndroidEnterprise.Storelayoutcluster(
-            "Apps",
-            {
-              enterpriseId: page.enterpriseId,
-              pageId: page.pageId,
-              name: [{ locale: "en-US", text: "Work apps" }],
-            },
-          );
+          const cluster = yield* GCP.AndroidEnterprise.Storelayoutcluster("Apps", {
+            enterpriseId: page.enterpriseId,
+            pageId: page.pageId,
+            name: [{ locale: "en-US", text: "Work apps" }],
+          });
           return { page, cluster };
         }),
       );
@@ -121,15 +113,12 @@ test.provider.skipIf(!runLifecycle)(
             pageId: created.page.pageId,
             name: [{ locale: "en-US", text: "Home" }],
           });
-          const cluster = yield* GCP.AndroidEnterprise.Storelayoutcluster(
-            "Apps",
-            {
-              enterpriseId: page.enterpriseId,
-              pageId: page.pageId,
-              clusterId: created.cluster.clusterId,
-              name: [{ locale: "en-US", text: "Featured apps" }],
-            },
-          );
+          const cluster = yield* GCP.AndroidEnterprise.Storelayoutcluster("Apps", {
+            enterpriseId: page.enterpriseId,
+            pageId: page.pageId,
+            clusterId: created.cluster.clusterId,
+            name: [{ locale: "en-US", text: "Featured apps" }],
+          });
           return { page, cluster };
         }),
       );

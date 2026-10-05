@@ -1,6 +1,6 @@
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
 
 export class BrowserRpcs extends RpcGroup.make(
   Rpc.make("echo", {

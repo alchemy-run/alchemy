@@ -2,19 +2,13 @@ import * as rtb from "@distilled.cloud/gcp/realtimebidding_v1";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 255;
 export const PROBE_PARENT = "bidders/1";
 export const PROBE_NAME = `${PROBE_PARENT}/pretargetingConfigs/0`;
 
-export type TargetingMode =
-  | rtb.StringTargetingDimensionTargetingModeEnum
-  | (string & {});
+export type TargetingMode = rtb.StringTargetingDimensionTargetingModeEnum | (string & {});
 
 export type StringTargetingDimensionValue = {
   targetingMode?: TargetingMode;
@@ -65,8 +59,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeResourceName = (value: string) =>
-  value.replace(/\/+$/, "").trim();
+export const normalizeResourceName = (value: string) => value.replace(/\/+$/, "").trim();
 
 export const expandParent = (value: string) => {
   const trimmed = normalizeResourceName(value);
@@ -100,13 +93,9 @@ const canonical = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     const items = value.map(canonical).filter((item) => item !== undefined);
     if (items.length === 0) return undefined;
-    const allScalar = items.every(
-      (item) => item === undefined || typeof item !== "object",
-    );
+    const allScalar = items.every((item) => item === undefined || typeof item !== "object");
     return allScalar
-      ? [...items].sort((left, right) =>
-          String(left).localeCompare(String(right)),
-        )
+      ? [...items].sort((left, right) => String(left).localeCompare(String(right)))
       : items;
   }
   if (typeof value === "object") {
@@ -120,8 +109,7 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   fingerprint(left) === fingerprint(right);
@@ -153,18 +141,12 @@ export const replaceOnIdentity = (input: {
 const markerOf = (stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
-export const fitMarker = (
-  labels: Record<string, string>,
-  maxLength: number,
-) => {
+export const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stack = labels[alchemyLabelKeys.stack] ?? "x";
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (id.length >= stack.length && id.length >= stage.length) {
       id = id.slice(0, -1);
     } else if (stack.length >= stage.length) {
@@ -185,10 +167,7 @@ export const encodeDisplayName = (
   const trimmed = displayName?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -216,14 +195,10 @@ export const parseDisplayName = (
 };
 
 export const hasOwnershipMarker = (displayName: string | undefined) =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, displayName: string | undefined) =>
   Effect.gen(function* () {
@@ -232,18 +207,9 @@ export const ownedByAlchemy = (id: string, displayName: string | undefined) =>
     if (!hasOwnershipMarker(displayName)) return false;
     if (yield* hasAlchemyLabels(id, labels)) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -283,8 +249,7 @@ export const collectPages = <A, Page, E, R>(
 
 const isMissing = <E extends { readonly _tag: string }>(
   error: E,
-): error is Extract<E, { readonly _tag: "NotFound" }> =>
-  error._tag === "NotFound";
+): error is Extract<E, { readonly _tag: "NotFound" }> => error._tag === "NotFound";
 
 export const ignoreList =
   <A>(fallback: A) =>
@@ -316,10 +281,9 @@ export const listConfigs = (parent: string) =>
       ).pipe(ignoreList([] as rtb.PretargetingConfig[]));
 
 export const listBidderAccounts = () =>
-  collectPages(
-    rtb.listBidders.pages({ pageSize: 100 }),
-    (page) => page.bidders,
-  ).pipe(ignoreList([] as rtb.Bidder[]));
+  collectPages(rtb.listBidders.pages({ pageSize: 100 }), (page) => page.bidders).pipe(
+    ignoreList([] as rtb.Bidder[]),
+  );
 
 export const listParentsForNuke = () =>
   Effect.gen(function* () {
@@ -340,17 +304,10 @@ export const listOwnedConfigs = () =>
     return pages.flat().filter((row) => hasOwnershipMarker(row.displayName));
   });
 
-export const findOwnedConfig = (
-  id: string,
-  parent?: string,
-  name?: string,
-  displayName?: string,
-) =>
+export const findOwnedConfig = (id: string, parent?: string, name?: string, displayName?: string) =>
   Effect.gen(function* () {
     const rows =
-      parent && parent.length > 0
-        ? yield* listConfigs(parent)
-        : yield* listOwnedConfigs();
+      parent && parent.length > 0 ? yield* listConfigs(parent) : yield* listOwnedConfigs();
     if (name) {
       const exact = rows.find((row) => row.name === name);
       if (exact) return exact;
@@ -421,42 +378,24 @@ export const mergeSpec = (
     news.allowedUserTargetingModes,
     current?.allowedUserTargetingModes,
   ),
-  excludedContentLabelIds: keep(
-    news.excludedContentLabelIds,
-    current?.excludedContentLabelIds,
-  ),
+  excludedContentLabelIds: keep(news.excludedContentLabelIds, current?.excludedContentLabelIds),
   includedLanguages: keep(news.includedLanguages, current?.includedLanguages),
   webTargeting: keep(news.webTargeting, current?.webTargeting),
   includedPlatforms: keep(news.includedPlatforms, current?.includedPlatforms),
   includedFormats: keep(news.includedFormats, current?.includedFormats),
   maximumQps: keep(news.maximumQps, current?.maximumQps),
   geoTargeting: keep(news.geoTargeting, current?.geoTargeting),
-  includedEnvironments: keep(
-    news.includedEnvironments,
-    current?.includedEnvironments,
-  ),
+  includedEnvironments: keep(news.includedEnvironments, current?.includedEnvironments),
   userListTargeting: keep(news.userListTargeting, current?.userListTargeting),
-  publisherTargeting: keep(
-    news.publisherTargeting,
-    current?.publisherTargeting,
-  ),
-  includedUserIdTypes: keep(
-    news.includedUserIdTypes,
-    current?.includedUserIdTypes,
-  ),
-  minimumViewabilityDecile: keep(
-    news.minimumViewabilityDecile,
-    current?.minimumViewabilityDecile,
-  ),
+  publisherTargeting: keep(news.publisherTargeting, current?.publisherTargeting),
+  includedUserIdTypes: keep(news.includedUserIdTypes, current?.includedUserIdTypes),
+  minimumViewabilityDecile: keep(news.minimumViewabilityDecile, current?.minimumViewabilityDecile),
   verticalTargeting: keep(news.verticalTargeting, current?.verticalTargeting),
   includedCreativeDimensions: keep(
     news.includedCreativeDimensions,
     current?.includedCreativeDimensions,
   ),
-  interstitialTargeting: keep(
-    news.interstitialTargeting,
-    current?.interstitialTargeting,
-  ),
+  interstitialTargeting: keep(news.interstitialTargeting, current?.interstitialTargeting),
   appTargeting: keep(news.appTargeting, current?.appTargeting),
   includedMobileOperatingSystemIds: keep(
     news.includedMobileOperatingSystemIds,
@@ -508,9 +447,7 @@ const PATCH_FIELDS = [
   ["interstitialTargeting", "interstitialTargeting"],
   ["appTargeting", "appTargeting"],
   ["includedMobileOperatingSystemIds", "includedMobileOperatingSystemIds"],
-] as const satisfies ReadonlyArray<
-  readonly [keyof PretargetingSpec, keyof PretargetingSpec]
->;
+] as const satisfies ReadonlyArray<readonly [keyof PretargetingSpec, keyof PretargetingSpec]>;
 
 export const updateMaskOf = (
   current: rtb.PretargetingConfig,

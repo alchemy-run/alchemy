@@ -149,9 +149,7 @@ export interface TopicEventSource extends Binding.Service<
   TopicEventSourceService
 > {}
 
-export const TopicEventSource = Binding.Service<TopicEventSource>(
-  "GCP.PubSub.TopicEventSource",
-);
+export const TopicEventSource = Binding.Service<TopicEventSource>("GCP.PubSub.TopicEventSource");
 
 /**
  * Subscribe an Effect handler to messages published to a Pub/Sub
@@ -178,8 +176,6 @@ export function consumeTopicMessages<Req = never, ResourceReq = never>(
   // Accept the resource or the Effect that declares it, like bindings do.
   const resolved = Effect.isEffect(topic) ? topic : Effect.succeed(topic);
   return resolved.pipe(
-    Effect.flatMap((value) =>
-      TopicEventSource.use((source) => source(value, props, process)),
-    ),
+    Effect.flatMap((value) => TopicEventSource.use((source) => source(value, props, process))),
   );
 }

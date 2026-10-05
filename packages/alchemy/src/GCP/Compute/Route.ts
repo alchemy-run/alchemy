@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_PRIORITY = 1000;
 const DEFAULT_INTERNET_GATEWAY = "default-internet-gateway";
@@ -171,9 +167,7 @@ export type Route = Resource<
  */
 export const Route = Resource<Route>("GCP.Compute.Route");
 
-export class RouteNotResolved extends Data.TaggedError(
-  "GCP.Compute.RouteNotResolved",
-)<{
+export class RouteNotResolved extends Data.TaggedError("GCP.Compute.RouteNotResolved")<{
   routeName: string;
 }> {}
 
@@ -269,8 +263,7 @@ const hopOf = (props: {
       kind: "vpn" as const,
       value: lastToken(props.nextHopVpnTunnel),
     };
-  if (props.nextHopIlb)
-    return { kind: "ilb" as const, value: lastToken(props.nextHopIlb) };
+  if (props.nextHopIlb) return { kind: "ilb" as const, value: lastToken(props.nextHopIlb) };
   return undefined;
 };
 
@@ -286,9 +279,7 @@ const toBody = (
   description: encodeDescription(ownership, props.description),
   priority: props.priority ?? DEFAULT_PRIORITY,
   tags: props.tags,
-  nextHopGateway: props.nextHopGateway
-    ? gatewayUrl(project, props.nextHopGateway)
-    : undefined,
+  nextHopGateway: props.nextHopGateway ? gatewayUrl(project, props.nextHopGateway) : undefined,
   nextHopIp: props.nextHopIp,
   nextHopInstance: props.nextHopInstance,
   nextHopVpnTunnel: props.nextHopVpnTunnel,
@@ -327,9 +318,7 @@ const getByName = (project: string, route: string) =>
 const requireRoute = (project: string, routeName: string) =>
   getByName(project, routeName).pipe(
     Effect.flatMap((route) =>
-      route
-        ? Effect.succeed(route)
-        : Effect.fail(new RouteNotResolved({ routeName })),
+      route ? Effect.succeed(route) : Effect.fail(new RouteNotResolved({ routeName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RouteNotResolved",
@@ -363,9 +352,7 @@ const removeRoute = (project: string, routeName: string) =>
 const matchesDesired = (route: compute.Route, news: RouteProps) => {
   if ((route.destRange ?? "") !== news.destRange) return false;
   if (!sameRef(route.network, news.network)) return false;
-  if (
-    (route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)
-  ) {
+  if ((route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)) {
     return false;
   }
   const parsed = parseDescription(route.description);
@@ -397,14 +384,10 @@ const immutableChanged = (
     return true;
   }
   const previousNetwork = olds?.network ?? output?.network;
-  if (
-    previousNetwork !== undefined &&
-    !sameRef(news.network, previousNetwork)
-  ) {
+  if (previousNetwork !== undefined && !sameRef(news.network, previousNetwork)) {
     return true;
   }
-  const previousPriority =
-    olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
+  const previousPriority = olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
   if ((news.priority ?? DEFAULT_PRIORITY) !== previousPriority) {
     return true;
   }
@@ -476,9 +459,7 @@ export const RouteProvider = () =>
         return yield* compute.listRoutes.items({ project: env.project }).pipe(
           Stream.filter((route) => {
             const { labels } = parseDescription(route.description);
-            return Object.keys(labels).some((key) =>
-              key.startsWith("alchemy-"),
-            );
+            return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
           }),
           Stream.map((route) => toAttrs(route, env.project)),
           Stream.runCollect,

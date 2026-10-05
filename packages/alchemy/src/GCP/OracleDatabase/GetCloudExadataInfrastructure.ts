@@ -38,7 +38,6 @@ export interface GetCloudExadataInfrastructure extends Binding.Service<
   >
 > {}
 
-export const GetCloudExadataInfrastructure =
-  Binding.Service<GetCloudExadataInfrastructure>(
-    "GCP.OracleDatabase.GetCloudExadataInfrastructure",
-  );
+export const GetCloudExadataInfrastructure = Binding.Service<GetCloudExadataInfrastructure>(
+  "GCP.OracleDatabase.GetCloudExadataInfrastructure",
+);

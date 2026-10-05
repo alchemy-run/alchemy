@@ -13,8 +13,7 @@ import * as Effect from "effect/Effect";
 export { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 
 /** The family segment of a task definition revision ARN. */
-const familyOfArn = (arn: string | undefined) =>
-  arn?.split("/").pop()?.split(":")[0];
+const familyOfArn = (arn: string | undefined) => arn?.split("/").pop()?.split(":")[0];
 
 /**
  * Restart every RUNNING task of `family` that is not yet on

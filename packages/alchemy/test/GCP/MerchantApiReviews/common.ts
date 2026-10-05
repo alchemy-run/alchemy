@@ -14,12 +14,10 @@ export const accountId =
 const sharedDataSource = process.env.GCP_MERCHANTAPI_DATA_SOURCE?.trim();
 
 export const merchantReviewDataSource =
-  process.env.GCP_MERCHANTAPI_MERCHANT_REVIEW_DATA_SOURCE?.trim() ||
-  sharedDataSource;
+  process.env.GCP_MERCHANTAPI_MERCHANT_REVIEW_DATA_SOURCE?.trim() || sharedDataSource;
 
 export const productReviewDataSource =
-  process.env.GCP_MERCHANTAPI_PRODUCT_REVIEW_DATA_SOURCE?.trim() ||
-  sharedDataSource;
+  process.env.GCP_MERCHANTAPI_PRODUCT_REVIEW_DATA_SOURCE?.trim() || sharedDataSource;
 
 export const runMerchantReviewLifecycle =
   !process.env.FAST && !!accountId && !!merchantReviewDataSource;

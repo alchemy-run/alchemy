@@ -110,9 +110,7 @@ export type ResponsePolicy = Resource<
  * @resource
  * @category DNS
  */
-export const ResponsePolicy = Resource<ResponsePolicy>(
-  "GCP.DNS.ResponsePolicy",
-);
+export const ResponsePolicy = Resource<ResponsePolicy>("GCP.DNS.ResponsePolicy");
 
 export class ResponsePolicyNotResolved extends Data.TaggedError(
   "GCP.DNS.ResponsePolicyNotResolved",
@@ -144,11 +142,9 @@ const toNetworkUrl = (project: string, network: string) => {
 };
 
 const desiredNetworks = (project: string, networks: string[] | undefined) =>
-  [
-    ...new Set(
-      (networks ?? []).map((network) => toNetworkUrl(project, network)),
-    ),
-  ].sort((left, right) => lastSegment(left).localeCompare(lastSegment(right)));
+  [...new Set((networks ?? []).map((network) => toNetworkUrl(project, network)))].sort(
+    (left, right) => lastSegment(left).localeCompare(lastSegment(right)),
+  );
 
 const observedNetworks = (policy: dns.ResponsePolicy) =>
   (policy.networks ?? [])
@@ -158,12 +154,9 @@ const observedNetworks = (policy: dns.ResponsePolicy) =>
 
 const sameNetworks = (left: string[], right: string[]) =>
   left.length === right.length &&
-  left.every(
-    (url, index) => lastSegment(url) === lastSegment(right[index] ?? ""),
-  );
+  left.every((url, index) => lastSegment(url) === lastSegment(right[index] ?? ""));
 
-const desiredClusters = (clusters: string[] | undefined) =>
-  [...new Set(clusters ?? [])].sort();
+const desiredClusters = (clusters: string[] | undefined) => [...new Set(clusters ?? [])].sort();
 
 const observedClusters = (policy: dns.ResponsePolicy) =>
   (policy.gkeClusters ?? [])
@@ -172,14 +165,9 @@ const observedClusters = (policy: dns.ResponsePolicy) =>
     .sort();
 
 const sameList = (left: string[], right: string[]) =>
-  left.length === right.length &&
-  left.every((value, index) => value === right[index]);
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
-const toResponsePolicyName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toResponsePolicyName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -200,10 +188,7 @@ const toAttrs = (policy: dns.ResponsePolicy, project: string) => ({
   responsePolicyName: policy.responsePolicyName ?? "",
   project,
   id: policy.id,
-  description:
-    policy.description && policy.description.length > 0
-      ? policy.description
-      : undefined,
+  description: policy.description && policy.description.length > 0 ? policy.description : undefined,
   labels: userLabels(policy.labels),
   networks: observedNetworks(policy),
   gkeClusters: observedClusters(policy),
@@ -231,11 +216,7 @@ const listRules = (project: string, responsePolicyName: string) =>
       if (pageToken === undefined || pageToken === "") break;
     }
     return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as dns.ResponsePolicyRule[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as dns.ResponsePolicyRule[])));
 
 const emptyRules = (project: string, responsePolicyName: string) =>
   Effect.gen(function* () {
@@ -262,14 +243,9 @@ export const ResponsePolicyProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.responsePolicyName ?? output?.responsePolicyName;
+      const previousName = olds?.responsePolicyName ?? output?.responsePolicyName;
       const nextName = news.responsePolicyName ?? previousName;
-      if (
-        previousName === undefined ||
-        nextName === undefined ||
-        nextName === previousName
-      ) {
+      if (previousName === undefined || nextName === undefined || nextName === previousName) {
         return undefined;
       }
       // A VPC may belong to only one response policy, so the old policy
@@ -288,9 +264,7 @@ export const ResponsePolicyProvider = () =>
       const existing = yield* getByName(env.project, responsePolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -306,9 +280,7 @@ export const ResponsePolicyProvider = () =>
           });
           for (const policy of response.responsePolicies ?? []) {
             if (
-              Object.keys(policy.labels ?? {}).some((key) =>
-                key.startsWith(ALCHEMY_LABEL_PREFIX),
-              )
+              Object.keys(policy.labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX))
             ) {
               found.push(toAttrs(policy, env.project));
             }
@@ -350,11 +322,7 @@ export const ResponsePolicyProvider = () =>
               })),
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, responsePolicyName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(env.project, responsePolicyName)));
         current = created ?? undefined;
       }
 
@@ -366,18 +334,10 @@ export const ResponsePolicyProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const descriptionChanged = (current.description ?? "") !== description;
-      const networksChanged = !sameNetworks(
-        observedNetworks(current),
-        networks,
-      );
+      const networksChanged = !sameNetworks(observedNetworks(current), networks);
       const clustersChanged = !sameList(observedClusters(current), gkeClusters);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        networksChanged ||
-        clustersChanged
-      ) {
+      if (labelsChanged || descriptionChanged || networksChanged || clustersChanged) {
         const body: dns.ResponsePolicy = {};
         if (labelsChanged) body.labels = desiredLabels;
         if (descriptionChanged) body.description = description;
@@ -395,9 +355,7 @@ export const ResponsePolicyProvider = () =>
           body,
         });
         current =
-          patched.responsePolicy ??
-          (yield* getByName(env.project, responsePolicyName)) ??
-          current;
+          patched.responsePolicy ?? (yield* getByName(env.project, responsePolicyName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -428,8 +386,7 @@ export const ResponsePolicyProvider = () =>
           () => detach.pipe(Effect.andThen(attempt)),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "Conflict" || error._tag === "BadRequest",
+          while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),

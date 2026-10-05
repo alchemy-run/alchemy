@@ -66,9 +66,7 @@ export const assertSiteGone = (service: DeployedService) =>
       }),
     );
     expect(service_).toEqual("gone");
-    const repositoryId = `${service.serviceId}-src`
-      .slice(0, 49)
-      .replace(/-+$/g, "");
+    const repositoryId = `${service.serviceId}-src`.slice(0, 49).replace(/-+$/g, "");
     const repository = yield* repositoryStatus(
       `projects/${service.project}/locations/${service.location}/repositories/${repositoryId}`,
     ).pipe(

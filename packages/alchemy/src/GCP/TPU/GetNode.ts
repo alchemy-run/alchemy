@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Node } from "./Node.ts";
 
-export interface GetNodeRequest extends Omit<
-  tpu.GetProjectsLocationsNodesRequest,
-  "name"
-> {}
+export interface GetNodeRequest extends Omit<tpu.GetProjectsLocationsNodesRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud TPU `nodes.get`.
@@ -36,11 +33,7 @@ export interface GetNode extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetNodeRequest,
-    ) => Effect.Effect<
-      tpu.Node,
-      tpu.GetProjectsLocationsNodesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<tpu.Node, tpu.GetProjectsLocationsNodesError, RuntimeContext>
   >
 > {}
 

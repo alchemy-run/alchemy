@@ -78,9 +78,7 @@ export type GlobalForwardingRuleProps = {
    * Balancer. Immutable — changing it replaces the rule.
    * @default "EXTERNAL"
    */
-  loadBalancingScheme?:
-    | compute.ForwardingRuleLoadBalancingSchemeEnum
-    | (string & {});
+  loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | (string & {});
   /**
    * VPC network URL. Unused for external HTTP(S) LB; required for
    * PSC-to-Google-APIs. Immutable.
@@ -274,49 +272,35 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `f${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `f${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const resourceTail = (value: string | undefined): string =>
-  lastSegment(value).toLowerCase();
+const resourceTail = (value: string | undefined): string => lastSegment(value).toLowerCase();
 
 const proxyName = (proxy: { name?: string; description?: string }) =>
-  hasOwnershipMarker(proxy.description)
-    ? lastSegment(proxy.name).toLowerCase()
-    : "";
+  hasOwnershipMarker(proxy.description) ? lastSegment(proxy.name).toLowerCase() : "";
 
 const ownedProxyNames = (project: string) =>
   Effect.gen(function* () {
-    const http = yield* compute.listTargetHttpProxies
-      .items({ project, maxResults: 500 })
-      .pipe(
-        Stream.map(proxyName),
-        Stream.filter((name) => name.length > 0),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      );
-    const https = yield* compute.listTargetHttpsProxies
-      .items({ project, maxResults: 500 })
-      .pipe(
-        Stream.map(proxyName),
-        Stream.filter((name) => name.length > 0),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      );
+    const http = yield* compute.listTargetHttpProxies.items({ project, maxResults: 500 }).pipe(
+      Stream.map(proxyName),
+      Stream.filter((name) => name.length > 0),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+    );
+    const https = yield* compute.listTargetHttpsProxies.items({ project, maxResults: 500 }).pipe(
+      Stream.map(proxyName),
+      Stream.filter((name) => name.length > 0),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+    );
     return new Set<string>([...http, ...https]);
   });
 
-const isOwnedForwardingRule = (
-  rule: compute.ForwardingRule,
-  ownedTargets: ReadonlySet<string>,
-) => {
-  if (
-    Object.keys(rule.labels ?? {}).some((key) => key.startsWith("alchemy-"))
-  ) {
+const isOwnedForwardingRule = (rule: compute.ForwardingRule, ownedTargets: ReadonlySet<string>) => {
+  if (Object.keys(rule.labels ?? {}).some((key) => key.startsWith("alchemy-"))) {
     return true;
   }
   if (hasOwnershipMarker(rule.description)) return true;
@@ -326,8 +310,7 @@ const isOwnedForwardingRule = (
   // rule whose name is still the engine physical name (`gcp-…` in tests).
   const name = (rule.name ?? "").toLowerCase();
   return (
-    name.startsWith("gcp-") &&
-    (rule.description === undefined || rule.description.length === 0)
+    name.startsWith("gcp-") && (rule.description === undefined || rule.description.length === 0)
   );
 };
 
@@ -345,8 +328,7 @@ const sameJson = (left: unknown, right: unknown) =>
 
 const schemeOf = (value: string | undefined) => value ?? DEFAULT_SCHEME;
 
-const protocolOf = (value: string | undefined) =>
-  (value ?? DEFAULT_PROTOCOL).toUpperCase();
+const protocolOf = (value: string | undefined) => (value ?? DEFAULT_PROTOCOL).toUpperCase();
 
 const tierOf = (value: string | undefined) => value ?? DEFAULT_TIER;
 
@@ -413,9 +395,7 @@ const toInsertBody = (
     body.externalManagedBackendBucketMigrationState =
       news.externalManagedBackendBucketMigrationState;
   }
-  if (
-    news.externalManagedBackendBucketMigrationTestingPercentage !== undefined
-  ) {
+  if (news.externalManagedBackendBucketMigrationTestingPercentage !== undefined) {
     body.externalManagedBackendBucketMigrationTestingPercentage =
       news.externalManagedBackendBucketMigrationTestingPercentage;
   }
@@ -440,8 +420,7 @@ const awaitResource = (project: string, forwardingRuleName: string) =>
         : Effect.succeed(rule),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.GlobalForwardingRulePending",
+      while: (error) => error._tag === "GCP.Compute.GlobalForwardingRulePending",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -460,24 +439,17 @@ const waitUntilGone = (project: string, forwardingRuleName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.GlobalForwardingRulePending",
+      while: (error) => error._tag === "GCP.Compute.GlobalForwardingRulePending",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.GlobalForwardingRulePending",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.GlobalForwardingRulePending", () => Effect.void),
   );
 
 export const GlobalForwardingRuleProvider = () =>
   Provider.succeed(GlobalForwardingRule, {
     nuke: {
-      dependsOn: [
-        "GCP.Compute.TargetHttpProxy",
-        "GCP.Compute.TargetHttpsProxy",
-      ],
+      dependsOn: ["GCP.Compute.TargetHttpProxy", "GCP.Compute.TargetHttpsProxy"],
     },
     stables: [
       "forwardingRuleName",
@@ -495,30 +467,20 @@ export const GlobalForwardingRuleProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.forwardingRuleName ?? output?.forwardingRuleName;
+      const previousName = olds?.forwardingRuleName ?? output?.forwardingRuleName;
       const nextName = news.forwardingRuleName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousProtocol = protocolOf(
-        olds?.ipProtocol ?? output?.ipProtocol,
-      );
-      const previousPort = normalizePortRange(
-        olds?.portRange ?? output?.portRange,
-      );
+      const previousProtocol = protocolOf(olds?.ipProtocol ?? output?.ipProtocol);
+      const previousPort = normalizePortRange(olds?.portRange ?? output?.portRange);
       const nextPort = normalizePortRange(news.portRange);
       const previousNetwork = resourceTail(olds?.network ?? output?.network);
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const previousVersion = ipVersionOf(olds?.ipVersion ?? output?.ipVersion);
       const previousCollection = resourceTail(olds?.ipCollection);
       const previousDns = olds?.noAutomateDnsZone;
-      const previousScheme = schemeOf(
-        olds?.loadBalancingScheme ?? output?.loadBalancingScheme,
-      );
+      const previousScheme = schemeOf(olds?.loadBalancingScheme ?? output?.loadBalancingScheme);
 
       const previousIp = output?.ipAddress;
       const ipChanged =
@@ -528,34 +490,23 @@ export const GlobalForwardingRuleProvider = () =>
         news.ipAddress !== previousIp;
 
       const immutableChanged =
-        (news.description !== undefined &&
-          (news.description ?? "") !== previousDescription) ||
+        (news.description !== undefined && (news.description ?? "") !== previousDescription) ||
         ipChanged ||
-        (news.ipProtocol !== undefined &&
-          protocolOf(news.ipProtocol) !== previousProtocol) ||
-        (news.ipVersion !== undefined &&
-          ipVersionOf(news.ipVersion) !== previousVersion) ||
+        (news.ipProtocol !== undefined && protocolOf(news.ipProtocol) !== previousProtocol) ||
+        (news.ipVersion !== undefined && ipVersionOf(news.ipVersion) !== previousVersion) ||
         (news.portRange !== undefined && nextPort !== previousPort) ||
         (news.loadBalancingScheme !== undefined &&
           schemeOf(news.loadBalancingScheme) !== previousScheme) ||
-        (news.network !== undefined &&
-          resourceTail(news.network) !== previousNetwork) ||
+        (news.network !== undefined && resourceTail(news.network) !== previousNetwork) ||
         (news.ipCollection !== undefined &&
           resourceTail(news.ipCollection) !== previousCollection) ||
-        (news.noAutomateDnsZone !== undefined &&
-          news.noAutomateDnsZone !== previousDns) ||
+        (news.noAutomateDnsZone !== undefined && news.noAutomateDnsZone !== previousDns) ||
         (news.metadataFilters !== undefined &&
           !sameJson(news.metadataFilters, olds?.metadataFilters)) ||
         (news.sourceIpRanges !== undefined &&
-          !sameJson(
-            [...news.sourceIpRanges].sort(),
-            [...(olds?.sourceIpRanges ?? [])].sort(),
-          )) ||
+          !sameJson([...news.sourceIpRanges].sort(), [...(olds?.sourceIpRanges ?? [])].sort())) ||
         (news.serviceDirectoryRegistrations !== undefined &&
-          !sameJson(
-            news.serviceDirectoryRegistrations,
-            olds?.serviceDirectoryRegistrations,
-          ));
+          !sameJson(news.serviceDirectoryRegistrations, olds?.serviceDirectoryRegistrations));
 
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -564,8 +515,7 @@ export const GlobalForwardingRuleProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            (nextName === undefined || nextName === previousName),
+            previousName !== undefined && (nextName === undefined || nextName === previousName),
         };
       }
       return undefined;
@@ -581,9 +531,7 @@ export const GlobalForwardingRuleProvider = () =>
       const existing = yield* getByName(env.project, forwardingRuleName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const { labels: descriptionLabels } = parseDescription(
-        existing.description,
-      );
+      const { labels: descriptionLabels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, {
         ...descriptionLabels,
         ...tagRecord(existing.labels),
@@ -635,15 +583,9 @@ export const GlobalForwardingRuleProvider = () =>
             Effect.flatMap((operation) =>
               waitGlobalOperation(env.project, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }).pipe(
-                Effect.flatMap(() =>
-                  getByName(env.project, forwardingRuleName),
-                ),
-              ),
+              }).pipe(Effect.flatMap(() => getByName(env.project, forwardingRuleName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, forwardingRuleName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, forwardingRuleName)),
           );
         current = created ?? undefined;
         if (current === undefined) {
@@ -662,10 +604,7 @@ export const GlobalForwardingRuleProvider = () =>
       }
       const resolved = current;
 
-      if (
-        news.target !== undefined &&
-        resourceTail(current.target) !== resourceTail(news.target)
-      ) {
+      if (news.target !== undefined && resourceTail(current.target) !== resourceTail(news.target)) {
         yield* compute
           .setTargetGlobalForwardingRules({
             project: env.project,
@@ -673,29 +612,24 @@ export const GlobalForwardingRuleProvider = () =>
             body: { target: news.target },
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),
           );
-        current =
-          (yield* getByName(env.project, forwardingRuleName)) ?? current;
+        current = (yield* getByName(env.project, forwardingRuleName)) ?? current;
       }
 
       const tierChanged =
-        news.networkTier !== undefined &&
-        tierOf(current.networkTier) !== tierOf(news.networkTier);
+        news.networkTier !== undefined && tierOf(current.networkTier) !== tierOf(news.networkTier);
       const migrationStateChanged =
         news.externalManagedBackendBucketMigrationState !== undefined &&
         current.externalManagedBackendBucketMigrationState !==
           news.externalManagedBackendBucketMigrationState;
       const migrationPctChanged =
-        news.externalManagedBackendBucketMigrationTestingPercentage !==
-          undefined &&
+        news.externalManagedBackendBucketMigrationTestingPercentage !== undefined &&
         current.externalManagedBackendBucketMigrationTestingPercentage !==
           news.externalManagedBackendBucketMigrationTestingPercentage;
 
@@ -718,21 +652,15 @@ export const GlobalForwardingRuleProvider = () =>
             forwardingRule: forwardingRuleName,
             body: patch,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
-        current =
-          (yield* getByName(env.project, forwardingRuleName)) ?? current;
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
+        current = (yield* getByName(env.project, forwardingRuleName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, forwardingRuleName)) ?? resolved;
+          const latest = (yield* getByName(env.project, forwardingRuleName)) ?? resolved;
           yield* compute
             .setLabelsGlobalForwardingRules({
               project: env.project,
@@ -742,11 +670,7 @@ export const GlobalForwardingRuleProvider = () =>
                 labelFingerprint: latest.labelFingerprint,
               },
             })
-            .pipe(
-              Effect.flatMap((operation) =>
-                waitGlobalOperation(env.project, operation),
-              ),
-            );
+            .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "Conflict",
@@ -754,8 +678,7 @@ export const GlobalForwardingRuleProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
         );
-        current =
-          (yield* getByName(env.project, forwardingRuleName)) ?? resolved;
+        current = (yield* getByName(env.project, forwardingRuleName)) ?? resolved;
       }
 
       return toAttrs(current ?? resolved, env.project);

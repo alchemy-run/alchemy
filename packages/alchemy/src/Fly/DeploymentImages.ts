@@ -3,9 +3,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 
-const ImageSet = Schema.Array(
-  Schema.Struct({ name: Schema.String, image: Schema.String }),
-);
+const ImageSet = Schema.Array(Schema.Struct({ name: Schema.String, image: Schema.String }));
 export type ContainerImagePin = { name: string; image: string };
 
 /** Blue/green needs immutable image references that survive a crash. */
@@ -18,9 +16,7 @@ const canonical = (pins: readonly ContainerImagePin[]): ContainerImagePin[] =>
 const valid = (pins: readonly ContainerImagePin[]): boolean =>
   pins.length > 0 &&
   new Set(pins.map(({ name }) => name)).size === pins.length &&
-  pins.every(
-    ({ name, image }) => name.trim().length > 0 && isImmutableImage(image),
-  );
+  pins.every(({ name, image }) => name.trim().length > 0 && isImmutableImage(image));
 
 export const pinsFromConfig = (
   config: FlyMachineConfig | undefined,
@@ -34,18 +30,12 @@ export const pinsFromConfig = (
   return valid(pins) ? canonical(pins) : undefined;
 };
 
-export const encodeImageSet = (
-  pins: readonly ContainerImagePin[],
-): string | undefined =>
+export const encodeImageSet = (pins: readonly ContainerImagePin[]): string | undefined =>
   valid(pins) ? JSON.stringify(canonical(pins)) : undefined;
 
-export const decodeImageSet = (
-  raw: string | undefined,
-): ContainerImagePin[] | undefined => {
+export const decodeImageSet = (raw: string | undefined): ContainerImagePin[] | undefined => {
   if (raw === undefined) return undefined;
-  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(ImageSet))(
-    raw,
-  );
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(ImageSet))(raw);
   if (!Option.isSome(decoded)) return undefined;
   const pins = decoded.value;
   return valid(pins) ? canonical(pins) : undefined;
@@ -61,12 +51,9 @@ export const sameImageSet = (
 };
 
 /** Protocol-2 metadata and the authoritative readback config must describe exactly the same set. */
-export const validObservedImageSet = (machine: {
-  config?: FlyMachineConfig;
-}): boolean => {
+export const validObservedImageSet = (machine: { config?: FlyMachineConfig }): boolean => {
   const metadata = machine.config?.metadata;
-  if (metadata?.[keys.protocol] !== "2" || metadata[keys.image] !== undefined)
-    return false;
+  if (metadata?.[keys.protocol] !== "2" || metadata[keys.image] !== undefined) return false;
   return sameImageSet(
     decodeImageSet(metadata[keys.containerImageSet]),
     pinsFromConfig(machine.config),
@@ -82,11 +69,8 @@ export const applyImageSet = (
   const byName = new Map(pins.map((pin) => [pin.name, pin.image]));
   if (
     config.containers.length !== byName.size ||
-    new Set(config.containers.map(({ name }) => name)).size !==
-      config.containers.length ||
-    config.containers.some(
-      ({ name }) => name === undefined || !byName.has(name),
-    )
+    new Set(config.containers.map(({ name }) => name)).size !== config.containers.length ||
+    config.containers.some(({ name }) => name === undefined || !byName.has(name))
   )
     return undefined;
   return {

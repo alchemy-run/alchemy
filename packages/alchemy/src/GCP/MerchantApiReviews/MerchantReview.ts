@@ -51,9 +51,7 @@ export type MerchantReviewAttributesProps = {
   /** URL of the merchant's main website. */
   merchantLink?: string;
   /** How the review was collected. */
-  collectionMethod?:
-    | reviews.MerchantReviewAttributesCollectionMethodEnum
-    | (string & {});
+  collectionMethod?: reviews.MerchantReviewAttributesCollectionMethodEnum | (string & {});
   /** Publisher-system identifier for the review author. */
   reviewerId?: string;
   /**
@@ -194,9 +192,7 @@ export type MerchantReview = Resource<
  * @resource
  * @category MerchantApiReviews
  */
-export const MerchantReview = Resource<MerchantReview>(
-  "GCP.MerchantApiReviews.MerchantReview",
-);
+export const MerchantReview = Resource<MerchantReview>("GCP.MerchantApiReviews.MerchantReview");
 
 export class MerchantReviewNotResolved extends Data.TaggedError(
   "GCP.MerchantApiReviews.MerchantReviewNotResolved",
@@ -228,13 +224,8 @@ const attributesOf = (
   };
 };
 
-const toAttrs = (
-  review: reviews.MerchantReview,
-  account: string,
-  dataSource?: string,
-) => {
-  const merchantReviewId =
-    review.merchantReviewId ?? (review.name ? lastSegment(review.name) : "");
+const toAttrs = (review: reviews.MerchantReview, account: string, dataSource?: string) => {
+  const merchantReviewId = review.merchantReviewId ?? (review.name ? lastSegment(review.name) : "");
   return {
     name: review.name ?? merchantReviewNameOf(account, merchantReviewId),
     account: accountIdOf(account),
@@ -280,15 +271,9 @@ const desiredBody = (input: {
   customAttributes: input.customAttributes,
 });
 
-const reviewNeedsSync = (
-  current: reviews.MerchantReview,
-  desired: reviews.MerchantReview,
-) =>
+const reviewNeedsSync = (current: reviews.MerchantReview, desired: reviews.MerchantReview) =>
   !jsonEqual(current.merchantReviewId, desired.merchantReviewId) ||
-  !jsonEqual(
-    current.merchantReviewAttributes,
-    desired.merchantReviewAttributes,
-  ) ||
+  !jsonEqual(current.merchantReviewAttributes, desired.merchantReviewAttributes) ||
   !jsonEqual(
     normalizeCustomAttributes(current.customAttributes),
     normalizeCustomAttributes(desired.customAttributes),
@@ -325,22 +310,13 @@ export const MerchantReviewProvider = () =>
         olds?.merchantReviewId,
         output?.merchantReviewId,
       );
-      const name =
-        output?.name ?? merchantReviewNameOf(account, merchantReviewId);
+      const name = output?.name ?? merchantReviewNameOf(account, merchantReviewId);
       let existing = yield* getMerchantReview(name);
       if (existing === undefined && account) {
-        existing = yield* findOwnedMerchantReview(
-          id,
-          account,
-          merchantReviewId,
-        );
+        existing = yield* findOwnedMerchantReview(id, account, merchantReviewId);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        account,
-        olds?.dataSource ?? output?.dataSource,
-      );
+      const attrs = toAttrs(existing, account, olds?.dataSource ?? output?.dataSource);
       return (yield* ownedByAlchemy(id, {
         customAttributes: existing.customAttributes,
         content: existing.merchantReviewAttributes?.content,
@@ -352,11 +328,9 @@ export const MerchantReviewProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const accounts = yield* configuredAccountIds();
-        const pages = yield* Effect.forEach(
-          accounts,
-          (account) => listMerchantReviewsAt(account),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(accounts, (account) => listMerchantReviewsAt(account), {
+          concurrency: 4,
+        });
         const attrs = [];
         for (let i = 0; i < pages.length; i++) {
           const account = accounts[i]!;
@@ -383,18 +357,14 @@ export const MerchantReviewProvider = () =>
         output?.merchantReviewId,
       );
       const dataSource = dataSourceNameOf(account, news.dataSource);
-      const name =
-        output?.name ?? merchantReviewNameOf(account, merchantReviewId);
+      const name = output?.name ?? merchantReviewNameOf(account, merchantReviewId);
       const ownership = yield* createInternalLabels(id);
       const attributes = desiredAttributes({
         account,
         ownership,
         attrs: news.merchantReviewAttributes,
       });
-      const customAttributes = stampCustomAttributes(
-        ownership,
-        news.customAttributes,
-      );
+      const customAttributes = stampCustomAttributes(ownership, news.customAttributes);
       const desired = desiredBody({
         merchantReviewId,
         attributes,

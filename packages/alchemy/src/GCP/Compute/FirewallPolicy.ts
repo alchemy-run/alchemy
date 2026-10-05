@@ -1,7 +1,5 @@
-import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { ignoredCodes } from "./internal.ts";
-import { waitOrganizationOperation } from "./operations.ts";
+import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -12,20 +10,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitOrganizationOperation } from "./operations.ts";
 
 const DEFAULT_POLICY_TYPE = "VPC_POLICY";
 const DEFAULT_RULE_PRIORITY = 2147483647;
 const MAX_NAME_LENGTH = 63;
 
-export type FirewallPolicyType =
-  | compute.FirewallPolicyPolicyTypeEnum
-  | (string & {});
+export type FirewallPolicyType = compute.FirewallPolicyPolicyTypeEnum | (string & {});
 export type FirewallPolicyRule = compute.FirewallPolicyRule;
 export type FirewallPolicyRuleMatcher = compute.FirewallPolicyRuleMatcher;
 export type FirewallPolicyAssociation = compute.FirewallPolicyAssociation;
@@ -151,9 +145,7 @@ export type FirewallPolicy = Resource<
  * @resource
  * @category Compute
  */
-export const FirewallPolicy = Resource<FirewallPolicy>(
-  "GCP.Compute.FirewallPolicy",
-);
+export const FirewallPolicy = Resource<FirewallPolicy>("GCP.Compute.FirewallPolicy");
 
 export class FirewallPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.FirewallPolicyNotResolved",
@@ -223,8 +215,7 @@ const normalizeParent = (value: string): string => {
   return trimmed;
 };
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
 
 const encodeDescription = (
   labels: Record<string, string>,
@@ -257,9 +248,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const projectParent = (project: string) =>
   resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
@@ -271,10 +260,7 @@ const projectParent = (project: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const resolveParent = (
-  news: FirewallPolicyProps,
-  output: { parent?: string } | undefined,
-) =>
+const resolveParent = (news: FirewallPolicyProps, output: { parent?: string } | undefined) =>
   Effect.gen(function* () {
     const explicit = news.parent ?? output?.parent;
     if (explicit !== undefined && explicit.length > 0) {
@@ -294,8 +280,7 @@ const listParents = (project: string) =>
     return [...parents];
   });
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -328,9 +313,7 @@ const canonMatch = (match: FirewallPolicyRuleMatcher | undefined) => {
           left.ipProtocol.localeCompare(right.ipProtocol) ||
           JSON.stringify(left.ports).localeCompare(JSON.stringify(right.ports)),
       ),
-    srcSecureTags: [...(match.srcSecureTags ?? [])]
-      .map((tag) => tag.name ?? "")
-      .sort(),
+    srcSecureTags: [...(match.srcSecureTags ?? [])].map((tag) => tag.name ?? "").sort(),
   };
 };
 
@@ -349,9 +332,7 @@ const canonRule = (rule: FirewallPolicyRule) => ({
   targetResources: sorted(rule.targetResources),
   targetServiceAccounts: sorted(rule.targetServiceAccounts),
   targetForwardingRules: sorted(rule.targetForwardingRules),
-  targetSecureTags: [...(rule.targetSecureTags ?? [])]
-    .map((tag) => tag.name ?? "")
-    .sort(),
+  targetSecureTags: [...(rule.targetSecureTags ?? [])].map((tag) => tag.name ?? "").sort(),
 });
 
 const ruleEquals = (left: FirewallPolicyRule, right: FirewallPolicyRule) =>
@@ -386,9 +367,7 @@ const desiredRules = (
     byPriority.set(rule.priority, rule);
   }
   if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
+    const observedDefault = observed.find((rule) => rule.priority === DEFAULT_RULE_PRIORITY);
     if (observedDefault !== undefined) {
       byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault);
     }
@@ -401,10 +380,7 @@ const desiredRules = (
 const policyIdOf = (policy: compute.FirewallPolicy) =>
   policy.name ?? policy.id ?? lastSegment(policy.selfLinkWithId);
 
-const toAttrs = (
-  policy: compute.FirewallPolicy,
-  project: string,
-): FirewallPolicy["Attributes"] => {
+const toAttrs = (policy: compute.FirewallPolicy, project: string): FirewallPolicy["Attributes"] => {
   const parsed = parseDescription(policy.description);
   return {
     shortName: policy.shortName ?? policy.displayName ?? "",
@@ -444,11 +420,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
-const observe = (
-  firewallPolicyId: string | undefined,
-  parentId: string,
-  shortName: string,
-) =>
+const observe = (firewallPolicyId: string | undefined, parentId: string, shortName: string) =>
   Effect.gen(function* () {
     if (firewallPolicyId !== undefined && firewallPolicyId.length > 0) {
       const existing = yield* getById(firewallPolicyId);
@@ -457,18 +429,12 @@ const observe = (
     return yield* findByShortName(parentId, shortName);
   });
 
-const awaitResource = (
-  firewallPolicyId: string,
-  parentId: string,
-  shortName: string,
-) =>
+const awaitResource = (firewallPolicyId: string, parentId: string, shortName: string) =>
   observe(firewallPolicyId, parentId, shortName).pipe(
     Effect.flatMap((policy) =>
       policy !== undefined
         ? Effect.succeed(policy)
-        : Effect.fail(
-            new FirewallPolicyNotResolved({ firewallPolicyId, shortName }),
-          ),
+        : Effect.fail(new FirewallPolicyNotResolved({ firewallPolicyId, shortName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.FirewallPolicyNotResolved",
@@ -612,15 +578,10 @@ export const FirewallPolicyProvider = () =>
       const previousName = olds?.shortName ?? output?.shortName;
       const nextName = news.shortName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousParent = olds?.parent ?? output?.parent;
-      const nextParent =
-        news.parent !== undefined
-          ? normalizeParent(news.parent)
-          : previousParent;
+      const nextParent = news.parent !== undefined ? normalizeParent(news.parent) : previousParent;
       const parentChanged =
         previousParent !== undefined &&
         nextParent !== undefined &&
@@ -647,11 +608,7 @@ export const FirewallPolicyProvider = () =>
           Effect.succeed(output?.parent ?? olds?.parent ?? ""),
         ),
       );
-      const existing = yield* observe(
-        output?.firewallPolicyId,
-        parent,
-        shortName,
-      );
+      const existing = yield* observe(output?.firewallPolicyId, parent, shortName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -692,11 +649,7 @@ export const FirewallPolicyProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
-      let current = yield* observe(
-        output?.firewallPolicyId,
-        parentId,
-        shortName,
-      );
+      let current = yield* observe(output?.firewallPolicyId, parentId, shortName);
 
       if (current === undefined) {
         const inserted = yield* compute
@@ -712,8 +665,7 @@ export const FirewallPolicyProvider = () =>
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        const createdId =
-          inserted !== undefined ? idFromOperation(inserted) : "";
+        const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(
           createdId.length > 0 ? createdId : (output?.firewallPolicyId ?? ""),
           parentId,
@@ -747,12 +699,7 @@ export const FirewallPolicyProvider = () =>
 
       const nextRules = desiredRules(news, current.rules ?? []);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          firewallPolicyId,
-          parentId,
-          current.rules ?? [],
-          nextRules,
-        );
+        yield* syncRules(firewallPolicyId, parentId, current.rules ?? [], nextRules);
         current = (yield* getById(firewallPolicyId)) ?? current;
       }
 
@@ -769,8 +716,7 @@ export const FirewallPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const firewallPolicyId = output.firewallPolicyId;
       if (firewallPolicyId.length === 0) return;
-      const parentId =
-        output.parent.length > 0 ? normalizeParent(output.parent) : undefined;
+      const parentId = output.parent.length > 0 ? normalizeParent(output.parent) : undefined;
       yield* compute
         .deleteFirewallPolicies({
           firewallPolicy: firewallPolicyId,

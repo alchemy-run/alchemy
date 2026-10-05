@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `ChatSync` request with `applicationId` injected from the bound application.
  */
-export interface ChatSyncRequest extends Omit<
-  qbusiness.ChatSyncInput,
-  "applicationId"
-> {}
+export interface ChatSyncRequest extends Omit<qbusiness.ChatSyncInput, "applicationId"> {}
 
 /**
  * Runtime binding for the `ChatSync` operation (IAM action
@@ -38,9 +35,7 @@ export interface ChatSync extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request?: ChatSyncRequest,
-    ) => Effect.Effect<qbusiness.ChatSyncOutput, qbusiness.ChatSyncError>
+    (request?: ChatSyncRequest) => Effect.Effect<qbusiness.ChatSyncOutput, qbusiness.ChatSyncError>
   >
 > {}
 export const ChatSync = Binding.Service<ChatSync>("AWS.QBusiness.ChatSync");

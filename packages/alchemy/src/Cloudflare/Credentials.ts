@@ -32,9 +32,7 @@ declare module "@distilled.cloud/cloudflare/Credentials" {
  * caching rules. Non-OAuth credentials (API token / global key) never expire
  * and cache forever.
  */
-export const cacheUntilExpiry = <E>(
-  resolve: Effect.Effect<ResolvedCredentials, E>,
-) =>
+export const cacheUntilExpiry = <E>(resolve: Effect.Effect<ResolvedCredentials, E>) =>
   CredentialsCache.cacheUntilExpiry(resolve, (credentials) =>
     credentials.type === "oauth" ? credentials.expiresAt : undefined,
   );
@@ -58,9 +56,7 @@ export const fromAuthProvider = () =>
         Effect.map((creds) =>
           Match.value(creds).pipe(
             Match.when({ type: "apiToken" }, (c) =>
-              apiTokenCredentials({
-                apiToken: Redacted.value(c.apiToken),
-              }),
+              apiTokenCredentials({ apiToken: Redacted.value(c.apiToken) }),
             ),
             Match.when({ type: "apiKey" }, (c) =>
               apiKeyCredentials({
@@ -79,9 +75,7 @@ export const fromAuthProvider = () =>
         ),
         Effect.mapError(
           (e) =>
-            new ConfigError({
-              message: `Failed to resolve Cloudflare credentials: ${e.message}`,
-            }),
+            new ConfigError({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
         ),
         deferUntilFirstUse,
       );

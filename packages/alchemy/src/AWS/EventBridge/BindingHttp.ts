@@ -61,19 +61,16 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           yield* host.bind`Allow(${host}, ${options.tag}())`({
             policyStatements: [
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: options.resources
-                  ? [...options.resources({ accountId, region })]
-                  : ["*"],
+                Resource: options.resources ? [...options.resources({ accountId, region })] : ["*"],
               },
             ],
           });
@@ -117,11 +114,10 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           // Pass the ARN as an unresolved Output — binding data is resolved
           // by the engine before the host reconciles. Eagerly yielding here
           // (during plan) produces a deferred object that serializes into an
@@ -130,24 +126,20 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
             ? Output.interpolate`${bus.eventBusArn}`
             : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, ${options.tag}(${bus ?? "default"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: options.resources
-                    ? [...options.resources({ accountId, region })]
-                    : [resource],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${bus ?? "default"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: options.resources
+                  ? [...options.resources({ accountId, region })]
+                  : [resource],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`${options.tag}(${bus?.LogicalId})`)(function* (
-        request?: Partial<I>,
-      ) {
+      return Effect.fn(`${options.tag}(${bus?.LogicalId})`)(function* (request?: Partial<I>) {
         const eventBusName = EventBusName ? yield* EventBusName : undefined;
         const input: Record<string, unknown> = { ...request };
         if (eventBusName !== undefined && eventBusName !== "default") {
@@ -194,9 +186,7 @@ export const makeEventBridgeRuleHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${rule.LogicalId})`)(function* (
-        request?: Partial<I>,
-      ) {
+      return Effect.fn(`${options.tag}(${rule.LogicalId})`)(function* (request?: Partial<I>) {
         const ruleName = yield* RuleName;
         const eventBusName = yield* EventBusName;
         const input: Record<string, unknown> = { ...request };

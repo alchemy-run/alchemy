@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as speech from "@distilled.cloud/gcp/speech_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import SpeechBindingsHost, { Hints, Ships } from "./fixtures/bindings-host.ts";
 
@@ -31,9 +31,7 @@ const projectRoles = () =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,

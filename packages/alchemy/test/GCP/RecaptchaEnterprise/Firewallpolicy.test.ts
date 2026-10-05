@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   recaptchaenterprise.getProjectsFirewallpolicies({ name }).pipe(
@@ -98,10 +95,9 @@ test.provider.skipIf(!runFirewall)(
       expect(updated.description).toEqual("allow sign-in");
       expect(updated.actions[0]?.block).toEqual({});
 
-      const fetchedUpdate =
-        yield* recaptchaenterprise.getProjectsFirewallpolicies({
-          name: created.name,
-        });
+      const fetchedUpdate = yield* recaptchaenterprise.getProjectsFirewallpolicies({
+        name: created.name,
+      });
       expect(fetchedUpdate.path).toEqual("/signin");
       expect(fetchedUpdate.description).toEqual("allow sign-in");
       expect(fetchedUpdate.actions?.[0]?.block).toBeDefined();

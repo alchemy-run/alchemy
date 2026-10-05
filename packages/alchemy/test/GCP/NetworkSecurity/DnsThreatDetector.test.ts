@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsDnsThreatDetectors({ name }).pipe(
@@ -70,18 +67,15 @@ test.provider(
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsDnsThreatDetectors({
-          name: created.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsDnsThreatDetectors({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.provider).toEqual("INFOBLOX");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -98,10 +92,9 @@ test.provider(
       expect(updated.provider).toEqual("INFOBLOX");
       expect(updated.labels).toMatchObject({ env: "prod", role: "dns" });
 
-      const refetched =
-        yield* networksecurity.getProjectsLocationsDnsThreatDetectors({
-          name: created.name,
-        });
+      const refetched = yield* networksecurity.getProjectsLocationsDnsThreatDetectors({
+        name: created.name,
+      });
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("dns");
 

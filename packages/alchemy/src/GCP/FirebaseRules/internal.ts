@@ -2,11 +2,7 @@ import * as firebaserules from "@distilled.cloud/gcp/firebaserules_v1";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_RELEASE_ID_LENGTH = 63;
 export const GENERATED_RELEASE_PREFIX = "alc-";
@@ -92,18 +88,13 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (content: string | undefined) =>
-  Object.keys(parseOwnership(content).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(content).labels).some((key) => key.startsWith("alchemy-"));
 
-export const sourceHasOwnership = (
-  source: firebaserules.Source | RulesetSource | undefined,
-) => (source?.files ?? []).some((file) => hasOwnershipMarker(file.content));
+export const sourceHasOwnership = (source: firebaserules.Source | RulesetSource | undefined) =>
+  (source?.files ?? []).some((file) => hasOwnershipMarker(file.content));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (
   id: string,
@@ -111,26 +102,15 @@ export const ownedByAlchemy = (
 ) =>
   Effect.gen(function* () {
     const expected = yield* createInternalLabels(id);
-    const file = (source?.files ?? []).find((item) =>
-      hasOwnershipMarker(item.content),
-    );
+    const file = (source?.files ?? []).find((item) => hasOwnershipMarker(item.content));
     if (file === undefined) return false;
     const { labels } = parseOwnership(file.content);
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -148,10 +128,7 @@ export const stampSource = (
   labels: Record<string, string>,
 ): firebaserules.Source => {
   const marker = markerOf(labels);
-  const files =
-    source.files.length > 0
-      ? source.files
-      : [{ name: "firestore.rules", content: "" }];
+  const files = source.files.length > 0 ? source.files : [{ name: "firestore.rules", content: "" }];
   return {
     files: files.map((file, index) => {
       const content = stripOwnershipLine(file.content);
@@ -191,10 +168,7 @@ export const toReleaseId = (
       maxLength: MAX_RELEASE_ID_LENGTH - GENERATED_RELEASE_PREFIX.length,
       lowercase: true,
     });
-    return `${GENERATED_RELEASE_PREFIX}${generated}`.slice(
-      0,
-      MAX_RELEASE_ID_LENGTH,
-    );
+    return `${GENERATED_RELEASE_PREFIX}${generated}`.slice(0, MAX_RELEASE_ID_LENGTH);
   });
 
 export const isGeneratedReleaseId = (releaseId: string | undefined) =>
@@ -230,14 +204,10 @@ const listRulesetMetas = (project: string) =>
 export const listFullRulesets = (project: string) =>
   Effect.gen(function* () {
     const metas = yield* listRulesetMetas(project);
-    const loaded = yield* Effect.forEach(
-      metas,
-      (ruleset) => getRuleset(ruleset.name ?? ""),
-      { concurrency: 8 },
-    );
-    return loaded.filter(
-      (ruleset): ruleset is firebaserules.Ruleset => ruleset !== undefined,
-    );
+    const loaded = yield* Effect.forEach(metas, (ruleset) => getRuleset(ruleset.name ?? ""), {
+      concurrency: 8,
+    });
+    return loaded.filter((ruleset): ruleset is firebaserules.Ruleset => ruleset !== undefined);
   });
 
 export const listOwnedRulesets = (project: string) =>

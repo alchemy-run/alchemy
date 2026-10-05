@@ -91,9 +91,7 @@ export interface ApiGatewayV2Stage extends Resource<
     description: string | undefined;
     stageVariables: { [key: string]: string | undefined } | undefined;
     defaultRouteSettings: agw2.RouteSettings | undefined;
-    routeSettings:
-      | { [key: string]: agw2.RouteSettings | undefined }
-      | undefined;
+    routeSettings: { [key: string]: agw2.RouteSettings | undefined } | undefined;
     accessLogSettings: agw2.AccessLogSettings | undefined;
     clientCertificateId: string | undefined;
     tags: Record<string, string>;
@@ -145,9 +143,7 @@ export interface ApiGatewayV2Stage extends Resource<
  *
  * @resource
  */
-export const StageResource = Resource<ApiGatewayV2Stage>(
-  "AWS.ApiGatewayV2.Stage",
-);
+export const StageResource = Resource<ApiGatewayV2Stage>("AWS.ApiGatewayV2.Stage");
 
 export interface StageInputProps extends Omit<
   {
@@ -172,9 +168,7 @@ export const Stage = (id: string, props: StageInputProps = {}) =>
     const { api, ...rest } = props;
     const apiId = rest.apiId ?? api?.apiId;
     if (!apiId) {
-      return yield* Effect.die(
-        "Stage requires either `api` (preferred) or an explicit `apiId`.",
-      );
+      return yield* Effect.die("Stage requires either `api` (preferred) or an explicit `apiId`.");
     }
     return yield* StageResource(id, { ...rest, apiId } as any);
   });
@@ -187,8 +181,7 @@ const computeUrls = (input: {
   protocolType: string | undefined;
   apiEndpoint: string | undefined;
 }) => {
-  const { region, accountId, apiId, stageName, protocolType, apiEndpoint } =
-    input;
+  const { region, accountId, apiId, stageName, protocolType, apiEndpoint } = input;
   const host = `${apiId}.execute-api.${region}.amazonaws.com`;
   const callbackUrl = `https://${host}/${stageName}`;
   const invokeUrl =
@@ -229,11 +222,7 @@ export const StageProvider = () =>
       const getStageSafe = (apiId: string, stageName: string) =>
         agw2
           .getStage({ ApiId: apiId, StageName: stageName })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       const getApiInfo = (apiId: string) =>
         agw2.getApi({ ApiId: apiId }).pipe(
@@ -250,20 +239,12 @@ export const StageProvider = () =>
         );
 
       return StageResource.Provider.of({
-        stables: [
-          "apiId",
-          "stageName",
-          "invokeUrl",
-          "callbackUrl",
-          "connectionsArn",
-        ],
+        stables: ["apiId", "stageName", "invokeUrl", "callbackUrl", "connectionsArn"],
 
         list: () =>
           Effect.gen(function* () {
             const { region, accountId } = yield* AWSEnvironment.current;
-            const apis = yield* collectAllPages((NextToken) =>
-              agw2.getApis({ NextToken }),
-            );
+            const apis = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
             const perApi = yield* Effect.forEach(
               apis.filter((api) => api.ApiId != null),
               (api) =>
@@ -368,18 +349,13 @@ export const StageProvider = () =>
 
           // 3. SYNC — update mutable settings on drift.
           const drift =
-            (news.autoDeploy !== undefined &&
-              (snapshot.autoDeploy ?? false) !== news.autoDeploy) ||
-            (news.deploymentId !== undefined &&
-              snapshot.deploymentId !== news.deploymentId) ||
+            (news.autoDeploy !== undefined && (snapshot.autoDeploy ?? false) !== news.autoDeploy) ||
+            (news.deploymentId !== undefined && snapshot.deploymentId !== news.deploymentId) ||
             snapshot.description !== news.description ||
             (news.stageVariables !== undefined &&
               !deepEqual(snapshot.stageVariables, news.stageVariables)) ||
             (news.defaultRouteSettings !== undefined &&
-              !deepEqual(
-                snapshot.defaultRouteSettings,
-                news.defaultRouteSettings,
-              )) ||
+              !deepEqual(snapshot.defaultRouteSettings, news.defaultRouteSettings)) ||
             (news.routeSettings !== undefined &&
               !deepEqual(snapshot.routeSettings, news.routeSettings)) ||
             (news.accessLogSettings !== undefined &&

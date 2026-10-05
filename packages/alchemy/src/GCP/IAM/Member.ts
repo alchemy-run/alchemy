@@ -54,13 +54,7 @@ export type MemberProps = {
  * @resource
  * @category IAM
  */
-export type Member = Resource<
-  "GCP.IAM.Member",
-  MemberProps,
-  MemberProps,
-  never,
-  Providers
->;
+export type Member = Resource<"GCP.IAM.Member", MemberProps, MemberProps, never, Providers>;
 
 export const Member = Resource<Member>("GCP.IAM.Member");
 
@@ -75,9 +69,7 @@ export const MemberProvider = () =>
         news.name !== olds.name ||
         news.role !== olds.role ||
         news.member !== olds.member;
-      return changed
-        ? { action: "replace" as const, deleteFirst: false }
-        : undefined;
+      return changed ? { action: "replace" as const, deleteFirst: false } : undefined;
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -36,9 +31,7 @@ import {
 const COLLECTION = "endpointPolicies";
 const DEFAULT_TYPE = "SIDECAR_PROXY";
 
-export type EndpointPolicyType =
-  | networkservices.EndpointPolicyTypeEnum
-  | (string & {});
+export type EndpointPolicyType = networkservices.EndpointPolicyTypeEnum | (string & {});
 
 export type EndpointPolicyMetadataLabel = {
   /** Label name presented as a key in xDS node metadata. */
@@ -207,9 +200,7 @@ export type EndpointPolicy = Resource<
  * @resource
  * @category NetworkServices
  */
-export const EndpointPolicy = Resource<EndpointPolicy>(
-  "GCP.NetworkServices.EndpointPolicy",
-);
+export const EndpointPolicy = Resource<EndpointPolicy>("GCP.NetworkServices.EndpointPolicy");
 
 const toLabel = (
   label:
@@ -221,10 +212,7 @@ const toLabel = (
 });
 
 const toMatcher = (
-  matcher:
-    | EndpointPolicyEndpointMatcher
-    | networkservices.EndpointMatcher
-    | undefined,
+  matcher: EndpointPolicyEndpointMatcher | networkservices.EndpointMatcher | undefined,
 ): EndpointPolicyEndpointMatcher | undefined => {
   const metadata = matcher?.metadataLabelMatcher;
   if (metadata === undefined) return undefined;
@@ -237,10 +225,7 @@ const toMatcher = (
 };
 
 const toPortSelector = (
-  selector:
-    | EndpointPolicyTrafficPortSelector
-    | networkservices.TrafficPortSelector
-    | undefined,
+  selector: EndpointPolicyTrafficPortSelector | networkservices.TrafficPortSelector | undefined,
 ): EndpointPolicyTrafficPortSelector | undefined => {
   if (selector === undefined) return undefined;
   return { ports: selector.ports ?? [] };
@@ -293,9 +278,7 @@ export const EndpointPolicyProvider = () =>
       const previousType = olds?.type ?? output?.type ?? DEFAULT_TYPE;
       const nextType = news.type ?? previousType;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType
       ) {
@@ -312,19 +295,13 @@ export const EndpointPolicyProvider = () =>
         output?.endpointPolicyId,
         "endpoint-policy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, endpointPolicyId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, endpointPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -351,16 +328,8 @@ export const EndpointPolicyProvider = () =>
         output?.endpointPolicyId,
         "endpoint-policy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        endpointPolicyId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, endpointPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -404,23 +373,12 @@ export const EndpointPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const matcherChanged = !sameJson(
-        toMatcher(current.endpointMatcher),
-        desiredMatcher,
-      );
-      const portsChanged = !sameStringList(
-        current.trafficPortSelector?.ports,
-        desiredPorts?.ports,
-      );
-      const authzChanged =
-        (current.authorizationPolicy ?? "") !==
-        (news.authorizationPolicy ?? "");
-      const serverTlsChanged =
-        (current.serverTlsPolicy ?? "") !== (news.serverTlsPolicy ?? "");
-      const clientTlsChanged =
-        (current.clientTlsPolicy ?? "") !== (news.clientTlsPolicy ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const matcherChanged = !sameJson(toMatcher(current.endpointMatcher), desiredMatcher);
+      const portsChanged = !sameStringList(current.trafficPortSelector?.ports, desiredPorts?.ports);
+      const authzChanged = (current.authorizationPolicy ?? "") !== (news.authorizationPolicy ?? "");
+      const serverTlsChanged = (current.serverTlsPolicy ?? "") !== (news.serverTlsPolicy ?? "");
+      const clientTlsChanged = (current.clientTlsPolicy ?? "") !== (news.clientTlsPolicy ?? "");
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -433,27 +391,23 @@ export const EndpointPolicyProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsEndpointPolicies({
+        const operation = yield* networkservices.patchProjectsLocationsEndpointPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              type,
-              labels: desiredLabels,
-              description: news.description,
-              endpointMatcher: desiredMatcher,
-              trafficPortSelector: desiredPorts,
-              authorizationPolicy: news.authorizationPolicy,
-              serverTlsPolicy: news.serverTlsPolicy,
-              clientTlsPolicy: news.clientTlsPolicy,
-            },
-          });
+            type,
+            labels: desiredLabels,
+            description: news.description,
+            endpointMatcher: desiredMatcher,
+            trafficPortSelector: desiredPorts,
+            authorizationPolicy: news.authorizationPolicy,
+            serverTlsPolicy: news.serverTlsPolicy,
+            clientTlsPolicy: news.clientTlsPolicy,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

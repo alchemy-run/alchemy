@@ -41,10 +41,7 @@ export interface CopyBlueprintStage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CopyBlueprintStageRequest,
-    ) => Effect.Effect<
-      bda.CopyBlueprintStageResponse,
-      bda.CopyBlueprintStageError
-    >
+    ) => Effect.Effect<bda.CopyBlueprintStageResponse, bda.CopyBlueprintStageError>
   >
 > {}
 export const CopyBlueprintStage = Binding.Service<CopyBlueprintStage>(

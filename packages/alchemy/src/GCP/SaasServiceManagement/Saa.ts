@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -150,10 +145,7 @@ export type Saa = Resource<
  */
 export const Saa = Resource<Saa>("GCP.SaasServiceManagement.Saa");
 
-const desiredLocations = (
-  news: SaaProps,
-  location: string,
-): saasservicemgmt.Location[] => {
+const desiredLocations = (news: SaaProps, location: string): saasservicemgmt.Location[] => {
   const listed = news.locations ?? [{ name: location }];
   return listed.map((item) => ({
     name: item.name ? normalizeLocation(item.name) : location,
@@ -201,9 +193,7 @@ const listOwned = (project: string, location: string) =>
     }),
     (page) => page.saas,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels))),
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
@@ -214,9 +204,7 @@ const listOwned = (project: string, location: string) =>
             }),
             (page) => page.saas,
           ).pipe(
-            Effect.map((fallback) =>
-              fallback.filter((item) => hasAlchemyLabelKeys(item.labels)),
-            ),
+            Effect.map((fallback) => fallback.filter((item) => hasAlchemyLabelKeys(item.labels))),
           ),
     ),
   );
@@ -231,9 +219,7 @@ export const SaaProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.saasId ?? output?.saasId,
         nextId: news.saasId ?? olds?.saasId ?? output?.saasId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -242,23 +228,13 @@ export const SaaProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const saasId = yield* toPhysicalId(
-        id,
-        olds?.saasId,
-        output?.saasId,
-        "saa",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, COLLECTION, saasId);
+      const saasId = yield* toPhysicalId(id, olds?.saasId, output?.saasId, "saa");
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, saasId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -270,15 +246,8 @@ export const SaaProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const saasId = yield* toPhysicalId(
-        id,
-        news.saasId,
-        output?.saasId,
-        "saa",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const saasId = yield* toPhysicalId(id, news.saasId, output?.saasId, "saa");
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, COLLECTION, saasId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -313,12 +282,10 @@ export const SaaProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const locationsChanged =
-        news.locations !== undefined &&
-        fingerprint(current.locations) !== fingerprint(locations);
+        news.locations !== undefined && fingerprint(current.locations) !== fingerprint(locations);
       const annotationsChanged =
         annotations !== undefined &&
-        fingerprint(userAnnotations(current.annotations)) !==
-          fingerprint(annotations);
+        fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const mask = fieldMask([
         labelsChanged && "labels",
         locationsChanged && "locations",
@@ -343,16 +310,14 @@ export const SaaProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* saasservicemgmt
-        .deleteProjectsLocationsSaas({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* saasservicemgmt.deleteProjectsLocationsSaas({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

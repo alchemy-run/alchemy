@@ -151,11 +151,7 @@ const toEndpoint = (
   };
 };
 
-const toAttrs = (
-  curation: apihub.GoogleCloudApihubV1Curation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (curation: apihub.GoogleCloudApihubV1Curation, project: string, region: string) => {
   const name = curation.name ?? "";
   const parsed = parseResourceName(name, "curations", region);
   return {
@@ -192,48 +188,30 @@ export const CurationProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.curationId ?? output?.curationId,
         nextId: news.curationId ?? olds?.curationId ?? output?.curationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        extra: !sameJson(
-          news.endpoint ?? olds?.endpoint,
-          olds?.endpoint ?? output?.endpoint,
-        ),
+        extra: !sameJson(news.endpoint ?? olds?.endpoint, olds?.endpoint ?? output?.endpoint),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const curationId = yield* toPhysicalId(
-        id,
-        olds?.curationId,
-        output?.curationId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, curationId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const curationId = yield* toPhysicalId(id, olds?.curationId, output?.curationId);
+      const name = output?.name ?? resourceName(env.project, location, curationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listCurations(
-          locationParent(env.project, env.region),
-        );
+        const items = yield* listCurations(locationParent(env.project, env.region));
         return items
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -241,24 +219,15 @@ export const CurationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const curationId = yield* toPhysicalId(
-        id,
-        news.curationId,
-        output?.curationId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, curationId);
+      const curationId = yield* toPhysicalId(id, news.curationId, output?.curationId);
+      const name = output?.name ?? resourceName(env.project, location, curationId);
       const ownership = yield* createOwnership(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? curationId;
       const endpoint: apihub.GoogleCloudApihubV1Endpoint = {
-        applicationIntegrationEndpointDetails:
-          news.endpoint.applicationIntegrationEndpointDetails,
+        applicationIntegrationEndpointDetails: news.endpoint.applicationIntegrationEndpointDetails,
       };
 
       let current = yield* getByName(name);

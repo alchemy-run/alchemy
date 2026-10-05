@@ -33,7 +33,6 @@ export interface GetLendingAnalysisSummary extends Binding.Service<
     >
   >
 > {}
-export const GetLendingAnalysisSummary =
-  Binding.Service<GetLendingAnalysisSummary>(
-    "AWS.Textract.GetLendingAnalysisSummary",
-  );
+export const GetLendingAnalysisSummary = Binding.Service<GetLendingAnalysisSummary>(
+  "AWS.Textract.GetLendingAnalysisSummary",
+);

@@ -1,41 +1,32 @@
-import * as osconfig from "@distilled.cloud/gcp/osconfig_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as osconfig from "@distilled.cloud/gcp/osconfig_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const DEFAULT_ACTION = "UPSERT";
 export const DEFAULT_STATE = "STOPPED";
 
-export type OrchestratedResource =
-  osconfig.GoogleCloudOsconfigV2__OrchestratedResource;
-export type OrchestrationScope =
-  osconfig.GoogleCloudOsconfigV2__OrchestrationScope;
-export type PolicyOrchestratorBody =
-  osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator;
+export type OrchestratedResource = osconfig.GoogleCloudOsconfigV2__OrchestratedResource;
+export type OrchestrationScope = osconfig.GoogleCloudOsconfigV2__OrchestrationScope;
+export type PolicyOrchestratorBody = osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator;
 
-export class OsconfigNotResolved extends Data.TaggedError(
-  "GCP.OSConfig.NotResolved",
-)<{
+export class OsconfigNotResolved extends Data.TaggedError("GCP.OSConfig.NotResolved")<{
   name: string;
 }> {}
 
-export class OsconfigStillExists extends Data.TaggedError(
-  "GCP.OSConfig.StillExists",
-)<{
+export class OsconfigStillExists extends Data.TaggedError("GCP.OSConfig.StillExists")<{
   name: string;
 }> {}
 
-export class FolderNotResolved extends Data.TaggedError(
-  "GCP.OSConfig.FolderNotResolved",
-)<{
+export class FolderNotResolved extends Data.TaggedError("GCP.OSConfig.FolderNotResolved")<{
   project: string;
 }> {}
 
@@ -89,9 +80,7 @@ export const folderParent = (value: string) =>
   value.startsWith("folders/") ? value : `folders/${lastSegment(value)}`;
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const projectParent = (value: string) =>
   value.startsWith("projects/") ? value : `projects/${lastSegment(value)}`;
@@ -110,18 +99,11 @@ export const parseName = (name: string) => {
   const orgsAt = parts.lastIndexOf("organizations");
   const foldersAt = parts.lastIndexOf("folders");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     folder: foldersAt >= 0 && parts[foldersAt + 1] ? parts[foldersAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : "global",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "global",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -133,9 +115,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -158,13 +139,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 const OUTPUT_ONLY_ASSIGNMENT = new Set([
   "rolloutState",
@@ -197,15 +175,11 @@ export const orchestratedPayload = (
   if (resource === undefined) return undefined;
   return {
     id: resource.id,
-    osPolicyAssignmentV1Payload: assignmentPayload(
-      resource.osPolicyAssignmentV1Payload,
-    ),
+    osPolicyAssignmentV1Payload: assignmentPayload(resource.osPolicyAssignmentV1Payload),
   };
 };
 
-export const defaultOrchestratedResource = (
-  resourceId: string,
-): OrchestratedResource => ({
+export const defaultOrchestratedResource = (resourceId: string): OrchestratedResource => ({
   id: resourceId,
   osPolicyAssignmentV1Payload: {
     instanceFilter: {
@@ -270,8 +244,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -313,17 +286,12 @@ export const waitUntilGone = <A, E, R>(
 export const collectOrchestrators = <E extends { readonly _tag: string }>(
   pages: Stream.Stream<
     osconfig.GoogleCloudOsconfigV2__ListPolicyOrchestratorsResponse,
-    | osconfig.NotFound
-    | osconfig.Forbidden
-    | osconfig.ServiceDisabled
-    | osconfig.GcpOpError,
+    osconfig.NotFound | osconfig.Forbidden | osconfig.ServiceDisabled | osconfig.GcpOpError,
     osconfig.GcpOpContext
   >,
 ) =>
   pages.pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(page.policyOrchestrators ?? []),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(page.policyOrchestrators ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag(["NotFound", "Forbidden", "ServiceDisabled"], () =>
@@ -357,10 +325,7 @@ export const tryResolveFolder = () =>
     return undefined;
   });
 
-export const resolveFolder = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveFolder = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return folderParent(explicit);
     if (existing !== undefined) return folderParent(existing);
@@ -384,10 +349,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -417,8 +379,6 @@ export const replaceOnIdentity = (input: {
   return {
     action: "replace" as const,
     deleteFirst:
-      !parentChanged &&
-      input.previousId !== undefined &&
-      input.nextId === input.previousId,
+      !parentChanged && input.previousId !== undefined && input.nextId === input.previousId,
   };
 };

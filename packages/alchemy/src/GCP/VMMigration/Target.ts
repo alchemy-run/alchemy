@@ -138,29 +138,18 @@ const listOwned = (project: string) =>
       Stream.filter((item) => hasOwnershipMarker(item.description)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as vm.TargetProject[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as vm.TargetProject[])),
     );
 
 export const TargetProvider = () =>
   Provider.succeed(Target, {
-    stables: [
-      "name",
-      "targetProjectId",
-      "hostProject",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "targetProjectId", "hostProject", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return replaceOnIdentity({
         previousId: olds?.targetProjectId ?? output?.targetProjectId,
-        nextId:
-          news?.targetProjectId ??
-          olds?.targetProjectId ??
-          output?.targetProjectId,
+        nextId: news?.targetProjectId ?? olds?.targetProjectId ?? output?.targetProjectId,
         previousLocation: GLOBAL_LOCATION,
         nextLocation: GLOBAL_LOCATION,
       });
@@ -178,9 +167,7 @@ export const TargetProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -233,10 +220,7 @@ export const TargetProvider = () =>
 
       const descriptionChanged = (current.description ?? "") !== description;
       const projectChanged = (current.project ?? "") !== project;
-      const mask = fieldMask([
-        descriptionChanged && "description",
-        projectChanged && "project",
-      ]);
+      const mask = fieldMask([descriptionChanged && "description", projectChanged && "project"]);
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsTargetProjects({
@@ -249,26 +233,21 @@ export const TargetProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* vm
-        .deleteProjectsLocationsTargetProjects({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* vm.deleteProjectsLocationsTargetProjects({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

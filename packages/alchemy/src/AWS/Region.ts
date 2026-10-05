@@ -12,14 +12,10 @@ declare module "@distilled.cloud/aws/Region" {
   }
 }
 
-export const of = (region: string) =>
-  Layer.succeed(Region.Region, Effect.succeed(region));
+export const of = (region: string) => Layer.succeed(Region.Region, Effect.succeed(region));
 
 export const fromEnvOrElse = (region: string) =>
-  Layer.succeed(
-    Region.Region,
-    Effect.succeed(process.env.AWS_REGION ?? region),
-  );
+  Layer.succeed(Region.Region, Effect.succeed(process.env.AWS_REGION ?? region));
 
 // Deferred with `Effect.suspend` so it does not dereference `AWSEnvironment`
 // during module evaluation. `Region.ts` and `Environment.ts` are part of an
@@ -27,9 +23,7 @@ export const fromEnvOrElse = (region: string) =>
 // `AWSEnvironment` eagerly at top level hits a temporal-dead-zone error when
 // this module is evaluated mid-cycle.
 export const CurrentRegion = Effect.suspend(() =>
-  AWSEnvironment.use((env) =>
-    Effect.flatMap(env, ({ region }) => Effect.succeed(region)),
-  ),
+  AWSEnvironment.use((env) => Effect.flatMap(env, ({ region }) => Effect.succeed(region))),
 );
 
 /**

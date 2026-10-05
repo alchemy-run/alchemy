@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  dummyAws,
-  logLevel,
-  currentProject,
-  runSourceLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { dummyAws, logLevel, currentProject, runSourceLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,10 +54,9 @@ test.provider.skipIf(!runSourceLifecycle)(
       expect(created.timeFrame).toEqual("WEEK");
       expect(created.displayName).toEqual("weekly");
 
-      const fetched =
-        yield* vmmigration.getProjectsLocationsSourcesUtilizationReports({
-          name: created.name,
-        });
+      const fetched = yield* vmmigration.getProjectsLocationsSourcesUtilizationReports({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toContain("alchemy-id=");
 

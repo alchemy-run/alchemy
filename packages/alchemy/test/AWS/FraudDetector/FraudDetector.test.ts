@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import FraudDetectorTestFunctionLive, {
   FRAUD_EMAIL,
   FraudDetectorTestFunction,
@@ -35,11 +35,9 @@ test.provider(
       const error = yield* Effect.flip(
         frauddetector.getDetectors({ detectorId: "does_not_exist_detector" }),
       );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
+      expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(
+        true,
+      );
     }),
   { tags: ["provider:aws", "provider:aws:frauddetector", "live"] },
 );
@@ -57,11 +55,9 @@ test.provider(
           eventTypeName: "does_not_exist_event_type",
         }),
       );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
+      expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(
+        true,
+      );
     }),
   { tags: ["provider:aws", "provider:aws:frauddetector", "live"] },
 );
@@ -80,11 +76,9 @@ test.provider(
           updateMode: "REPLACE",
         }),
       );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
+      expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(
+        true,
+      );
     }),
   { tags: ["provider:aws", "provider:aws:frauddetector", "live"] },
 );
@@ -95,21 +89,12 @@ let baseUrl: string;
 
 describe(
   "FraudDetector GetEventPrediction (E2E)",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:frauddetector",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:frauddetector", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
         if (!RUN_LIVE) return;
-        yield* Effect.logInfo(
-          "FraudDetector E2E setup: destroying previous run",
-        );
+        yield* Effect.logInfo("FraudDetector E2E setup: destroying previous run");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo(
@@ -129,15 +114,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -168,10 +148,7 @@ describe(
                 : Effect.fail(new Error(`predict failed: ${res.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(8)]),
             }),
           );
           const body = (yield* response.json) as { outcomes: string[] };
@@ -195,10 +172,7 @@ describe(
                 : Effect.fail(new Error(`predict failed: ${res.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(8)]),
             }),
           );
           const body = (yield* response.json) as { outcomes: string[] };
@@ -228,10 +202,7 @@ describe(
                     : Effect.fail(new Error(`${path} failed: ${res.status}`)),
                 ),
                 Effect.retry({
-                  schedule: Schedule.max([
-                    Schedule.exponential("2 seconds"),
-                    Schedule.recurs(6),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
                 }),
               );
 
@@ -241,9 +212,7 @@ describe(
               Effect.flatMap((res) =>
                 res.status === 200
                   ? Effect.flatMap(res.json, (body) =>
-                      Effect.succeed(
-                        body as { found: boolean; currentLabel?: string },
-                      ),
+                      Effect.succeed(body as { found: boolean; currentLabel?: string }),
                     )
                   : Effect.fail(new Error(`get event failed: ${res.status}`)),
               ),
@@ -254,10 +223,7 @@ describe(
           yield* post("/event", { eventId, email: "legit@example.com" });
           const stored = yield* readEvent.pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.spaced("3 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
               while: (e): boolean => e instanceof Error,
             }),
             Effect.repeat({
@@ -316,10 +282,7 @@ describe(
           // The seeded element from the List resource is readable.
           const seeded = yield* readList.pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(6),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
             }),
           );
           expect(seeded.elements).toContain(SEED_BLOCKED_IP);
@@ -356,10 +319,7 @@ describe(
           yield* client
             .execute(
               HttpClientRequest.post(`${baseUrl}/predict`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  email: FRAUD_EMAIL,
-                  eventId,
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ email: FRAUD_EMAIL, eventId }),
               ),
             )
             .pipe(
@@ -369,32 +329,25 @@ describe(
                   : Effect.fail(new Error(`predict failed: ${res.status}`)),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("2 seconds"),
-                  Schedule.recurs(6),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
               }),
             );
 
           // The prediction shows up in ListEventPredictions eventually.
-          const listed = yield* client
-            .get(`${baseUrl}/predictions?eventId=${eventId}`)
-            .pipe(
-              Effect.flatMap((res) =>
-                res.status === 200
-                  ? Effect.flatMap(res.json, (body) =>
-                      Effect.succeed(body as { summaries: unknown[] }),
-                    )
-                  : Effect.fail(
-                      new Error(`list predictions failed: ${res.status}`),
-                    ),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("5 seconds"),
-                until: (body): boolean => body.summaries.length > 0,
-                times: 10,
-              }),
-            );
+          const listed = yield* client.get(`${baseUrl}/predictions?eventId=${eventId}`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) =>
+                    Effect.succeed(body as { summaries: unknown[] }),
+                  )
+                : Effect.fail(new Error(`list predictions failed: ${res.status}`)),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (body): boolean => body.summaries.length > 0,
+              times: 10,
+            }),
+          );
           expect(listed.summaries.length).toBeGreaterThan(0);
 
           // Its full evaluation metadata is auditable.
@@ -405,11 +358,7 @@ describe(
                 res.status === 200
                   ? Effect.flatMap(res.json, (body) =>
                       Effect.succeed(
-                        body as {
-                          found: boolean;
-                          outcomes: string[];
-                          ruleCount: number;
-                        },
+                        body as { found: boolean; outcomes: string[]; ruleCount: number },
                       ),
                     )
                   : Effect.fail(new Error(`audit failed: ${res.status}`)),
@@ -434,34 +383,23 @@ describe(
             .pipe(
               Effect.flatMap((res) =>
                 res.status === 200
-                  ? Effect.flatMap(res.json, (body) =>
-                      Effect.succeed(body as { status?: string }),
-                    )
+                  ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { status?: string }))
                   : Effect.fail(new Error(`purge failed: ${res.status}`)),
               ),
             );
           expect(purged.status).toBeTruthy();
 
           // The companion status call reports the async deletion job.
-          const status = yield* client
-            .get(`${baseUrl}/events/purge-status`)
-            .pipe(
-              Effect.flatMap((res) =>
-                res.status === 200
-                  ? Effect.flatMap(res.json, (body) =>
-                      Effect.succeed(body as { status?: string }),
-                    )
-                  : Effect.fail(
-                      new Error(`purge status failed: ${res.status}`),
-                    ),
-              ),
-              Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("2 seconds"),
-                  Schedule.recurs(6),
-                ]),
-              }),
-            );
+          const status = yield* client.get(`${baseUrl}/events/purge-status`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { status?: string }))
+                : Effect.fail(new Error(`purge status failed: ${res.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
+            }),
+          );
           expect(status.status).toBeTruthy();
         }),
       { timeout: 180_000 },

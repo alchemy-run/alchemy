@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { PodIdentityAssociation } from "@/AWS/EKS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -64,9 +64,7 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       const provider = yield* Provider.findProvider(PodIdentityAssociation);
       const all = yield* provider.list();
 
-      expect(
-        all.some((a) => a.associationId === association.associationId),
-      ).toBe(true);
+      expect(all.some((a) => a.associationId === association.associationId)).toBe(true);
 
       yield* stack.destroy();
     }),

@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import TargetFunction from "./target-function.ts";
 
@@ -13,8 +13,7 @@ export default class CloudFunctionsBindingsHost extends GCP.Function<CloudFuncti
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const getFunction = yield* GCP.CloudFunctions.GetFunction(TargetFunction);
-    const download =
-      yield* GCP.CloudFunctions.GenerateDownloadUrl(TargetFunction);
+    const download = yield* GCP.CloudFunctions.GenerateDownloadUrl(TargetFunction);
 
     return {
       fetch: serveProbes({

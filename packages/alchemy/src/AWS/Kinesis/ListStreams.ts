@@ -32,6 +32,4 @@ export interface ListStreams extends Binding.Service<
     ) => Effect.Effect<Kinesis.ListStreamsOutput, Kinesis.ListStreamsError>
   >
 > {}
-export const ListStreams = Binding.Service<ListStreams>(
-  "AWS.Kinesis.ListStreams",
-);
+export const ListStreams = Binding.Service<ListStreams>("AWS.Kinesis.ListStreams");

@@ -1,21 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
-});
+const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, verify out-of-band, and destroy tag",
@@ -34,10 +28,7 @@ test.provider(
       expect(tag.name).toBeDefined();
       expect(tag.accountId).toEqual(accountId);
 
-      const actual = yield* zeroTrust.getAccessTag({
-        accountId,
-        tagName: tag.name,
-      });
+      const actual = yield* zeroTrust.getAccessTag({ accountId, tagName: tag.name });
       expect(actual.name).toEqual(tag.name);
 
       // Reconcile again with no changes — existence-only resource converges
@@ -53,9 +44,7 @@ test.provider(
 
       const afterDestroy = yield* zeroTrust
         .getAccessTag({ accountId, tagName: tag.name })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
@@ -71,18 +60,14 @@ test.provider(
 
       const tag = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.Tag("RenameTag", {
-            name: "alchemy-test-access-tag-a",
-          });
+          return yield* Cloudflare.Access.Tag("RenameTag", { name: "alchemy-test-access-tag-a" });
         }),
       );
       expect(tag.name).toEqual("alchemy-test-access-tag-a");
 
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.Tag("RenameTag", {
-            name: "alchemy-test-access-tag-b",
-          });
+          return yield* Cloudflare.Access.Tag("RenameTag", { name: "alchemy-test-access-tag-b" });
         }),
       );
       expect(renamed.name).toEqual("alchemy-test-access-tag-b");
@@ -96,18 +81,14 @@ test.provider(
 
       const old = yield* zeroTrust
         .getAccessTag({ accountId, tagName: "alchemy-test-access-tag-a" })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
       expect(old).toBeUndefined();
 
       yield* stack.destroy();
 
       const afterDestroy = yield* zeroTrust
         .getAccessTag({ accountId, tagName: "alchemy-test-access-tag-b" })
-        .pipe(
-          Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
@@ -123,9 +104,7 @@ test.provider(
 
       const tag = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Access.Tag("ListTag", {
-            name: "alchemy-test-access-tag-list",
-          });
+          return yield* Cloudflare.Access.Tag("ListTag", { name: "alchemy-test-access-tag-list" });
         }),
       );
 

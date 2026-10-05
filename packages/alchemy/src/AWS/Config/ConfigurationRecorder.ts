@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface RecordingGroupProps {
@@ -204,9 +199,7 @@ export const ConfigurationRecorderProvider = () =>
         id: string,
         props: Pick<ConfigurationRecorderProps, "name">,
       ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const toWireRecordingGroup = (
@@ -249,9 +242,7 @@ export const ConfigurationRecorderProvider = () =>
         config.listTagsForResource({ ResourceArn: arn }).pipe(
           Effect.map((r) =>
             Object.fromEntries(
-              (r.Tags ?? []).flatMap((t) =>
-                t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [],
-              ),
+              (r.Tags ?? []).flatMap((t) => (t.Key !== undefined ? [[t.Key, t.Value ?? ""]] : [])),
             ),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
@@ -277,8 +268,7 @@ export const ConfigurationRecorderProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.recorderName ?? (yield* createRecorderName(id, olds ?? {}));
+          const name = output?.recorderName ?? (yield* createRecorderName(id, olds ?? {}));
           const recorder = yield* observeRecorder(name);
           if (recorder?.arn === undefined) return undefined;
           const attrs = { recorderName: name, recorderArn: recorder.arn };
@@ -295,8 +285,7 @@ export const ConfigurationRecorderProvider = () =>
           // fall through: engine default update logic for mutable fields
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.recorderName ?? (yield* createRecorderName(id, news));
+          const name = output?.recorderName ?? (yield* createRecorderName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredGroup = toWireRecordingGroup(news.recordingGroup);
@@ -364,11 +353,7 @@ export const ConfigurationRecorderProvider = () =>
                 ConfigurationRecorderNames: [name],
               })
               .pipe(
-                Effect.map(
-                  (r) =>
-                    (r.ConfigurationRecordersStatus ?? []).at(0)?.recording ??
-                    false,
-                ),
+                Effect.map((r) => (r.ConfigurationRecordersStatus ?? []).at(0)?.recording ?? false),
                 Effect.catchTag("NoSuchConfigurationRecorderException", () =>
                   Effect.succeed(false),
                 ),
@@ -394,22 +379,12 @@ export const ConfigurationRecorderProvider = () =>
             .stopConfigurationRecorder({
               ConfigurationRecorderName: output.recorderName,
             })
-            .pipe(
-              Effect.catchTag(
-                "NoSuchConfigurationRecorderException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchConfigurationRecorderException", () => Effect.void));
           yield* config
             .deleteConfigurationRecorder({
               ConfigurationRecorderName: output.recorderName,
             })
-            .pipe(
-              Effect.catchTag(
-                "NoSuchConfigurationRecorderException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchConfigurationRecorderException", () => Effect.void));
         }),
       });
     }),

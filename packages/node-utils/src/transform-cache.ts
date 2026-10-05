@@ -39,9 +39,7 @@ const defaultDirectory = () => {
  * off. `cache: false` and `ALCHEMY_TRANSFORM_CACHE=0` disable it; a string
  * (option or env) names the directory; otherwise the per-user default.
  */
-export const resolveCacheDirectory = (
-  option: boolean | string | undefined,
-): string | undefined => {
+export const resolveCacheDirectory = (option: boolean | string | undefined): string | undefined => {
   if (option === false) return undefined;
   if (typeof option === "string") return option;
   const env = process.env[TRANSFORM_CACHE_ENV];

@@ -21,7 +21,5 @@ export default class Events extends Neon.Function<Events>()(
           VALUES (${event.invocationId}) ON CONFLICT DO NOTHING`;
       }),
     );
-  }).pipe(
-    Effect.provide(Layer.mergeAll(Neon.ConnectHttp, Neon.CronEventSourceHttp)),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Neon.ConnectHttp, Neon.CronEventSourceHttp))),
 ) {}

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -139,9 +134,7 @@ export type DatasetsHl7V2Store = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsHl7V2Store = Resource<DatasetsHl7V2Store>(
-  "GCP.Healthcare.DatasetsHl7V2Store",
-);
+export const DatasetsHl7V2Store = Resource<DatasetsHl7V2Store>("GCP.Healthcare.DatasetsHl7V2Store");
 
 export class DatasetsHl7V2StoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsHl7V2StoreNotResolved",
@@ -155,9 +148,7 @@ const datasetOf = (dataset: string, project: string, location: string) =>
 const resourceName = (dataset: string, hl7V2StoreId: string) =>
   `${dataset}/hl7V2Stores/${hl7V2StoreId}`;
 
-const parserOf = (
-  config: healthcare.ParserConfig | undefined,
-): Hl7V2ParserConfig | undefined => {
+const parserOf = (config: healthcare.ParserConfig | undefined): Hl7V2ParserConfig | undefined => {
   if (config === undefined) return undefined;
   return {
     allowNullHeader: config.allowNullHeader,
@@ -165,11 +156,7 @@ const parserOf = (
   };
 };
 
-const toAttrs = (
-  store: healthcare.Hl7V2Store,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (store: healthcare.Hl7V2Store, project: string, region: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "hl7V2Stores", region);
   return {
@@ -199,8 +186,7 @@ export const DatasetsHl7V2StoreProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousVersion =
-        olds?.parserConfig?.version ?? output?.parserConfig?.version;
+      const previousVersion = olds?.parserConfig?.version ?? output?.parserConfig?.version;
       const nextVersion = news.parserConfig?.version;
       const extra =
         previousVersion !== undefined &&
@@ -221,44 +207,30 @@ export const DatasetsHl7V2StoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const hl7V2StoreId = yield* toPhysicalId(
-        id,
-        olds?.hl7V2StoreId,
-        output?.hl7V2StoreId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const hl7V2StoreId = yield* toPhysicalId(id, olds?.hl7V2StoreId, output?.hl7V2StoreId);
       const dataset =
         olds?.dataset !== undefined
           ? datasetOf(olds.dataset, env.project, location)
           : (output?.dataset ?? "");
-      const name =
-        output?.name ??
-        (dataset.length > 0 ? resourceName(dataset, hl7V2StoreId) : "");
+      const name = output?.name ?? (dataset.length > 0 ? resourceName(dataset, hl7V2StoreId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* forEachDataset(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              healthcare.listProjectsLocationsDatasetsHl7V2Stores.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.hl7V2Stores,
-            ),
+        const stores = yield* forEachDataset(env.project, env.region, (parent) =>
+          collectPages(
+            healthcare.listProjectsLocationsDatasetsHl7V2Stores.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.hl7V2Stores,
+          ),
         );
         return stores
           .filter((store) => hasAlchemyLabelMap(store.labels))
@@ -267,16 +239,9 @@ export const DatasetsHl7V2StoreProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const dataset = datasetOf(news.dataset, env.project, location);
-      const hl7V2StoreId = yield* toPhysicalId(
-        id,
-        news.hl7V2StoreId,
-        output?.hl7V2StoreId,
-      );
+      const hl7V2StoreId = yield* toPhysicalId(id, news.hl7V2StoreId, output?.hl7V2StoreId);
       const name = output?.name ?? resourceName(dataset, hl7V2StoreId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -310,23 +275,14 @@ export const DatasetsHl7V2StoreProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const rejectChanged =
-        (current.rejectDuplicateMessage === true) !==
-        (news.rejectDuplicateMessage === true);
+        (current.rejectDuplicateMessage === true) !== (news.rejectDuplicateMessage === true);
       const parserChanged =
         news.parserConfig !== undefined &&
         (current.parserConfig?.allowNullHeader === true) !==
           (news.parserConfig.allowNullHeader === true);
-      const notificationsChanged = !sameJson(
-        current.notificationConfigs,
-        news.notificationConfigs,
-      );
+      const notificationsChanged = !sameJson(current.notificationConfigs, news.notificationConfigs);
 
-      if (
-        labelsChanged ||
-        rejectChanged ||
-        parserChanged ||
-        notificationsChanged
-      ) {
+      if (labelsChanged || rejectChanged || parserChanged || notificationsChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsHl7V2Stores({
             name: currentName,

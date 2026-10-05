@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as securitylake from "@distilled.cloud/aws/securitylake";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import SecurityLakeBindingsFunctionLive, {
-  SecurityLakeBindingsFunction,
-} from "./bindings-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import SecurityLakeBindingsFunctionLive, { SecurityLakeBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -25,9 +23,7 @@ test.provider(
   "listDataLakeExceptions returns exceptions or a typed not-onboarded rejection",
   () =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(
-        securitylake.listDataLakeExceptions({}),
-      );
+      const result = yield* Effect.result(securitylake.listDataLakeExceptions({}));
       if (Result.isSuccess(result)) {
         expect(Array.isArray(result.success.exceptions ?? [])).toBe(true);
       } else {
@@ -81,14 +77,10 @@ describe(
     beforeAll(
       Effect.gen(function* () {
         if (!RUN_LIVE) return;
-        yield* Effect.logInfo(
-          "SecurityLake E2E setup: destroying previous run",
-        );
+        yield* Effect.logInfo("SecurityLake E2E setup: destroying previous run");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "SecurityLake E2E setup: deploying data lake + Lambda",
-        );
+        yield* Effect.logInfo("SecurityLake E2E setup: deploying data lake + Lambda");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SecurityLakeBindingsFunction;
@@ -103,15 +95,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -125,13 +112,11 @@ describe(
       { timeout: 600_000 },
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "both capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as { bound: string[] };
-          expect(response.bound).toHaveLength(2);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("both capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as { bound: string[] };
+        expect(response.bound).toHaveLength(2);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(

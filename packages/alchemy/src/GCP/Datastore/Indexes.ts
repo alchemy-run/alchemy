@@ -26,9 +26,7 @@ import {
   type IndexedProperty,
 } from "./internal.ts";
 
-export type IndexAncestor =
-  | datastore.GoogleDatastoreAdminV1IndexAncestorEnum
-  | (string & {});
+export type IndexAncestor = datastore.GoogleDatastoreAdminV1IndexAncestorEnum | (string & {});
 
 export type { IndexedProperty };
 
@@ -129,10 +127,8 @@ const replaceOnIdentity = (input: {
 }) => {
   if (
     (input.previousKind.length > 0 && input.previousKind !== input.nextKind) ||
-    (input.previousAncestor.length > 0 &&
-      input.previousAncestor !== input.nextAncestor) ||
-    (input.previousProperties.length > 0 &&
-      input.previousProperties !== input.nextProperties)
+    (input.previousAncestor.length > 0 && input.previousAncestor !== input.nextAncestor) ||
+    (input.previousProperties.length > 0 && input.previousProperties !== input.nextProperties)
   ) {
     return { action: "replace" as const };
   }
@@ -148,14 +144,9 @@ export const IndexProvider = () =>
       return replaceOnIdentity({
         previousKind: olds?.kind ?? output?.kind ?? "",
         nextKind: news.kind ?? output?.kind ?? "",
-        previousAncestor: normalizeEnum(
-          olds?.ancestor ?? output?.ancestor,
-          DEFAULT_ANCESTOR,
-        ),
+        previousAncestor: normalizeEnum(olds?.ancestor ?? output?.ancestor, DEFAULT_ANCESTOR),
         nextAncestor: normalizeEnum(news.ancestor, DEFAULT_ANCESTOR),
-        previousProperties: propertiesKey(
-          olds?.properties ?? output?.properties,
-        ),
+        previousProperties: propertiesKey(olds?.properties ?? output?.properties),
         nextProperties: propertiesKey(news.properties),
       });
     }),
@@ -164,9 +155,7 @@ export const IndexProvider = () =>
       const env = yield* GcpEnvironment.current;
       if (output?.indexId !== undefined && output.indexId.length > 0) {
         const existing = yield* getById(env.project, output.indexId);
-        return existing === undefined
-          ? undefined
-          : toAttrs(existing, env.project);
+        return existing === undefined ? undefined : toAttrs(existing, env.project);
       }
       if (olds === undefined) return undefined;
       // Indexes have no labels; an index is identified by its definition.
@@ -259,8 +248,7 @@ export const IndexProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || error._tag === "BadRequest",
+              while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),

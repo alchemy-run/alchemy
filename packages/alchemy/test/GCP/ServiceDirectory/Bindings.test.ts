@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import ServiceDirectoryBindingsHost, {
   Api,
@@ -25,11 +25,10 @@ let namespaceName: string;
 
 /** Roles the host's service account holds on the bound service. */
 const hostRolesOnService = Effect.gen(function* () {
-  const policy =
-    yield* servicedirectory.getIamPolicyProjectsLocationsNamespacesServices({
-      resource: serviceName,
-      body: { options: { requestedPolicyVersion: 3 } },
-    });
+  const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespacesServices({
+    resource: serviceName,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => binding.role)
@@ -38,11 +37,10 @@ const hostRolesOnService = Effect.gen(function* () {
 
 /** Roles the host's service account holds on the parent namespace. */
 const hostRolesOnNamespace = Effect.gen(function* () {
-  const policy =
-    yield* servicedirectory.getIamPolicyProjectsLocationsNamespaces({
-      resource: namespaceName,
-      body: { options: { requestedPolicyVersion: 3 } },
-    });
+  const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespaces({
+    resource: namespaceName,
+    body: { options: { requestedPolicyVersion: 3 } },
+  });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => binding.role);
@@ -51,12 +49,7 @@ const hostRolesOnNamespace = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable)(
   "ServiceDirectory Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:servicedirectory",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:servicedirectory", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -90,11 +83,10 @@ describe.skipIf(!dockerAvailable)(
         "resolves the service with its endpoints, granted viewer on the service only",
         (_stack) =>
           Effect.gen(function* () {
-            const out =
-              yield* expectProbe<servicedirectory.ResolveServiceResponse>(
-                baseUrl,
-                "resolve",
-              );
+            const out = yield* expectProbe<servicedirectory.ResolveServiceResponse>(
+              baseUrl,
+              "resolve",
+            );
             expect(out.service?.name).toEqual(serviceName);
             expect(
               (out.service?.endpoints ?? []).map((endpoint) => ({
@@ -110,9 +102,7 @@ describe.skipIf(!dockerAvailable)(
               },
             ]);
 
-            expect(yield* hostRolesOnService).toEqual([
-              "roles/servicedirectory.viewer",
-            ]);
+            expect(yield* hostRolesOnService).toEqual(["roles/servicedirectory.viewer"]);
             expect(yield* hostRolesOnNamespace).toEqual([]);
           }),
         {
@@ -127,24 +117,18 @@ describe.skipIf(!dockerAvailable)(
         "reads the endpoint, granted viewer on its service only",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<servicedirectory.Endpoint>(
-              baseUrl,
-              "getEndpoint",
-            );
+            const live = yield* expectProbe<servicedirectory.Endpoint>(baseUrl, "getEndpoint");
             expect(live.name).toEqual(endpointName);
             expect(live.address).toEqual(ENDPOINT_ADDRESS);
             expect(live.port).toEqual(ENDPOINT_PORT);
 
             // Out of band: the deployer sees the same endpoint.
-            const direct =
-              yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints(
-                { name: endpointName },
-              );
+            const direct = yield* servicedirectory.getProjectsLocationsNamespacesServicesEndpoints({
+              name: endpointName,
+            });
             expect(direct.uid).toEqual(live.uid);
 
-            expect(yield* hostRolesOnService).toEqual([
-              "roles/servicedirectory.viewer",
-            ]);
+            expect(yield* hostRolesOnService).toEqual(["roles/servicedirectory.viewer"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:servicedirectory", "live"],

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkehub from "@distilled.cloud/gcp/gkehub_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const membership = process.env.GCP_TEST_GKE_MEMBERSHIP;
 // The full lifecycle needs a registered Fleet membership; set
@@ -54,9 +51,9 @@ test.provider(
         parent: `projects/${project}/locations/global/memberships/-`,
         pageSize: 10,
       });
-      expect(
-        (page.membershipFeatures ?? []).map((feature) => feature.name),
-      ).not.toContain(missingFeature);
+      expect((page.membershipFeatures ?? []).map((feature) => feature.name)).not.toContain(
+        missingFeature,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

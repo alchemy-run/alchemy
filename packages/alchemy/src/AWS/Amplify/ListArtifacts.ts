@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { App } from "./App.ts";
 
-export interface ListArtifactsRequest extends Omit<
-  amplify.ListArtifactsRequest,
-  "appId"
-> {}
+export interface ListArtifactsRequest extends Omit<amplify.ListArtifactsRequest, "appId"> {}
 
 /**
  * Runtime binding for `amplify:ListArtifacts`.
@@ -42,6 +39,4 @@ export interface ListArtifacts extends Binding.Service<
   >
 > {}
 
-export const ListArtifacts = Binding.Service<ListArtifacts>(
-  "AWS.Amplify.ListArtifacts",
-);
+export const ListArtifacts = Binding.Service<ListArtifacts>("AWS.Amplify.ListArtifacts");

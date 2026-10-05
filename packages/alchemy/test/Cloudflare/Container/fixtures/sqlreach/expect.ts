@@ -1,7 +1,7 @@
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 
 const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
@@ -21,9 +21,7 @@ export const expectDatabaseReachable = (
     const get = (path: string) =>
       client.get(new URL(path, baseUrl)).pipe(
         Effect.flatMap((r) =>
-          r.status !== 200
-            ? Effect.fail(new Error(`not ready: ${r.status}`))
-            : r.text,
+          r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
         ),
         Effect.timeout("30 seconds"),
         Effect.retry({ schedule: readinessSchedule, times: 30 }),

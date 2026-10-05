@@ -58,9 +58,7 @@ interface ParsedHead {
 
 const parseHead = (raw: Buffer): ParsedHead | undefined => {
   const lines = latin1.decode(raw).split("\r\n");
-  const requestLine = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+) \S+ (HTTP\/\d\.\d)$/.exec(
-    lines[0] ?? "",
-  );
+  const requestLine = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+) \S+ (HTTP\/\d\.\d)$/.exec(lines[0] ?? "");
   if (requestLine === null) return undefined;
   const headers = new Map<string, string>();
   for (const line of lines.slice(1)) {
@@ -90,10 +88,7 @@ export const makeExpectContinueObserver = (sendContinue: () => void) => {
     // A tunnel follows: nothing after this head is HTTP framing.
     if (method === "CONNECT" || headers.has("upgrade")) return { _tag: "Off" };
     // HTTP/1.0 requests' expectations must be ignored (RFC 9110 §10.1.1)
-    if (
-      version === "HTTP/1.1" &&
-      headers.get("expect")?.toLowerCase() === "100-continue"
-    ) {
+    if (version === "HTTP/1.1" && headers.get("expect")?.toLowerCase() === "100-continue") {
       sendContinue();
     }
     const transferEncoding = headers.get("transfer-encoding")?.toLowerCase();
@@ -141,15 +136,10 @@ export const makeExpectContinueObserver = (sendContinue: () => void) => {
         const end = buffer.indexOf(CRLF);
         if (end === -1) {
           state =
-            buffer.length > MAX_CHUNK_LINE_BYTES
-              ? { _tag: "Off" }
-              : { _tag: "ChunkSize", buffer };
+            buffer.length > MAX_CHUNK_LINE_BYTES ? { _tag: "Off" } : { _tag: "ChunkSize", buffer };
           return Buffer.alloc(0);
         }
-        const sizeField = latin1
-          .decode(buffer.subarray(0, end))
-          .split(";")[0]!
-          .trim();
+        const sizeField = latin1.decode(buffer.subarray(0, end)).split(";")[0]!.trim();
         if (!/^[0-9a-fA-F]+$/.test(sizeField)) {
           state = { _tag: "Off" };
           return Buffer.alloc(0);
@@ -177,9 +167,7 @@ export const makeExpectContinueObserver = (sendContinue: () => void) => {
           if (end === -1) {
             const rest = buffer.subarray(offset);
             state =
-              rest.length > MAX_HEAD_BYTES
-                ? { _tag: "Off" }
-                : { _tag: "Trailers", buffer: rest };
+              rest.length > MAX_HEAD_BYTES ? { _tag: "Off" } : { _tag: "Trailers", buffer: rest };
             return Buffer.alloc(0);
           }
           if (end === offset) {

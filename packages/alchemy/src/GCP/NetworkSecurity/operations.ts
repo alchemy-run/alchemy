@@ -1,5 +1,5 @@
-import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -51,15 +51,11 @@ export const rfc1035 = (name: string, fallback = "resource"): string => {
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback = DEFAULT_LOCATION,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback = DEFAULT_LOCATION) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
-export const normalizeZone = (
-  location: string | undefined,
-  fallback = DEFAULT_ZONE,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeZone = (location: string | undefined, fallback = DEFAULT_ZONE) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const projectParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -76,9 +72,7 @@ export const parseResourceName = (name: string) => {
   return {
     parentId: parentAt >= 0 && parts[parentAt + 1] ? parts[parentAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
     id: lastSegment(name),
   };
 };
@@ -115,8 +109,7 @@ export const sortedStrings = (values: ReadonlyArray<string> | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
 /**
  * Wait for a Network Security long-running operation. Cloud NGFW firewall
@@ -138,8 +131,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -148,15 +140,10 @@ export const waitForOperation = (
     ),
   );
 
-export const waitUntilExists = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -165,15 +152,10 @@ export const waitUntilExists = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -186,16 +168,12 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         )
       : Effect.succeed(undefined);
 
@@ -210,10 +188,7 @@ const tryResolveOrganizationId = (project: string) =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return lastSegment(explicit);
     if (existing !== undefined) return lastSegment(existing);

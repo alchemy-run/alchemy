@@ -7,6 +7,7 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 import {
   deployWebsite,
@@ -14,7 +15,6 @@ import {
   type Website,
   type WebsiteScope,
 } from "./FrameworkSite.ts";
-import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 /** Configuration for a command-built Neon website. */
 export type StaticSiteProps = Omit<Command.BuildProps, "env"> &
@@ -76,14 +76,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const local = context.dev && remote !== true;
     const cwd = props.cwd ?? props.rootDir;
     if (props.project !== undefined && props.branch !== undefined) {
-      return yield* Effect.die(
-        new Error("Specify branch or project, never both."),
-      );
+      return yield* Effect.die(new Error("Specify branch or project, never both."));
     }
     if (props.spa && props.errorPage !== undefined) {
-      return yield* Effect.die(
-        new Error("StaticSite spa and errorPage are mutually exclusive."),
-      );
+      return yield* Effect.die(new Error("StaticSite spa and errorPage are mutually exclusive."));
     }
     if (local && props.dev !== undefined) {
       const dev = yield* Command.Dev("Dev", {

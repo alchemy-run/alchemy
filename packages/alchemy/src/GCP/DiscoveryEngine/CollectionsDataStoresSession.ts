@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parentOf,
-  parseResourceName,
-  sessionIdOf,
-  toPhysical,
-} from "./internal.ts";
+import { parentOf, parseResourceName, sessionIdOf, toPhysical } from "./internal.ts";
 
 export type CollectionsDataStoresSessionProps = {
   /**
@@ -106,10 +101,9 @@ export type CollectionsDataStoresSession = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsDataStoresSession =
-  Resource<CollectionsDataStoresSession>(
-    "GCP.DiscoveryEngine.CollectionsDataStoresSession",
-  );
+export const CollectionsDataStoresSession = Resource<CollectionsDataStoresSession>(
+  "GCP.DiscoveryEngine.CollectionsDataStoresSession",
+);
 
 export class CollectionsDataStoresSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSessionNotResolved",
@@ -117,10 +111,7 @@ export class CollectionsDataStoresSessionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  session: discoveryengine.GoogleCloudDiscoveryengineV1Session,
-  project: string,
-) => {
+const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, project: string) => {
   const name = session.name ?? "";
   const parsed = parseResourceName(name, "sessions");
   return {
@@ -139,8 +130,7 @@ const toAttrs = (
   };
 };
 
-const resourceName = (dataStore: string, sessionId: string) =>
-  `${dataStore}/sessions/${sessionId}`;
+const resourceName = (dataStore: string, sessionId: string) => `${dataStore}/sessions/${sessionId}`;
 
 const getByName = (name: string) =>
   name.length === 0
@@ -151,14 +141,7 @@ const getByName = (name: string) =>
 
 export const CollectionsDataStoresSessionProvider = () =>
   Provider.succeed(CollectionsDataStoresSession, {
-    stables: [
-      "name",
-      "sessionId",
-      "dataStore",
-      "project",
-      "location",
-      "startTime",
-    ],
+    stables: ["name", "sessionId", "dataStore", "project", "location", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -166,9 +149,7 @@ export const CollectionsDataStoresSessionProvider = () =>
       const previousId = olds?.sessionId ?? output?.sessionId;
       if (
         (previousParent !== undefined && news.dataStore !== previousParent) ||
-        (previousId !== undefined &&
-          news.sessionId !== undefined &&
-          news.sessionId !== previousId)
+        (previousId !== undefined && news.sessionId !== undefined && news.sessionId !== previousId)
       ) {
         return {
           action: "replace" as const,
@@ -184,15 +165,9 @@ export const CollectionsDataStoresSessionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.dataStore ?? output?.dataStore;
-      const childId = yield* toPhysical(
-        id,
-        olds?.sessionId,
-        output?.sessionId,
-        sessionIdOf,
-      );
+      const childId = yield* toPhysical(id, olds?.sessionId, output?.sessionId, sessionIdOf);
       const name =
-        output?.name ??
-        (parent !== undefined ? resourceName(parent, childId) : undefined);
+        output?.name ?? (parent !== undefined ? resourceName(parent, childId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -203,12 +178,7 @@ export const CollectionsDataStoresSessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sessionId = yield* toPhysical(
-        id,
-        news.sessionId,
-        output?.sessionId,
-        sessionIdOf,
-      );
+      const sessionId = yield* toPhysical(id, news.sessionId, output?.sessionId, sessionIdOf);
       const name = resourceName(news.dataStore, sessionId);
       const displayName = news.displayName ?? sessionId;
       const labels = news.labels ?? [];
@@ -241,43 +211,33 @@ export const CollectionsDataStoresSessionProvider = () =>
       const resource = current.name ?? name;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
       const stateChanged = (current.state ?? "") !== state;
-      const userChanged =
-        (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
+      const userChanged = (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
       const observedLabels = [...(current.labels ?? [])].sort().join("\0");
       const desiredLabels = [...labels].sort().join("\0");
       const labelsChanged = observedLabels !== desiredLabels;
       const pinnedChanged = (current.isPinned === true) !== desiredPinned;
 
-      if (
-        displayNameChanged ||
-        stateChanged ||
-        userChanged ||
-        labelsChanged ||
-        pinnedChanged
-      ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSessions(
-            {
-              name: resource,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                stateChanged ? "state" : undefined,
-                userChanged ? "user_pseudo_id" : undefined,
-                labelsChanged ? "labels" : undefined,
-                pinnedChanged ? "is_pinned" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name: resource,
-                displayName,
-                state,
-                userPseudoId: news.userPseudoId,
-                labels,
-                isPinned: desiredPinned,
-              },
-            },
-          );
+      if (displayNameChanged || stateChanged || userChanged || labelsChanged || pinnedChanged) {
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSessions({
+          name: resource,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            stateChanged ? "state" : undefined,
+            userChanged ? "user_pseudo_id" : undefined,
+            labelsChanged ? "labels" : undefined,
+            pinnedChanged ? "is_pinned" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name: resource,
+            displayName,
+            state,
+            userPseudoId: news.userPseudoId,
+            labels,
+            isPinned: desiredPinned,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

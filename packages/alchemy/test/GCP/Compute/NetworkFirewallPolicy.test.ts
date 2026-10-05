@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, firewallPolicy: string) =>
   compute.getNetworkFirewallPolicies({ project, firewallPolicy }).pipe(
@@ -25,10 +22,8 @@ const waitUntilGone = (project: string, firewallPolicy: string) =>
     }),
   );
 
-const ruleAt = (
-  rules: compute.FirewallPolicyRule[] | undefined,
-  priority: number,
-) => (rules ?? []).find((rule) => rule.priority === priority);
+const ruleAt = (rules: compute.FirewallPolicyRule[] | undefined, priority: number) =>
+  (rules ?? []).find((rule) => rule.priority === priority);
 
 const hasReservedGotoNext = (rules: compute.FirewallPolicyRule[] | undefined) =>
   (rules ?? []).some(
@@ -109,9 +104,7 @@ test.provider(
         maxResults: 500,
       });
       expect(
-        (listed.items ?? []).some(
-          (policy) => policy.name === created.networkFirewallPolicyName,
-        ),
+        (listed.items ?? []).some((policy) => policy.name === created.networkFirewallPolicyName),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -135,32 +128,25 @@ test.provider(
         }),
       );
 
-      expect(updated.networkFirewallPolicyName).toEqual(
-        created.networkFirewallPolicyName,
-      );
-      expect(updated.networkFirewallPolicyId).toEqual(
-        created.networkFirewallPolicyId,
-      );
+      expect(updated.networkFirewallPolicyName).toEqual(created.networkFirewallPolicyName);
+      expect(updated.networkFirewallPolicyId).toEqual(created.networkFirewallPolicyId);
       expect(updated.description).toEqual("updated vpc fw");
-      expect(
-        ruleAt(updated.rules, 1000)?.match?.srcIpRanges?.slice().sort(),
-      ).toEqual(["10.0.0.0/8", "192.168.0.0/16"]);
+      expect(ruleAt(updated.rules, 1000)?.match?.srcIpRanges?.slice().sort()).toEqual([
+        "10.0.0.0/8",
+        "192.168.0.0/16",
+      ]);
 
       const fetchedUpdate = yield* compute.getNetworkFirewallPolicies({
         project: updated.project,
         firewallPolicy: updated.networkFirewallPolicyName,
       });
       expect(fetchedUpdate.description).toContain("updated vpc fw");
-      expect(ruleAt(fetchedUpdate.rules, 1000)?.description).toEqual(
-        "http and https",
-      );
+      expect(ruleAt(fetchedUpdate.rules, 1000)?.description).toEqual("http and https");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.Compute.NetworkFirewallPolicy("VpcFw", {
-            networkFirewallPolicyName: nextName(
-              created.networkFirewallPolicyName,
-            ),
+            networkFirewallPolicyName: nextName(created.networkFirewallPolicyName),
             description: "replaced vpc fw",
             rules: [
               {
@@ -180,18 +166,13 @@ test.provider(
       expect(replaced.networkFirewallPolicyName).toEqual(
         nextName(created.networkFirewallPolicyName),
       );
-      expect(replaced.networkFirewallPolicyId).not.toEqual(
-        created.networkFirewallPolicyId,
-      );
+      expect(replaced.networkFirewallPolicyId).not.toEqual(created.networkFirewallPolicyId);
       expect(replaced.description).toEqual("replaced vpc fw");
       expect(ruleAt(replaced.rules, 1000)?.action).toEqual("deny");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.project,
-        replaced.networkFirewallPolicyName,
-      );
+      const gone = yield* waitUntilGone(replaced.project, replaced.networkFirewallPolicyName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },

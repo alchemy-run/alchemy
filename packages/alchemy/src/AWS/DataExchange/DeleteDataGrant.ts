@@ -25,12 +25,7 @@ export interface DeleteDataGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: dataexchange.DeleteDataGrantRequest,
-    ) => Effect.Effect<
-      dataexchange.DeleteDataGrantResponse,
-      dataexchange.DeleteDataGrantError
-    >
+    ) => Effect.Effect<dataexchange.DeleteDataGrantResponse, dataexchange.DeleteDataGrantError>
   >
 > {}
-export const DeleteDataGrant = Binding.Service<DeleteDataGrant>(
-  "AWS.DataExchange.DeleteDataGrant",
-);
+export const DeleteDataGrant = Binding.Service<DeleteDataGrant>("AWS.DataExchange.DeleteDataGrant");

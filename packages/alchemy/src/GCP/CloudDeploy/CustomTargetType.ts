@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -232,15 +227,9 @@ export type CustomTargetType = Resource<
  * @resource
  * @category CloudDeploy
  */
-export const CustomTargetType = Resource<CustomTargetType>(
-  "GCP.CloudDeploy.CustomTargetType",
-);
+export const CustomTargetType = Resource<CustomTargetType>("GCP.CloudDeploy.CustomTargetType");
 
-const resourceName = (
-  project: string,
-  location: string,
-  customTargetTypeId: string,
-) =>
+const resourceName = (project: string, location: string, customTargetTypeId: string) =>
   `projects/${project}/locations/${location}/customTargetTypes/${customTargetTypeId}`;
 
 const toCustomActions = (
@@ -267,9 +256,7 @@ const toContainerTask = (
       };
 
 const toTask = (value: clouddeploy.Task | undefined): Task | undefined =>
-  value === undefined
-    ? undefined
-    : { container: toContainerTask(value.container) };
+  value === undefined ? undefined : { container: toContainerTask(value.container) };
 
 const toTasks = (
   value: clouddeploy.CustomTargetTasks | undefined,
@@ -320,27 +307,15 @@ const listOwned = (project: string, region: string) =>
 
 export const CustomTargetTypeProvider = () =>
   Provider.succeed(CustomTargetType, {
-    stables: [
-      "name",
-      "customTargetTypeId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "customTargetTypeId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.customTargetTypeId ?? output?.customTargetTypeId,
-        nextId:
-          news.customTargetTypeId ??
-          olds?.customTargetTypeId ??
-          output?.customTargetTypeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.customTargetTypeId ?? olds?.customTargetTypeId ?? output?.customTargetTypeId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -355,17 +330,12 @@ export const CustomTargetTypeProvider = () =>
         output?.customTargetTypeId,
         "customtargettype",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, customTargetTypeId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, customTargetTypeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -383,9 +353,7 @@ export const CustomTargetTypeProvider = () =>
         output?.customTargetTypeId,
         "customtargettype",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, customTargetTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -423,34 +391,29 @@ export const CustomTargetTypeProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.description, news.description) && "description",
-        fingerprint(toCustomActions(current.customActions)) !==
-          fingerprint(news.customActions) && "customActions",
-        fingerprint(toTasks(current.tasks)) !== fingerprint(news.tasks) &&
-          "tasks",
+        fingerprint(toCustomActions(current.customActions)) !== fingerprint(news.customActions) &&
+          "customActions",
+        fingerprint(toTasks(current.tasks)) !== fingerprint(news.tasks) && "tasks",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* clouddeploy.patchProjectsLocationsCustomTargetTypes({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              description: news.description,
-              customActions: news.customActions,
-              tasks: news.tasks,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
-          });
+        const operation = yield* clouddeploy.patchProjectsLocationsCustomTargetTypes({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            description: news.description,
+            customActions: news.customActions,
+            tasks: news.tasks,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

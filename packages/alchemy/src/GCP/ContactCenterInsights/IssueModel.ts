@@ -113,9 +113,7 @@ export type IssueModel = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const IssueModel = Resource<IssueModel>(
-  "GCP.ContactCenterInsights.IssueModel",
-);
+export const IssueModel = Resource<IssueModel>("GCP.ContactCenterInsights.IssueModel");
 
 export class IssueModelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.IssueModelNotResolved",
@@ -123,10 +121,7 @@ export class IssueModelNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  model: cci.GoogleCloudContactcenterinsightsV1IssueModel,
-  project: string,
-) => {
+const toAttrs = (model: cci.GoogleCloudContactcenterinsightsV1IssueModel, project: string) => {
   const name = model.name ?? "";
   const parsed = parseOwnership(model.displayName);
   return {
@@ -139,9 +134,7 @@ const toAttrs = (
     modelType: model.modelType,
     inputDataConfig: model.inputDataConfig
       ? {
-          medium: model.inputDataConfig.medium as
-            | IssueModelInputDataConfig["medium"]
-            | undefined,
+          medium: model.inputDataConfig.medium as IssueModelInputDataConfig["medium"] | undefined,
           filter: model.inputDataConfig.filter,
         }
       : undefined,
@@ -162,13 +155,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((model) =>
-      model
-        ? Effect.succeed(model)
-        : Effect.fail(new IssueModelNotResolved({ name })),
+      model ? Effect.succeed(model) : Effect.fail(new IssueModelNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ContactCenterInsights.IssueModelNotResolved",
+      while: (error) => error._tag === "GCP.ContactCenterInsights.IssueModelNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -187,9 +177,7 @@ const listAt = (parent: string, project: string) =>
 const findByDisplayName = (parent: string, displayName: string) =>
   cci.listProjectsLocationsIssueModels({ parent }).pipe(
     Effect.map((page) =>
-      (page.issueModels ?? []).find(
-        (model) => model.displayName === displayName,
-      ),
+      (page.issueModels ?? []).find((model) => model.displayName === displayName),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -217,9 +205,7 @@ export const IssueModelProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayName))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
       }
       const location = olds?.location ?? env.region;
       const parent = locationParent(env.project, location);
@@ -228,18 +214,13 @@ export const IssueModelProvider = () =>
       const found = yield* findByDisplayName(parent, displayName);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
-      return (yield* ownedByAlchemy(id, found.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, found.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -286,8 +267,7 @@ export const IssueModelProvider = () =>
 
       const name = current.name ?? "";
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const languageChanged =
-        (current.languageCode ?? "") !== (news.languageCode ?? "");
+      const languageChanged = (current.languageCode ?? "") !== (news.languageCode ?? "");
       const typeChanged = (current.modelType ?? "") !== (news.modelType ?? "");
       const inputChanged = !sameJson(
         current.inputDataConfig

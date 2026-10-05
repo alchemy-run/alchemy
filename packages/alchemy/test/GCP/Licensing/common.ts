@@ -18,12 +18,9 @@ export const runLifecycle =
   !!process.env.GOOGLE_LICENSE_USER_ID;
 
 export const productId = process.env.GOOGLE_LICENSE_PRODUCT_ID ?? "Google-Apps";
-export const skuId =
-  process.env.GOOGLE_LICENSE_SKU_ID ?? "Google-Apps-For-Business";
-export const updateSkuId =
-  process.env.GOOGLE_LICENSE_SKU_ID_UPDATE ?? "Google-Apps-Unlimited";
-export const userId =
-  process.env.GOOGLE_LICENSE_USER_ID ?? "alchemy-missing@example.com";
+export const skuId = process.env.GOOGLE_LICENSE_SKU_ID ?? "Google-Apps-For-Business";
+export const updateSkuId = process.env.GOOGLE_LICENSE_SKU_ID_UPDATE ?? "Google-Apps-Unlimited";
+export const userId = process.env.GOOGLE_LICENSE_USER_ID ?? "alchemy-missing@example.com";
 export const customerId =
   process.env.GOOGLE_LICENSE_CUSTOMER_ID ??
   process.env.GOOGLE_WORKSPACE_CUSTOMER_ID ??
@@ -32,10 +29,7 @@ export const customerId =
 export const missingUserId = "alchemy-missing@example.com";
 
 export const waitUntilGone = (
-  assignment: Pick<
-    licensing.LicenseAssignment,
-    "productId" | "skuId" | "userId"
-  >,
+  assignment: Pick<licensing.LicenseAssignment, "productId" | "skuId" | "userId">,
 ) =>
   licensing
     .getLicenseAssignments({

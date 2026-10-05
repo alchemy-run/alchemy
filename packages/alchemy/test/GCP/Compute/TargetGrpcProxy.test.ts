@@ -1,33 +1,28 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (targetGrpcProxyName: string) =>
   GcpEnvironment.current.pipe(
     Effect.flatMap(({ project }) =>
-      compute
-        .getTargetGrpcProxies({ project, targetGrpcProxy: targetGrpcProxyName })
-        .pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (status) => status === "gone",
-            times: 10,
-          }),
-        ),
+      compute.getTargetGrpcProxies({ project, targetGrpcProxy: targetGrpcProxyName }).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (status) => status === "gone",
+          times: 10,
+        }),
+      ),
     ),
   );
 
@@ -72,9 +67,7 @@ test.provider(
         targetGrpcProxy: created.targetGrpcProxyName,
       });
       expect(fetched.name).toEqual(created.targetGrpcProxyName);
-      expect(resourceTail(fetched.urlMap)).toEqual(
-        resourceTail(created.urlMap),
-      );
+      expect(resourceTail(fetched.urlMap)).toEqual(resourceTail(created.urlMap));
       expect(fetched.validateForProxyless).toEqual(false);
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("grpc frontend");
@@ -100,18 +93,14 @@ test.provider(
 
       expect(updated.targetGrpcProxyName).toEqual(created.targetGrpcProxyName);
       expect(updated.description).toEqual("updated frontend");
-      expect(resourceTail(updated.urlMap)).toEqual(
-        resourceTail(created.urlMap),
-      );
+      expect(resourceTail(updated.urlMap)).toEqual(resourceTail(created.urlMap));
 
       const refetched = yield* compute.getTargetGrpcProxies({
         project,
         targetGrpcProxy: updated.targetGrpcProxyName,
       });
       expect(refetched.description).toContain("updated frontend");
-      expect(resourceTail(refetched.urlMap)).toEqual(
-        resourceTail(updated.urlMap),
-      );
+      expect(resourceTail(refetched.urlMap)).toEqual(resourceTail(updated.urlMap));
 
       yield* stack.destroy();
 

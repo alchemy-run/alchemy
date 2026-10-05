@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   listOrganizations,
@@ -30,8 +25,7 @@ import {
   waitUntilGone,
 } from "./operations.ts";
 
-const DEFAULT_TYPE =
-  "THREAT_PREVENTION" satisfies networksecurity.SecurityProfileTypeEnum;
+const DEFAULT_TYPE = "THREAT_PREVENTION" satisfies networksecurity.SecurityProfileTypeEnum;
 
 export type OrganizationsSecurityProfileType =
   | networksecurity.SecurityProfileTypeEnum
@@ -209,20 +203,14 @@ export type OrganizationsSecurityProfile = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const OrganizationsSecurityProfile =
-  Resource<OrganizationsSecurityProfile>(
-    "GCP.NetworkSecurity.OrganizationsSecurityProfile",
-  );
+export const OrganizationsSecurityProfile = Resource<OrganizationsSecurityProfile>(
+  "GCP.NetworkSecurity.OrganizationsSecurityProfile",
+);
 
-const resourceName = (
-  organization: string,
-  location: string,
-  securityProfileId: string,
-) =>
+const resourceName = (organization: string, location: string, securityProfileId: string) =>
   `organizations/${organization}/locations/${location}/securityProfiles/${securityProfileId}`;
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const toThreatPrevention = (
   profile: networksecurity.ThreatPreventionProfile | undefined,
@@ -244,9 +232,7 @@ const toAttrs = (profile: networksecurity.SecurityProfile) => {
     organization: parsed.parentId,
     location: parsed.location,
     type: profile.type ?? DEFAULT_TYPE,
-    threatPreventionProfile: toThreatPrevention(
-      profile.threatPreventionProfile,
-    ),
+    threatPreventionProfile: toThreatPrevention(profile.threatPreventionProfile),
     customMirroringProfile: profile.customMirroringProfile,
     urlFilteringProfile: profile.urlFilteringProfile,
     customInterceptProfile: profile.customInterceptProfile,
@@ -270,13 +256,9 @@ const listOwned = (organization: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securityProfiles ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.securityProfiles ?? [])),
       Stream.filter((profile) =>
-        Object.keys(profile.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(profile.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map(toAttrs),
       Stream.runCollect,
@@ -294,14 +276,7 @@ const desiredThreatPrevention = (
 
 export const OrganizationsSecurityProfileProvider = () =>
   Provider.succeed(OrganizationsSecurityProfile, {
-    stables: [
-      "name",
-      "securityProfileId",
-      "organization",
-      "location",
-      "type",
-      "createTime",
-    ],
+    stables: ["name", "securityProfileId", "organization", "location", "type", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -309,32 +284,22 @@ export const OrganizationsSecurityProfileProvider = () =>
       const nextId = news.securityProfileId ?? previousId;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg = news.organization ?? previousOrg;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? olds?.type ?? output?.type);
       const previousMirror =
         olds?.customMirroringProfile?.mirroringEndpointGroup ??
         output?.customMirroringProfile?.mirroringEndpointGroup;
-      const nextMirror =
-        news.customMirroringProfile?.mirroringEndpointGroup ?? previousMirror;
+      const nextMirror = news.customMirroringProfile?.mirroringEndpointGroup ?? previousMirror;
       const previousIntercept =
         olds?.customInterceptProfile?.interceptEndpointGroup ??
         output?.customInterceptProfile?.interceptEndpointGroup;
       const nextIntercept =
-        news.customInterceptProfile?.interceptEndpointGroup ??
-        previousIntercept;
+        news.customInterceptProfile?.interceptEndpointGroup ?? previousIntercept;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousOrg !== undefined &&
-          nextOrg !== undefined &&
-          nextOrg !== previousOrg) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousOrg !== undefined && nextOrg !== undefined && nextOrg !== previousOrg) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousMirror !== nextMirror ||
@@ -368,16 +333,12 @@ export const OrganizationsSecurityProfileProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, securityProfileId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, securityProfileId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -449,8 +410,7 @@ export const OrganizationsSecurityProfileProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const threatChanged =
         type === "THREAT_PREVENTION" &&
         !sameJson(
@@ -469,23 +429,19 @@ export const OrganizationsSecurityProfileProvider = () =>
           urlChanged ? "urlFilteringProfile" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networksecurity.patchOrganizationsLocationsSecurityProfiles({
+        const operation = yield* networksecurity.patchOrganizationsLocationsSecurityProfiles({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              threatPreventionProfile,
-              urlFilteringProfile: news.urlFilteringProfile,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            threatPreventionProfile,
+            urlFilteringProfile: news.urlFilteringProfile,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current);

@@ -32,7 +32,6 @@ export interface DeleteMedicalTranscriptionJob extends Binding.Service<
     >
   >
 > {}
-export const DeleteMedicalTranscriptionJob =
-  Binding.Service<DeleteMedicalTranscriptionJob>(
-    "AWS.Transcribe.DeleteMedicalTranscriptionJob",
-  );
+export const DeleteMedicalTranscriptionJob = Binding.Service<DeleteMedicalTranscriptionJob>(
+  "AWS.Transcribe.DeleteMedicalTranscriptionJob",
+);

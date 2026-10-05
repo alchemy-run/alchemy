@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  databaseNameOf,
-  lastSegment,
-  parseDatabaseName,
-  toResourceId,
-} from "./internal.ts";
+import { databaseNameOf, lastSegment, parseDatabaseName, toResourceId } from "./internal.ts";
 
 const DEFAULT_DATABASE = "(default)";
 const DEFAULT_COLLECTION = "_alchemy";
@@ -129,9 +124,7 @@ export type Document = Resource<
  */
 export const Document = Resource<Document>("GCP.Firestore.Document");
 
-export class DocumentNotResolved extends Data.TaggedError(
-  "GCP.Firestore.DocumentNotResolved",
-)<{
+export class DocumentNotResolved extends Data.TaggedError("GCP.Firestore.DocumentNotResolved")<{
   name: string;
 }> {}
 
@@ -143,21 +136,17 @@ const databaseIdOf = (value: string | undefined, project: string) => {
 const collectionOf = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_COLLECTION;
 
-const parentPathOf = (value: string | undefined) =>
-  (value ?? "").replace(/^\/+|\/+$/g, "");
+const parentPathOf = (value: string | undefined) => (value ?? "").replace(/^\/+|\/+$/g, "");
 
 const documentsParent = (databaseName: string, parentPath: string) =>
-  parentPath.length === 0
-    ? `${databaseName}/documents`
-    : `${databaseName}/documents/${parentPath}`;
+  parentPath.length === 0 ? `${databaseName}/documents` : `${databaseName}/documents/${parentPath}`;
 
 const documentName = (
   databaseName: string,
   parentPath: string,
   collectionId: string,
   documentId: string,
-) =>
-  `${documentsParent(databaseName, parentPath)}/${collectionId}/${documentId}`;
+) => `${documentsParent(databaseName, parentPath)}/${collectionId}/${documentId}`;
 
 const parseDocumentName = (name: string) => {
   const marker = "/documents/";
@@ -166,8 +155,7 @@ const parseDocumentName = (name: string) => {
   const relative = at >= 0 ? name.slice(at + marker.length) : lastSegment(name);
   const parts = relative.split("/").filter((part) => part.length > 0);
   const documentId = parts[parts.length - 1] ?? "";
-  const collectionId =
-    parts.length >= 2 ? parts[parts.length - 2]! : DEFAULT_COLLECTION;
+  const collectionId = parts.length >= 2 ? parts[parts.length - 2]! : DEFAULT_COLLECTION;
   const parentParts = parts.slice(0, Math.max(0, parts.length - 2));
   return {
     ...parseDatabaseName(databaseName),
@@ -188,9 +176,7 @@ const fieldOf = (value: firestore.Value | undefined): DocumentFieldValue => ({
   nullValue: value?.nullValue,
 });
 
-const userFields = (
-  fields: firestore.ValueMap | undefined,
-): Record<string, DocumentFieldValue> => {
+const userFields = (fields: firestore.ValueMap | undefined): Record<string, DocumentFieldValue> => {
   const next: Record<string, DocumentFieldValue> = {};
   for (const [key, value] of Object.entries(fields ?? {})) {
     next[key] = fieldOf(value);
@@ -275,18 +261,10 @@ export const DocumentProvider = () =>
         env.project,
       );
       const databaseName = databaseNameOf(env.project, databaseId);
-      const collectionId = collectionOf(
-        olds?.collectionId ?? output?.collectionId,
-      );
+      const collectionId = collectionOf(olds?.collectionId ?? output?.collectionId);
       const parentPath = parentPathOf(olds?.parentPath ?? output?.parentPath);
-      const documentId = yield* toResourceId(
-        id,
-        olds?.documentId,
-        output?.documentId,
-      );
-      const name =
-        output?.name ??
-        documentName(databaseName, parentPath, collectionId, documentId);
+      const documentId = yield* toResourceId(id, olds?.documentId, output?.documentId);
+      const name = output?.name ?? documentName(databaseName, parentPath, collectionId, documentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -303,18 +281,9 @@ export const DocumentProvider = () =>
       const databaseName = databaseNameOf(env.project, databaseId);
       const collectionId = collectionOf(news.collectionId);
       const parentPath = parentPathOf(news.parentPath);
-      const documentId = yield* toResourceId(
-        id,
-        news.documentId,
-        output?.documentId,
-      );
+      const documentId = yield* toResourceId(id, news.documentId, output?.documentId);
       const parent = documentsParent(databaseName, parentPath);
-      const name = documentName(
-        databaseName,
-        parentPath,
-        collectionId,
-        documentId,
-      );
+      const name = documentName(databaseName, parentPath, collectionId, documentId);
       const fields = desiredFields(news);
 
       let current = yield* getByName(output?.name ?? name);

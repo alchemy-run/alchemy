@@ -13,8 +13,7 @@ import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 export const AccessReadWriteTokenHttp = Layer.effect(
   AccessReadWriteToken,
   Effect.gen(function* () {
-    const access =
-      yield* cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories;
+    const access = yield* cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories;
     return yield* makeRepositoryHttpBinding<
       cloudbuild.AccessReadWriteTokenProjectsLocationsConnectionsRepositoriesRequest,
       cloudbuild.FetchReadWriteTokenResponse,

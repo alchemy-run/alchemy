@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -116,10 +111,7 @@ export const Schema = Resource<Schema>("GCP.DocumentAI.Schema");
 const resourceName = (project: string, location: string, schemaId: string) =>
   `${locationParent(project, location)}/schemas/${schemaId}`;
 
-const toAttrs = (
-  schema: documentai.GoogleCloudDocumentaiV1NextSchema,
-  project: string,
-) => {
+const toAttrs = (schema: documentai.GoogleCloudDocumentaiV1NextSchema, project: string) => {
   const name = schema.name ?? "";
   const parsed = parseResourceName(name, "schemas");
   return {
@@ -141,12 +133,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsSchemas({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -175,16 +162,12 @@ export const SchemaProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const schemaId = olds?.schemaId ?? output?.schemaId;
-      const name =
-        output?.name ??
-        (schemaId ? resourceName(env.project, location, schemaId) : "");
+      const name = output?.name ?? (schemaId ? resourceName(env.project, location, schemaId) : "");
       const parent = locationParent(env.project, location);
       const existing = yield* findOwned(id, env.project, parent, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -198,9 +181,7 @@ export const SchemaProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -213,10 +194,7 @@ export const SchemaProvider = () =>
       );
       const displayName = news.displayName ?? fallbackName;
       const hinted =
-        output?.name ??
-        (news.schemaId
-          ? resourceName(env.project, location, news.schemaId)
-          : "");
+        output?.name ?? (news.schemaId ? resourceName(env.project, location, news.schemaId) : "");
 
       let current = yield* findOwned(id, env.project, parent, hinted);
 
@@ -233,9 +211,7 @@ export const SchemaProvider = () =>
           Effect.catchTag("Conflict", (error) =>
             findOwned(id, env.project, parent, hinted).pipe(
               Effect.flatMap((found) =>
-                found !== undefined
-                  ? Effect.succeed(found)
-                  : Effect.fail(error),
+                found !== undefined ? Effect.succeed(found) : Effect.fail(error),
               ),
             ),
           ),

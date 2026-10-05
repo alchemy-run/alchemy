@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { CertificateAuthority } from "./CertificateAuthority.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 /**
  * Shared HTTP scaffolding for Certificate Authority Service bindings.
  * NOT exported from index.ts.
  */
-export const makeCertificateAuthorityHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeCertificateAuthorityHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -26,9 +22,7 @@ export const makeCertificateAuthorityHttpBinding = <
         iam: [grantFor(options.iam, ca.caPool)],
       });
       const name = yield* ca.name;
-      return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
           ...(request as I),
           name: yield* name,

@@ -44,6 +44,4 @@ export interface GenerateWallet extends Binding.Service<
   >
 > {}
 
-export const GenerateWallet = Binding.Service<GenerateWallet>(
-  "GCP.OracleDatabase.GenerateWallet",
-);
+export const GenerateWallet = Binding.Service<GenerateWallet>("GCP.OracleDatabase.GenerateWallet");

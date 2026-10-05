@@ -126,10 +126,9 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
  * @resource
  * @category Composer
  */
-export const EnvironmentsUserWorkloadsSecret =
-  Resource<EnvironmentsUserWorkloadsSecret>(
-    "GCP.Composer.EnvironmentsUserWorkloadsSecret",
-  );
+export const EnvironmentsUserWorkloadsSecret = Resource<EnvironmentsUserWorkloadsSecret>(
+  "GCP.Composer.EnvironmentsUserWorkloadsSecret",
+);
 
 export class EnvironmentsUserWorkloadsSecretNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsSecretNotResolved",
@@ -146,10 +145,7 @@ export class EnvironmentsUserWorkloadsSecretStillExists extends Data.TaggedError
 const resourceName = (environmentName: string, secretId: string) =>
   `${environmentParent(environmentName)}/userWorkloadsSecrets/${secretId}`;
 
-const toAttrs = (
-  secret: composer.UserWorkloadsSecret,
-  environmentName: string,
-) => {
+const toAttrs = (secret: composer.UserWorkloadsSecret, environmentName: string) => {
   const name = secret.name ?? resourceName(environmentName, "");
   const parsed = parseWorkloadName(name);
   const parent = environmentParent(environmentName || name);
@@ -177,43 +173,30 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new EnvironmentsUserWorkloadsSecretStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
+      while: (error) => error._tag === "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
-const keysOf = (map: Record<string, string>) =>
-  Object.keys(map).sort().join("\0");
+const keysOf = (map: Record<string, string>) => Object.keys(map).sort().join("\0");
 
 const valuesCleared = (map: Record<string, string>) =>
   Object.values(map).every((value) => value.length === 0);
 
 export const EnvironmentsUserWorkloadsSecretProvider = () =>
   Provider.succeed(EnvironmentsUserWorkloadsSecret, {
-    stables: [
-      "name",
-      "secretId",
-      "environmentName",
-      "project",
-      "location",
-      "environmentId",
-    ],
+    stables: ["name", "secretId", "environmentName", "project", "location", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.secretId ?? output?.secretId;
       const idChanged =
-        previousId !== undefined &&
-        news.secretId !== undefined &&
-        news.secretId !== previousId;
+        previousId !== undefined && news.secretId !== undefined && news.secretId !== previousId;
       const previousParent = olds?.environmentName ?? output?.environmentName;
       const parentChanged =
         previousParent !== undefined &&
-        environmentParent(news.environmentName) !==
-          environmentParent(previousParent);
+        environmentParent(news.environmentName) !== environmentParent(previousParent);
       if (!idChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
@@ -221,11 +204,7 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const environmentName = olds?.environmentName ?? output?.environmentName;
       if (environmentName === undefined) return undefined;
-      const secretId = yield* toPhysicalId(
-        id,
-        olds?.secretId,
-        output?.secretId,
-      );
+      const secretId = yield* toPhysicalId(id, olds?.secretId, output?.secretId);
       const name = output?.name ?? resourceName(environmentName, secretId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -233,9 +212,7 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
       // No labels: a generated id embeds stack/stage/id, and a row we
       // created is in state. Only an explicit id found without state is
       // ambiguous.
-      return output === undefined && olds?.secretId !== undefined
-        ? Unowned(attrs)
-        : attrs;
+      return output === undefined && olds?.secretId !== undefined ? Unowned(attrs) : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -272,16 +249,13 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
         (observedCleared && (keysChanged || desiredUserChanged));
 
       if (shouldSync) {
-        current =
-          yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsSecrets(
-            {
-              name: current.name ?? name,
-              body: {
-                name: current.name ?? name,
-                data: desiredData,
-              },
-            },
-          );
+        current = yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+          name: current.name ?? name,
+          body: {
+            name: current.name ?? name,
+            data: desiredData,
+          },
+        });
       }
 
       return toAttrs(current, parent);

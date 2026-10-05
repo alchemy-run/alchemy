@@ -31,10 +31,9 @@ export const database = Effect.gen(function* () {
     deletionPolicy: "ABANDON",
   });
   // The Data API only accepts regional secrets in the instance's region.
-  const passwordSecret = yield* GCP.SecretManager.LocationsSecret(
-    "AppPassword",
-    { location: instance.region },
-  );
+  const passwordSecret = yield* GCP.SecretManager.LocationsSecret("AppPassword", {
+    location: instance.region,
+  });
 
   // drizzle-kit regenerates ./migrations whenever src/schema.ts changes.
   const schema = yield* Drizzle.Schema("Schema", {

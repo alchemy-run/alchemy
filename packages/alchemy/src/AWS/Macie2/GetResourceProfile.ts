@@ -27,10 +27,7 @@ export interface GetResourceProfile extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetResourceProfileRequest,
-    ) => Effect.Effect<
-      macie2.GetResourceProfileResponse,
-      macie2.GetResourceProfileError
-    >
+    ) => Effect.Effect<macie2.GetResourceProfileResponse, macie2.GetResourceProfileError>
   >
 > {}
 export const GetResourceProfile = Binding.Service<GetResourceProfile>(

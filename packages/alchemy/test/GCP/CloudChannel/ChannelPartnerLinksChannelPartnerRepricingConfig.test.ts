@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   probeAccountName,
@@ -22,11 +22,9 @@ test.provider(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        cloudchannel.getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs(
-          {
-            name: `${probePartner}/channelPartnerRepricingConfigs/alchemy-missing`,
-          },
-        ),
+        cloudchannel.getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+          name: `${probePartner}/channelPartnerRepricingConfigs/alchemy-missing`,
+        }),
       );
       expect(error._tag).toEqual("Forbidden");
 
@@ -45,23 +43,21 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        cloudchannel.createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs(
-          {
-            parent: probePartner,
-            body: {
-              repricingConfig: {
-                effectiveInvoiceMonth: probeMonth,
-                rebillingBasis: "COST_AT_LIST",
-                adjustment: {
-                  percentageAdjustment: { percentage: { value: "0.00" } },
-                },
-                entitlementGranularity: {
-                  entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
-                },
+        cloudchannel.createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+          parent: probePartner,
+          body: {
+            repricingConfig: {
+              effectiveInvoiceMonth: probeMonth,
+              rebillingBasis: "COST_AT_LIST",
+              adjustment: {
+                percentageAdjustment: { percentage: { value: "0.00" } },
+              },
+              entitlementGranularity: {
+                entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
               },
             },
           },
-        ),
+        }),
       );
       expect(error._tag).toEqual("Forbidden");
 
@@ -79,8 +75,7 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const partner =
-        process.env.GOOGLE_CLOUDCHANNEL_PARTNER?.trim() ?? probePartner;
+      const partner = process.env.GOOGLE_CLOUDCHANNEL_PARTNER?.trim() ?? probePartner;
       const entitlement =
         process.env.GCP_CLOUDCHANNEL_ENTITLEMENT?.trim() ??
         `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy`;
@@ -102,9 +97,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.name).toContain("/channelPartnerRepricingConfigs/");
 
       const fetched =
-        yield* cloudchannel.getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs(
-          { name: created.name },
-        );
+        yield* cloudchannel.getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+          name: created.name,
+        });
       expect(fetched.name).toEqual(created.name);
 
       const updated = yield* stack.deploy(

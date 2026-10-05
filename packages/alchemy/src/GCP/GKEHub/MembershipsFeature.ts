@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -155,9 +150,7 @@ export type MembershipsFeature = Resource<
  * @resource
  * @category GKEHub
  */
-export const MembershipsFeature = Resource<MembershipsFeature>(
-  "GCP.GKEHub.MembershipsFeature",
-);
+export const MembershipsFeature = Resource<MembershipsFeature>("GCP.GKEHub.MembershipsFeature");
 
 const resourceName = (membership: string, featureId: string) =>
   `${membership}/features/${featureId}`;
@@ -198,28 +191,22 @@ const listChildren = (parent: string) =>
   );
 
 const listOwned = (project: string) =>
-  gkehub.listProjectsLocations
-    .pages({ name: `projects/${project}`, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
-      Stream.map((location) => location.locationId),
-      Stream.filter(
-        (locationId): locationId is string =>
-          locationId !== undefined && locationId.length > 0,
+  gkehub.listProjectsLocations.pages({ name: `projects/${project}`, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
+    Stream.map((location) => location.locationId),
+    Stream.filter(
+      (locationId): locationId is string => locationId !== undefined && locationId.length > 0,
+    ),
+    Stream.runCollect,
+    Effect.flatMap((locations) =>
+      Effect.forEach(
+        Array.from(locations),
+        (location) => listChildren(`projects/${project}/locations/${location}/memberships/-`),
+        { concurrency: 4 },
       ),
-      Stream.runCollect,
-      Effect.flatMap((locations) =>
-        Effect.forEach(
-          Array.from(locations),
-          (location) =>
-            listChildren(
-              `projects/${project}/locations/${location}/memberships/-`,
-            ),
-          { concurrency: 4 },
-        ),
-      ),
-      Effect.map((pages) => pages.flat()),
-    );
+    ),
+    Effect.map((pages) => pages.flat()),
+  );
 
 export const MembershipsFeatureProvider = () =>
   Provider.succeed(MembershipsFeature, {
@@ -236,9 +223,7 @@ export const MembershipsFeatureProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const location = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       return replaceOnIdentity({
         previousId: olds?.featureId ?? output?.featureId,
         nextId: news.featureId ?? olds?.featureId ?? output?.featureId,
@@ -251,12 +236,7 @@ export const MembershipsFeatureProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const featureId = yield* toPhysicalId(
-        id,
-        olds?.featureId,
-        output?.featureId,
-        "feature",
-      );
+      const featureId = yield* toPhysicalId(id, olds?.featureId, output?.featureId, "feature");
       const location = normalizeLocation(olds?.location ?? output?.location);
       const membership = membershipName(
         olds?.membership ?? output?.membership ?? "",
@@ -267,9 +247,7 @@ export const MembershipsFeatureProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -281,12 +259,7 @@ export const MembershipsFeatureProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const featureId = yield* toPhysicalId(
-        id,
-        news.featureId,
-        output?.featureId,
-        "feature",
-      );
+      const featureId = yield* toPhysicalId(id, news.featureId, output?.featureId, "feature");
       const location = normalizeLocation(news.location ?? output?.location);
       const membership = membershipName(news.membership, env.project, location);
       const name = resourceName(membership, featureId);
@@ -326,28 +299,23 @@ export const MembershipsFeatureProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const specChanged =
-        news.spec !== undefined &&
-        fingerprint(current.spec) !== fingerprint(news.spec);
+        news.spec !== undefined && fingerprint(current.spec) !== fingerprint(news.spec);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         specChanged && "spec",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkehub.patchProjectsLocationsMembershipsFeatures({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              labels: desiredLabels,
-              spec: news.spec,
-            },
-          });
+        const operation = yield* gkehub.patchProjectsLocationsMembershipsFeatures({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            labels: desiredLabels,
+            spec: news.spec,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

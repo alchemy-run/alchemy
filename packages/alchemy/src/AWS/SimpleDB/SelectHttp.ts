@@ -21,9 +21,7 @@ export const SelectHttp = Layer.effect(
         return yield* select({
           ...rest,
           SelectExpression:
-            typeof SelectExpression === "function"
-              ? SelectExpression(name)
-              : SelectExpression,
+            typeof SelectExpression === "function" ? SelectExpression(name) : SelectExpression,
         });
       });
     });
