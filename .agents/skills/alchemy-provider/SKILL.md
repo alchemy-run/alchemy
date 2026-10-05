@@ -174,6 +174,10 @@ until no row is `missing` or `implemented`. Every progress report and the
 final report quote its counts per status; "done" while any in-scope row is
 `missing` is a false claim.
 
+The first line of `INDEX.md` records the skill version it was built
+against: `Skill: <sha>`, from `git log -1 --format=%H --
+.agents/skills/alchemy-provider`. Update it after re-reading a newer skill.
+
 Decide scope per resource and record the out-of-scope list in the
 provider's website overview under an "Out of scope" section:
 

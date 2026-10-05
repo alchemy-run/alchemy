@@ -25,7 +25,7 @@ Run this first; the other sections only judge the code that exists.
 | Index matches the code | every `tested` row has a `Resource<...>("<P>.<Service>.<Name>")` in `src/<P>` and a registered provider in `Providers.ts` | yes |
 | One test file per resource | every `tested` row has `test/<P>/<Service>/<Name>.test.ts` | yes |
 | Non-resource deliverables | index rows for bindings, runtime, event sources, websites, examples | none `missing`; `rg -l 'Binding.Service' src/<P>` is non-zero when the cloud has data-plane capabilities |
-| Skill freshness | `git log -1 --format=%H -- .agents/skills/alchemy-provider` vs the skill commit noted in the index | equal; a newer skill commit means re-read it and add rows for its new deliverables |
+| Skill freshness | `git log -1 --format=%H -- .agents/skills/alchemy-provider` vs the `Skill: <sha>` line at the top of `INDEX.md` | equal; a newer skill commit means re-read it and add rows for its new deliverables |
 | Docs generated for everything | `ls website/src/content/docs/providers/<P>` after `pnpm docs:gen` | one page per resource and binding page group, matching the index |
 | Out-of-scope list published | the overview page's "Out of scope" section | matches the `out-of-scope` rows |
 
