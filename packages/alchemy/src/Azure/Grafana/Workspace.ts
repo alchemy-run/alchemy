@@ -267,15 +267,20 @@ export const Workspace = Resource<Workspace>("Azure.Grafana.Workspace");
 
 type ObservedGrafana = dashboard.GetGrafanaResponse;
 
-export const createGrafanaName = Effect.fn(function* (id: string) {
+export const createGrafanaName = Effect.fn(function* (
+  id: string,
+  maxLength = 23,
+) {
   const name = yield* createPhysicalName({
     id,
-    maxLength: 23,
+    maxLength,
     lowercase: true,
     delimiter: "-",
   });
   const cleaned = name.replace(/[^a-z0-9-]/g, "").replace(/-+$/, "");
-  return /^[a-z]/.test(cleaned) ? cleaned : `g${cleaned}`.slice(0, 23);
+  return /^[a-z]/.test(cleaned)
+    ? cleaned
+    : `g${cleaned}`.slice(0, maxLength).replace(/-+$/, "");
 });
 
 export const getGrafana = (

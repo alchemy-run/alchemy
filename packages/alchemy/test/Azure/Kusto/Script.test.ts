@@ -85,5 +85,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get(), 60)).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

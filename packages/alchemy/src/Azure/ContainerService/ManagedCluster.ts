@@ -26,6 +26,7 @@ import {
   sameName,
   subsetMatches,
   whileClusterBusy,
+  whileClusterCreateBlocked,
 } from "./Common.ts";
 
 export type ManagedClusterSkuTier = "Free" | "Standard" | "Premium";
@@ -596,7 +597,7 @@ export const ManagedClusterProvider = () =>
             ...where,
             ...createBody(news, name, location, tags),
           })
-          .pipe(Effect.retry(whileClusterBusy));
+          .pipe(Effect.retry(whileClusterCreateBlocked));
         observed = yield* waitReady;
       }
 

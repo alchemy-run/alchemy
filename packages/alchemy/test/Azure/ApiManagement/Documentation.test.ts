@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import {
   basicV2Service,
+  consumptionService,
   logLevel,
   subscriptionId,
   tags,
@@ -46,6 +47,9 @@ const program = (doc?: { name: string; content: string }) =>
 // Documentation pages are not available on Consumption (PUT returns an
 // empty 404). A BasicV2 service bills ~$0.21/h and takes 5-15+ minutes to
 // create: est. ~$0.10 and ~25 minutes per run.
+// Blocked by the platform: the documentations PUT also returns an empty
+// 404 on BasicV2 and Developer services (api-version 2024-05-01), which the
+// probe below pins on a free Consumption service.
 test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete a documentation page",
   (stack) =>
@@ -83,6 +87,30 @@ test.provider.skipIf(!runExpensive)(
         "gone",
       );
 
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 900_000 },
+);
+
+// Always-on probe (Consumption, no idle cost, ~3 minutes): the platform
+// rejects documentation pages with an empty-bodied 404.
+test.provider(
+  "documentation PUT is rejected with NotFound",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group, service } = yield* stack.deploy(consumptionService);
+      const sub = yield* subscriptionId;
+      const error = yield* apim
+        .DocumentationCreateOrUpdate({
+          subscriptionId: sub,
+          resourceGroupName: group.resourceGroupName,
+          serviceName: service.serviceName,
+          documentationId: "alchemy-probe",
+          properties: { title: "Probe", content: "# Probe" },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("NotFound");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 900_000 },

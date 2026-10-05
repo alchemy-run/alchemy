@@ -5,7 +5,14 @@ import * as workloads from "@distilled.cloud/azure/workloads";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
-import { logLevel, monitorStack, subscription, tags, waitGone } from "./util.ts";
+import {
+  AMS_LOCATION,
+  logLevel,
+  monitorStack,
+  subscription,
+  tags,
+  waitGone,
+} from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -57,7 +64,10 @@ test.provider.skipIf(!runExpensive)(
 
       // Replacement: the routing preference is immutable.
       const replaced = yield* stack.deploy(
-        monitorStack({ monitorTags: { env: "prod" }, routingPreference: "RouteAll" }),
+        monitorStack({
+          monitorTags: { env: "prod" },
+          routingPreference: "RouteAll",
+        }),
       );
       expect(replaced.monitor.monitorName).not.toEqual(monitor.monitorName);
       const replacedObserved = yield* getMonitor(
@@ -68,7 +78,9 @@ test.provider.skipIf(!runExpensive)(
         "RouteAll",
       );
       expect(
-        yield* waitGone(getMonitor(group.resourceGroupName, monitor.monitorName)),
+        yield* waitGone(
+          getMonitor(group.resourceGroupName, monitor.monitorName),
+        ),
       ).toEqual("gone");
 
       yield* stack.destroy();
@@ -78,7 +90,7 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );
 
 // Free, but slow: ARM accepts a monitor whose subnet does not exist, the
@@ -96,12 +108,12 @@ test.provider.skipIf(!runExpensive)(
         .deploy(
           Effect.gen(function* () {
             const group = yield* Azure.Resources.ResourceGroup("Group", {
-              location: "eastus",
+              location: AMS_LOCATION,
             });
             const subscriptionId = yield* subscription;
             const monitor = yield* Azure.Workloads.Monitor("Ams", {
               resourceGroup: group.resourceGroupName,
-              location: "eastus",
+              location: AMS_LOCATION,
               monitorSubnet: Output.interpolate`/subscriptions/${subscriptionId}/resourceGroups/${group.resourceGroupName}/providers/Microsoft.Network/virtualNetworks/missing/subnets/missing`,
             });
             return { group, monitor };
@@ -109,13 +121,11 @@ test.provider.skipIf(!runExpensive)(
         )
         .pipe(Effect.flip);
       expect(error._tag).toEqual("Azure.ProvisioningFailed");
-      expect(JSON.stringify(error)).toContain(
-        "AppServicePlanDeploymentFailed",
-      );
+      expect(JSON.stringify(error)).toContain("AppServicePlanDeploymentFailed");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );
 
 // Ungated probe (free: one empty resource group): a missing monitor reads

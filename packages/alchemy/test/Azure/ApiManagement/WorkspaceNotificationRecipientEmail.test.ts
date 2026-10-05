@@ -16,7 +16,7 @@ const recipients = (resourceGroupName: string, serviceName: string) =>
       resourceGroupName,
       serviceName,
       workspaceId: "alchemy-ws",
-      notificationName: "BCC",
+      notificationName: "PurchasePublisherNotificationMessage",
     }),
   ).pipe(
     Effect.map((page) =>
@@ -24,7 +24,7 @@ const recipients = (resourceGroupName: string, serviceName: string) =>
     ),
   );
 
-/** Poll until the BCC recipients match `expected` (bounded). */
+/** Poll until the notification recipients match `expected` (bounded). */
 const untilRecipients = (
   resourceGroupName: string,
   serviceName: string,
@@ -42,11 +42,11 @@ const program = (email?: string) =>
   Effect.gen(function* () {
     const { group, service, workspace } = yield* basicV2Workspace;
     const recipient = email
-      ? yield* Azure.ApiManagement.WorkspaceNotificationRecipientEmail("Team", {
+      ? yield* Azure.ApiManagement.WorkspaceNotificationRecipientEmail("Recipient", {
           resourceGroup: group.resourceGroupName,
           serviceName: service.serviceName,
           workspaceName: workspace.workspaceName,
-          notificationName: "BCC",
+          notificationName: "PurchasePublisherNotificationMessage",
           email,
         })
       : undefined;

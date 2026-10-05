@@ -68,7 +68,7 @@ test.provider.skipIf(!runExpensive)(
         yield* waitGone(getLandscape(group.resourceGroupName, monitor.monitorName)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );
 
 // Ungated probe (free: one empty resource group): the landscape monitor of

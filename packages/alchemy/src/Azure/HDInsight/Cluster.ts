@@ -124,7 +124,7 @@ export interface ClusterProps {
   /** Resource group the cluster is created in. Changing it replaces the cluster. */
   resourceGroup: string;
   /**
-   * Globally unique cluster name (`<name>.azurehdinsight.net`): 3-59
+   * Globally unique cluster name (`<name>.azurehdinsight.net`): 3-45
    * letters, digits, and hyphens, starting with a letter. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the cluster.
@@ -369,7 +369,8 @@ const DEFAULT_VM_SIZE = "Standard_E4_v3";
 const createClusterName = Effect.fn(function* (id: string) {
   const name = (yield* createPhysicalName({
     id,
-    maxLength: 59,
+    // ARM rejects cluster names over 45 characters.
+    maxLength: 45,
     lowercase: true,
   }))
     .replace(/[^a-z0-9-]/g, "-")

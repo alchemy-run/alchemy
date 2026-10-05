@@ -45,7 +45,7 @@ const program = (props: { tags: Record<string, string>; timeout: string }) =>
       name: "blue",
       model:
         "azureml://registries/azureml/models/distilbert-base-uncased-finetuned-sst-2-english/labels/latest",
-      instanceType: "Standard_DS3_v2",
+      instanceType: "Standard_E2s_v3",
       instanceCount: 1,
       requestSettings: { requestTimeout: props.timeout },
       tags: props.tags,
@@ -53,10 +53,11 @@ const program = (props: { tags: Record<string, string>; timeout: string }) =>
     return { ...base, endpoint, deployment };
   });
 
-// A managed deployment runs a dedicated Standard_DS3_v2 (4 vCPUs, ~$0.30/h,
-// plus a 20% surge reservation) and takes 10-20 minutes to provision. The
-// free trial has no managed online endpoint VM quota, and the endpoint
-// needs a `Default` workspace (AZURE_ML_APP_INSIGHTS_ID).
+// A managed deployment runs a dedicated Standard_E2s_v3 (2 vCPUs, ~$0.13/h;
+// the cheapest SKU the model allows; the 20% surge reservation needs 4 Ev3
+// ML cores) and takes 10-20 minutes to provision, plus a rolling update and
+// deletion (~30-45 minutes, ~$0.15 per run). The free trial has no managed online endpoint VM quota, and the
+// endpoint needs a `Default` workspace (AZURE_ML_APP_INSIGHTS_ID).
 test.provider.skipIf(!runPaidOnly || !appInsightsId)(
   "create, update, and delete an online deployment",
   (stack) =>
@@ -87,6 +88,6 @@ test.provider.skipIf(!runPaidOnly || !appInsightsId)(
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
-    }).pipe(withVcpus(4), logLevel),
-  { tags, timeout: 900_000 },
+    }).pipe(withVcpus(2), logLevel),
+  { tags, timeout: 3_600_000 },
 );

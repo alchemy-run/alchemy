@@ -70,7 +70,8 @@ const program = (props: {
   });
 
 // Needs a Ready classic cluster (20-30 min to build, ~$0.10/h) — see
-// `readyCluster`.
+// `readyCluster`. Each classic ARM operation takes ~2 min, so the
+// lifecycle runs ~19 min.
 test.provider.skipIf(!runExpensive || readyCluster === undefined)(
   "create, update, replace, and delete a classic service fabric service",
   (stack) =>
@@ -137,5 +138,5 @@ test.provider.skipIf(!runExpensive || readyCluster === undefined)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 2_400_000 },
 );

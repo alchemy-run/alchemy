@@ -167,7 +167,8 @@ const sameSet = (a: readonly string[], b: readonly string[]) => {
   return left.length === right.length && left.every((x, i) => x === right[i]);
 };
 
-const nameOf = (id: string) => createPhysicalName({ id, maxLength: 64 });
+// Azure rejects gateway names longer than 54 characters.
+const nameOf = (id: string) => createPhysicalName({ id, maxLength: 54 });
 
 // Gateways take 5-25 minutes to provision.
 const budget = { interval: "30 seconds", times: 60 } as const;

@@ -334,15 +334,26 @@ export const ProfileProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        cdn
-          .DeleteProfile({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            profileName: output.profileName,
-          })
-          .pipe(Effect.retry(whileProfileBusy)),
+      const observed = yield* getProfile(
+        subscriptionId,
+        output.resourceGroup,
+        output.profileName,
       );
+      if (observed === undefined) return;
+      // A delete already in flight (e.g. from an interrupted run) rejects a
+      // second DELETE with `ResourceConflict` for its whole duration; wait
+      // for it instead.
+      if (observed.properties?.resourceState !== "Deleting") {
+        yield* ignoreNotFound(
+          cdn
+            .DeleteProfile({
+              subscriptionId,
+              resourceGroupName: output.resourceGroup,
+              profileName: output.profileName,
+            })
+            .pipe(Effect.retry(whileProfileBusy)),
+        );
+      }
       yield* waitUntilGone(
         `Front Door profile ${output.profileName}`,
         getProfile(subscriptionId, output.resourceGroup, output.profileName),

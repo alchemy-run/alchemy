@@ -54,6 +54,9 @@ const program = Effect.gen(function* () {
     location: LOCATION,
     enablePurgeProtection: true,
     softDeleteRetentionInDays: 7,
+    // The workspace identity is granted the key through an access policy;
+    // RBAC-authorized vaults ignore access policies.
+    enableRbacAuthorization: false,
   });
   const key = yield* Azure.KeyVault.Key("Cmk", {
     resourceGroup: group.resourceGroupName,

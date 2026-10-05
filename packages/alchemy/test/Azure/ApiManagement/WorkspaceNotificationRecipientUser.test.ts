@@ -16,7 +16,7 @@ const recipients = (resourceGroupName: string, serviceName: string) =>
       resourceGroupName,
       serviceName,
       workspaceId: "alchemy-ws",
-      notificationName: "BCC",
+      notificationName: "PurchasePublisherNotificationMessage",
     }),
   ).pipe(
     Effect.map((page) =>
@@ -26,7 +26,7 @@ const recipients = (resourceGroupName: string, serviceName: string) =>
     ),
   );
 
-/** Poll until the BCC recipient users match `expected` (bounded). */
+/** Poll until the notification recipient users match `expected` (bounded). */
 const untilRecipients = (
   resourceGroupName: string,
   serviceName: string,
@@ -65,7 +65,7 @@ const program = (user?: "jane" | "joe") =>
           resourceGroup: group.resourceGroupName,
           serviceName: service.serviceName,
           workspaceName: workspace.workspaceName,
-          notificationName: "BCC",
+          notificationName: "PurchasePublisherNotificationMessage",
           userName: user === "jane" ? jane.userName : joe.userName,
         })
       : undefined;

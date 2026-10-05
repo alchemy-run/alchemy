@@ -79,10 +79,11 @@ export const LAB_VM_SIZE =
   process.env.AZURE_TEST_LAB_VM_SIZE ?? "Standard_D2as_v4";
 /**
  * Resize target. Standard_D2s_v3 hit "SkuNotAvailable ... Capacity
- * Restrictions" in eastus.
+ * Restrictions" in eastus, and the subscription has zero DASv5 quota (the
+ * resize stays 'Updating' and never applies), so use DSv4 (quota 10).
  */
 export const LAB_VM_SIZE_ALT =
-  process.env.AZURE_TEST_LAB_VM_SIZE_ALT ?? "Standard_D2as_v5";
+  process.env.AZURE_TEST_LAB_VM_SIZE_ALT ?? "Standard_D2s_v4";
 
 /** Lab + registered VNet/subnet for lab VMs (all free). */
 export const labNetworkFixture = (location = "eastus") =>

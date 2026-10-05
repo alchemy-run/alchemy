@@ -3,6 +3,7 @@ import * as Test from "@/Test/Alchemy";
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { runExpensive } from "../gates.ts";
 import {
   developerGateway,
@@ -11,6 +12,7 @@ import {
   tags,
   untilGone,
 } from "./fixture.ts";
+import { PFX_ONE, PFX_PASSWORD } from "./certificates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -32,6 +34,13 @@ const getConfig = (
 const program = (config?: { name: string; http2Enabled: boolean }) =>
   Effect.gen(function* () {
     const { group, service, gateway } = yield* developerGateway;
+    const tls = yield* Azure.ApiManagement.Certificate("Tls", {
+      resourceGroup: group.resourceGroupName,
+      serviceName: service.serviceName,
+      name: "alchemy-tls",
+      data: Redacted.make(PFX_ONE),
+      password: Redacted.make(PFX_PASSWORD),
+    });
     const created = config
       ? yield* Azure.ApiManagement.GatewayHostnameConfiguration("Host", {
           resourceGroup: group.resourceGroupName,
@@ -39,6 +48,7 @@ const program = (config?: { name: string; http2Enabled: boolean }) =>
           gatewayName: gateway.gatewayName,
           name: config.name,
           hostname: `${config.name}.example.com`,
+          certificateId: tls.certificateId,
           http2Enabled: config.http2Enabled,
         })
       : undefined;
@@ -91,5 +101,5 @@ test.provider.skipIf(!runExpensive)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );

@@ -127,13 +127,16 @@ const toAttrs = (
   applicationType: string,
   version: string,
   observed: Observed,
+  knownPackageUrl: string | undefined,
 ): ApplicationTypeVersion["Attributes"] => ({
   version,
   applicationTypeVersionId: observed.id ?? "",
   applicationType,
   cluster,
   resourceGroup,
-  appPackageUrl: observed.properties?.appPackageUrl ?? "",
+  // GET omits the (SAS-bearing) package URL, so keep the one we sent.
+  appPackageUrl:
+    observed.properties?.appPackageUrl || (knownPackageUrl ?? ""),
   defaultParameterList: Object.fromEntries(
     Object.entries(observed.properties?.defaultParameterList ?? {}).flatMap(
       ([key, value]) => (value === undefined ? [] : [[key, value]]),
@@ -178,7 +181,14 @@ export const ApplicationTypeVersionProvider = () =>
           for (const item of versions?.value ?? []) {
             if (hasAnyAlchemyTag(item.tags) && item.name !== undefined) {
               all.push(
-                toAttrs(resourceGroup, clusterName, type.name, item.name, item),
+                toAttrs(
+                  resourceGroup,
+                  clusterName,
+                  type.name,
+                  item.name,
+                  item,
+                  undefined,
+                ),
               );
             }
           }
@@ -229,6 +239,7 @@ export const ApplicationTypeVersionProvider = () =>
         applicationType,
         version,
         observed,
+        output?.appPackageUrl ?? olds?.appPackageUrl,
       );
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
@@ -269,7 +280,14 @@ export const ApplicationTypeVersionProvider = () =>
         { interval: "5 seconds", times: 120 },
       );
 
-      return toAttrs(resourceGroup, cluster, applicationType, version, observed);
+      return toAttrs(
+        resourceGroup,
+        cluster,
+        applicationType,
+        version,
+        observed,
+        news.appPackageUrl,
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -24,7 +24,9 @@ export interface PrivateEndpointConnectionProps {
   /** Name of the SQL server the private endpoint connects to. Changing it replaces the connection. */
   server: string;
   /**
-   * ARM ID of the private endpoint whose connection request is managed.
+   * ARM ID of the private endpoint whose connection request is managed, or
+   * just its name when the endpoint lives in a Microsoft-managed
+   * subscription (e.g. an elastic job agent's `privateEndpointId`).
    * Changing it replaces the connection.
    */
   privateEndpointId: string;
@@ -155,9 +157,22 @@ const findConnection = Effect.fn(function* (
       ),
   );
   return (page?.value ?? []).find((connection) =>
-    sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),
+    matchesEndpoint(
+      connection.properties?.privateEndpoint?.id,
+      privateEndpointId,
+    ),
   );
 });
+
+/**
+ * Match a connection's private endpoint by ARM ID, or by name when only a
+ * name is known (elastic job agents report their Microsoft-hosted managed
+ * private endpoint as `EJ_<guid>_<name>`).
+ */
+const matchesEndpoint = (observed: string | undefined, wanted: string) =>
+  wanted.includes("/")
+    ? sameId(observed, wanted)
+    : lower(observed?.split("/").pop()) === lower(wanted);
 
 const toAttrs = (
   resourceGroup: string,

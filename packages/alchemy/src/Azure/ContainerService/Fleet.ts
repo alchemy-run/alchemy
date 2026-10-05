@@ -293,10 +293,10 @@ export const FleetProvider = () =>
         fleetName: name,
       };
       const get = getFleet(subscriptionId, resourceGroup, name);
-      // A hubless fleet settles in seconds; a hub takes ~10 minutes.
+      // A hubless fleet settles in seconds; a hub takes 10-15 minutes.
       const waitReady = waitForProvisioned(`fleet ${name}`, get, stateOf, {
-        interval: "10 seconds",
-        times: 60,
+        interval: "15 seconds",
+        times: 100,
       });
 
       // Observe.
@@ -352,7 +352,7 @@ export const FleetProvider = () =>
       yield* waitUntilGone(
         `fleet ${output.fleetName}`,
         getFleet(subscriptionId, output.resourceGroup, output.fleetName),
-        { interval: "10 seconds", times: 60 },
+        { interval: "15 seconds", times: 100 },
       );
     }),
 

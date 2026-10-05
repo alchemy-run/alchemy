@@ -60,7 +60,7 @@ const program = (props: { tags: Record<string, string> }) =>
       location: LOCATION,
       addressPrefixes: ["10.43.0.0/16"],
     });
-    const subnet = yield* Azure.Network.Subnet("Pool", {
+    const subnet = yield* Azure.Network.Subnet("PoolSubnet", {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.43.0.0/24",
@@ -117,6 +117,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:sql", "live"],
-    timeout: 6 * 3_600_000,
+    timeout: 4 * 3_600_000,
   },
 );

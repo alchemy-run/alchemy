@@ -1,5 +1,6 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -123,15 +124,31 @@ export const EmailTemplateProvider = () =>
             title: news.title,
             description: news.description,
           },
-        }),
+        }).pipe(
+          // Template writes share a per-subscription throttle
+          // (`PerSubEmailTemplateWrites`); wait for the window to reopen.
+          Effect.retry({
+            while: (e) => e._tag === "RequestRateLimitExceeded",
+            schedule: Schedule.spaced("20 seconds"),
+            times: 6,
+          }),
+        ),
       // Deleting a template resets it to the default content.
       remove: (subscriptionId, key) =>
-        apim.DeleteEmailTemplate({
-          subscriptionId,
-          resourceGroupName: key.resourceGroup,
-          serviceName: key.serviceName,
-          templateName: key.templateName,
-        }),
+        apim
+          .DeleteEmailTemplate({
+            subscriptionId,
+            resourceGroupName: key.resourceGroup,
+            serviceName: key.serviceName,
+            templateName: key.templateName,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "RequestRateLimitExceeded",
+              schedule: Schedule.spaced("20 seconds"),
+              times: 6,
+            }),
+          ),
       resetOnDelete: true,
       inSync: (news, observed) =>
         observed.properties?.isDefault === false &&

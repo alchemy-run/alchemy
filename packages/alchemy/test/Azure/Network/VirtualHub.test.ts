@@ -64,7 +64,7 @@ const lifecycle = (sku: "Basic" | "Standard", skip: boolean) =>
           yield* untilGone(getHub(group.resourceGroupName, hub.virtualHubName)),
         ).toEqual("gone");
       }).pipe(logLevel),
-    { tags, timeout: 900_000 },
+    { tags, timeout: 7_200_000 },
   );
 
 // A Basic hub (in a Basic WAN) has no hub charge, but Azure took ~20

@@ -48,8 +48,8 @@ const program = (props: {
     return { group, profile, version };
   });
 
-// Free and synchronous, but the free-trial subscription cannot create the
-// parent profile (`AutomanageSubscriptionNotSupported`, see the probe in
+// Free and synchronous, but a subscription not already onboarded to the
+// retiring Automanage service cannot create the parent profile (`AutomanageSubscriptionNotSupported`, see the probe in
 // ConfigurationProfile.test.ts). Runs with AZURE_TEST_PAID=1.
 test.provider.skipIf(!runPaidOnly)(
   "create, update tags, replace, and delete a configuration profile version",
@@ -113,7 +113,7 @@ test.provider.skipIf(!runPaidOnly)(
 );
 
 // Ungated probe: a version cannot be written without its parent profile,
-// which the trial cannot create. Only a resource group is created (free).
+// which a non-onboarded subscription cannot create. Only a resource group is created (free).
 test.provider(
   "a version without a parent profile is rejected",
   (stack) =>

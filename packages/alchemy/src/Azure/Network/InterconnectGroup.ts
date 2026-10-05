@@ -1,4 +1,5 @@
 import * as network from "@distilled.cloud/azure/network";
+import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
@@ -109,6 +110,8 @@ export const InterconnectGroupProvider = () =>
       immutable: (news, output) =>
         lower(news.scope ?? "InfiniBand") !== lower(output.scope) ||
         lower(news.subgroupProfile.vmSize) !== lower(output.vmSize),
+      // `InvalidResourceType`: the subscription is not exposed to the type,
+      // so no instance can exist (a create that was rejected left nothing).
       get: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetInterconnectGroup({
@@ -116,6 +119,10 @@ export const InterconnectGroupProvider = () =>
             resourceGroupName: path.resourceGroup,
             interconnectGroupName: path.name,
           }),
+        ).pipe(
+          Effect.catchTag("InvalidResourceType", () =>
+            Effect.succeed(undefined),
+          ),
         ),
       put: (subscriptionId, path, body) =>
         network.InterconnectGroupsCreateOrUpdate({
@@ -125,11 +132,13 @@ export const InterconnectGroupProvider = () =>
           ...body,
         }),
       del: (subscriptionId, path) =>
-        network.DeleteInterconnectGroup({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          interconnectGroupName: path.name,
-        }),
+        network
+          .DeleteInterconnectGroup({
+            subscriptionId,
+            resourceGroupName: path.resourceGroup,
+            interconnectGroupName: path.name,
+          })
+          .pipe(Effect.catchTag("InvalidResourceType", () => Effect.void)),
       updateTags: (subscriptionId, path, tags) =>
         network.UpdateInterconnectGroupTags({
           subscriptionId,

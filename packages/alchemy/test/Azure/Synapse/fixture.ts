@@ -109,7 +109,11 @@ export const getWorkspace = (
  * `AZURE_TEST_EXPENSIVE=1`.
  */
 export const lakeSqlPool = (
-  props: { sku?: string; tags?: Record<string, string> } = {},
+  props: {
+    sku?: string;
+    tags?: Record<string, string>;
+    storageAccountType?: "GRS" | "LRS";
+  } = {},
 ) =>
   Effect.gen(function* () {
     const parent = yield* lakeWorkspace();
@@ -117,7 +121,7 @@ export const lakeSqlPool = (
       resourceGroup: parent.group.resourceGroupName,
       workspace: parent.workspace.workspaceName,
       sku: props.sku ?? "DW100c",
-      storageAccountType: "LRS",
+      storageAccountType: props.storageAccountType ?? "LRS",
       tags: props.tags,
     });
     return { ...parent, pool };

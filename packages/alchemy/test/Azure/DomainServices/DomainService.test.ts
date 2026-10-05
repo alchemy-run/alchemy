@@ -42,7 +42,10 @@ const program = (props: {
 // Standard managed domain: ~$0.15/hour, but provisioning takes 45-60
 // minutes and deletion ~30 (~$0.30 per run, well over the time budget).
 // Needs the "Domain Controller Services" service principal in the tenant
-// and no other managed domain in the tenant (one per tenant).
+// and no other managed domain in the tenant (one per tenant). Without that
+// service principal provisioning fails after ~10 minutes with InternalError
+// "The service principal with appId '2565bd9d-da50-47d4-8b85-4c97f669dc36'
+// could not be found in the Azure Active Directory tenant."
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a managed domain",
   (stack) =>

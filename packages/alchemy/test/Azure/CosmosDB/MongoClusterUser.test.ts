@@ -65,9 +65,10 @@ test.provider.skipIf(!runExpensive)(
       expect(observed.properties?.identityProvider?.type).toEqual(
         "MicrosoftEntraID",
       );
+      // Azure echoes the principal type as `ServicePrincipal`.
       expect(
-        observed.properties?.identityProvider?.properties?.principalType,
-      ).toEqual("servicePrincipal");
+        observed.properties?.identityProvider?.properties?.principalType?.toLowerCase(),
+      ).toEqual("serviceprincipal");
 
       // A different principal replaces the user.
       const replaced = yield* stack.deploy(program({ principal: "B" }));

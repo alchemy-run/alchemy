@@ -46,7 +46,11 @@ export interface ManagedPrivateEndpointProps {
    * for Event Hubs or `blob` for storage. Changing it replaces the endpoint.
    */
   groupId: string;
-  /** Message shown to the target's owner in the approval request. */
+  /**
+   * Message shown to the target's owner in the approval request. Azure
+   * accepts but never applies changes to it, so changing it replaces the
+   * endpoint.
+   */
   requestMessage?: string;
 }
 
@@ -155,8 +159,9 @@ export const ManagedPrivateEndpointProvider = () =>
         !sameId(news.privateLinkResourceId, output.privateLinkResourceId) ||
         lower(news.groupId) !== lower(output.groupId) ||
         (olds !== undefined &&
-          lower(news.privateLinkResourceRegion)?.replace(/\s/g, "") !==
-            lower(olds.privateLinkResourceRegion)?.replace(/\s/g, ""))
+          (lower(news.privateLinkResourceRegion)?.replace(/\s/g, "") !==
+            lower(olds.privateLinkResourceRegion)?.replace(/\s/g, "") ||
+            news.requestMessage !== olds.requestMessage))
       ) {
         return { action: "replace" } as const;
       }
@@ -225,18 +230,9 @@ export const ManagedPrivateEndpointProvider = () =>
           .ManagedPrivateEndpointsCreateOrUpdate({ ...where, properties })
           .pipe(Effect.retry(whileClusterBusy));
       }
+      // Every property is immutable (diff replaces), so there is nothing
+      // to sync.
       observed = yield* waitReady;
-
-      // Sync the request message against observed state.
-      if (
-        news.requestMessage !== undefined &&
-        observed.properties?.requestMessage !== news.requestMessage
-      ) {
-        yield* kusto
-          .UpdateManagedPrivateEndpoint({ ...where, properties })
-          .pipe(Effect.retry(whileClusterBusy));
-        observed = yield* waitReady;
-      }
 
       return toAttrs(resourceGroup, cluster, name, observed);
     }),

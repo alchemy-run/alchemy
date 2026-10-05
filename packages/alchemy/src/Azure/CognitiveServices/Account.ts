@@ -26,6 +26,7 @@ import {
   type CognitiveServicesIdentity,
   createAccountName,
   identityDiffers,
+  MANAGED_NETWORK_ACCOUNT_BUDGET,
   sameArm,
   sameValue,
   toIdentityInput,
@@ -248,6 +249,14 @@ export const getAccount = (
     }),
   );
 
+/** Whether an observed account is injected into a Microsoft-managed network. */
+export const usesMicrosoftManagedNetwork = (
+  account: cognitiveservices.GetAccountResponse | undefined,
+) =>
+  account?.properties?.networkInjections?.some(
+    (injection) => injection.useMicrosoftManagedNetwork === true,
+  ) === true;
+
 export const getDeletedAccount = (
   subscriptionId: string,
   location: string,
@@ -443,11 +452,16 @@ export const AccountProvider = () =>
           },
         });
       }
+      const budget = news.networkInjections?.some(
+        (injection) => injection.useMicrosoftManagedNetwork === true,
+      )
+        ? MANAGED_NETWORK_ACCOUNT_BUDGET
+        : ACCOUNT_BUDGET;
       observed = yield* waitForProvisioned(
         label,
         get,
         (account) => account.properties?.provisioningState,
-        ACCOUNT_BUDGET,
+        budget,
       );
 
       // Sync each mutable aspect against the observed account; PATCH only
@@ -517,7 +531,7 @@ export const AccountProvider = () =>
           label,
           get,
           (account) => account.properties?.provisioningState,
-          ACCOUNT_BUDGET,
+          budget,
         );
       }
 
@@ -532,16 +546,53 @@ export const AccountProvider = () =>
         accountName: output.accountName,
       };
       const label = `cognitive services account ${output.accountName}`;
+      const get = getAccount(
+        subscriptionId,
+        output.resourceGroup,
+        output.accountName,
+      );
+      const current = yield* get;
+      const budget = usesMicrosoftManagedNetwork(current)
+        ? MANAGED_NETWORK_ACCOUNT_BUDGET
+        : ACCOUNT_BUDGET;
+      // An account still creating or updating rejects the delete with a
+      // conflict; let it settle (a `Failed` account is deletable, and a
+      // `Deleting` one only needs observing).
+      if (current !== undefined) {
+        yield* waitForProvisioned(
+          label,
+          get,
+          (account) =>
+            account.properties?.provisioningState === "Deleting"
+              ? "Succeeded"
+              : account.properties?.provisioningState,
+          budget,
+        ).pipe(Effect.ignore);
+      }
+      // An account already `Deleting` (e.g. an earlier attempt whose request
+      // hit the gateway timeout) rejects another DELETE with a conflict that
+      // never clears; that delete is ours and only needs observing.
+      const alreadyDeleting = get.pipe(
+        Effect.map(
+          (account) =>
+            account === undefined ||
+            account.properties?.provisioningState === "Deleting",
+        ),
+      );
       yield* ignoreNotFound(
-        cognitiveservices
-          .DeleteAccount(where)
-          .pipe(Effect.retry(whileAccountBusy)),
+        cognitiveservices.DeleteAccount(where).pipe(
+          // Tearing down a managed network outlives the ARM gateway; the
+          // delete continues server-side and waitUntilGone observes it.
+          Effect.catchTag("GatewayTimeout", () => Effect.void),
+          Effect.catchTag("CognitiveServicesRequestConflict", (error) =>
+            Effect.flatMap(alreadyDeleting, (deleting) =>
+              deleting ? Effect.void : Effect.fail(error),
+            ),
+          ),
+          Effect.retry(whileAccountBusy),
+        ),
       );
-      yield* waitUntilGone(
-        label,
-        getAccount(subscriptionId, output.resourceGroup, output.accountName),
-        ACCOUNT_BUDGET,
-      );
+      yield* waitUntilGone(label, get, budget);
       // Deleting only soft-deletes the account; purge it so the name and
       // subdomain are released and nothing lingers.
       const deleted = { ...where, location: output.location };

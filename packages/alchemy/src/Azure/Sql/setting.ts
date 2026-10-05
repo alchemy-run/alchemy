@@ -26,6 +26,26 @@ export const retryInProgress = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
+/**
+ * Retry a write to a dedicated SQL pool (data warehouse) object while the
+ * pool is still settling after it or a sibling workload object was just
+ * created: Azure answers `InternalServerError` for a minute or two.
+ */
+export const retryWhileWarehouseSettles = <
+  A,
+  E extends { readonly _tag: string },
+  R,
+>(
+  self: Effect.Effect<A, E, R>,
+) =>
+  self.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "InternalServerError",
+      schedule: Schedule.spaced("15 seconds"),
+      times: 20,
+    }),
+  );
+
 export const syncSetting = <
   A,
   E1,

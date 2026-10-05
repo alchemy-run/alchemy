@@ -133,6 +133,6 @@ test.provider.skipIf(!runExpensive)(
     }),
   {
     tags: ["provider:azure", "provider:azure:keyvault", "live"],
-    timeout: 3_600_000,
+    timeout: 7_200_000,
   },
 );

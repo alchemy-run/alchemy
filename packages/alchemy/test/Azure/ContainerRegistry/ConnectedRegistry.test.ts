@@ -36,27 +36,61 @@ const program = (props: {
       sku: "Premium",
       dataEndpointEnabled: true,
     });
-    const syncScope = yield* Azure.ContainerRegistry.ScopeMap("SyncScope", {
+    const gatewayActions = [
+      "gateway/edgegateway/config/read",
+      "gateway/edgegateway/config/write",
+      "gateway/edgegateway/message/read",
+      "gateway/edgegateway/message/write",
+    ];
+    const readActions = [
+      "repositories/hello-world/content/read",
+      "repositories/hello-world/metadata/read",
+    ];
+    // Azure requires a ReadOnly connected registry's sync scope map to lack
+    // repository write actions and a ReadWrite one's to have them, so each
+    // mode gets its own scope map + token. Both stay deployed across the
+    // mode replacement.
+    const readOnlyScope = yield* Azure.ContainerRegistry.ScopeMap(
+      "SyncScope",
+      {
+        resourceGroup: group.resourceGroupName,
+        registry: registry.registryName,
+        actions: [...readActions, ...gatewayActions],
+      },
+    );
+    const readWriteScope = yield* Azure.ContainerRegistry.ScopeMap(
+      "SyncScopeReadWrite",
+      {
+        resourceGroup: group.resourceGroupName,
+        registry: registry.registryName,
+        actions: [
+          ...readActions,
+          "repositories/hello-world/content/write",
+          "repositories/hello-world/content/delete",
+          "repositories/hello-world/metadata/write",
+          ...gatewayActions,
+        ],
+      },
+    );
+    const readOnlyToken = yield* Azure.ContainerRegistry.Token("SyncToken", {
       resourceGroup: group.resourceGroupName,
       registry: registry.registryName,
-      actions: [
-        "repositories/hello-world/content/read",
-        "repositories/hello-world/metadata/read",
-        "gateway/edge/config/read",
-        "gateway/edge/config/write",
-        "gateway/edge/message/read",
-        "gateway/edge/message/write",
-      ],
+      scopeMapId: readOnlyScope.scopeMapId,
     });
-    const syncToken = yield* Azure.ContainerRegistry.Token("SyncToken", {
-      resourceGroup: group.resourceGroupName,
-      registry: registry.registryName,
-      scopeMapId: syncScope.scopeMapId,
-    });
+    const readWriteToken = yield* Azure.ContainerRegistry.Token(
+      "SyncTokenReadWrite",
+      {
+        resourceGroup: group.resourceGroupName,
+        registry: registry.registryName,
+        scopeMapId: readWriteScope.scopeMapId,
+      },
+    );
+    const syncToken =
+      props.mode === "ReadWrite" ? readWriteToken : readOnlyToken;
     const connected = yield* Azure.ContainerRegistry.ConnectedRegistry("Edge", {
       resourceGroup: group.resourceGroupName,
       registry: registry.registryName,
-      name: "edge",
+      name: "edgegateway",
       mode: props.mode,
       syncTokenId: syncToken.tokenId,
       logging: { logLevel: props.logLevel },
@@ -84,7 +118,7 @@ test.provider.skipIf(!runExpensive)(
         getConnectedRegistry(
           group.resourceGroupName,
           registry.registryName,
-          "edge",
+          "edgegateway",
         );
       const observed = yield* get();
       expect(observed.properties?.mode).toEqual("ReadOnly");
@@ -92,7 +126,7 @@ test.provider.skipIf(!runExpensive)(
         observed.properties?.parent?.syncProperties?.tokenId?.toLowerCase(),
       ).toEqual(syncToken.tokenId.toLowerCase());
       expect(observed.properties?.connectionState).toEqual("Offline");
-      expect(connected.connectedRegistryName).toEqual("edge");
+      expect(connected.connectedRegistryName).toEqual("edgegateway");
 
       // In-place: logging and notifications.
       const updated = yield* stack.deploy(

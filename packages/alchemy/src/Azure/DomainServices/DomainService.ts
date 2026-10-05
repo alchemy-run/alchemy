@@ -59,7 +59,11 @@ export interface DomainServiceLdapsSettings {
 export interface DomainServiceSecuritySettings {
   /** Allow NTLM v1 authentication. */
   ntlmV1?: DomainServiceToggle;
-  /** Allow TLS 1.0. */
+  /**
+   * Allow TLS 1.0/1.1. Azure now rejects provisioning with it enabled
+   * ("TLS 1.0 or 1.1 is currently deprecated"), so Alchemy defaults it off.
+   * @default "Disabled"
+   */
   tlsV1?: DomainServiceToggle;
   /** Synchronize NTLM password hashes. */
   syncNtlmPasswords?: DomainServiceToggle;
@@ -477,6 +481,11 @@ export const DomainServiceProvider = () =>
                 news.ldapsSettings.pfxCertificatePassword,
               ),
             };
+      // Azure's own default (tlsV1 Enabled) now fails provisioning.
+      const domainSecuritySettings: DomainServiceSecuritySettings = {
+        tlsV1: "Disabled",
+        ...news.domainSecuritySettings,
+      };
       const resourceForestSettings =
         news.resourceForestSettings === undefined
           ? undefined
@@ -513,7 +522,7 @@ export const DomainServiceProvider = () =>
             filteredSync: news.filteredSync,
             syncScope: news.syncScope,
             ldapsSettings,
-            domainSecuritySettings: news.domainSecuritySettings,
+            domainSecuritySettings,
             notificationSettings: news.notificationSettings,
             resourceForestSettings,
           },
@@ -547,12 +556,11 @@ export const DomainServiceProvider = () =>
         changed.replicaSets = replicaSets;
       }
       if (
-        news.domainSecuritySettings !== undefined &&
-        !matches(props.domainSecuritySettings, news.domainSecuritySettings)
+        !matches(props.domainSecuritySettings, domainSecuritySettings)
       ) {
         changed.domainSecuritySettings = {
           ...props.domainSecuritySettings,
-          ...news.domainSecuritySettings,
+          ...domainSecuritySettings,
         };
       }
       if (

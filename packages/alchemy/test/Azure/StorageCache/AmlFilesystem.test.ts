@@ -31,10 +31,14 @@ const program = (props: {
   tags?: Record<string, string>;
 }) =>
   Effect.gen(function* () {
-    const { group, subnet } = yield* lustreDependencies({ hsm: false });
+    const { group, subnet } = yield* lustreDependencies({
+      hsm: false,
+      group: "alchemy-test-storagecache-amlfs",
+    });
     const fs = yield* Azure.StorageCache.AmlFilesystem("Lustre", {
       resourceGroup: group.resourceGroupName,
       sku: "AMLFS-Durable-Premium-500",
+      zones: ["1"],
       storageCapacityTiB: props.storageCapacityTiB,
       filesystemSubnet: subnet.subnetId,
       maintenanceWindow: props.maintenanceWindow,
@@ -132,7 +136,7 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );
 
 // Ungated, free: the resource provider answers sizing queries, and a GET of

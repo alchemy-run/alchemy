@@ -33,7 +33,8 @@ export interface BackupProtectionContainerProps {
   /**
    * Kind of container: `StorageContainer` registers a storage account for
    * Azure Files backup, `VMAppContainer` registers a VM for SQL/SAP HANA
-   * workload backup. Changing it replaces the container.
+   * workload backup (the VM name and its resource group name must total
+   * at most 84 characters). Changing it replaces the container.
    * @default "StorageContainer"
    */
   containerType?: BackupContainerType;
@@ -143,6 +144,22 @@ export class BackupContainerNotDiscovered extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+/**
+ * Azure Backup's workload (SQL/SAP HANA in VM) registration job fails
+ * without a usable error when the VM name and its resource group name
+ * together exceed 84 characters; the provider rejects such sources up
+ * front.
+ */
+export class BackupWorkloadVmNameTooLong extends Data.TaggedError(
+  "Azure.RecoveryServices.BackupWorkloadVmNameTooLong",
+)<{
+  readonly sourceResourceId: string;
+  readonly message: string;
+}> {}
+
+/** Azure Backup's limit on VM name + resource group name for workloads. */
+const MAX_WORKLOAD_VM_NAME_LENGTH = 84;
+
 type Observed = backup.GetProtectionContainerResponse;
 
 const nameOf = (armId: string) => armId.split("/").filter(Boolean).at(-1) ?? "";
@@ -178,6 +195,19 @@ const getContainer = (
 const isRegistered = (observed: Observed | undefined) =>
   (observed?.properties?.registrationStatus ?? "").toLowerCase() ===
   "registered";
+
+/** A workload registration still installing the backup extension. */
+const isRegistering = (observed: Observed | undefined) =>
+  (observed?.properties?.registrationStatus ?? "").toLowerCase() ===
+  "registering";
+
+/**
+ * Polls (5 s apart) for a registration to finish: storage containers
+ * register in about a minute, workload (VMAppContainer) registrations
+ * install the backup extension on the VM and take up to ~10 minutes.
+ */
+const registrationPolls = (containerType: BackupContainerType) =>
+  containerType === "StorageContainer" ? 15 : 150;
 
 const toAttrs = (
   resourceGroup: string,
@@ -298,7 +328,19 @@ export const BackupProtectionContainerProvider = () =>
         observedLock.toLowerCase() !==
           news.acquireStorageAccountLock.toLowerCase();
 
-      if (!isRegistered(observed)) {
+      if (containerType === "VMAppContainer") {
+        const length =
+          (resourceGroupOf(sourceResourceId) ?? "").length +
+          nameOf(sourceResourceId).length;
+        if (length > MAX_WORKLOAD_VM_NAME_LENGTH) {
+          return yield* new BackupWorkloadVmNameTooLong({
+            sourceResourceId,
+            message: `Azure Backup cannot register ${sourceResourceId}: the VM name and resource group name are ${length} characters together (max ${MAX_WORKLOAD_VM_NAME_LENGTH})`,
+          });
+        }
+      }
+
+      if (!isRegistered(observed) && !isRegistering(observed)) {
         // Ensure: the vault only registers resources it has discovered, so
         // refresh discovery and wait for the resource to show up first.
         yield* backup.RefreshProtectionContainer({
@@ -335,26 +377,34 @@ export const BackupProtectionContainerProvider = () =>
             ),
           );
       }
-      const register = backup.RegisterProtectionContainer({
-        ...where,
-        fabricName: BACKUP_FABRIC,
-        containerName,
-        properties: {
-          containerType,
-          backupManagementType,
-          sourceResourceId,
-          friendlyName: nameOf(sourceResourceId),
-          workloadType: news.workloadType,
-          acquireStorageAccountLock: news.acquireStorageAccountLock,
-          ...(containerType === "VMAppContainer"
-            ? {
-                operationType: isRegistered(observed)
-                  ? "Reregister"
-                  : "Register",
-              }
-            : {}),
-        },
-      });
+      const register = backup
+        .RegisterProtectionContainer({
+          ...where,
+          fabricName: BACKUP_FABRIC,
+          containerName,
+          properties: {
+            containerType,
+            backupManagementType,
+            sourceResourceId,
+            workloadType: news.workloadType,
+            acquireStorageAccountLock: news.acquireStorageAccountLock,
+            // A workload registration that carries `friendlyName` or
+            // `operationType: "Register"` fails with `CloudInternalError`;
+            // only re-registration names its operation.
+            ...(containerType === "VMAppContainer"
+              ? isRegistered(observed)
+                ? { operationType: "Reregister" }
+                : {}
+              : { friendlyName: nameOf(sourceResourceId) }),
+          },
+        })
+        .pipe(
+          // A registration that is still running is awaited below.
+          Effect.catchTag(
+            "BackupContainerRegistrationInProgress",
+            () => Effect.void,
+          ),
+        );
       const untilRegistered = get.pipe(
         Effect.flatMap((container) =>
           container !== undefined && isRegistered(container)
@@ -364,11 +414,11 @@ export const BackupProtectionContainerProvider = () =>
         Effect.retry({
           while: (e) => e === "pending",
           schedule: Schedule.spaced("5 seconds"),
-          times: 15,
+          times: registrationPolls(containerType),
         }),
       );
       const fresh = yield* (
-        !isRegistered(observed) || lockDrift
+        (!isRegistered(observed) && !isRegistering(observed)) || lockDrift
           ? // Ensure / sync: (re-)register with the desired settings. The
             // asynchronous registration job intermittently fails with an
             // internal error and leaves no container; registering again
@@ -399,6 +449,21 @@ export const BackupProtectionContainerProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const get = getContainer(
+        subscriptionId,
+        output.resourceGroup,
+        output.vault,
+        output.containerName,
+      );
+      // A workload registration cannot be undone while it is still
+      // installing the backup extension; let it settle first.
+      yield* get.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (container) => !isRegistering(container),
+          times: 150,
+        }),
+      );
       yield* ignoreNotFound(
         backup.UnregisterProtectionContainer({
           subscriptionId,
@@ -410,14 +475,11 @@ export const BackupProtectionContainerProvider = () =>
       );
       yield* waitUntilGone(
         `backup container ${output.containerName}`,
-        getContainer(
-          subscriptionId,
-          output.resourceGroup,
-          output.vault,
-          output.containerName,
-        ).pipe(
+        get.pipe(
           Effect.map((container) =>
-            isRegistered(container) ? container : undefined,
+            isRegistered(container) || isRegistering(container)
+              ? container
+              : undefined,
           ),
         ),
         { interval: "5 seconds", times: 48 },

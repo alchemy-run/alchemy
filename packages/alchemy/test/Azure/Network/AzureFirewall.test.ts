@@ -16,6 +16,7 @@ import {
 const { test } = Test.make({ providers: Azure.providers() });
 
 const POLICY = "alchemy-test-firewall-policy";
+const POLICY_2 = "alchemy-test-firewall-policy-2";
 
 const getFirewall = (resourceGroupName: string, azureFirewallName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
@@ -26,29 +27,29 @@ const getFirewall = (resourceGroupName: string, azureFirewallName: string) =>
     }),
   );
 
-const getPolicy = (resourceGroupName: string) =>
+const getPolicy = (resourceGroupName: string, firewallPolicyName: string) =>
   Effect.flatMap(subscriptionId, (subscriptionId) =>
     network.GetFirewallPolicy({
       subscriptionId,
       resourceGroupName,
-      firewallPolicyName: POLICY,
+      firewallPolicyName,
     }),
   );
 
 // Azure.Network.FirewallPolicy is not implemented yet: the Basic policy is
 // created out-of-band inside the stack's resource group.
-const createPolicy = (resourceGroupName: string) =>
+const createPolicy = (resourceGroupName: string, firewallPolicyName: string) =>
   Effect.gen(function* () {
     yield* network.FirewallPoliciesCreateOrUpdate({
       subscriptionId: yield* subscriptionId,
       resourceGroupName,
-      firewallPolicyName: POLICY,
+      firewallPolicyName,
       location: "eastus",
       properties: { sku: { tier: "Basic" } },
     });
     return yield* waitForProvisioned(
-      `firewall policy ${POLICY}`,
-      orUndefinedIfNotFound(getPolicy(resourceGroupName)),
+      `firewall policy ${firewallPolicyName}`,
+      orUndefinedIfNotFound(getPolicy(resourceGroupName, firewallPolicyName)),
       (policy) => policy.properties?.provisioningState,
       { interval: "5 seconds", times: 60 },
     );
@@ -56,7 +57,6 @@ const createPolicy = (resourceGroupName: string) =>
 
 const program = (props: {
   policyId?: string;
-  dnsProxy: boolean;
   tags: Record<string, string>;
 }) =>
   Effect.gen(function* () {
@@ -102,9 +102,6 @@ const program = (props: {
               subnetId: managementSubnet.subnetId,
               publicIpAddressId: managementIp.publicIpAddressId,
             },
-            additionalProperties: props.dnsProxy
-              ? { "Network.DNS.EnableProxy": "true" }
-              : undefined,
             tags: props.tags,
           });
     return { group, firewall };
@@ -120,13 +117,15 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const { group } = yield* stack.deploy(
-        program({ dnsProxy: false, tags: { env: "test" } }),
+        program({ tags: { env: "test" } }),
       );
-      const policy = yield* createPolicy(group.resourceGroupName);
+      const policy = yield* createPolicy(group.resourceGroupName, POLICY);
       const policyId = policy.id!;
+      const policy2 = yield* createPolicy(group.resourceGroupName, POLICY_2);
+      const policyId2 = policy2.id!;
 
       const { firewall } = yield* stack.deploy(
-        program({ policyId, dnsProxy: false, tags: { env: "test" } }),
+        program({ policyId, tags: { env: "test" } }),
       );
       expect(firewall!.skuTier).toEqual("Basic");
       expect(firewall!.privateIpAddress).toMatch(/^10\.0\.0\.\d+$/);
@@ -141,9 +140,10 @@ test.provider.skipIf(!runExpensive)(
       expect(observed.properties?.managementIpConfiguration).toBeDefined();
       expect(observed.tags?.env).toEqual("test");
 
-      // In-place update: DNS proxy + tags.
+      // In-place update: swap the policy + tags. (DNS proxy and threat
+      // intel are managed by the policy once one is attached.)
       const updated = yield* stack.deploy(
-        program({ policyId, dnsProxy: true, tags: { env: "prod" } }),
+        program({ policyId: policyId2, tags: { env: "prod" } }),
       );
       expect(updated.firewall!.azureFirewallId).toEqual(
         firewall!.azureFirewallId,
@@ -152,11 +152,9 @@ test.provider.skipIf(!runExpensive)(
         group.resourceGroupName,
         firewall!.azureFirewallName,
       );
-      expect(
-        reobserved.properties?.additionalProperties?.[
-          "Network.DNS.EnableProxy"
-        ],
-      ).toEqual("true");
+      expect(reobserved.properties?.firewallPolicy?.id?.toLowerCase()).toEqual(
+        policyId2.toLowerCase(),
+      );
       expect(reobserved.tags?.env).toEqual("prod");
 
       yield* stack.destroy();
@@ -166,5 +164,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withPublicIps(2), logLevel),
-  { tags, timeout: 3_600_000 },
+  { tags, timeout: 7_200_000 },
 );

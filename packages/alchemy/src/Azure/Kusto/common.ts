@@ -67,6 +67,25 @@ export const clusterLocation = Effect.fn(function* (
   return cluster?.location;
 });
 
+const FAILED_STATES = new Set(["Failed", "Canceled", "Cancelled"]);
+
+/**
+ * Readiness that also requires the observed state to reflect a write.
+ * Kusto writes return `202` and a GET right after still reports the old
+ * values with `provisioningState: "Succeeded"`, so a write is only done
+ * once `converged` holds. Terminal failures still fail fast.
+ */
+export const untilConverged =
+  <A>(
+    stateOf: (value: A) => string | undefined,
+    converged: (value: A) => boolean,
+  ) =>
+  (value: A) => {
+    const state = stateOf(value);
+    if (state !== undefined && FAILED_STATES.has(state)) return state;
+    return converged(value) ? state : "Pending";
+  };
+
 /**
  * A cluster runs one management operation at a time; a write while it is
  * `Updating` (e.g. a sibling child being created) fails with a conflict.

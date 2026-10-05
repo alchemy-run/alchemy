@@ -65,7 +65,7 @@ const program = (props: { time: string; status: "Enabled" | "Disabled" }) =>
 
 // One 2-vCPU lab VM (~$0.10/hour) for ~15 minutes: ~$0.03. Gated: the lab
 // VM takes ~5 minutes to create and ~5 to delete (plus the lab), so the
-// lifecycle runs past 10 minutes.
+// lifecycle runs past 10 minutes (measured ~13).
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a lab VM schedule",
   (stack) =>
@@ -99,5 +99,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_500_000 },
 );

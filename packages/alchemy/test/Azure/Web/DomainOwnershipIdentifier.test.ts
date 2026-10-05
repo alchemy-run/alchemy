@@ -101,7 +101,7 @@ test.provider.skipIf(!runPaidOnly)(
         created.app.siteName,
         id.identifierName,
       );
-      expect(observed.properties?.id).toEqual("value-one");
+      expect(observed.properties?.value).toEqual("value-one");
 
       // In-place update: the value.
       const updated = yield* stack.deploy(
@@ -113,7 +113,7 @@ test.provider.skipIf(!runPaidOnly)(
         created.app.siteName,
         id.identifierName,
       );
-      expect(reobserved.properties?.id).toEqual("value-two");
+      expect(reobserved.properties?.value).toEqual("value-two");
 
       // Replacement: a new name.
       const replaced = yield* stack.deploy(
@@ -148,7 +148,7 @@ test.provider.skipIf(!runPaidOnly)(
 
 // Probe: F1 plan creates are throttled for the subscription (see
 // fixtures/f1-plan.ts).
-test.provider(
+test.provider.skipIf(runPaidOnly)(
   "F1 plan create is rejected with AppServicePlanCreateThrottled",
   (stack) =>
     Effect.gen(function* () {

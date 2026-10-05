@@ -326,12 +326,14 @@ const observableProperties = (
 
 /**
  * Poll until the environment is provisioned. A failed environment carries
- * the platform's reason in `deploymentErrors`; surface it.
+ * the platform's reason in `deploymentErrors`; surface it. A create can sit
+ * in `Waiting` for 10+ minutes when the region is short of cluster capacity,
+ * so the budget is 25 minutes.
  */
 const provisioned = (label: string, get: ReturnType<typeof getEnvironment>) =>
   waitForProvisioned(label, get, (env) => env.properties?.provisioningState, {
     interval: "10 seconds",
-    times: 60,
+    times: 150,
   }).pipe(
     Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
       get.pipe(

@@ -32,6 +32,21 @@ import {
   type SqlSku,
 } from "./common.ts";
 
+/** Managed identity of a managed instance. */
+export interface ManagedInstanceIdentity {
+  /** Identity type. */
+  type:
+    | "None"
+    | "SystemAssigned"
+    | "UserAssigned"
+    | "SystemAssigned,UserAssigned";
+  /**
+   * ARM resource IDs of user-assigned identities. The first one becomes the
+   * instance's primary user-assigned identity.
+   */
+  userAssignedIdentityIds?: string[];
+}
+
 export interface ManagedInstanceProps {
   /** Resource group the instance is created in. Changing it replaces the instance. */
   resourceGroup: string;
@@ -112,6 +127,12 @@ export interface ManagedInstanceProps {
    */
   dnsZonePartner?: string;
   /**
+   * Managed identity. Ledger digest uploads and customer-managed TDE keys
+   * need one; Microsoft Entra administrators additionally need the
+   * identity to hold the Directory Readers role.
+   */
+  identity?: ManagedInstanceIdentity;
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -148,6 +169,8 @@ export interface ManagedInstance extends Resource<
     dnsZone: string | undefined;
     /** Salted fingerprint of the last administrator password Alchemy set. */
     passwordFingerprint: Redacted.Redacted<string> | undefined;
+    /** Principal ID of the system-assigned identity, if any. */
+    principalId: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
   },
@@ -232,8 +255,41 @@ const toAttrs = (
   storageSizeInGB: mi.properties?.storageSizeInGB,
   dnsZone: mi.properties?.dnsZone,
   passwordFingerprint,
+  principalId: mi.identity?.principalId,
   tags: userTags(mi.tags),
 });
+
+const toIdentity = (
+  identity: ManagedInstanceIdentity | undefined,
+): sql.ManagedInstancesCreateOrUpdateRequestIdentity | undefined =>
+  identity === undefined
+    ? undefined
+    : {
+        type: identity.type,
+        userAssignedIdentities:
+          identity.userAssignedIdentityIds === undefined
+            ? undefined
+            : Object.fromEntries(
+                identity.userAssignedIdentityIds.map((id) => [id, {}]),
+              ),
+      };
+
+const identityDiffers = (
+  observed: ObservedInstance["identity"],
+  desired: ManagedInstanceIdentity,
+) => {
+  if (
+    (observed?.type ?? "None").toLowerCase().replace(/\s/g, "") !==
+    desired.type.toLowerCase().replace(/\s/g, "")
+  ) {
+    return true;
+  }
+  const want = (desired.userAssignedIdentityIds ?? []).map(lower).sort();
+  const have = Object.keys(observed?.userAssignedIdentities ?? {})
+    .map(lower)
+    .sort();
+  return want.join(",") !== have.join(",");
+};
 
 /** Managed instance operations run for hours: poll every minute for up to 6 h. */
 const SLOW = { interval: "60 seconds", times: 360 } as const;
@@ -361,8 +417,11 @@ export const ManagedInstanceProvider = () =>
           location,
           tags,
           sku: news.sku,
+          identity: toIdentity(news.identity),
           properties: {
             ...mutable,
+            primaryUserAssignedIdentityId:
+              news.identity?.userAssignedIdentityIds?.[0],
             subnetId: news.subnetId,
             administratorLogin: news.administratorLogin,
             administratorLoginPassword: news.administratorLoginPassword,
@@ -394,11 +453,27 @@ export const ManagedInstanceProvider = () =>
       const skuChanged =
         news.sku !== undefined && !skuMatches(observed.sku, news.sku);
       const tagsChanged = tagsDiffer(observed.tags, tags);
-      if (Object.keys(changed).length > 0 || skuChanged || tagsChanged) {
+      const identityChanged =
+        news.identity !== undefined &&
+        identityDiffers(observed.identity, news.identity);
+      const primaryIdentity = news.identity?.userAssignedIdentityIds?.[0];
+      if (
+        primaryIdentity !== undefined &&
+        !sameId(props.primaryUserAssignedIdentityId, primaryIdentity)
+      ) {
+        changed.primaryUserAssignedIdentityId = primaryIdentity;
+      }
+      if (
+        Object.keys(changed).length > 0 ||
+        skuChanged ||
+        tagsChanged ||
+        identityChanged
+      ) {
         yield* sql.UpdateManagedInstance({
           ...where,
           sku: skuChanged ? news.sku : undefined,
           tags: tagsChanged ? tags : undefined,
+          identity: identityChanged ? toIdentity(news.identity) : undefined,
           properties: Object.keys(changed).length > 0 ? changed : undefined,
         });
         observed = yield* waitReady(
@@ -409,7 +484,10 @@ export const ManagedInstanceProvider = () =>
             (!skuChanged ||
               news.sku === undefined ||
               skuMatches(mi.sku, news.sku)) &&
-            (!tagsChanged || !tagsDiffer(mi.tags, tags)),
+            (!tagsChanged || !tagsDiffer(mi.tags, tags)) &&
+            (!identityChanged ||
+              news.identity === undefined ||
+              !identityDiffers(mi.identity, news.identity)),
         );
       }
 

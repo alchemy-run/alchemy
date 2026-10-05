@@ -41,7 +41,7 @@ export interface DiskProps {
   diskSizeGiB: number;
   /**
    * Host caching of the disk when attached (`None`, `ReadOnly`,
-   * `ReadWrite`).
+   * `ReadWrite`). Changing it replaces the disk.
    */
   hostCaching?: "None" | "ReadOnly" | "ReadWrite";
   /**
@@ -188,6 +188,7 @@ export const DiskProvider = () =>
           news.name.toLowerCase() !== output.diskName.toLowerCase()) ||
         news.diskType !== output.diskType ||
         news.diskSizeGiB !== output.diskSizeGiB ||
+        (olds !== undefined && news.hostCaching !== olds.hostCaching) ||
         !sameId(news.managedDiskId, olds?.managedDiskId)
       ) {
         return { action: "replace" } as const;
@@ -247,34 +248,30 @@ export const DiskProvider = () =>
       let observed = yield* get;
       if (observed !== undefined) observed = yield* wait;
 
-      // Ensure + sync host caching and tags (PUT is a long-running upsert;
-      // the lease is managed by attach/detach below).
-      if (
-        observed === undefined ||
-        (news.hostCaching !== undefined &&
-          news.hostCaching !== observed.properties?.hostCaching) ||
-        tagsDiffer(observed.tags, tags)
-      ) {
+      // Ensure (PUT is a long-running create). Azure rejects a PUT on an
+      // existing disk ("Managed Disk Id cannot be changed"), so tags are
+      // synced via PATCH below; the lease is managed by attach/detach.
+      if (observed === undefined) {
         yield* devtestlabs.DisksCreateOrUpdate({
           ...where,
-          location:
-            observed?.location ??
-            (yield* labLocation(subscriptionId, resourceGroup, lab)),
+          location: yield* labLocation(subscriptionId, resourceGroup, lab),
           tags,
           properties: {
             diskType: news.diskType,
             diskSizeGiB: news.diskSizeGiB,
-            hostCaching: news.hostCaching ?? observed?.properties?.hostCaching,
-            managedDiskId:
-              news.managedDiskId ?? observed?.properties?.managedDiskId,
+            hostCaching: news.hostCaching,
+            managedDiskId: news.managedDiskId,
             // A new disk is created attached: Azure fails standalone empty
             // disks (provisioningState 'Failed', no error detail).
-            leasedByLabVmId:
-              observed === undefined
-                ? news.leasedByLabVmId
-                : observed.properties?.leasedByLabVmId,
+            leasedByLabVmId: news.leasedByLabVmId,
           },
         });
+        observed = yield* wait;
+      }
+
+      // Sync tags against the observed disk.
+      if (tagsDiffer(observed.tags, tags)) {
+        yield* devtestlabs.UpdateDisk({ ...where, tags });
         observed = yield* wait;
       }
 

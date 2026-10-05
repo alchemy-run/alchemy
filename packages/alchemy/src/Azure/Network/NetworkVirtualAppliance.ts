@@ -3,7 +3,13 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
-import { lower, ref, sameId, sameSet } from "./common.ts";
+import {
+  createNetworkName,
+  lower,
+  ref,
+  sameId,
+  sameSet,
+} from "./common.ts";
 import { identityIds, identityInput } from "./expressRouteDirectShared.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -21,7 +27,7 @@ export interface NetworkVirtualApplianceProps {
   /** Resource group of the appliance. Changing it replaces the appliance. */
   resourceGroup: string;
   /**
-   * Name of the appliance: 1-80 letters, digits, `_`, `.`, and `-`. If
+   * Name of the appliance: 2-58 letters, digits, `_`, `.`, and `-`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the appliance.
    */
@@ -143,6 +149,8 @@ export const NetworkVirtualApplianceProvider = () =>
       label: "network virtual appliance",
       nameAttr: "networkVirtualApplianceName",
       tracked: true,
+      // Azure caps NVA names at 58 characters.
+      physicalName: (id) => createNetworkName(id, 58),
       // NVA deployments take 15-30 minutes.
       slow: true,
       immutable: (news, output) =>
@@ -173,13 +181,9 @@ export const NetworkVirtualApplianceProvider = () =>
           resourceGroupName: path.resourceGroup,
           networkVirtualApplianceName: path.name,
         }),
-      updateTags: (subscriptionId, path, tags) =>
-        network.UpdateNetworkVirtualApplianceTags({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          networkVirtualApplianceName: path.name,
-          tags,
-        }),
+      // No `updateTags`: Azure answers the tags PATCH with "Patch Method is
+      // not yet supported for this Region or Subscription", so tag changes
+      // re-apply the PUT.
       listAll: (subscriptionId) =>
         network.ListNetworkVirtualAppliances({ subscriptionId }),
       body: (news, { location, tags }) => ({

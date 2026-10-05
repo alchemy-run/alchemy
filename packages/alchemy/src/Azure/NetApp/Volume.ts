@@ -28,6 +28,7 @@ import {
   type NetAppExportPolicyRule,
   parseNetAppId,
   poolRefs,
+  waitSettled,
   whileBusy,
 } from "./Common.ts";
 
@@ -526,6 +527,14 @@ export const VolumeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const get = getVolume(
+        subscriptionId,
+        output.resourceGroup,
+        output.account,
+        output.pool,
+        output.volumeName,
+      );
+      yield* waitSettled(get, (volume) => volume.properties?.provisioningState);
       yield* whileBusy(
         ignoreNotFound(
           netapp.DeleteVolume({
@@ -537,17 +546,7 @@ export const VolumeProvider = () =>
           }),
         ),
       );
-      yield* waitUntilGone(
-        `netapp volume ${output.volumeName}`,
-        getVolume(
-          subscriptionId,
-          output.resourceGroup,
-          output.account,
-          output.pool,
-          output.volumeName,
-        ),
-        LRO_BUDGET,
-      );
+      yield* waitUntilGone(`netapp volume ${output.volumeName}`, get, LRO_BUDGET);
     }),
 
     nuke: {

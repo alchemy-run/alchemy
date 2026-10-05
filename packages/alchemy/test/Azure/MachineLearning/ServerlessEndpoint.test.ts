@@ -16,6 +16,9 @@ import {
 const { test } = Test.make({ providers: Azure.providers() });
 
 const modelId =
+  "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct";
+// A retired catalog model, no longer offered as a serverless API.
+const retired =
   "azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct";
 
 const getEndpoint = (
@@ -35,18 +38,28 @@ const getEndpoint = (
 const program = (props: { tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const base = yield* baseProject();
+    // Non-Microsoft models need a marketplace subscription in the project
+    // before an endpoint can serve them.
+    const marketplace = yield* Azure.MachineLearning.MarketplaceSubscription(
+      "LlamaOffer",
+      {
+        resourceGroup: base.group.resourceGroupName,
+        workspace: base.workspace.workspaceName,
+        modelId,
+      },
+    );
     const endpoint = yield* Azure.MachineLearning.ServerlessEndpoint("Llama", {
       resourceGroup: base.group.resourceGroupName,
       workspace: base.workspace.workspaceName,
-      modelId,
+      modelId: marketplace.modelId,
       tags: props.tags,
     });
     return { ...base, endpoint };
   });
 
 // Serverless endpoints for non-Microsoft models need an Azure Marketplace
-// subscription, which the free trial blocks. Pay-per-token only (no
-// hourly charge); ~5-10 minutes.
+// subscription, which needs a paid subscription. Pay-per-token only (no
+// fixed or hourly charge; no tokens are used); ~5-10 minutes.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a serverless endpoint",
   (stack) =>
@@ -72,10 +85,10 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: the free trial is not offered catalog models-as-a-service
-// (non-Microsoft models need an Azure Marketplace subscription), so the
-// create is rejected with the typed error (hub + project have no hourly
-// charge; ~3-5 minutes).
+// Ungated probe: a model the catalog no longer offers as a serverless API
+// (or one not offered to the subscription, e.g. on a free trial) is
+// rejected with the typed error (hub + project have no hourly charge;
+// ~3-5 minutes).
 test.provider(
   "a serverless endpoint for an unavailable model is rejected",
   (stack) =>
@@ -90,7 +103,10 @@ test.provider(
           name: "probe-serverless",
           location,
           sku: { name: "Consumption" },
-          properties: { authMode: "Key", modelSettings: { modelId } },
+          properties: {
+            authMode: "Key",
+            modelSettings: { modelId: retired },
+          },
         })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("MachineLearningModelNotAvailable");

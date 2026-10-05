@@ -157,13 +157,17 @@ const findConnection = Effect.fn(function* (
   );
 });
 
+// List responses omit `name`; the connection name is the last ID segment.
+const connectionName = (connection: { name?: string; id?: string }): string =>
+  connection.name ?? connection.id?.split("/").pop() ?? "";
+
 const toAttrs = (
   resourceGroup: string,
   managedHsm: string,
   privateEndpointId: string,
   connection: Observed,
 ): ManagedHsmPrivateEndpointConnection["Attributes"] => ({
-  privateEndpointConnectionName: connection.name ?? "",
+  privateEndpointConnectionName: connectionName(connection),
   privateEndpointConnectionId: connection.id ?? "",
   managedHsm,
   resourceGroup,
@@ -172,6 +176,13 @@ const toAttrs = (
   description:
     connection.properties?.privateLinkServiceConnectionState?.description,
 });
+
+/** The pool rejects connection changes while it applies the previous one. */
+const whilePoolUpdating = {
+  while: (e: { readonly _tag: string }) => e._tag === "ManagedHsmPoolUpdating",
+  schedule: Schedule.spaced("10 seconds"),
+  times: 30,
+} as const;
 
 export const ManagedHsmPrivateEndpointConnectionProvider = () =>
   Provider.succeed(ManagedHsmPrivateEndpointConnection, {
@@ -266,7 +277,7 @@ export const ManagedHsmPrivateEndpointConnectionProvider = () =>
           times: 12,
         }),
       );
-      const name = observed.name ?? "";
+      const name = connectionName(observed);
       const get = getConnection(
         subscriptionId,
         resourceGroup,
@@ -281,18 +292,20 @@ export const ManagedHsmPrivateEndpointConnectionProvider = () =>
         (news.description !== undefined &&
           state?.description !== news.description)
       ) {
-        yield* keyvault.PutMHSMPrivateEndpointConnection({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          name: managedHsm,
-          privateEndpointConnectionName: name,
-          properties: {
-            privateLinkServiceConnectionState: {
-              status,
-              description: news.description ?? state?.description,
+        yield* keyvault
+          .PutMHSMPrivateEndpointConnection({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            name: managedHsm,
+            privateEndpointConnectionName: name,
+            properties: {
+              privateLinkServiceConnectionState: {
+                status,
+                description: news.description ?? state?.description,
+              },
             },
-          },
-        });
+          })
+          .pipe(Effect.retry(whilePoolUpdating));
       }
       const fresh = yield* waitForProvisioned(
         `private endpoint connection ${name}`,
@@ -307,24 +320,36 @@ export const ManagedHsmPrivateEndpointConnectionProvider = () =>
       return toAttrs(resourceGroup, managedHsm, privateEndpointId, fresh);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ olds, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        keyvault.DeleteMHSMPrivateEndpointConnection({
+      // A create that failed mid-flight may persist no connection name;
+      // resolve it from the private endpoint instead.
+      const resourceGroup = output?.resourceGroup ?? olds.resourceGroup;
+      const managedHsm = output?.managedHsm ?? olds.managedHsm;
+      const privateEndpointId =
+        output?.privateEndpointId ?? olds.privateEndpointId;
+      const name =
+        output?.privateEndpointConnectionName ||
+        (yield* findConnection(
           subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          name: output.managedHsm,
-          privateEndpointConnectionName: output.privateEndpointConnectionName,
-        }),
+          resourceGroup,
+          managedHsm,
+          privateEndpointId,
+        ).pipe(Effect.map((found) => (found ? connectionName(found) : ""))));
+      if (name === "") return;
+      yield* ignoreNotFound(
+        keyvault
+          .DeleteMHSMPrivateEndpointConnection({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            name: managedHsm,
+            privateEndpointConnectionName: name,
+          })
+          .pipe(Effect.retry(whilePoolUpdating)),
       );
       yield* waitUntilGone(
-        `private endpoint connection ${output.privateEndpointConnectionName}`,
-        getConnection(
-          subscriptionId,
-          output.resourceGroup,
-          output.managedHsm,
-          output.privateEndpointConnectionName,
-        ),
+        `private endpoint connection ${name}`,
+        getConnection(subscriptionId, resourceGroup, managedHsm, name),
       );
     }),
 

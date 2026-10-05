@@ -57,7 +57,11 @@ export interface JobPrivateEndpoint extends Resource<
     jobAgentName: string;
     /** ARM ID of the target SQL server. */
     targetServerId: string;
-    /** ARM ID of the managed private endpoint Azure created. */
+    /**
+     * Name of the managed private endpoint Azure created in its own
+     * subscription (`EJ_<guid>_<name>`). Approve its connection on the
+     * target server with `Azure.Sql.PrivateEndpointConnection`.
+     */
     privateEndpointId: string | undefined;
   },
   never,
@@ -200,15 +204,19 @@ export const JobPrivateEndpointProvider = () =>
           }),
         );
       }
+      // GET answers right away, but the agent keeps provisioning the managed
+      // private endpoint (and rejects further writes with
+      // `ElasticJobAgentIsBusy`) until `privateEndpointId` is reported.
       const fresh = yield* waitForProvisioned(
         `sql job private endpoint ${name}`,
         get,
         (observed) =>
           lower(observed.properties?.targetServerAzureResourceId) ===
-          lower(desired.targetServerAzureResourceId)
+            lower(desired.targetServerAzureResourceId) &&
+          observed.properties?.privateEndpointId !== undefined
             ? "Succeeded"
             : "Updating",
-        { interval: "3 seconds", times: 60 },
+        { interval: "10 seconds", times: 90 },
       );
       return toAttrs(scope, name, fresh);
     }),
@@ -226,7 +234,7 @@ export const JobPrivateEndpointProvider = () =>
       yield* waitUntilGone(
         `sql job private endpoint ${output.privateEndpointName}`,
         getChild(subscriptionId, output, output.privateEndpointName),
-        { interval: "3 seconds", times: 60 },
+        { interval: "10 seconds", times: 90 },
       );
     }),
   });

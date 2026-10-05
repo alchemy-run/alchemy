@@ -204,7 +204,17 @@ export const AccessPolicyProvider = () =>
             properties: { permissions: news.permissions },
           })
           .pipe(Effect.retry(whileCacheBusy));
-        observed = yield* settle;
+        // The PUT returns before the GET reflects it; a GET right after an
+        // update still reports the old rules as `Succeeded`.
+        observed = yield* waitForProvisioned(
+          label,
+          get,
+          (policy) =>
+            policy.properties?.permissions === news.permissions
+              ? policy.properties?.provisioningState
+              : "Updating",
+          budget,
+        );
       }
       return toAttrs(resourceGroup, cache, name, observed);
     }),

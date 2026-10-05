@@ -1,6 +1,7 @@
 import type { AzureOpContext, AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -65,6 +66,12 @@ export interface EntitySpec<
    * that GET never returns.
    */
   inSync?: (props: P, observed: O, olds: P | undefined) => boolean;
+  /**
+   * Whether a GET reflects the desired props. When set, reconcile polls
+   * (bounded) after a write until it does — for entities whose reads lag
+   * behind writes across gateway replicas.
+   */
+  converged?: (props: P, observed: O) => boolean;
   /**
    * Whether an immutable, non-path field changed. The entity keeps its
    * path, so the old one is deleted before the new one is created.
@@ -207,6 +214,17 @@ export const entityLifecycle = <
         observed !== undefined && (spec.inSync?.(news, observed, olds) ?? true);
       if (!inSync) {
         yield* spec.put(subscriptionId, key, news);
+        const converged = spec.converged;
+        if (converged !== undefined) {
+          yield* get(subscriptionId, key).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (current) =>
+                current !== undefined && converged(news, current),
+              times: 20,
+            }),
+          );
+        }
       }
       const current = yield* waitForProvisioned(
         spec.label(key),

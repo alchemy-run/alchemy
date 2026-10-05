@@ -185,10 +185,15 @@ const sharingProfile = (ids: string[] | undefined) =>
         })),
       };
 
-/** Delete is rejected while reservations or VMs remain. */
+/**
+ * Delete is rejected while reservations or VMs remain; a just-deleted
+ * reservation lingers as a nested resource (`CannotDeleteResource`) briefly.
+ */
 const whileMembersRemain = {
   while: (e: { readonly _tag: string }) =>
-    e._tag === "OperationNotAllowed" || e._tag === "ResourceConflict",
+    e._tag === "OperationNotAllowed" ||
+    e._tag === "ResourceConflict" ||
+    e._tag === "CannotDeleteResource",
   schedule: Schedule.spaced("5 seconds"),
   times: 24,
 } as const;

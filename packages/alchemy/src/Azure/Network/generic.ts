@@ -242,7 +242,7 @@ export const networkProvider =
       spec.readyState !== undefined
         ? waitForProvisioned(label, get, spec.readyState, {
             interval: spec.slow ? "15 seconds" : "3 seconds",
-            times: spec.slow ? 160 : 100,
+            times: spec.slow ? 240 : 100,
           })
         : spec.slow
           ? waitNetworkProvisionedSlow(label, get)
@@ -464,7 +464,7 @@ export const networkProvider =
         if (spec.beforeDelete !== undefined) {
           yield* spec.beforeDelete(subscriptionId, path as NetworkPath);
         }
-        yield* ignoreNotFound(
+        const deleteOnce = ignoreNotFound(
           spec.del(subscriptionId, path as NetworkPath),
         ).pipe(
           // `CannotDeleteResource`: nested children are still being removed.
@@ -477,9 +477,20 @@ export const networkProvider =
               : {}),
           }),
         );
+        yield* deleteOnce;
+        // A delete that ends `Failed` leaves the resource in place (seen on
+        // hub NVAs, where a second DELETE succeeds): re-issue it.
         yield* waitGone(
           describe(path as NetworkPath),
-          spec.get(subscriptionId, path as NetworkPath),
+          spec
+            .get(subscriptionId, path as NetworkPath)
+            .pipe(
+              Effect.tap((observed) =>
+                observed?.properties?.provisioningState === "Failed"
+                  ? deleteOnce
+                  : Effect.void,
+              ),
+            ),
         );
       }),
 

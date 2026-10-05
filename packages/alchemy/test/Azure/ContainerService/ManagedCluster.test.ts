@@ -112,7 +112,8 @@ test.provider(
 );
 
 // Replacement provisions a second cluster before deleting the first
-// (~2 × 6 min, 4 vCPUs at once): over the time budget, run explicitly.
+// (~2 × 6 min plus a ~6 min delete, 4 vCPUs at once): over the time
+// budget, run explicitly.
 test.provider.skipIf(!runExpensive)(
   "changing dnsPrefix replaces the cluster",
   (stack) =>
@@ -144,6 +145,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(withPublicIps(2), withVcpus(4), logLevel),
   {
     tags: ["provider:azure", "provider:azure:containerservice", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );

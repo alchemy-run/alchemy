@@ -37,10 +37,12 @@ const program = (props: {
   Effect.gen(function* () {
     const { group, subnet, hsm, grants } = yield* lustreDependencies({
       hsm: true,
+      group: "alchemy-test-storagecache-import",
     });
     const fs = yield* Azure.StorageCache.AmlFilesystem("Lustre", {
       resourceGroup: group.resourceGroupName,
       sku: "AMLFS-Durable-Premium-500",
+      zones: ["1"],
       storageCapacityTiB: 4,
       filesystemSubnet: subnet.subnetId,
       maintenanceWindow: { dayOfWeek: "Sunday", timeOfDayUTC: "22:00" },
@@ -119,5 +121,5 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

@@ -46,7 +46,15 @@ const program = (password: Redacted.Redacted<string>, name?: string) =>
       name,
       targetServerId: target.serverId,
     });
-    return { ...parent, target, endpoint };
+    // The agent's managed private endpoint stays pending (and the agent busy)
+    // until the target server approves the connection.
+    const approval = yield* Azure.Sql.PrivateEndpointConnection("Approval", {
+      resourceGroup: parent.group.resourceGroupName,
+      server: target.serverName,
+      privateEndpointId: endpoint.privateEndpointId.as<string>(),
+      status: "Approved",
+    });
+    return { ...parent, target, endpoint, approval };
   });
 
 // Needs an elastic job agent: S1 job database (~$0.04/hour) + JA100 (~$0.03/hour),
@@ -82,5 +90,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get("alchemy-renamed"))).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 900_000 },
+  { tags: SQL_TAGS, timeout: 3_600_000 },
 );

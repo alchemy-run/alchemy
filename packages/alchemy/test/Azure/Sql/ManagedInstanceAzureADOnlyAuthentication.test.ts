@@ -17,6 +17,8 @@ import {
 
 const { test } = Test.make({ providers: Azure.providers() });
 
+const hasDirectoryReaders = !!process.env.AZURE_TEST_SQL_MI_DIRECTORY_READERS;
+
 const getSetting = (resourceGroupName: string, managedInstanceName: string) =>
   Effect.gen(function* () {
     return yield* sql.GetManagedInstanceAzureADOnlyAuthentication({
@@ -31,13 +33,22 @@ type Step = { azureADOnlyAuthentication: boolean };
 
 const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
   Effect.gen(function* () {
-    const { group, instance } = yield* managedInstance(password);
+    const { group, instance } = yield* managedInstance(password, {
+      identity: { type: "SystemAssigned" },
+    });
+    // Entra-only authentication needs an Entra administrator first.
+    const admin = yield* Azure.Sql.ManagedInstanceAdministrator("Admin", {
+      resourceGroup: group.resourceGroupName,
+      managedInstance: instance.managedInstanceName,
+      login: "alchemy-admins",
+      sid: "00000000-0000-0000-0000-000000000001",
+    });
     const setting =
       step === undefined
         ? undefined
         : yield* Azure.Sql.ManagedInstanceAzureADOnlyAuthentication("Setting", {
             resourceGroup: group.resourceGroupName,
-            managedInstance: instance.managedInstanceName,
+            managedInstance: admin.managedInstanceName,
             ...step,
           });
     return { group, instance, setting };
@@ -45,8 +56,13 @@ const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
 
 // Needs a SQL Managed Instance (~$0.70/hour; the first instance in a subnet
 // takes 30 minutes to 6 hours): several dollars per run, so this only runs
-// with AZURE_TEST_EXPENSIVE=1.
-test.provider.skipIf(!runExpensive)(
+// with AZURE_TEST_EXPENSIVE=1. The Entra administrator it depends on also
+// needs the instance identity to hold the Entra "Directory Readers" role
+// (otherwise the admin create fails asynchronously with
+// `ServicePrincipalLookupInAadFailed`), so it only runs when
+// AZURE_TEST_SQL_MI_DIRECTORY_READERS=1 (a tenant where new managed instance
+// identities are granted Directory Readers, e.g. via a group).
+test.provider.skipIf(!runExpensive || !hasDirectoryReaders)(
   "set, update, and reset managed instance entra-only authentication",
   (stack) =>
     Effect.gen(function* () {
@@ -94,5 +110,32 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get)).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
+);
+
+// Probe: without an Entra administrator Azure rejects the setting with a
+// typed error. Needs a managed instance (~$0.40 per run), so it only runs
+// with AZURE_TEST_EXPENSIVE=1.
+test.provider.skipIf(!runExpensive)(
+  "entra-only authentication requires an entra administrator",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const password = yield* newPassword;
+      const { group, instance } = yield* stack.deploy(
+        managedInstance(password),
+      );
+      const error = yield* sql
+        .ManagedInstanceAzureADOnlyAuthenticationsCreateOrUpdate({
+          subscriptionId: yield* subscription,
+          resourceGroupName: group.resourceGroupName,
+          managedInstanceName: instance.managedInstanceName,
+          authenticationName: "Default",
+          properties: { azureADOnlyAuthentication: true },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("SqlManagedInstanceEntraAdminRequired");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

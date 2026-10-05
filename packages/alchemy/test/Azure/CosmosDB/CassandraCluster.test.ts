@@ -47,6 +47,10 @@ const clusterProgram = (props: {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.40.1.0/24",
+      // Managed Cassandra needs outbound access to Azure services; new
+      // subnets default to private, which fails cluster creation ~30
+      // minutes in with "connection failure".
+      defaultOutboundAccess: true,
     });
     const grant = yield* Azure.Authorization.RoleAssignment("CosmosNetwork", {
       scope: vnet.virtualNetworkId,
@@ -70,7 +74,7 @@ const clusterProgram = (props: {
   });
 
 // The management plane alone has no VM cost, but creation and deletion take
-// 10-25 minutes, over the ~10 minute budget for ungated tests. Needs the
+// 10-40 minutes, over the ~10 minute budget for ungated tests. Needs the
 // "Azure Cosmos DB" service principal object ID in
 // AZURE_COSMOS_DB_SP_OBJECT_ID.
 test.provider.skipIf(!runExpensive || !cosmosPrincipal)(
@@ -114,6 +118,6 @@ test.provider.skipIf(!runExpensive || !cosmosPrincipal)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:cosmosdb", "live"],
-    timeout: 3_000_000,
+    timeout: 10_800_000,
   },
 );

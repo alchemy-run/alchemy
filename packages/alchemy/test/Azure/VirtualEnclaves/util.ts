@@ -23,19 +23,20 @@ export const subscription = Effect.map(
 
 /**
  * Every Virtual Enclaves lifecycle needs a Community, which deploys a
- * Virtual WAN hub (~$0.25/h) plus an Azure Firewall (Basic ~$0.40/h) and
+ * Virtual WAN hub (~$0.25/h) plus an Azure Firewall (Standard ~$1.25/h) and
  * takes 30-60+ minutes to provision and as long to delete.
  */
-export const LIFECYCLE_TIMEOUT = 900_000;
+export const LIFECYCLE_TIMEOUT = 4 * 60 * 60 * 1000;
 
-/** A community with the cheapest firewall, shared by the child tests. */
+/** A community shared by the child tests. */
 export const community = (location = "eastus") =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", { location });
     const community = yield* Azure.VirtualEnclaves.Community("Community", {
       resourceGroup: group.resourceGroupName,
       addressSpace: "10.20.0.0/16",
-      firewallSku: "Basic",
+      // Azure provisions Standard even when Basic is requested.
+      firewallSku: "Standard",
     });
     return { group, community };
   });

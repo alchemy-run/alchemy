@@ -104,5 +104,5 @@ test.provider.skipIf(!runPaidOnly)(
         yield* waitGone(get(replaced.volumeGroup.volumeGroupName)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

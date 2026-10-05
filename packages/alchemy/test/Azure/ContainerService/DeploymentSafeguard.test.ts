@@ -54,5 +54,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* untilGone(getSafeguard(cluster.clusterId))).toEqual("gone");
     }).pipe(withPublicIps(1), withVcpus(2), logLevel),
-  { tags: [...tags], timeout: 900_000 },
+  { tags: [...tags], timeout: 3_600_000 },
 );

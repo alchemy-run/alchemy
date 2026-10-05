@@ -90,7 +90,9 @@ test.provider(
       );
       expect(reobserved.properties?.roleName).toEqual("alchemy-row-reader");
       expect(
-        [...(reobserved.properties?.permissions?.[0]?.dataActions ?? [])].sort(),
+        [
+          ...(reobserved.properties?.permissions?.[0]?.dataActions ?? []),
+        ].sort(),
       ).toEqual([READ_METADATA, READ_ROWS].sort());
 
       yield* stack.destroy();

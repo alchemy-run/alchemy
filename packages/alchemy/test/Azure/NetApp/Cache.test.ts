@@ -35,12 +35,6 @@ const program = (props: { sizeGiB: number; tags: Record<string, string> }) =>
       addressPrefix: "10.21.1.0/24",
       delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
     });
-    const peeringSubnet = yield* Azure.Network.Subnet("PeeringSubnet", {
-      resourceGroup: group.resourceGroupName,
-      virtualNetwork: vnet.virtualNetworkName,
-      addressPrefix: "10.21.2.0/24",
-      delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
-    });
     const pool = yield* Azure.NetApp.CapacityPool("Pool", {
       resourceGroup: group.resourceGroupName,
       account: account.accountName,
@@ -53,7 +47,10 @@ const program = (props: { sizeGiB: number; tags: Record<string, string> }) =>
       pool: pool.poolName,
       size: props.sizeGiB * Azure.NetApp.GiB,
       cacheSubnetResourceId: cacheSubnet.subnetId,
-      peeringSubnetResourceId: peeringSubnet.subnetId,
+      // Distinct cache and peering subnets must live in different VNets and
+      // both carry the NetApp delegation (`InvalidSubnet`); one subnet
+      // serves both roles.
+      peeringSubnetResourceId: cacheSubnet.subnetId,
       protocolTypes: ["NFSv3"],
       originClusterInformation: {
         peerClusterName: peerClusterName ?? "",
@@ -69,7 +66,9 @@ const program = (props: { sizeGiB: number; tags: Record<string, string> }) =>
 // 1 TiB Standard pool (~$0.20/hour) for ~30 minutes plus an external ONTAP
 // origin cluster: ~$0.20 per run on Azure. Free-trial subscriptions cannot
 // create NetApp accounts (`NetAppCreationRestricted`, probed in
-// Account.test.ts), and the origin cluster must exist out of band.
+// Account.test.ts), and the origin cluster must exist out of band: with an
+// unreachable origin the create LRO ends `Failed` after ~15 minutes with
+// "The peer cluster could not be reached at the provided IP address".
 test.provider.skipIf(!runPaidOnly || origin === undefined)(
   "create, update, and delete a cache volume",
   (stack) =>
@@ -105,5 +104,5 @@ test.provider.skipIf(!runPaidOnly || origin === undefined)(
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

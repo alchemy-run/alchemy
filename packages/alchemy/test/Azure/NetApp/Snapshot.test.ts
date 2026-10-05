@@ -52,5 +52,5 @@ test.provider.skipIf(!runPaidOnly)(
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

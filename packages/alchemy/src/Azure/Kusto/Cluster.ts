@@ -1,5 +1,6 @@
 import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -20,7 +21,12 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { getCluster, lower, whileClusterBusy } from "./common.ts";
+import {
+  getCluster,
+  lower,
+  untilConverged,
+  whileClusterBusy,
+} from "./common.ts";
 
 export type KustoSkuName = kusto.AzureSkuName;
 export type KustoSkuTier = kusto.AzureSkuTier;
@@ -135,8 +141,10 @@ export interface ClusterProps {
   keyVaultProperties?: KustoKeyVaultProperties;
   /**
    * Language extensions (Python, R) enabled on the cluster. Applied via the
-   * add/remove language-extension actions; when set, extensions not listed
-   * are removed.
+   * add/remove language-extension actions (up to an hour each); when set,
+   * extensions not listed are removed. Requires a SKU whose VM supports
+   * nested virtualization (e.g. `Standard_E2ads_v5`); the default Dev
+   * `Standard_E2a_v4` SKU silently never enables them.
    */
   languageExtensions?: KustoLanguageExtension[];
   /**
@@ -235,6 +243,8 @@ export interface Cluster extends Resource<
  * ```typescript
  * const cluster = yield* Azure.Kusto.Cluster("adx", {
  *   resourceGroup: group.resourceGroupName,
+ *   // Sandboxes need a VM size with nested virtualization.
+ *   sku: { name: "Standard_E2ads_v5", tier: "Standard", capacity: 2 },
  *   languageExtensions: [{ name: "PYTHON", imageName: "Python3_11_7" }],
  * });
  * ```
@@ -316,9 +326,6 @@ const sameList = (
   JSON.stringify([...(a ?? [])].map((x) => x.toLowerCase()).sort()) ===
   JSON.stringify([...(b ?? [])].map((x) => x.toLowerCase()).sort());
 
-const extensionKey = (name: string | undefined, image: string | undefined) =>
-  `${(name ?? "").toUpperCase()}/${image ?? ""}`;
-
 export const ClusterProvider = () =>
   Provider.succeed(Cluster, {
     stables: ["clusterName", "clusterId", "resourceGroup", "location"],
@@ -369,7 +376,7 @@ export const ClusterProvider = () =>
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* AzureEnvironment.current;
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Kusto");
@@ -418,8 +425,19 @@ export const ClusterProvider = () =>
       // Creation takes 10-20 minutes; updates and starts a few minutes.
       const waitReady = waitForProvisioned(label, get, clusterReadiness, {
         interval: "20 seconds",
-        times: 60,
+        times: 90,
       });
+      // Waits for a write to show up in the observed cluster.
+      const waitFor = (
+        converged: (cluster: ObservedCluster) => boolean,
+        times = 90,
+      ) =>
+        waitForProvisioned(
+          label,
+          get,
+          untilConverged(clusterReadiness, converged),
+          { interval: "20 seconds", times },
+        );
 
       // Observe.
       let observed = yield* get;
@@ -451,128 +469,155 @@ export const ClusterProvider = () =>
       }
 
       // Sync properties, SKU, identity, and tags against observed state.
-      const props = observed.properties ?? {};
-      const changed: kusto.ClusterPropertiesInput = {};
-      const set = <K extends keyof kusto.ClusterPropertiesInput>(
-        key: K,
-        value: kusto.ClusterPropertiesInput[K],
-      ) => {
-        changed[key] = value;
-      };
-      for (const key of [
-        "enableDiskEncryption",
-        "enableStreamingIngest",
-        "enablePurge",
-        "publicNetworkAccess",
-        "engineType",
-        "enableAutoStop",
-        "restrictOutboundNetworkAccess",
-        "publicIPType",
-      ] as const) {
-        const value = desired[key];
-        if (value !== undefined && props[key] !== value) set(key, value);
-      }
-      for (const key of ["allowedIpRangeList", "allowedFqdnList"] as const) {
-        const value = desired[key];
-        if (value !== undefined && !sameList(props[key], value)) {
-          set(key, value);
+      const deltaOf = (current: ObservedCluster) => {
+        const props = current.properties ?? {};
+        const changed: kusto.ClusterPropertiesInput = {};
+        const set = <K extends keyof kusto.ClusterPropertiesInput>(
+          key: K,
+          value: kusto.ClusterPropertiesInput[K],
+        ) => {
+          changed[key] = value;
+        };
+        for (const key of [
+          "enableDiskEncryption",
+          "enableStreamingIngest",
+          "enablePurge",
+          "publicNetworkAccess",
+          "engineType",
+          "enableAutoStop",
+          "restrictOutboundNetworkAccess",
+          "publicIPType",
+        ] as const) {
+          const value = desired[key];
+          if (value !== undefined && props[key] !== value) set(key, value);
         }
-      }
-      if (
-        news.trustedExternalTenants !== undefined &&
-        !sameList(
-          props.trustedExternalTenants?.flatMap((t) => t.value ?? []),
-          news.trustedExternalTenants,
-        )
-      ) {
-        set("trustedExternalTenants", desired.trustedExternalTenants);
-      }
-      if (
-        news.acceptedAudiences !== undefined &&
-        !sameList(
-          props.acceptedAudiences?.flatMap((a) => a.value ?? []),
-          news.acceptedAudiences,
-        )
-      ) {
-        set("acceptedAudiences", desired.acceptedAudiences);
-      }
-      if (
-        news.optimizedAutoscale !== undefined &&
-        JSON.stringify(props.optimizedAutoscale ?? {}) !==
-          JSON.stringify({
-            version: news.optimizedAutoscale.version,
-            isEnabled: news.optimizedAutoscale.isEnabled,
-            minimum: news.optimizedAutoscale.minimum,
-            maximum: news.optimizedAutoscale.maximum,
-          })
-      ) {
-        set("optimizedAutoscale", news.optimizedAutoscale);
-      }
-      if (
-        news.keyVaultProperties !== undefined &&
-        (
-          ["keyName", "keyVersion", "keyVaultUri", "userIdentity"] as const
-        ).some(
-          (key) =>
-            news.keyVaultProperties?.[key] !== undefined &&
-            news.keyVaultProperties[key] !== props.keyVaultProperties?.[key],
-        )
-      ) {
-        set("keyVaultProperties", news.keyVaultProperties);
-      }
-      const skuChanged =
-        observed.sku?.name !== sku.name ||
-        observed.sku?.tier !== sku.tier ||
-        (sku.capacity !== undefined && observed.sku?.capacity !== sku.capacity);
-      const identityChanged =
-        identity !== undefined &&
-        (observed.identity?.type !== identity.type ||
+        for (const key of ["allowedIpRangeList", "allowedFqdnList"] as const) {
+          const value = desired[key];
+          if (value !== undefined && !sameList(props[key], value)) {
+            set(key, value);
+          }
+        }
+        if (
+          news.trustedExternalTenants !== undefined &&
           !sameList(
-            Object.keys(observed.identity?.userAssignedIdentities ?? {}),
-            Object.keys(identity.userAssignedIdentities ?? {}),
-          ));
-      const tagsChanged = tagsDiffer(observed.tags, tags);
-      if (
-        Object.keys(changed).length > 0 ||
-        skuChanged ||
-        identityChanged ||
-        tagsChanged
-      ) {
+            props.trustedExternalTenants?.flatMap((t) => t.value ?? []),
+            news.trustedExternalTenants,
+          )
+        ) {
+          set("trustedExternalTenants", desired.trustedExternalTenants);
+        }
+        if (
+          news.acceptedAudiences !== undefined &&
+          !sameList(
+            props.acceptedAudiences?.flatMap((a) => a.value ?? []),
+            news.acceptedAudiences,
+          )
+        ) {
+          set("acceptedAudiences", desired.acceptedAudiences);
+        }
+        if (
+          news.optimizedAutoscale !== undefined &&
+          JSON.stringify(props.optimizedAutoscale ?? {}) !==
+            JSON.stringify({
+              version: news.optimizedAutoscale.version,
+              isEnabled: news.optimizedAutoscale.isEnabled,
+              minimum: news.optimizedAutoscale.minimum,
+              maximum: news.optimizedAutoscale.maximum,
+            })
+        ) {
+          set("optimizedAutoscale", news.optimizedAutoscale);
+        }
+        if (
+          news.keyVaultProperties !== undefined &&
+          (
+            ["keyName", "keyVersion", "keyVaultUri", "userIdentity"] as const
+          ).some(
+            (key) =>
+              news.keyVaultProperties?.[key] !== undefined &&
+              news.keyVaultProperties[key] !== props.keyVaultProperties?.[key],
+          )
+        ) {
+          set("keyVaultProperties", news.keyVaultProperties);
+        }
+        const skuChanged =
+          current.sku?.name !== sku.name ||
+          current.sku?.tier !== sku.tier ||
+          (sku.capacity !== undefined &&
+            current.sku?.capacity !== sku.capacity);
+        const identityChanged =
+          identity !== undefined &&
+          (current.identity?.type !== identity.type ||
+            !sameList(
+              Object.keys(current.identity?.userAssignedIdentities ?? {}),
+              Object.keys(identity.userAssignedIdentities ?? {}),
+            ));
+        const tagsChanged = tagsDiffer(current.tags, tags);
+        const any =
+          Object.keys(changed).length > 0 ||
+          skuChanged ||
+          identityChanged ||
+          tagsChanged;
+        return { changed, skuChanged, identityChanged, tagsChanged, any };
+      };
+      const delta = deltaOf(observed);
+      if (delta.any) {
         yield* kusto
           .UpdateCluster({
             ...where,
-            sku: skuChanged ? sku : undefined,
-            identity: identityChanged ? identity : undefined,
-            tags: tagsChanged ? tags : undefined,
-            properties: Object.keys(changed).length > 0 ? changed : undefined,
+            sku: delta.skuChanged ? sku : undefined,
+            identity: delta.identityChanged ? identity : undefined,
+            tags: delta.tagsChanged ? tags : undefined,
+            properties:
+              Object.keys(delta.changed).length > 0 ? delta.changed : undefined,
           })
           .pipe(Effect.retry(whileClusterBusy));
-        observed = yield* waitReady;
+        observed = yield* waitFor((c) => !deltaOf(c).any);
       }
 
-      // Sync language extensions via the add/remove actions.
+      // Sync language extensions via the add/remove actions. Extensions are
+      // matched by name: Azure reports a stale image name (e.g.
+      // `Python3_6_5` after enabling `Python3_10_8`), so an image change is
+      // detected against the previous props and applied as remove + add.
       if (news.languageExtensions !== undefined) {
+        const upper = (value: string | undefined) =>
+          (value ?? "").toUpperCase();
+        const namesOf = (cluster: ObservedCluster) =>
+          new Set(
+            (cluster.properties?.languageExtensions?.value ?? []).map((e) =>
+              upper(e.languageExtensionName),
+            ),
+          );
         const current = observed.properties?.languageExtensions?.value ?? [];
-        const currentKeys = new Set(
-          current.map((e) =>
-            extensionKey(e.languageExtensionName, e.languageExtensionImageName),
-          ),
+        const currentNames = namesOf(observed);
+        const previousImage = new Map(
+          (olds?.languageExtensions ?? []).map((e) => [
+            upper(e.name),
+            e.imageName,
+          ]),
         );
-        const desiredKeys = new Set(
-          news.languageExtensions.map((e) => extensionKey(e.name, e.imageName)),
+        const imageChanged = new Set(
+          news.languageExtensions
+            .filter(
+              (e) =>
+                currentNames.has(upper(e.name)) &&
+                previousImage.has(upper(e.name)) &&
+                previousImage.get(upper(e.name)) !== e.imageName,
+            )
+            .map((e) => upper(e.name)),
+        );
+        const desiredNames = new Set(
+          news.languageExtensions.map((e) => upper(e.name)),
         );
         const toRemove = current.filter(
           (e) =>
-            !desiredKeys.has(
-              extensionKey(
-                e.languageExtensionName,
-                e.languageExtensionImageName,
-              ),
-            ),
+            !desiredNames.has(upper(e.languageExtensionName)) ||
+            imageChanged.has(upper(e.languageExtensionName)),
         );
         const toAdd = news.languageExtensions.filter(
-          (e) => !currentKeys.has(extensionKey(e.name, e.imageName)),
+          (e) =>
+            !currentNames.has(upper(e.name)) || imageChanged.has(upper(e.name)),
         );
+        // Enabling or disabling an extension takes up to an hour.
         if (toRemove.length > 0) {
           yield* kusto
             .RemoveClusterLanguageExtensions({
@@ -583,7 +628,12 @@ export const ClusterProvider = () =>
               })),
             })
             .pipe(Effect.retry(whileClusterBusy));
-          observed = yield* waitReady;
+          observed = yield* waitFor((c) => {
+            const names = namesOf(c);
+            return toRemove.every(
+              (e) => !names.has(upper(e.languageExtensionName)),
+            );
+          }, 180);
         }
         if (toAdd.length > 0) {
           yield* kusto
@@ -595,7 +645,10 @@ export const ClusterProvider = () =>
               })),
             })
             .pipe(Effect.retry(whileClusterBusy));
-          observed = yield* waitReady;
+          observed = yield* waitFor((c) => {
+            const names = namesOf(c);
+            return toAdd.every((e) => names.has(upper(e.name)));
+          }, 180);
         }
       }
 
@@ -604,6 +657,30 @@ export const ClusterProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const get = getCluster(
+        subscriptionId,
+        output.resourceGroup,
+        output.clusterName,
+      );
+      // A cluster mid-operation (Updating, Starting, ...) rejects the delete;
+      // let it settle first (bounded; the delete retries conflicts anyway).
+      yield* get.pipe(
+        Effect.flatMap((cluster) =>
+          cluster !== undefined &&
+          TRANSITIONAL_STATES.has(cluster.properties?.state ?? "")
+            ? Effect.fail("busy" as const)
+            : Effect.void,
+        ),
+        Effect.retry({
+          while: (e) => e === "busy",
+          schedule: Schedule.spaced("20 seconds"),
+          times: 45,
+        }),
+        Effect.catchIf(
+          (e): e is "busy" => e === "busy",
+          () => Effect.void,
+        ),
+      );
       yield* ignoreNotFound(
         kusto
           .DeleteCluster({
@@ -617,7 +694,7 @@ export const ClusterProvider = () =>
       yield* waitUntilGone(
         `kusto cluster ${output.clusterName}`,
         getCluster(subscriptionId, output.resourceGroup, output.clusterName),
-        { interval: "20 seconds", times: 50 },
+        { interval: "20 seconds", times: 60 },
       );
     }),
 

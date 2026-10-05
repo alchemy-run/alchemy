@@ -61,10 +61,18 @@ export const appPackage = {
   serviceTypeName: process.env.AZURE_TEST_SF_SERVICE_TYPE ?? "VotingWebType",
 };
 
+/**
+ * Region and VM size for clusters with nodes. Standard_D2s_v3 is
+ * capacity-restricted (`SkuNotAvailable`) for the testing subscription in
+ * westus2; Standard_D2s_v4 is unrestricted in westus3.
+ */
+export const nodeLocation = "westus3";
+export const nodeVmSize = "Standard_D2s_v4";
+
 /** Resource group, Basic cluster, and a 3-node primary node type. */
 export const clusterWithNodes = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
-    location: "westus2",
+    location: nodeLocation,
   });
   const cluster = yield* Azure.ServiceFabric.ManagedCluster("Cluster", {
     resourceGroup: group.resourceGroupName,
@@ -76,6 +84,7 @@ export const clusterWithNodes = Effect.gen(function* () {
     cluster: cluster.managedClusterName,
     isPrimary: true,
     vmInstanceCount: 3,
+    vmSize: nodeVmSize,
   });
   return { group, cluster, nodeType };
 });

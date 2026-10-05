@@ -230,8 +230,9 @@ const toAttrs = (
   provisioningState: dc.properties?.provisioningState,
 });
 
-// Node provisioning takes 10-20 minutes.
-const BUDGET = { interval: "15 seconds", times: 120 } as const;
+// Node provisioning takes 10-20 minutes; the regional operation queue can
+// add 20+ minutes on top.
+const BUDGET = { interval: "15 seconds", times: 240 } as const;
 
 export const CassandraDataCenterProvider = () =>
   Provider.succeed(CassandraDataCenter, {
@@ -338,15 +339,29 @@ export const CassandraDataCenterProvider = () =>
       // Sync node count, VM size, and yaml against observed state.
       const delta = propertyDelta(news, observed);
       if (!isEmpty(delta)) {
-        yield* cosmos.UpdateCassandraDataCenter({
+        // The PATCH operation answers 500 "The method or operation is not
+        // implemented", so changes go through a full PUT of the observed
+        // properties with the delta applied.
+        const current = observed.properties ?? {};
+        yield* cosmos.CassandraDataCentersCreateUpdate({
           ...where,
-          properties: delta,
+          properties: {
+            dataCenterLocation: normalizeLocation(current.dataCenterLocation),
+            delegatedSubnetId: current.delegatedSubnetId,
+            nodeCount: current.nodeCount,
+            sku: current.sku,
+            diskSku: current.diskSku,
+            diskCapacity: current.diskCapacity,
+            availabilityZone: current.availabilityZone,
+            base64EncodedCassandraYamlFragment:
+              current.base64EncodedCassandraYamlFragment,
+            ...delta,
+          },
         });
         observed = yield* waitForProvisioned(
           label,
           get,
-          (dc) =>
-            isEmpty(propertyDelta(news, dc)) ? settled(dc) : "Updating",
+          (dc) => (isEmpty(propertyDelta(news, dc)) ? settled(dc) : "Updating"),
           BUDGET,
         );
       }

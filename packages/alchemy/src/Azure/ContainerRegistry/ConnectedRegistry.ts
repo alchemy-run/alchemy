@@ -151,10 +151,10 @@ export interface ConnectedRegistry extends Resource<
  *   actions: [
  *     "repositories/hello-world/content/read",
  *     "repositories/hello-world/metadata/read",
- *     "gateway/edge/config/read",
- *     "gateway/edge/config/write",
- *     "gateway/edge/message/read",
- *     "gateway/edge/message/write",
+ *     "gateway/edgegateway/config/read",
+ *     "gateway/edgegateway/config/write",
+ *     "gateway/edgegateway/message/read",
+ *     "gateway/edgegateway/message/write",
  *   ],
  * });
  * const syncToken = yield* Azure.ContainerRegistry.Token("edge-sync", {
@@ -165,7 +165,7 @@ export interface ConnectedRegistry extends Resource<
  * const edge = yield* Azure.ContainerRegistry.ConnectedRegistry("edge", {
  *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
- *   name: "edge",
+ *   name: "edgegateway",
  *   mode: "ReadOnly",
  *   syncTokenId: syncToken.tokenId,
  * });

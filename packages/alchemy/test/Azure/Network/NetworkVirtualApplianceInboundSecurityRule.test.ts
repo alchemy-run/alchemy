@@ -77,5 +77,5 @@ test.provider.skipIf(!runPaidOnly)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

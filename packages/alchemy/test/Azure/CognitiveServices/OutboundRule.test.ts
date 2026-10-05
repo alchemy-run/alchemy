@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { expect } from "alchemy-test";
@@ -7,6 +8,9 @@ import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+/** Built-in "Azure AI Enterprise Network Connection Approver" role. */
+const NETWORK_CONNECTION_APPROVER = "b556d68e-0be0-4f35-a333-ad7ee1ce17ea";
 
 const program = (props: {
   name: string;
@@ -32,21 +36,33 @@ const program = (props: {
     const storage = yield* Azure.Storage.StorageAccount("Files", {
       resourceGroup: group.resourceGroupName,
     });
+    // The account's identity approves the private endpoint on the target.
+    const approver = yield* Azure.Authorization.RoleAssignment("Approver", {
+      scope: storage.storageAccountId,
+      roleDefinitionId: NETWORK_CONNECTION_APPROVER,
+      principalId: account.principalId.as<string>(),
+      principalType: "ServicePrincipal",
+    });
     const rule = yield* Azure.CognitiveServices.OutboundRule("Rule", {
       resourceGroup: group.resourceGroupName,
       account: network.account,
       name: props.name,
       type: "PrivateEndpoint",
       destination: {
-        serviceResourceId: storage.storageAccountId,
+        // Create the rule only after the approver grant exists.
+        serviceResourceId: Output.all(
+          storage.storageAccountId,
+          approver.roleAssignmentId,
+        ).pipe(Output.map(([storageAccountId]) => storageAccountId)),
         subresourceTarget: props.subresourceTarget,
       },
     });
     return { group, account, rule };
   });
 
-// Needs the managed VNet (10+ minutes, preview) plus a managed private
-// endpoint (~$0.01/hour): gated as slow.
+// Needs the managed VNet (~5-10 minutes to create, ~30 minutes to delete
+// with the account, preview) plus a managed private endpoint
+// (~$0.01/hour): gated as slow.
 test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete a managed network outbound rule",
   (stack) =>
@@ -71,7 +87,8 @@ test.provider.skipIf(!runExpensive)(
         subresourceTarget: "blob",
       });
 
-      // In place: a different sub-resource.
+      // Rules are immutable: a different sub-resource replaces the rule
+      // under the same name (delete first).
       yield* stack.deploy(
         program({ name: "alchemy-rule-a", subresourceTarget: "queue" }),
       );
@@ -99,5 +116,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );

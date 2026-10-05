@@ -170,6 +170,7 @@ test.provider.skipIf(!runExpensive)(
     }),
   {
     tags: ["provider:azure", "provider:azure:storagesync", "live"],
-    timeout: 900_000,
+    // Covers the ~30 minute resource group teardown after a cloud endpoint.
+    timeout: 3_600_000,
   },
 );

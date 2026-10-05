@@ -71,6 +71,8 @@ const program = (props: {
 // tenant admin (Pro/Premium licensing); the trial tenant's resource provider
 // answers every request with 502 Bad Gateway (see the probe in
 // PrivateLinkService.test.ts). Private endpoint ~$0.01/hour; a few minutes.
+// Running it on a tenant without Private Link leaves an undeletable ARM
+// record (and a ResourceGroupDeletionBlocked group) behind.
 test.provider.skipIf(!runPaidOnly)(
   "approve, update, and delete a Power BI private endpoint connection",
   (stack) =>

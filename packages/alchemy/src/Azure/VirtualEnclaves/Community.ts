@@ -71,7 +71,10 @@ export interface CommunityProps {
   /** RBAC role assignments on the community. */
   communityRoleAssignments?: VirtualEnclavesRoleAssignment[];
   /**
-   * SKU of the community's Azure Firewall.
+   * SKU of the community's Azure Firewall. Azure cannot change the tier of
+   * an existing community, so changing it replaces the community. API
+   * version 2026-04-01 provisions `Standard` even when `Basic` is
+   * requested; the observed tier is reported in the `firewallSku` attribute.
    * @default "Standard"
    */
   firewallSku?: "Basic" | "Standard" | "Premium";
@@ -216,7 +219,7 @@ export const CommunityProvider = () =>
       });
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         !sameName(news.resourceGroup, output.resourceGroup) ||
@@ -226,7 +229,14 @@ export const CommunityProvider = () =>
           !sameName(news.location, output.location)) ||
         (news.addressSpace !== undefined &&
           output.addressSpace !== undefined &&
-          news.addressSpace !== output.addressSpace)
+          news.addressSpace !== output.addressSpace) ||
+        // Compared against the requested SKU: Azure may provision a
+        // different tier than requested (see `firewallSku`).
+        (olds !== undefined &&
+          !sameName(
+            news.firewallSku ?? "Standard",
+            olds.firewallSku ?? "Standard",
+          ))
       ) {
         return { action: "replace" } as const;
       }
@@ -270,7 +280,6 @@ export const CommunityProvider = () =>
         governedServiceList: news.governedServiceList,
         policyOverride: news.policyOverride,
         communityRoleAssignments: news.communityRoleAssignments,
-        firewallSku: news.firewallSku,
         approvalSettings: news.approvalSettings,
         maintenanceModeConfiguration: news.maintenanceModeConfiguration,
         monitoringSettings: news.monitoringSettings,
@@ -292,7 +301,11 @@ export const CommunityProvider = () =>
           location,
           tags,
           identity,
-          properties: { ...mutable, addressSpace: news.addressSpace },
+          properties: {
+            ...mutable,
+            addressSpace: news.addressSpace,
+            firewallSku: news.firewallSku,
+          },
         });
       }
       observed = yield* waitReady;

@@ -4,14 +4,16 @@ import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
-import {
-  COSMOS_LOCATION,
-  logLevel,
-  subscriptionId,
-  waitGone,
-} from "./helpers.ts";
+import { logLevel, subscriptionId, waitGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+/**
+ * Central US rejects dedicated gateway scale-out ("ServiceUnavailable:
+ * Sorry, we are currently experiencing high demand in this region");
+ * West US 2 creates and resizes in ~2 minutes.
+ */
+const LOCATION = "westus2";
 
 const getService = (
   resourceGroupName: string,
@@ -30,12 +32,12 @@ const getService = (
 const program = (props: { instanceCount: number }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: COSMOS_LOCATION,
+      location: LOCATION,
     });
     // Dedicated compute requires a provisioned-throughput account.
     const account = yield* Azure.CosmosDB.DatabaseAccount("Account", {
       resourceGroup: group.resourceGroupName,
-      location: COSMOS_LOCATION,
+      location: LOCATION,
     });
     const service = yield* Azure.CosmosDB.Service("Gateway", {
       resourceGroup: group.resourceGroupName,

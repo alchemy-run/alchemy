@@ -125,5 +125,5 @@ test.provider.skipIf(!runExpensive)(
       ).toEqual("gone");
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

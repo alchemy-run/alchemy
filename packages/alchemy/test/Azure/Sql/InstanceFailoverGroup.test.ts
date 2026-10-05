@@ -1,5 +1,6 @@
 import * as Azure from "@/Azure";
 import type { Input } from "@/Input";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as sql from "@distilled.cloud/azure/sql";
 import { expect } from "alchemy-test";
@@ -18,7 +19,9 @@ const logLevel = Effect.provideService(
 );
 
 const PRIMARY = "centralus";
-const SECONDARY = "eastus2";
+// The subscription has no SQL MI vCore/subnet quota in eastus/eastus2
+// (limit 0); southcentralus has the default 320 vCores / 6 subnets.
+const SECONDARY = "southcentralus";
 
 const getGroup = (
   resourceGroupName: string,
@@ -74,7 +77,7 @@ const miSubnet = (
       location,
       addressPrefixes: [cidr],
     });
-    return yield* Azure.Network.Subnet(`${prefix}Subnet`, {
+    const subnet = yield* Azure.Network.Subnet(`${prefix}Subnet`, {
       resourceGroup,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: cidr.replace("/16", "/24"),
@@ -82,6 +85,7 @@ const miSubnet = (
       routeTableId: routes.routeTableId,
       delegations: [{ serviceName: "Microsoft.Sql/managedInstances" }],
     });
+    return { vnet, subnet };
   });
 
 const program = (props: {
@@ -104,6 +108,29 @@ const program = (props: {
       SECONDARY,
       "10.45.0.0/16",
     );
+    // Failover groups replicate over global VNet peering.
+    // Peer only after both subnets exist, one direction at a time: a
+    // peering write while either VNet is still updating is rejected.
+    const forward = yield* Azure.Network.VirtualNetworkPeering(
+      "PrimaryToSecondary",
+      {
+        resourceGroup: group.resourceGroupName,
+        virtualNetwork: primarySubnet.vnet.virtualNetworkName,
+        remoteVirtualNetworkId: Output.all(
+          secondarySubnet.vnet.virtualNetworkId,
+          primarySubnet.subnet.subnetId,
+          secondarySubnet.subnet.subnetId,
+        ).pipe(Output.map(([vnetId]) => vnetId)),
+      },
+    );
+    yield* Azure.Network.VirtualNetworkPeering("SecondaryToPrimary", {
+      resourceGroup: group.resourceGroupName,
+      virtualNetwork: secondarySubnet.vnet.virtualNetworkName,
+      remoteVirtualNetworkId: Output.all(
+        primarySubnet.vnet.virtualNetworkId,
+        forward.peeringId,
+      ).pipe(Output.map(([vnetId]) => vnetId)),
+    });
     const mi = {
       resourceGroup: group.resourceGroupName,
       administratorLogin: "alchemyadmin",
@@ -116,12 +143,12 @@ const program = (props: {
     const primary = yield* Azure.Sql.ManagedInstance("Primary", {
       ...mi,
       location: PRIMARY,
-      subnetId: primarySubnet.subnetId,
+      subnetId: primarySubnet.subnet.subnetId,
     });
     const secondary = yield* Azure.Sql.ManagedInstance("Secondary", {
       ...mi,
       location: SECONDARY,
-      subnetId: secondarySubnet.subnetId,
+      subnetId: secondarySubnet.subnet.subnetId,
       dnsZonePartner: primary.managedInstanceId,
     });
     const fog = yield* Azure.Sql.InstanceFailoverGroup("Fog", {
@@ -191,6 +218,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:sql", "live"],
-    timeout: 12 * 3_600_000,
+    timeout: 4 * 3_600_000,
   },
 );

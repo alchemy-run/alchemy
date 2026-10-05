@@ -25,13 +25,18 @@ const SETTING_NAME = "Default";
 
 export interface SqlPoolDataMaskingPolicyProps extends SqlPoolChildProps {
   /**
-   * Whether dynamic data masking is on.
+   * Whether dynamic data masking is on. Azure only keeps `Enabled` while
+   * the pool has at least one exempt principal (other than `dbo`) or
+   * masking rule; otherwise it reports `Disabled`. Disabling masking
+   * clears `exemptPrincipals`.
    * @default "Enabled"
    */
   dataMaskingState?: SynapseEnabledState;
   /**
    * Semicolon-separated database users that see unmasked data, e.g.
-   * `analyst1;analyst2`.
+   * `analyst1;analyst2`. Every entry must be an existing database user.
+   * Administrators (`dbo`) always see unmasked data, so Azure drops them
+   * from the list.
    */
   exemptPrincipals?: string;
 }
@@ -98,6 +103,19 @@ const toAttrs = (
   exemptPrincipals: setting.properties?.exemptPrincipals,
 });
 
+/**
+ * Canonical form of a semicolon-separated principal list. Azure reorders
+ * the list, appends a trailing `;`, and drops `dbo` (administrators are
+ * always exempt).
+ */
+const principalSet = (principals: string | undefined) =>
+  (principals ?? "")
+    .split(";")
+    .map((p) => p.trim().toLowerCase())
+    .filter((p) => p !== "" && p !== "dbo")
+    .sort()
+    .join(";");
+
 const settingSync = (
   subscriptionId: string,
   ref: SqlPoolChildAttrs,
@@ -105,7 +123,16 @@ const settingSync = (
 ) => ({
   label: `synapse data masking policy on sql pool ${ref.sqlPoolName}`,
   get: getSetting(subscriptionId, ref),
-  matches: (setting: Observed) => fieldsMatch(setting.properties, desired),
+  matches: (setting: Observed) =>
+    fieldsMatch(
+      setting.properties?.dataMaskingState,
+      desired.dataMaskingState,
+    ) &&
+    // Disabling masking clears the exempt list.
+    (desired.dataMaskingState === "Disabled" ||
+      desired.exemptPrincipals === undefined ||
+      principalSet(setting.properties?.exemptPrincipals) ===
+        principalSet(desired.exemptPrincipals)),
   put: synapse.DataMaskingPoliciesCreateOrUpdate({
     ...sqlPoolWhere(subscriptionId, ref),
     dataMaskingPolicyName: SETTING_NAME,

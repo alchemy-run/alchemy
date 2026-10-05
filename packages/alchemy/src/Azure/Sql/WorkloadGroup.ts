@@ -21,6 +21,12 @@ import {
 } from "./common.ts";
 import { databasePath, type DatabaseScope } from "./setting.ts";
 
+/**
+ * Generated names stay short: a classifier in the group fails with
+ * InternalServerError when both names together exceed ~125 characters.
+ */
+const MAX_NAME_LENGTH = 60;
+
 export interface WorkloadGroupProps {
   /** Resource group of the server. Changing it replaces the workload group. */
   resourceGroup: string;
@@ -31,6 +37,8 @@ export interface WorkloadGroupProps {
   /**
    * Name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the workload group.
+   * Classifiers in the group fail (InternalServerError) when this name
+   * and the classifier's name together exceed ~125 characters.
    */
   name?: string;
   /** Minimum share of resources reserved for the group (0-100). */
@@ -165,7 +173,7 @@ export const WorkloadGroupProvider = () =>
         return undefined;
       }
       const scope = { resourceGroup, serverName, databaseName };
-      const generated = yield* createChildName(id, 128);
+      const generated = yield* createChildName(id, MAX_NAME_LENGTH);
       const name = output?.workloadGroupName ?? olds?.name ?? generated;
       const observed = yield* getChild(subscriptionId, scope, name);
       if (observed === undefined) return undefined;
@@ -188,7 +196,7 @@ export const WorkloadGroupProvider = () =>
       const name =
         news.name ??
         output?.workloadGroupName ??
-        (yield* createChildName(id, 128));
+        (yield* createChildName(id, MAX_NAME_LENGTH));
       const desired = {
         minResourcePercent: news.minResourcePercent,
         maxResourcePercent: news.maxResourcePercent,

@@ -4,7 +4,15 @@ import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runPaidOnly, withPublicIps, withVcpus } from "../gates.ts";
-import { clusterAuth, logLevel, subscription, tags, waitGone } from "./util.ts";
+import {
+  clusterAuth,
+  logLevel,
+  nodeLocation,
+  nodeVmSize,
+  subscription,
+  tags,
+  waitGone,
+} from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -25,10 +33,12 @@ const getNodeType = (
 const program = (props: {
   tags: Record<string, string>;
   placementProperties?: Record<string, string>;
+  vmSize?: string;
+  location?: string;
 }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "westus2",
+      location: props.location ?? nodeLocation,
     });
     const cluster = yield* Azure.ServiceFabric.ManagedCluster("Cluster", {
       resourceGroup: group.resourceGroupName,
@@ -40,17 +50,16 @@ const program = (props: {
       cluster: cluster.managedClusterName,
       isPrimary: true,
       vmInstanceCount: 3,
-      vmSize: "Standard_D2s_v3",
+      vmSize: props.vmSize ?? nodeVmSize,
       placementProperties: props.placementProperties,
       tags: props.tags,
     });
     return { group, cluster, nodeType };
   });
 
-// A primary node type needs 3 × Standard_D2s_v3 (6 vCPUs): more than the
-// free trial's ~4 regional vCPUs. ~$0.60/hour while running, 20-40
-// minutes to provision and as long to delete. Run with AZURE_TEST_PAID=1
-// on an upgraded subscription.
+// A primary node type needs 3 × Standard_D2s_v4 (6 vCPUs of the DSv4
+// family). ~$0.60/hour while running, 20-40 minutes to provision and as
+// long to delete. Run with AZURE_TEST_PAID=1 on an upgraded subscription.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a primary node type",
   (stack) =>
@@ -72,7 +81,7 @@ test.provider.skipIf(!runPaidOnly)(
           expect(nodeType.vmInstanceCount).toEqual(3);
           const observed = yield* get();
           expect(observed.properties?.provisioningState).toEqual("Succeeded");
-          expect(observed.properties?.vmSize).toEqual("Standard_D2s_v3");
+          expect(observed.properties?.vmSize).toEqual(nodeVmSize);
 
           // In-place: placement properties and tags.
           const updated = yield* stack.deploy(
@@ -93,22 +102,28 @@ test.provider.skipIf(!runPaidOnly)(
         }),
       ),
     ).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );
 
-// Ungated probe (~$0.01, ~9 minutes): the free trial's 4 regional vCPUs
-// cannot fit the 6 a 3-node primary node type needs, and the node type
-// fails with the typed `QuotaExceeded` error. The node-less cluster is
-// cleaned up by the final destroy.
+// Ungated probe (~$0.01, ~9 minutes): the subscription's Dv5/DSv5 family
+// quota is 0, so a 3-node Standard_D2s_v5 primary node type fails with the
+// typed `QuotaExceeded` error. The node-less cluster is cleaned up by the
+// final destroy.
 test.provider(
-  "a primary node type exceeds the free-trial vCPU quota",
+  "a primary node type exceeds the DSv5-family vCPU quota",
   (stack) =>
     withVcpus(4)(
       withPublicIps(1)(
         Effect.gen(function* () {
           yield* stack.destroy();
           const error = yield* stack
-            .deploy(program({ tags: { env: "test" } }))
+            .deploy(
+              program({
+                tags: { env: "test" },
+                vmSize: "Standard_D2s_v5",
+                location: "westus2",
+              }),
+            )
             .pipe(Effect.flip);
           expect(error._tag).toEqual("QuotaExceeded");
           yield* stack.destroy();

@@ -38,7 +38,10 @@ const program = (props: { tags: Record<string, string> }) =>
 // The resource itself is free, but the Power BI resource provider answers
 // every request with 502 Bad Gateway until a Power BI / Fabric tenant admin
 // enables Azure Private Link (Pro/Premium licensing). Runs only on such a
-// tenant (AZURE_TEST_PAID=1); a few seconds, ~$0.
+// tenant (AZURE_TEST_PAID=1); a few seconds, ~$0. Do NOT set
+// AZURE_TEST_PAID=1 on a tenant without it: the failed PUT leaves an ARM
+// record whose delete the RP refuses (403 BadRequest), so the resource group
+// stays blocked with ResourceGroupDeletionBlocked.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a Power BI private link service",
   (stack) =>

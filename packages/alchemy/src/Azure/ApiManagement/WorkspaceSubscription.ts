@@ -74,6 +74,16 @@ const normalizeScope = (scope: string) => {
   return index >= 0 ? scope.slice(index) : scope;
 };
 
+/**
+ * Workspace subscriptions reject a service-relative scope ("One or more
+ * fields contain incorrect values"); expand `/products/{id}` and `/apis...`
+ * to the workspace-relative form. ARM ids and `/workspaces/...` pass through.
+ */
+const workspaceScope = (workspaceName: string, scope: string) =>
+  scope.startsWith("/products/") || scope.startsWith("/apis")
+    ? `/workspaces/${workspaceName}${scope}`
+    : scope;
+
 export const WorkspaceSubscriptionProvider = () =>
   Provider.succeed(WorkspaceSubscription, {
     stables: [
@@ -114,7 +124,7 @@ export const WorkspaceSubscriptionProvider = () =>
           // Never email the owner.
           notify: false,
           properties: {
-            scope: news.scope,
+            scope: workspaceScope(key.workspaceName, news.scope),
             displayName: news.displayName ?? key.subscriptionName,
             state: news.state ?? "active",
             allowTracing: news.allowTracing,

@@ -17,6 +17,7 @@ import {
   createKustoChildName,
   isClusterOwnedByStack,
   lower,
+  untilConverged,
   whileClusterBusy,
 } from "./common.ts";
 
@@ -213,7 +214,7 @@ export const SandboxCustomImageProvider = () =>
         `kusto sandbox custom image ${name}`,
         get,
         (i) => i.properties?.provisioningState,
-        { interval: "15 seconds", times: 60 },
+        { interval: "15 seconds", times: 160 },
       );
 
       // Observe.
@@ -228,19 +229,30 @@ export const SandboxCustomImageProvider = () =>
       observed = yield* waitReady;
 
       // Sync version, base image, and requirements against observed state.
-      const props = observed.properties;
-      if (
-        (news.languageVersion !== undefined &&
-          props?.languageVersion !== news.languageVersion) ||
-        (news.baseImageName !== undefined &&
-          props?.baseImageName !== news.baseImageName) ||
-        (news.requirementsFileContent !== undefined &&
-          props?.requirementsFileContent !== news.requirementsFileContent)
-      ) {
+      const drifted = (image: NonNullable<typeof observed>) => {
+        const props = image.properties;
+        return (
+          (news.languageVersion !== undefined &&
+            props?.languageVersion !== news.languageVersion) ||
+          (news.baseImageName !== undefined &&
+            props?.baseImageName !== news.baseImageName) ||
+          (news.requirementsFileContent !== undefined &&
+            props?.requirementsFileContent !== news.requirementsFileContent)
+        );
+      };
+      if (drifted(observed)) {
         yield* kusto
           .UpdateSandboxCustomImage({ ...where, properties })
           .pipe(Effect.retry(whileClusterBusy));
-        observed = yield* waitReady;
+        observed = yield* waitForProvisioned(
+          `kusto sandbox custom image ${name}`,
+          get,
+          untilConverged(
+            (i) => i.properties?.provisioningState,
+            (i) => !drifted(i),
+          ),
+          { interval: "15 seconds", times: 160 },
+        );
       }
 
       return toAttrs(resourceGroup, cluster, name, observed);

@@ -77,7 +77,7 @@ const program = (props: { sizeGiB: number; tags: Record<string, string> }) =>
 
 // One 2-vCPU lab VM (~$0.10/hour) + a 4-8 GiB standard disk for ~25
 // minutes: ~$0.05. Gated: the lab VM alone takes ~5 minutes to create and
-// ~5 to delete, so the lifecycle runs well past 10 minutes.
+// ~5 to delete; the full lifecycle measured ~14 minutes.
 test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete a lab disk",
   (stack) =>
@@ -118,5 +118,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get(replaced.disk.diskName))).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_500_000 },
 );

@@ -46,16 +46,22 @@ export interface IntegrationFabricProps {
    */
   location?: string;
   /**
-   * ARM ID of the resource being integrated, e.g. an AKS cluster. Changing
-   * it replaces the integration fabric.
+   * ARM ID of the resource being integrated. Omit it for a data-source-only
+   * fabric (target type `NoneType`); Azure currently accepts only the
+   * workspace's bundled Azure Monitor workspace (fabric name `bundled-amw`)
+   * or an SRE agent as a target. Changing it replaces the integration fabric.
    */
-  targetResourceId: string;
+  targetResourceId?: string;
   /**
-   * ARM ID of the resource Grafana uses as data source, e.g. an Azure
-   * Monitor workspace. Changing it replaces the integration fabric.
+   * ARM ID of the resource Grafana uses as data source. Azure currently
+   * supports only an Azure Monitor workspace. Changing it replaces the
+   * integration fabric.
    */
   dataSourceResourceId: string;
-  /** Integration scenarios to enable. */
+  /**
+   * Integration scenarios to enable. For an Azure Monitor workspace data
+   * source without a target, Azure accepts `aks` and `istio`.
+   */
   scenarios?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
@@ -92,21 +98,20 @@ export interface IntegrationFabric extends Resource<
 > {}
 
 /**
- * An integration fabric of an Azure Managed Grafana workspace — wires a
- * resource such as an AKS cluster to a data source such as an Azure Monitor
- * workspace so Grafana ships curated dashboards and alerts for it.
+ * An integration fabric of an Azure Managed Grafana workspace — wires an
+ * Azure Monitor workspace data source into Grafana for integration
+ * scenarios (e.g. `aks`, `istio`) so Grafana ships curated dashboards for it.
  *
  * @see https://learn.microsoft.com/azure/managed-grafana/overview
  *
- * ### Integrating an AKS Cluster
- * **Example:** Cluster metrics through an Azure Monitor workspace
+ * ### Integrating AKS Dashboards
+ * **Example:** AKS and Istio dashboards over an Azure Monitor workspace
  * ```typescript
  * const fabric = yield* Azure.Grafana.IntegrationFabric("aks", {
  *   resourceGroup: group.resourceGroupName,
  *   workspace: grafana.workspaceName,
- *   targetResourceId: cluster.clusterId,
  *   dataSourceResourceId: metrics.workspaceId,
- *   scenarios: ["ContainerInsights"],
+ *   scenarios: ["aks", "istio"],
  * });
  * ```
  *
@@ -132,7 +137,7 @@ const getFabric = (
   );
 
 const lower = (value: string | undefined) =>
-  value?.toLowerCase().replaceAll(" ", "");
+  value?.toLowerCase().replaceAll(" ", "") || undefined;
 
 const toAttrs = (
   resourceGroup: string,
@@ -145,8 +150,8 @@ const toAttrs = (
   workspace,
   resourceGroup,
   location: fabric.location,
-  targetResourceId: fabric.properties?.targetResourceId,
-  dataSourceResourceId: fabric.properties?.dataSourceResourceId,
+  targetResourceId: fabric.properties?.targetResourceId || undefined,
+  dataSourceResourceId: fabric.properties?.dataSourceResourceId || undefined,
   scenarios: [...(fabric.properties?.scenarios ?? [])],
   tags: userTags(fabric.tags),
 });
@@ -156,6 +161,9 @@ const sameSet = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => {
   const right = new Set(b.map((value) => value.toLowerCase()));
   return left.size === right.size && [...left].every((v) => right.has(v));
 };
+
+// Integration fabric names match ^[a-zA-Z][a-z0-9A-Z-]{0,18}[a-z0-9A-Z]$.
+const createFabricName = (id: string) => createGrafanaName(id, 20);
 
 const BUDGET = { interval: "5 seconds", times: 60 } as const;
 
@@ -227,7 +235,7 @@ export const IntegrationFabricProvider = () =>
       const name =
         output?.integrationFabricName ??
         olds?.name ??
-        (yield* createGrafanaName(id));
+        (yield* createFabricName(id));
       const observed = yield* getFabric(
         subscriptionId,
         resourceGroup,
@@ -247,7 +255,7 @@ export const IntegrationFabricProvider = () =>
       const name =
         news.name ??
         output?.integrationFabricName ??
-        (yield* createGrafanaName(id));
+        (yield* createFabricName(id));
       const tags = yield* desiredTags(id, news.tags);
       const where = {
         subscriptionId,

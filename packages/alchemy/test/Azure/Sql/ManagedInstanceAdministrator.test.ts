@@ -17,6 +17,8 @@ import {
 
 const { test } = Test.make({ providers: Azure.providers() });
 
+const hasDirectoryReaders = !!process.env.AZURE_TEST_SQL_MI_DIRECTORY_READERS;
+
 const getSetting = (resourceGroupName: string, managedInstanceName: string) =>
   Effect.gen(function* () {
     return yield* sql.GetManagedInstanceAdministrator({
@@ -31,7 +33,9 @@ type Step = { login: string; sid: string };
 
 const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
   Effect.gen(function* () {
-    const { group, instance } = yield* managedInstance(password);
+    const { group, instance } = yield* managedInstance(password, {
+      identity: { type: "SystemAssigned" },
+    });
     const setting =
       step === undefined
         ? undefined
@@ -45,8 +49,13 @@ const program = (password: Redacted.Redacted<string>, step: Step | undefined) =>
 
 // Needs a SQL Managed Instance (~$0.70/hour; the first instance in a subnet
 // takes 30 minutes to 6 hours): several dollars per run, so this only runs
-// with AZURE_TEST_EXPENSIVE=1.
-test.provider.skipIf(!runExpensive)(
+// with AZURE_TEST_EXPENSIVE=1. Azure resolves the administrator through the
+// instance's identity, which must hold the Entra "Directory Readers" role
+// (a tenant-level grant); without it the create fails asynchronously with
+// `ServicePrincipalLookupInAadFailed`, so this only runs when
+// AZURE_TEST_SQL_MI_DIRECTORY_READERS=1 (a tenant where new managed instance
+// identities are granted Directory Readers, e.g. via a group).
+test.provider.skipIf(!runExpensive || !hasDirectoryReaders)(
   "set, update, and remove a managed instance entra administrator",
   (stack) =>
     Effect.gen(function* () {
@@ -100,5 +109,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get)).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

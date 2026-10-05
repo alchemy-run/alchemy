@@ -26,8 +26,13 @@ export const withStandardEnvironment = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> => standardEnvironments.withPermits(1)(self);
 
-/** Region for standard environments. */
-export const STANDARD_LOCATION = "westus2";
+/**
+ * Region for standard environments. Most regions allow one environment per
+ * subscription, so parallel runs of different files pick distinct regions
+ * via `AZURE_TEST_CONTAINERAPPS_LOCATION`.
+ */
+export const STANDARD_LOCATION =
+  process.env.AZURE_TEST_CONTAINERAPPS_LOCATION ?? "westus2";
 
 /** A Consumption workload profile (no reserved vCPUs). */
 export const CONSUMPTION_PROFILES = [

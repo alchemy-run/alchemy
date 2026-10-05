@@ -18,6 +18,7 @@ import {
   createKustoChildName,
   isClusterOwnedByStack,
   lower,
+  untilConverged,
   whileClusterBusy,
 } from "./common.ts";
 
@@ -256,7 +257,10 @@ export const DatabasePrincipalAssignmentProvider = () =>
       const fresh = yield* waitForProvisioned(
         `kusto database principal assignment ${name}`,
         get,
-        (a) => a.properties?.provisioningState,
+        untilConverged(
+          (a) => a.properties?.provisioningState,
+          (a) => a.properties?.role === news.role,
+        ),
         { interval: "5 seconds", times: 60 },
       );
       return toAttrs(resourceGroup, cluster, database, name, fresh);

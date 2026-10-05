@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import { expect } from "alchemy-test";
@@ -50,7 +51,7 @@ const program = (variant?: Variant) =>
         : yield* Azure.ApiManagement.WorkspaceSubscription("Entity", {
             ...base,
             name: "alchemy-sub",
-            scope: `/products/${product.productName}`,
+            scope: Output.interpolate`/products/${product.productName}`,
             displayName: `Subscription ${variant}`,
           });
     return { group, service, created };

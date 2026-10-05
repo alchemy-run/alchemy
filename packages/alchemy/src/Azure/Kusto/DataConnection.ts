@@ -19,6 +19,7 @@ import {
   isClusterOwnedByStack,
   lower,
   sameId,
+  untilConverged,
   whileClusterBusy,
 } from "./common.ts";
 
@@ -37,7 +38,8 @@ export interface DataConnectionProps {
   database: string;
   /**
    * Connection name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the connection.
+   * stage, and logical ID (at most 40 characters). Changing it replaces
+   * the connection.
    */
   name?: string;
   /**
@@ -305,7 +307,7 @@ export const DataConnectionProvider = () =>
       const name =
         output?.dataConnectionName ??
         olds?.name ??
-        (yield* createKustoChildName(id));
+        (yield* createKustoChildName(id, 40));
       const observed = yield* getConnection(
         subscriptionId,
         resourceGroup,
@@ -328,7 +330,7 @@ export const DataConnectionProvider = () =>
       const name =
         news.name ??
         output?.dataConnectionName ??
-        (yield* createKustoChildName(id));
+        (yield* createKustoChildName(id, 40));
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -374,16 +376,19 @@ export const DataConnectionProvider = () =>
       // Sync mutable settings against observed state. The PATCH carries
       // the full property set because the per-kind required fields are
       // validated on every write.
-      const props = observed.properties ?? {};
-      const drift =
-        MUTABLE_FIELDS.some(
-          (key) =>
-            properties[key] !== undefined && props[key] !== properties[key],
-        ) ||
-        (news.eventSystemProperties !== undefined &&
-          JSON.stringify([...(props.eventSystemProperties ?? [])].sort()) !==
-            JSON.stringify([...news.eventSystemProperties].sort()));
-      if (drift) {
+      const drifted = (connection: NonNullable<typeof observed>) => {
+        const props = connection.properties ?? {};
+        return (
+          MUTABLE_FIELDS.some(
+            (key) =>
+              properties[key] !== undefined && props[key] !== properties[key],
+          ) ||
+          (news.eventSystemProperties !== undefined &&
+            JSON.stringify([...(props.eventSystemProperties ?? [])].sort()) !==
+              JSON.stringify([...news.eventSystemProperties].sort()))
+        );
+      };
+      if (drifted(observed)) {
         yield* kusto
           .UpdateDataConnection({
             ...where,
@@ -392,7 +397,15 @@ export const DataConnectionProvider = () =>
             properties,
           })
           .pipe(Effect.retry(whileClusterBusy));
-        observed = yield* waitReady;
+        observed = yield* waitForProvisioned(
+          `kusto data connection ${name}`,
+          get,
+          untilConverged(
+            (c) => c.properties?.provisioningState,
+            (c) => !drifted(c),
+          ),
+          { interval: "5 seconds", times: 60 },
+        );
       }
 
       return toAttrs(resourceGroup, cluster, database, name, observed);

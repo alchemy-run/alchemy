@@ -48,7 +48,7 @@ const program = (subscriptionId: string, sendSubscriptionLogs: boolean) =>
   });
 
 // Needs an Elastic monitor (Marketplace SaaS purchase + hosted deployment,
-// ~$0.50-1/hour, ~5-15 minutes; the free trial cannot create one, see the
+// ~$0.50-1/hour, ~10-50 minutes; the free trial cannot create one, see the
 // Monitor probe) and a second subscription owned by the test identity. Run
 // only with AZURE_TEST_PAID=1 and AZURE_TEST_ELASTIC_SECOND_SUBSCRIPTION.
 test.provider.skipIf(!runPaidOnly || !secondSubscription)(
@@ -87,5 +87,5 @@ test.provider.skipIf(!runPaidOnly || !secondSubscription)(
         yield* waitGone(getMonitor(group.resourceGroupName, monitor.monitorName)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );

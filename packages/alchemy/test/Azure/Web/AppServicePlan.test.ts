@@ -145,6 +145,8 @@ test.provider.skipIf(!runPaidOnly)(
             });
             const plan = yield* Azure.Web.AppServicePlan("Plan", {
               resourceGroup: group.resourceGroupName,
+              // F1 quota is 0 in eastus; westus3 has F1 quota.
+              location: "westus3",
               sku,
             });
             return { group, plan };

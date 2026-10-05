@@ -52,7 +52,7 @@ export interface AzureFirewallProps {
    */
   resourceGroup: string;
   /**
-   * Name of the firewall: 1-80 letters, digits, `_`, `.`, and `-`. If
+   * Name of the firewall: 1-56 letters, digits, `_`, `.`, and `-`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the firewall.
    */
@@ -98,7 +98,8 @@ export interface AzureFirewallProps {
   threatIntelMode?: "Alert" | "Deny" | "Off";
   /**
    * Additional firewall properties, e.g.
-   * `{ "Network.DNS.EnableProxy": "true" }`.
+   * `{ "Network.DNS.EnableProxy": "true" }`. Azure rejects DNS settings
+   * here when `firewallPolicyId` is set: the policy manages them.
    */
   additionalProperties?: Record<string, string>;
   /**
@@ -327,7 +328,7 @@ export const AzureFirewallProvider = () =>
       const name =
         output?.azureFirewallName ??
         olds?.name ??
-        (yield* createNetworkName(id));
+        (yield* createNetworkName(id, 56));
       const observed = yield* getFirewall(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -342,7 +343,7 @@ export const AzureFirewallProvider = () =>
       const name =
         news.name ??
         output?.azureFirewallName ??
-        (yield* createNetworkName(id));
+        (yield* createNetworkName(id, 56));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const where = {

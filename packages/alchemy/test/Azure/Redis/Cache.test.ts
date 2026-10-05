@@ -96,9 +96,10 @@ test.provider.skipIf(!runExpensive)(
   { tags, timeout: 3_600_000 },
 );
 
-// Replacement provisions a second Basic C0 cache: cents, but 40+ minutes
-// end to end. It stays in eastus: this subscription may only create
-// Azure Cache for Redis where it already had one (`RedisCacheRetiring`).
+// Replacement provisions a second Basic C0 cache: cents, but each create
+// takes 25-30 minutes, so 60-70 minutes end to end. It stays in eastus:
+// this subscription is refused new Azure Cache for Redis caches in most
+// regions (`RedisCacheRetiring`).
 test.provider.skipIf(!runExpensive)(
   "replace a redis cache when its name changes",
   (stack) =>
@@ -127,5 +128,5 @@ test.provider.skipIf(!runExpensive)(
         yield* waitGone(getCache(group.resourceGroupName, renamed)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 3_600_000 },
+  { tags, timeout: 7_200_000 },
 );

@@ -43,7 +43,7 @@ const program = (props: {
 
 // Subscribes to the Elastic Cloud pay-as-you-go Marketplace plan and
 // provisions a hosted Elastic deployment (~$0.50-1/hour while it exists,
-// billed by Elastic). Provisioning ~5-15 minutes. The free trial cannot
+// billed by Elastic). Provisioning ~10-50 minutes. The free trial cannot
 // purchase Marketplace SaaS plans; run only with AZURE_TEST_PAID=1.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete an elastic monitor",
@@ -90,7 +90,7 @@ test.provider.skipIf(!runPaidOnly)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );
 
 // Probe: the free trial rejects the Elastic Marketplace purchase before

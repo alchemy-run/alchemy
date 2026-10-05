@@ -25,14 +25,14 @@ import {
 
 /** An SMB Azure Files share mounted with the storage account key. */
 export interface EnvironmentStorageAzureFile {
-  /** Storage account name. */
+  /** Storage account name. Changing it replaces the storage. */
   accountName: string;
-  /** Storage account access key. */
+  /** Storage account access key. Updated in place (e.g. key rotation). */
   accountKey: string | Redacted.Redacted<string>;
-  /** File share name. */
+  /** File share name. Changing it replaces the storage. */
   shareName: string;
   /**
-   * Mount access mode.
+   * Mount access mode. Changing it replaces the storage.
    * @default "ReadWrite"
    */
   accessMode?: "ReadOnly" | "ReadWrite";
@@ -40,12 +40,12 @@ export interface EnvironmentStorageAzureFile {
 
 /** An NFS Azure Files share (premium `FileStorage` account, VNet environment). */
 export interface EnvironmentStorageNfsAzureFile {
-  /** NFS server, e.g. `{account}.file.core.windows.net`. */
+  /** NFS server, e.g. `{account}.file.core.windows.net`. Changing it replaces the storage. */
   server: string;
-  /** Share path, e.g. `/{account}/{share}`. */
+  /** Share path, e.g. `/{account}/{share}`. Changing it replaces the storage. */
   shareName: string;
   /**
-   * Mount access mode.
+   * Mount access mode. Changing it replaces the storage.
    * @default "ReadWrite"
    */
   accessMode?: "ReadOnly" | "ReadWrite";
@@ -200,16 +200,39 @@ export const EnvironmentStorageProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
+      // ARM rejects changes to the account/server, share name, and access
+      // mode ("Only Azure File authentication settings can be updated").
+      const smbChanged =
+        news.azureFile !== undefined &&
+        olds?.azureFile !== undefined &&
+        (lower(news.azureFile.accountName) !==
+          lower(olds.azureFile.accountName) ||
+          news.azureFile.shareName !== olds.azureFile.shareName ||
+          (news.azureFile.accessMode ?? "ReadWrite") !==
+            (olds.azureFile.accessMode ?? "ReadWrite"));
+      const nfsChanged =
+        news.nfsAzureFile !== undefined &&
+        olds?.nfsAzureFile !== undefined &&
+        (lower(news.nfsAzureFile.server) !== lower(olds.nfsAzureFile.server) ||
+          news.nfsAzureFile.shareName !== olds.nfsAzureFile.shareName ||
+          (news.nfsAzureFile.accessMode ?? "ReadWrite") !==
+            (olds.nfsAzureFile.accessMode ?? "ReadWrite"));
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         news.environment !== output.environment ||
         (news.name !== undefined && news.name !== output.storageName) ||
         (news.nfsAzureFile !== undefined ? "NfsAzureFile" : "AzureFile") !==
-          output.storageType
+          output.storageType ||
+        smbChanged ||
+        nfsChanged
       ) {
-        return { action: "replace" } as const;
+        // A fixed name cannot coexist with its replacement.
+        return {
+          action: "replace",
+          deleteFirst: news.name !== undefined,
+        } as const;
       }
       return undefined;
     }),

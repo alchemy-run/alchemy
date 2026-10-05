@@ -56,7 +56,8 @@ const program = (props: { tags: Record<string, string>; name?: string }) =>
   });
 
 // Needs a Ready classic cluster (20-30 min to build, ~$0.10/h) — see
-// `readyCluster`. On a `WaitingForNodes` cluster ARM rejects the
+// `readyCluster`. Each classic ARM operation takes ~2 min, so the
+// lifecycle runs ~15 min. On a `WaitingForNodes` cluster ARM rejects the
 // application: "<version> not usable while provisioning state is Updating".
 test.provider.skipIf(!runExpensive || readyCluster === undefined)(
   "create, update, replace, and delete a classic service fabric application",
@@ -103,5 +104,5 @@ test.provider.skipIf(!runExpensive || readyCluster === undefined)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 1_800_000 },
 );

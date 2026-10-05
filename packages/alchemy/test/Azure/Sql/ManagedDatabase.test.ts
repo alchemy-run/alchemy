@@ -89,5 +89,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get("alchemy-renamed"))).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

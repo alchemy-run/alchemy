@@ -166,7 +166,10 @@ export const ServerTrustGroupProvider = () =>
         setKey(news.trustScopes ?? ["GlobalTransactions"]) !==
           setKey(output.trustScopes)
       ) {
-        return { action: "replace" } as const;
+        // An instance belongs to at most one trust group: while the old
+        // group exists its deletion never completes once a replacement
+        // claims the same members, so delete it first.
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),

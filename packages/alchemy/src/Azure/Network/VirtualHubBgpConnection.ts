@@ -17,7 +17,10 @@ export interface VirtualHubBgpConnectionProps {
    * the app, stage, and logical ID. Changing it replaces the peering.
    */
   name?: string;
-  /** ASN of the BGP peer (an NVA in a connected spoke VNet). */
+  /**
+   * ASN of the BGP peer (an NVA in a connected spoke VNet). Azure cannot
+   * update it in place: changing it replaces the peering.
+   */
   peerAsn: number;
   /** IP address of the BGP peer. */
   peerIp: string;
@@ -87,12 +90,16 @@ export const VirtualHubBgpConnectionProvider = () =>
       parents: ["virtualHub"],
       tracked: false,
       slow: true,
+      // The old session is removed first: Azure peers one session per
+      // peer IP on a hub.
+      deleteFirst: true,
       immutable: (news, output) =>
-        output.hubVirtualNetworkConnectionId !== undefined &&
-        !sameId(
-          news.hubVirtualNetworkConnectionId,
-          output.hubVirtualNetworkConnectionId,
-        ),
+        (output.peerAsn !== undefined && news.peerAsn !== output.peerAsn) ||
+        (output.hubVirtualNetworkConnectionId !== undefined &&
+          !sameId(
+            news.hubVirtualNetworkConnectionId,
+            output.hubVirtualNetworkConnectionId,
+          )),
       get: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetVirtualHubBgpConnection({

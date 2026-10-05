@@ -307,7 +307,20 @@ export const TransitHubProvider = () =>
           properties,
           tags: tagsChanged ? tags : undefined,
         });
-        observed = yield* waitReady;
+        // The PATCH is applied asynchronously and the hub may still report
+        // its previous `Succeeded` state; wait until the tags are visible.
+        observed = yield* waitForProvisioned(
+          `transit hub ${name}`,
+          get,
+          (hub) => {
+            const state = hub.properties?.provisioningState;
+            return tagsDiffer(hub.tags, tags) &&
+              (state === undefined || state === "Succeeded")
+              ? "Updating"
+              : state;
+          },
+          SLOW,
+        );
       }
 
       return toAttrs(resourceGroup, community, name, observed);

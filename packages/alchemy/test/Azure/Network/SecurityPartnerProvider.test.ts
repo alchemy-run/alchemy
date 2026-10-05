@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
@@ -96,7 +97,8 @@ test.provider(
   { tags, timeout: 900_000 },
 );
 
-// Standard virtual hub (~$0.25/hour, 15-30 minutes to provision): run with
+// Standard virtual hub (~$0.25/hour, 15-30 minutes) + VPN gateway
+// (~$0.36/hour, 30+ minutes): ≈$1 and over an hour per run. Run with
 // AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "attach a security partner provider to a virtual hub",
@@ -107,12 +109,20 @@ test.provider.skipIf(!runExpensive)(
       const { group, partner, hub } = yield* stack.deploy(
         Effect.gen(function* () {
           const { group, hub } = yield* standardHub;
+          // Azure only attaches a partner provider to a hub that has a VPN
+          // gateway ("... is not supported without VPN Gateway in the
+          // Virtual Hub").
+          const gateway = yield* Azure.Network.VpnGateway("S2s", {
+            resourceGroup: group.resourceGroupName,
+            virtualHubId: hub.virtualHubId,
+          });
           const partner = yield* Azure.Network.SecurityPartnerProvider(
             "Partner",
             {
               resourceGroup: group.resourceGroupName,
               securityProviderName: "ZScaler",
-              virtualHubId: hub.virtualHubId,
+              // Read through the gateway so the partner is created after it.
+              virtualHubId: Output.map(gateway.virtualHubId, (id) => id!),
             },
           );
           return { group, hub, partner };
@@ -132,5 +142,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

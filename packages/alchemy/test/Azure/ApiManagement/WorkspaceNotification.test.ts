@@ -27,7 +27,7 @@ const get = (
       resourceGroupName,
       serviceName,
       workspaceId: "alchemy-ws",
-      notificationName: "BCC",
+      notificationName: "PurchasePublisherNotificationMessage",
     }),
   );
 
@@ -45,7 +45,7 @@ const program = (variant?: Variant) =>
         ? undefined
         : yield* Azure.ApiManagement.WorkspaceNotification("Entity", {
             ...base,
-            notificationName: "BCC",
+            notificationName: "PurchasePublisherNotificationMessage",
           });
     return { group, service, created };
   });
@@ -64,7 +64,7 @@ test.provider.skipIf(!runExpensive)(
       const svc = first.service.serviceName;
       expect(first.created).toBeDefined();
       const one = yield* get(rg, svc, "one");
-      expect(one.name).toEqual("BCC");
+      expect(one.name).toEqual("PurchasePublisherNotificationMessage");
 
       // Notifications cannot be deleted; removing the resource keeps it.
       yield* stack.deploy(program());

@@ -35,6 +35,13 @@ export const waitGone = <A, R>(
   );
 
 /**
+ * Region for AMS monitors. A monitor deploys an Elastic Premium (EP1) App
+ * Service plan into its managed resource group; this subscription's EP1
+ * quota is 0 in eastus (`AppServicePlanDeploymentFailed`) and 30 in westus2.
+ */
+export const AMS_LOCATION = "westus2";
+
+/**
  * An AMS monitor in a VNet with a subnet delegated to
  * `Microsoft.Web/serverFarms` (the monitor's function app joins it).
  */
@@ -44,14 +51,14 @@ export const monitorStack = (props: {
 }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "eastus",
+      location: AMS_LOCATION,
     });
     const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
       resourceGroup: group.resourceGroupName,
-      location: "eastus",
+      location: AMS_LOCATION,
       addressPrefixes: ["10.20.0.0/16"],
     });
-    const subnet = yield* Azure.Network.Subnet("Ams", {
+    const subnet = yield* Azure.Network.Subnet("AmsSubnet", {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.20.1.0/24",
@@ -59,7 +66,7 @@ export const monitorStack = (props: {
     });
     const monitor = yield* Azure.Workloads.Monitor("Ams", {
       resourceGroup: group.resourceGroupName,
-      location: "eastus",
+      location: AMS_LOCATION,
       monitorSubnet: subnet.subnetId,
       routingPreference: props.routingPreference,
       tags: props.monitorTags,

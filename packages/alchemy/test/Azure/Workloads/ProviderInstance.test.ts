@@ -5,7 +5,14 @@ import * as workloads from "@distilled.cloud/azure/workloads";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive, withVcpus } from "../gates.ts";
-import { logLevel, monitorStack, subscription, tags, waitGone } from "./util.ts";
+import {
+  AMS_LOCATION,
+  logLevel,
+  monitorStack,
+  subscription,
+  tags,
+  waitGone,
+} from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -41,13 +48,14 @@ const program = (sapSid: string) =>
     });
     const nic = yield* Azure.Network.NetworkInterface("Nic", {
       resourceGroup: group.resourceGroupName,
-      location: "eastus",
+      location: AMS_LOCATION,
       ipConfigurations: [{ subnetId: hosts.subnetId }],
     });
     const vm = yield* Azure.Compute.VirtualMachine("Host", {
       resourceGroup: group.resourceGroupName,
-      location: "eastus",
-      vmSize: "Standard_B1s",
+      location: AMS_LOCATION,
+      // B1s is capacity-restricted (SkuNotAvailable) in eastus.
+      vmSize: "Standard_F1als_v7",
       networkInterfaceIds: [nic.networkInterfaceId],
       adminUsername: "azureuser",
       sshPublicKeys: [PUBLIC_KEY],
@@ -66,7 +74,7 @@ const program = (sapSid: string) =>
   });
 
 // Needs an AMS monitor (~$0.25/hour, 10-20 minutes to create, ~10-30 to
-// delete) plus a B1s VM running node_exporter (~$0.01/hour). Runs only with
+// delete) plus an F1als_v7 VM running node_exporter (~$0.03/hour). Runs only with
 // AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "create, replace, and delete a PrometheusOS provider instance",
@@ -121,7 +129,7 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withVcpus(1), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );
 
 // Ungated probe (free: one empty resource group): reading a provider

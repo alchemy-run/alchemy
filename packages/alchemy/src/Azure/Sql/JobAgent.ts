@@ -42,8 +42,10 @@ export interface JobAgentProps {
   /** Name of the SQL server. Changing it replaces the agent. */
   server: string;
   /**
-   * Agent name (1-128 characters). If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the agent.
+   * Agent name. If omitted, a unique name is generated from the app,
+   * stage, and logical ID. Changing it replaces the agent. ARM accepts up
+   * to 128 characters, but creating an agent with a name longer than ~56
+   * characters is accepted and then never completes.
    */
   name?: string;
   /**
@@ -203,8 +205,14 @@ const identityDiffers = (
 };
 
 /**
- * Job agent creation runs for a long time (20+ minutes observed) and GET
- * returns not-found until it completes, so the budget is generous.
+ * Longer names are accepted (202) but the create never completes and GET
+ * keeps answering not-found (observed with 66+ characters; 56 succeeds).
+ */
+const MAX_NAME_LENGTH = 48;
+
+/**
+ * Job agent creation takes about a minute; GET returns not-found until it
+ * completes. The budget leaves room for a slow region.
  */
 const PROVISIONING = { interval: "10 seconds", times: 270 } as const;
 
@@ -254,7 +262,9 @@ export const JobAgentProvider = () =>
         return undefined;
       }
       const name =
-        output?.jobAgentName ?? olds?.name ?? (yield* createChildName(id));
+        output?.jobAgentName ??
+        olds?.name ??
+        (yield* createChildName(id, MAX_NAME_LENGTH));
       const observed = yield* getAgent(
         subscriptionId,
         resourceGroup,
@@ -272,7 +282,9 @@ export const JobAgentProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.Sql");
       const { resourceGroup, server } = news;
       const name =
-        news.name ?? output?.jobAgentName ?? (yield* createChildName(id));
+        news.name ??
+        output?.jobAgentName ??
+        (yield* createChildName(id, MAX_NAME_LENGTH));
       const tags = yield* desiredTags(id, news.tags);
       const where = {
         subscriptionId,

@@ -49,7 +49,11 @@ export interface ManagedInstanceDtcProps {
   dtcEnabled: boolean;
   /** DTC security settings. */
   security?: ManagedInstanceDtcSecurity;
-  /** External DNS suffixes the DTC resolves. */
+  /**
+   * External DNS suffixes the DTC resolves. Azure always keeps the DTC
+   * host's own DNS domain (`dtcHostNameDnsSuffix` minus its first label)
+   * in the list as well.
+   */
   externalDnsSuffixSearchList?: string[];
 }
 
@@ -108,6 +112,28 @@ const getSetting = (subscriptionId: string, scope: InstanceScope) =>
       dtcName: SETTING_NAME,
     }),
   );
+
+/** Enabling DTC takes a few minutes (~200 s observed): poll for up to 10. */
+const DTC_POLLS = 200;
+
+/** A write is applied once the setting leaves `Updating`. */
+const settled = (observed: Observed) =>
+  lower(observed.properties?.provisioningState ?? "Succeeded") !== "updating";
+
+/**
+ * The search list Azure reports always includes the DTC host's own DNS
+ * domain (`dtcHostNameDnsSuffix` minus its first label); only the other
+ * entries are user-managed.
+ */
+const customDnsSuffixes = (observed: Observed) => {
+  const own = observed.properties?.dtcHostNameDnsSuffix
+    ?.split(".")
+    .slice(1)
+    .join(".");
+  return (observed.properties?.externalDnsSuffixSearchList ?? []).filter(
+    (suffix) => own === undefined || lower(suffix) !== lower(own),
+  );
+};
 
 const toAttrs = (
   scope: InstanceScope,
@@ -194,11 +220,12 @@ export const ManagedInstanceDtcProvider = () =>
         label: `sql managed instance dtc on ${scope.managedInstanceName}`,
         get: getSetting(subscriptionId, scope),
         converged: (observed) =>
+          settled(observed) &&
           fieldsMatch(observed.properties, desired, [
             "externalDnsSuffixSearchList",
           ]) &&
           sameList(
-            observed.properties?.externalDnsSuffixSearchList,
+            customDnsSuffixes(observed),
             desired.externalDnsSuffixSearchList,
           ),
         put: sql.ManagedInstanceDtcsCreateOrUpdate({
@@ -206,6 +233,7 @@ export const ManagedInstanceDtcProvider = () =>
           dtcName: SETTING_NAME,
           properties: desired,
         }),
+        times: DTC_POLLS,
       });
       return toAttrs(scope, fresh);
     }),
@@ -220,12 +248,14 @@ export const ManagedInstanceDtcProvider = () =>
           label,
           get: getSetting(subscriptionId, output),
           converged: (observed) =>
+            settled(observed) &&
             fieldsMatch(observed.properties, { dtcEnabled: false }),
           put: sql.ManagedInstanceDtcsCreateOrUpdate({
             ...instancePath(subscriptionId, output),
             dtcName: SETTING_NAME,
             properties: { dtcEnabled: false },
           }),
+          times: DTC_POLLS,
         }),
       );
     }),

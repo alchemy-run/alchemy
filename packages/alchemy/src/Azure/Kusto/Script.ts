@@ -18,6 +18,7 @@ import {
   createKustoChildName,
   isClusterOwnedByStack,
   lower,
+  untilConverged,
   whileClusterBusy,
 } from "./common.ts";
 
@@ -263,7 +264,12 @@ export const ScriptProvider = () =>
       const fresh = yield* waitForProvisioned(
         `kusto script ${name}`,
         get,
-        (s) => s.properties?.provisioningState,
+        untilConverged(
+          (s) => s.properties?.provisioningState,
+          (s) =>
+            s.properties?.forceUpdateTag === forceUpdateTag &&
+            (s.properties?.continueOnErrors ?? false) === continueOnErrors,
+        ),
         { interval: "5 seconds", times: 60 },
       );
       return toAttrs(resourceGroup, cluster, database, name, fresh);

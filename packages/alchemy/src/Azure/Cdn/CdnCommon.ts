@@ -23,10 +23,13 @@ export const waitForAfd = <A, E, R>(
     times: 120,
   });
 
-/** Front Door deletes are long-running (profile deletes take 5-15 minutes). */
+/**
+ * Front Door deletes are long-running (profile deletes take 5-15 minutes and
+ * have been observed above 15; poll for up to 30 minutes).
+ */
 export const AFD_DELETE_BUDGET = {
   interval: "10 seconds",
-  times: 100,
+  times: 180,
 } as const;
 
 /**
@@ -36,7 +39,7 @@ export const AFD_DELETE_BUDGET = {
 export const whileProfileBusy = {
   while: (e: { readonly _tag: string }) => e._tag === "ResourceConflict",
   schedule: Schedule.spaced("10 seconds"),
-  times: 30,
+  times: 60,
 } as const;
 
 /**

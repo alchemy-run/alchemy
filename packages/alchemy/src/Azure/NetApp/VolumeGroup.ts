@@ -64,7 +64,10 @@ export interface VolumeGroupVolume {
   proximityPlacementGroup?: string;
   /** Availability zone (Oracle). */
   zones?: string[];
-  /** Export policy rules. */
+  /**
+   * Export policy rules. Azure requires one on every volume in a group.
+   * @default one rule allowing read/write from `0.0.0.0/0` over the volume's protocols
+   */
   exportPolicy?: NetAppExportPolicyRule[];
   /**
    * Network features.
@@ -189,6 +192,41 @@ export interface VolumeGroup extends Resource<
  * @resource
  */
 export const VolumeGroup = Resource<VolumeGroup>("Azure.NetApp.VolumeGroup");
+
+const protocolsOf = (volume: VolumeGroupVolume) =>
+  volume.protocolTypes ?? ["NFSv4.1"];
+
+/**
+ * Volume groups validate every access flag as required
+ * (`Request is missing a value for 'ExportPolicy.Rules[UnixReadOnly]'`),
+ * so unset flags are sent as explicit `false`.
+ */
+const RULE_DEFAULTS = {
+  hasRootAccess: true,
+  unixReadOnly: false,
+  unixReadWrite: false,
+  cifs: false,
+  nfsv3: false,
+  nfsv41: false,
+  kerberos5ReadOnly: false,
+  kerberos5ReadWrite: false,
+  kerberos5iReadOnly: false,
+  kerberos5iReadWrite: false,
+  kerberos5pReadOnly: false,
+  kerberos5pReadWrite: false,
+} satisfies Partial<NetAppExportPolicyRule>;
+
+const defaultExportPolicy = (
+  volume: VolumeGroupVolume,
+): NetAppExportPolicyRule[] => [
+  {
+    ruleIndex: 1,
+    allowedClients: "0.0.0.0/0",
+    unixReadWrite: true,
+    nfsv3: protocolsOf(volume).includes("NFSv3"),
+    nfsv41: protocolsOf(volume).includes("NFSv4.1"),
+  },
+];
 
 interface Where {
   subscriptionId: string;
@@ -328,18 +366,17 @@ export const VolumeGroupProvider = () =>
                   subnetId: volume.subnetId,
                   capacityPoolResourceId: volume.capacityPoolResourceId,
                   volumeSpecName: volume.volumeSpecName,
-                  protocolTypes: volume.protocolTypes ?? ["NFSv4.1"],
+                  protocolTypes: protocolsOf(volume),
                   throughputMibps: volume.throughputMibps,
                   proximityPlacementGroup: volume.proximityPlacementGroup,
                   networkFeatures: volume.networkFeatures ?? "Standard",
-                  exportPolicy: volume.exportPolicy
-                    ? {
-                        rules: volume.exportPolicy.map((rule) => ({
-                          hasRootAccess: true,
-                          ...rule,
-                        })),
-                      }
-                    : undefined,
+                  // Volumes inside a group must carry an export policy
+                  // (`VolumesInVolumeGroupMustHaveExportPolicy`).
+                  exportPolicy: {
+                    rules: (
+                      volume.exportPolicy ?? defaultExportPolicy(volume)
+                    ).map((rule) => ({ ...RULE_DEFAULTS, ...rule })),
+                  },
                 },
               })),
             },
@@ -348,7 +385,13 @@ export const VolumeGroupProvider = () =>
       }
       const observed = yield* waitForProvisioned(
         `volume group ${where.volumeGroupName}`,
-        get,
+        // The group GET fails with a transient 500 while its volumes are
+        // still provisioning; keep polling.
+        get.pipe(
+          Effect.catchTag("NetAppVolumeGroupNotReadable", () =>
+            Effect.succeed(undefined),
+          ),
+        ),
         (group) => group.properties?.provisioningState,
         LRO_BUDGET,
       );

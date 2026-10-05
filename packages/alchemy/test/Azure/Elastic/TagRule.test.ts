@@ -49,7 +49,7 @@ const program = (sendActivityLogs: boolean) =>
   });
 
 // Needs an Elastic monitor (Marketplace SaaS purchase + hosted deployment,
-// ~$0.50-1/hour, ~5-15 minutes); the free trial cannot create one (see the
+// ~$0.50-1/hour, ~10-50 minutes); the free trial cannot create one (see the
 // Monitor probe). Run only with AZURE_TEST_PAID=1.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete elastic tag rules",
@@ -82,5 +82,5 @@ test.provider.skipIf(!runPaidOnly)(
         yield* waitGone(getMonitor(group.resourceGroupName, monitor.monitorName)),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );

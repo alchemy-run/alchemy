@@ -244,7 +244,9 @@ export const MonitorProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* workloads
         .ListMonitors({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListMonitors", page)));
+        .pipe(
+          Effect.flatMap((page) => requireSinglePage("ListMonitors", page)),
+        );
       return (page.value ?? []).flatMap((monitor) => {
         const group = resourceGroupOf(monitor.id);
         return hasAnyAlchemyTag(monitor.tags) &&
@@ -263,9 +265,18 @@ export const MonitorProvider = () =>
         changed(news.location, output.location) ||
         changed(news.appLocation, output.appLocation) ||
         changed(news.monitorSubnet, output.monitorSubnet) ||
-        changed(news.routingPreference ?? "Default", output.routingPreference) ||
-        changed(news.zoneRedundancyPreference, output.zoneRedundancyPreference) ||
-        changed(news.managedResourceGroupName, output.managedResourceGroupName) ||
+        changed(
+          news.routingPreference ?? "Default",
+          output.routingPreference,
+        ) ||
+        changed(
+          news.zoneRedundancyPreference,
+          output.zoneRedundancyPreference,
+        ) ||
+        changed(
+          news.managedResourceGroupName,
+          output.managedResourceGroupName,
+        ) ||
         changed(
           news.logAnalyticsWorkspaceArmId,
           output.logAnalyticsWorkspaceArmId,
@@ -344,8 +355,9 @@ export const MonitorProvider = () =>
       // Sync tags and identity (the only PATCHable aspects).
       const tagsChanged = tagsDiffer(observed.tags, tags);
       const identityChanged =
-        identityIds(Object.keys(observed.identity?.userAssignedIdentities ?? {}))
-          .join(",") !== identityIds(news.userAssignedIdentityIds).join(",");
+        identityIds(
+          Object.keys(observed.identity?.userAssignedIdentities ?? {}),
+        ).join(",") !== identityIds(news.userAssignedIdentityIds).join(",");
       if (tagsChanged || identityChanged) {
         yield* workloads.UpdateMonitor({
           ...where,
@@ -360,19 +372,42 @@ export const MonitorProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
+      const issueDelete = ignoreNotFound(
         workloads.DeleteMonitor({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           monitorName: output.monitorName,
         }),
       );
-      // Deleting the monitor also tears down its managed resource group;
-      // a monitor whose provisioning failed can take over 20 minutes.
+      yield* issueDelete;
+      // Deleting the monitor also tears down its managed resource group,
+      // which can take over 30 minutes. A delete that fails asynchronously
+      // returns the monitor to its previous state (typically `Failed` for a
+      // monitor whose provisioning failed) instead of removing it, so the
+      // DELETE is re-issued (at most every 5 minutes) while the monitor is
+      // observed outside `Deleting`.
+      let pollsSinceDelete = 0;
       yield* waitUntilGone(
         `SAP monitor ${output.monitorName}`,
-        getMonitor(subscriptionId, output.resourceGroup, output.monitorName),
-        { interval: "30 seconds", times: 60 },
+        getMonitor(
+          subscriptionId,
+          output.resourceGroup,
+          output.monitorName,
+        ).pipe(
+          Effect.tap((monitor) => {
+            pollsSinceDelete++;
+            if (
+              monitor === undefined ||
+              monitor.properties?.provisioningState === "Deleting" ||
+              pollsSinceDelete < 10
+            ) {
+              return Effect.void;
+            }
+            pollsSinceDelete = 0;
+            return issueDelete;
+          }),
+        ),
+        { interval: "30 seconds", times: 120 },
       );
     }),
 

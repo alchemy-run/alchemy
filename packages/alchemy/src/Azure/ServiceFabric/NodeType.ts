@@ -423,14 +423,22 @@ export const NodeTypeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
+      // A cluster's last primary node type cannot be deleted on its own; it
+      // is removed together with the cluster, which is deleted next.
+      const deleted = yield* ignoreNotFound(
         sf.DeleteNodeType({
           subscriptionId,
           resourceGroupName: output.resourceGroup,
           clusterName: output.cluster,
           nodeTypeName: output.nodeTypeName,
         }),
+      ).pipe(
+        Effect.as(true),
+        Effect.catchTag("ServiceFabricPrimaryNodeTypeRequired", () =>
+          Effect.succeed(false),
+        ),
       );
+      if (!deleted) return;
       yield* waitUntilGone(
         `Service Fabric node type ${output.nodeTypeName}`,
         getNodeType(

@@ -83,9 +83,18 @@ test.provider.skipIf(!runExpensive)(
           o.properties?.externalDnsSuffixSearchList?.[0] === "corp.example.com",
         12,
       );
-      expect(observed2.properties?.externalDnsSuffixSearchList).toEqual([
-        "corp.example.com",
-      ]);
+      // Azure always keeps the DTC host's own DNS domain in the list.
+      const ownDomain = observed2.properties?.dtcHostNameDnsSuffix
+        ?.split(".")
+        .slice(1)
+        .join(".")
+        .toLowerCase();
+      expect(ownDomain).toBeDefined();
+      expect(
+        (observed2.properties?.externalDnsSuffixSearchList ?? []).filter(
+          (suffix) => suffix.toLowerCase() !== ownDomain,
+        ),
+      ).toEqual(["corp.example.com"]);
 
       // Removing the resource disables DTC.
       yield* stack.deploy(program(password, undefined));
@@ -100,5 +109,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get)).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

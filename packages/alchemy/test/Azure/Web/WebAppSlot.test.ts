@@ -53,7 +53,9 @@ const program = (props: {
     });
     const plan = yield* Azure.Web.AppServicePlan("Plan", {
       resourceGroup: group.resourceGroupName,
-      location: "eastus",
+      // eastus refuses App Service plan creates for this subscription
+      // (ServerFarmCreateNotAllowed); westus3 accepts them.
+      location: "westus3",
       sku: "S1",
       os: "linux",
     });
@@ -73,10 +75,10 @@ const program = (props: {
     return { group, app, slot };
   });
 
-// Deployment slots need a Standard (S1) or higher plan, which has zero VM
-// quota on the free trial (see the QuotaExceeded probe in
-// AppServicePlan.test.ts). Cost on a paid subscription: ~$0.10/h for S1,
-// about $0.02 per run. Provisioning: ~3-5 minutes.
+// Deployment slots need a Standard (S1) or higher plan, which the testing
+// subscription may not create (ServerFarmCreateNotAllowed, see the probe
+// below). Cost on a subscription that can: ~$0.10/h for S1, about $0.02 per
+// run. Provisioning: ~3-5 minutes.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete a deployment slot",
   (stack) =>
@@ -155,8 +157,10 @@ test.provider.skipIf(!runPaidOnly)(
 );
 
 // Probe: plans without slots reject them, typed as WebAppSlotsNotSupported.
-// Runs on a Flex Consumption app (~$0) since Standard has no trial quota.
-test.provider.skipIf(runPaidOnly)(
+// Runs on a Flex Consumption app (~$0). The testing subscription may not
+// create Flex Consumption plans either (ServerFarmCreateNotAllowed), so this
+// runs only with AZURE_TEST_PAID=1.
+test.provider.skipIf(!runPaidOnly)(
   "a plan without slots rejects a slot with WebAppSlotsNotSupported",
   (stack) =>
     Effect.gen(function* () {
@@ -188,5 +192,42 @@ test.provider.skipIf(runPaidOnly)(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 600_000,
+  },
+);
+
+// Probe: the testing subscription may not create Standard (or any
+// Premium / Flex Consumption) plans in any region: HTTP 502 "The
+// subscription '<id>' is not allowed to create or update the serverfarm."
+test.provider.skipIf(runPaidOnly)(
+  "standard plan create is rejected with ServerFarmCreateNotAllowed",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { group } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const group = yield* Azure.Resources.ResourceGroup("Group", {
+            location: "eastus",
+          });
+          return { group };
+        }),
+      );
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const error = yield* web
+        .AppServicePlansCreateOrUpdate({
+          subscriptionId,
+          resourceGroupName: group.resourceGroupName,
+          name: "alchemy-s1-probe",
+          location: "westus3",
+          kind: "linux",
+          sku: { name: "S1", tier: "Standard" },
+          properties: { reserved: true },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("ServerFarmCreateNotAllowed");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 300_000,
   },
 );

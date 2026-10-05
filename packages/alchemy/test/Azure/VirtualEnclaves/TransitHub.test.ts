@@ -1,4 +1,5 @@
 import * as Azure from "@/Azure";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as mission from "@distilled.cloud/azure/mission";
 import { expect } from "alchemy-test";
@@ -6,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import {
   community,
+  enclave,
   LIFECYCLE_TIMEOUT,
   logLevel,
   subscription,
@@ -32,13 +34,23 @@ const getTransitHub = (
 const program = (hubTags: Record<string, string>) =>
   Effect.gen(function* () {
     const { group, community: hub } = yield* community();
+    // Azure rejects a transit hub until the community has a vHub, which
+    // the first enclave deploys.
+    const spoke = yield* enclave(
+      "Spoke",
+      group.resourceGroupName,
+      hub.communityId,
+    );
     const remote = yield* Azure.Network.VirtualNetwork("Remote", {
       resourceGroup: group.resourceGroupName,
       addressPrefixes: ["10.90.0.0/24"],
     });
     const transit = yield* Azure.VirtualEnclaves.TransitHub("Transit", {
       resourceGroup: group.resourceGroupName,
-      community: hub.communityName,
+      // Create the transit hub only after the enclave exists.
+      community: Output.all(hub.communityName, spoke.virtualEnclaveId).pipe(
+        Output.map(([communityName]) => communityName),
+      ),
       transitOption: {
         type: "Peering",
         remoteVirtualNetworkId: remote.virtualNetworkId,
@@ -48,8 +60,9 @@ const program = (hubTags: Record<string, string>) =>
     return { group, community: hub, transit };
   });
 
-// Needs a community (vWAN hub + Basic firewall, ~$0.65/h, 30-60+ min) plus
-// a peering transit hub: ~$2-3 and up to two hours per run. Run with
+// Needs a community (vWAN hub + firewall, 30-60+ min), an enclave (which
+// deploys the community vHub, ~60-90 min) and a peering transit hub: ~$3-6
+// and up to three hours per run. Run with
 // AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a transit hub",

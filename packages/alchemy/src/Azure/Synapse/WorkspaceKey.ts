@@ -12,7 +12,12 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
+import {
+  getWorkspace,
+  isWorkspaceOwnedByStack,
+  lower,
+  syncSetting,
+} from "./common.ts";
 
 export interface WorkspaceKeyProps {
   /** Resource group of the workspace. Changing it replaces the key. */
@@ -202,6 +207,21 @@ export const WorkspaceKeyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // The workspace's own encryption key cannot be deleted (Azure answers
+      // 500 "Something unexpected happened during key deletion."); it goes
+      // away with the workspace.
+      const workspace = yield* getWorkspace(
+        subscriptionId,
+        output.resourceGroup,
+        output.workspaceName,
+      );
+      if (workspace === undefined) return;
+      if (
+        lower(workspace.properties?.encryption?.cmk?.key?.name) ===
+        lower(output.keyName)
+      ) {
+        return;
+      }
       yield* ignoreNotFound(
         synapse.DeleteKey({
           subscriptionId,

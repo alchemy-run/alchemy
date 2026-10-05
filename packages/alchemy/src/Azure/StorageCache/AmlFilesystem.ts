@@ -99,7 +99,8 @@ export interface AmlFilesystemEncryption {
 export interface AmlFilesystemProps {
   /**
    * Resource group the file system is created in. Changing it replaces the
-   * file system.
+   * file system. Azure Managed Lustre rejects resource group names longer
+   * than 80 characters.
    */
   resourceGroup: string;
   /**
@@ -113,7 +114,11 @@ export interface AmlFilesystemProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Availability zones (e.g. `["1"]`). Changing them replaces the file system. */
+  /**
+   * Availability zone (e.g. `["1"]`). Required in regions with availability
+   * zones, where exactly one zone must be given. Changing it replaces the
+   * file system.
+   */
   zones?: string[];
   /**
    * Throughput SKU. Each SKU has a minimum capacity and increment:

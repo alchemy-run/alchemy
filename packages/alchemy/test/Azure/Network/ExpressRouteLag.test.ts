@@ -24,7 +24,9 @@ const program = (props: { tags: Record<string, string> }) =>
     });
     const lag = yield* Azure.Network.ExpressRouteLag("Lag", {
       resourceGroup: group.resourceGroupName,
-      peeringLocation: "Equinix-Ashburn-DC2",
+      // Ashburn-DC2 reported no free 10 Gbps ports for a LAG
+      // (GetExpressRoutePortsLocation availableBandwidths: []).
+      peeringLocation: "Equinix-Chicago-CH1",
       bandwidthInGbps: 10,
       numberOfPorts: 2,
       tags: props.tags,

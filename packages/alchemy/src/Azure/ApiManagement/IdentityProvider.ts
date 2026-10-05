@@ -156,6 +156,10 @@ export const IdentityProviderProvider = () =>
         olds !== undefined &&
         reveal(olds.clientSecret) === reveal(news.clientSecret) &&
         subsetMatches(desiredOf(news), observed.properties),
+      // Reads lag behind writes for a while (a GET can still return the
+      // previous allowed tenants), so wait until the change is visible.
+      converged: (news, observed) =>
+        subsetMatches(desiredOf(news), observed.properties),
       toAttrs: (_subscriptionId, key, observed) => ({
         resourceGroup: key.resourceGroup,
         serviceName: key.serviceName,

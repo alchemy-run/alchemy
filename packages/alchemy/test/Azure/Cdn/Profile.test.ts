@@ -99,11 +99,39 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: FRONT_DOOR_TIMEOUT },
 );
 
+// Pay-As-You-Go probe: new subscriptions get a small Front Door
+// profile-creation quota (exhausted after ~5 creates on the testing
+// subscription). A rejected create must surface as the typed
+// `FrontDoorProfileQuotaExceeded`; an accepted one is destroyed again.
+test.provider.skipIf(!runPaidOnly)(
+  "quota probe",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const result = yield* stack
+        .deploy(program({ timeout: 60, tags: {} }))
+        .pipe(Effect.result);
+      if (result._tag === "Failure") {
+        expect(JSON.stringify(result.failure)).toContain(
+          "FrontDoorProfileQuotaExceeded",
+        );
+      } else {
+        expect(result.success.profile.sku).toEqual("Standard_AzureFrontDoor");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: FRONT_DOOR_TIMEOUT },
+);
+
 // Ungated probe (free: the create is rejected): the Free Trial subscription
 // refuses Front Door profiles with a typed error, both through the provider
 // and the SDK. Test titles stay short: Microsoft.Cdn rejects resource group
-// names longer than 80 characters.
-test.provider(
+// names longer than 80 characters. On a Pay-As-You-Go subscription
+// (`AZURE_TEST_PAID=1`) the create succeeds and would leak an unmanaged
+// profile, so the probe only runs where the lifecycle is gated off.
+test.provider.skipIf(runPaidOnly)(
   "free trial probe",
   (stack) =>
     Effect.gen(function* () {

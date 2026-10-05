@@ -89,11 +89,14 @@ export const consumptionApi = Effect.gen(function* () {
  * it are gated behind `runExpensive`.
  */
 export const basicV2Service = Effect.gen(function* () {
+  // BasicV2 activations in eastus have queued for 30-50 minutes; westus
+  // activates in ~2.
   const group = yield* Azure.Resources.ResourceGroup("Group", {
-    location: "eastus",
+    location: "westus",
   });
   const service = yield* Azure.ApiManagement.Service("Portal", {
     resourceGroup: group.resourceGroupName,
+    location: "westus",
     sku: { name: "BasicV2", capacity: 1 },
     publisherEmail: "ops@example.com",
     publisherName: "Alchemy",

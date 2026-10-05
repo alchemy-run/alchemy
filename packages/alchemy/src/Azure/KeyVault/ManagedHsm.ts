@@ -1,5 +1,6 @@
 import * as keyvault from "@distilled.cloud/azure/keyvault";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -241,6 +242,13 @@ const toRuleSet = (
   virtualNetworkRules: (acls.virtualNetworkRules ?? []).map((id) => ({ id })),
 });
 
+/** The pool rejects updates and soft delete while it applies a change. */
+const whilePoolUpdating = {
+  while: (e: { readonly _tag: string }) => e._tag === "ManagedHsmPoolUpdating",
+  schedule: Schedule.spaced("15 seconds"),
+  times: 40,
+} as const;
+
 export const ManagedHsmProvider = () =>
   Provider.succeed(ManagedHsm, {
     stables: [
@@ -327,8 +335,8 @@ export const ManagedHsmProvider = () =>
       const where = { subscriptionId, resourceGroupName: resourceGroup, name };
       const label = `managed HSM ${name}`;
       const get = getManagedHsm(subscriptionId, resourceGroup, name);
-      // Provisioning takes 20-30 minutes.
-      const budget = { interval: "30 seconds", times: 60 } as const;
+      // Provisioning takes 20-30 minutes; allow up to 45.
+      const budget = { interval: "30 seconds", times: 90 } as const;
 
       // Observe.
       let observed = yield* get;
@@ -339,22 +347,33 @@ export const ManagedHsmProvider = () =>
         const recover =
           deleted !== undefined &&
           (yield* isOwned(id, deleted.properties?.tags));
-        yield* keyvault.ManagedHsmsCreateOrUpdate({
-          ...where,
-          location,
-          sku: { family: skuFamily(sku), name: sku },
-          tags,
-          properties: recover
-            ? { createMode: "recover" }
-            : {
-                tenantId: news.tenantId ?? env.tenantId,
-                initialAdminObjectIds: news.initialAdminObjectIds,
-                softDeleteRetentionInDays: news.softDeleteRetentionInDays ?? 90,
-                enablePurgeProtection: news.enablePurgeProtection ?? false,
-                networkAcls,
-                publicNetworkAccess: news.publicNetworkAccess,
-              },
-        });
+        yield* keyvault
+          .ManagedHsmsCreateOrUpdate({
+            ...where,
+            location,
+            sku: { family: skuFamily(sku), name: sku },
+            tags,
+            properties: recover
+              ? { createMode: "recover" }
+              : {
+                  tenantId: news.tenantId ?? env.tenantId,
+                  initialAdminObjectIds: news.initialAdminObjectIds,
+                  softDeleteRetentionInDays:
+                    news.softDeleteRetentionInDays ?? 90,
+                  enablePurgeProtection: news.enablePurgeProtection ?? false,
+                  networkAcls,
+                  publicNetworkAccess: news.publicNetworkAccess,
+                },
+          })
+          .pipe(
+            // A just-created resource group can take a few seconds to
+            // replicate to the Key Vault RP.
+            Effect.retry({
+              while: (e) => e._tag === "ResourceGroupNotFound",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 12,
+            }),
+          );
       }
       observed = yield* waitForProvisioned(
         label,
@@ -389,11 +408,13 @@ export const ManagedHsmProvider = () =>
       }
       const tagsChanged = tagsDiffer(observed.tags, tags);
       if (Object.keys(changed).length > 0 || tagsChanged) {
-        yield* keyvault.UpdateManagedHsm({
-          ...where,
-          tags: tagsChanged ? tags : undefined,
-          properties: Object.keys(changed).length > 0 ? changed : undefined,
-        });
+        yield* keyvault
+          .UpdateManagedHsm({
+            ...where,
+            tags: tagsChanged ? tags : undefined,
+            properties: Object.keys(changed).length > 0 ? changed : undefined,
+          })
+          .pipe(Effect.retry(whilePoolUpdating));
         observed = yield* waitForProvisioned(
           label,
           get,
@@ -409,11 +430,13 @@ export const ManagedHsmProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const name = output.managedHsmName;
       yield* ignoreNotFound(
-        keyvault.DeleteManagedHsm({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          name,
-        }),
+        keyvault
+          .DeleteManagedHsm({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            name,
+          })
+          .pipe(Effect.retry(whilePoolUpdating)),
       );
       yield* waitUntilGone(
         `managed HSM ${name}`,
@@ -423,17 +446,24 @@ export const ManagedHsmProvider = () =>
       if (output.purgeOnDelete === false || output.enablePurgeProtection) {
         return;
       }
+      // A purge already in flight (e.g. from an interrupted destroy) is
+      // awaited rather than restarted.
       yield* ignoreNotFound(
-        keyvault.PurgeManagedHsmDeleted({
-          subscriptionId,
-          location: output.location,
-          name,
-        }),
+        keyvault
+          .PurgeManagedHsmDeleted({
+            subscriptionId,
+            location: output.location,
+            name,
+          })
+          .pipe(
+            Effect.catchTag("ManagedHsmAlreadyBeingDeleted", () => Effect.void),
+          ),
       );
+      // Purging a never-activated pool has been observed to take 30+ minutes.
       yield* waitUntilGone(
         `deleted managed HSM ${name}`,
         getDeletedHsm(subscriptionId, output.location, name),
-        { interval: "15 seconds", times: 60 },
+        { interval: "30 seconds", times: 120 },
       );
     }),
 

@@ -111,7 +111,7 @@ export const waitNetworkProvisioned = <
 
 /**
  * Wait for a slow Microsoft.Network resource (application gateway,
- * firewall) to reach `Succeeded`: these take 5-20 minutes.
+ * firewall, hub, gateway) to reach `Succeeded`: these take 5-60 minutes.
  */
 export const waitNetworkProvisionedSlow = <
   A extends { readonly properties?: { readonly provisioningState?: string } },
@@ -125,14 +125,14 @@ export const waitNetworkProvisionedSlow = <
     label,
     get,
     (value) => value.properties?.provisioningState,
-    { interval: "15 seconds", times: 100 },
+    { interval: "15 seconds", times: 240 },
   );
 
-/** Wait for a slow Microsoft.Network resource to disappear (up to ~25 min). */
+/** Wait for a slow Microsoft.Network resource to disappear (up to ~60 min). */
 export const waitNetworkGoneSlow = <A, E, R>(
   label: string,
   get: Effect.Effect<A | undefined, E, R>,
-) => waitUntilGone(label, get, { interval: "15 seconds", times: 100 });
+) => waitUntilGone(label, get, { interval: "15 seconds", times: 240 });
 
 /** Last segment of an ARM ID (the sub-resource name). */
 export const nameOf = (armId: string | undefined) => armId?.split("/").pop();

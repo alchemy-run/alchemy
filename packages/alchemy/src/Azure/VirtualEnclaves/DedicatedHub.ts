@@ -289,7 +289,22 @@ export const DedicatedHubProvider = () =>
           properties,
           tags: tagsChanged ? tags : undefined,
         });
-        observed = yield* waitReady;
+        // The PATCH is applied asynchronously and the hub may still report
+        // its previous `Succeeded` state; wait until the delta is visible.
+        observed = yield* waitForProvisioned(
+          `dedicated hub ${name}`,
+          get,
+          (hub) => {
+            const state = hub.properties?.provisioningState;
+            const pending =
+              changedProperties(desired, hub.properties) !== undefined ||
+              tagsDiffer(hub.tags, tags);
+            return pending && (state === undefined || state === "Succeeded")
+              ? "Updating"
+              : state;
+          },
+          SLOW,
+        );
       }
 
       return toAttrs(resourceGroup, community, name, observed);

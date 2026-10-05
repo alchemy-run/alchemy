@@ -222,7 +222,7 @@ test.provider.skipIf(!runPaidOnly)(
 
 // Probe: the subscription cannot create the Flex Consumption plan this
 // lifecycle needs.
-test.provider(
+test.provider.skipIf(runPaidOnly)(
   "flex consumption plan is rejected with ServerFarmCreateNotAllowed",
   (stack) =>
     Effect.gen(function* () {

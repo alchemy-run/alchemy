@@ -45,7 +45,7 @@ export interface ServerlessEndpointProps {
   location?: string;
   /**
    * Model to serve, e.g.
-   * `azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct`.
+   * `azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct`.
    * Non-Microsoft models need a marketplace subscription. Changing it
    * replaces the endpoint.
    */
@@ -105,7 +105,7 @@ export interface ServerlessEndpoint extends Resource<
  * const llama = yield* Azure.MachineLearning.ServerlessEndpoint("llama", {
  *   resourceGroup: group.resourceGroupName,
  *   workspace: project.workspaceName,
- *   modelId: "azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct",
+ *   modelId: "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct",
  * });
  * ```
  *

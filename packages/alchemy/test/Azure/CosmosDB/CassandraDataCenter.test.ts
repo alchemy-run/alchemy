@@ -48,6 +48,10 @@ const program = (nodeCount: number) =>
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.41.1.0/24",
+      // Managed Cassandra needs outbound access to Azure services; new
+      // subnets default to private, which fails cluster creation ~30
+      // minutes in with "connection failure".
+      defaultOutboundAccess: true,
     });
     const grant = yield* Azure.Authorization.RoleAssignment("CosmosNetwork", {
       scope: vnet.virtualNetworkId,
@@ -70,6 +74,8 @@ const program = (nodeCount: number) =>
       dataCenterLocation: LOCATION,
       delegatedSubnetId: subnet.subnetId,
       sku: "Standard_D8s_v5",
+      // One P30 data disk per node instead of the default four.
+      diskCapacity: 1,
       nodeCount,
     });
     return { group, cluster, dataCenter };
@@ -118,6 +124,6 @@ test.provider.skipIf(!runPaidOnly || !cosmosPrincipal)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:cosmosdb", "live"],
-    timeout: 6_000_000,
+    timeout: 14_400_000,
   },
 );

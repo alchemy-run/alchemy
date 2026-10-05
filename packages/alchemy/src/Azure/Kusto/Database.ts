@@ -18,6 +18,7 @@ import {
   createKustoChildName,
   isClusterOwnedByStack,
   lower,
+  untilConverged,
   whileClusterBusy,
 } from "./common.ts";
 
@@ -246,7 +247,19 @@ export const DatabaseProvider = () =>
             properties: changed,
           })
           .pipe(Effect.retry(whileClusterBusy));
-        observed = yield* waitReady;
+        observed = yield* waitForProvisioned(
+          `kusto database ${name}`,
+          get,
+          untilConverged(
+            (db) => db.properties?.provisioningState,
+            (db) =>
+              (changed.softDeletePeriod === undefined ||
+                db.properties?.softDeletePeriod === changed.softDeletePeriod) &&
+              (changed.hotCachePeriod === undefined ||
+                db.properties?.hotCachePeriod === changed.hotCachePeriod),
+          ),
+          { interval: "5 seconds", times: 60 },
+        );
       }
 
       return toAttrs(resourceGroup, cluster, name, observed);

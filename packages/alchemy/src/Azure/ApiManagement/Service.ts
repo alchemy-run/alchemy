@@ -191,11 +191,15 @@ const skuFamily = (sku: string) => {
   return "classic";
 };
 
-/** Consumption and v2 services provision in minutes; classic tiers take 30-45. */
+/**
+ * Consumption and v2 services usually provision in minutes but can queue
+ * for 20+ when the region is busy; classic tiers take 30-45 minutes and
+ * Premium can take over an hour.
+ */
 const budgetFor = (sku: string): WaitBudget =>
   skuFamily(sku) === "classic"
-    ? { interval: "15 seconds", times: 240 }
-    : { interval: "10 seconds", times: 90 };
+    ? { interval: "15 seconds", times: 360 }
+    : { interval: "10 seconds", times: 180 };
 
 const toAttrs = (
   resourceGroup: string,
@@ -468,13 +472,13 @@ export const ServiceProvider = () =>
         Effect.retry({
           while: (e) => e._tag === "ApiManagementServiceTransitioning",
           schedule: Schedule.spaced("15 seconds"),
-          times: 40,
+          times: 120,
         }),
       );
       yield* waitUntilGone(
         `API Management service ${name}`,
         getService(subscriptionId, output.resourceGroup, name),
-        { interval: "10 seconds", times: 90 },
+        budgetFor(output.sku),
       );
       // Deleting soft-deletes for 48 hours; purge so the name is free again.
       yield* purgeDeletedService(subscriptionId, output.location, name);

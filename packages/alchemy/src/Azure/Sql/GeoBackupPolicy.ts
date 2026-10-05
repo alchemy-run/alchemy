@@ -12,7 +12,12 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
-import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
+import {
+  databasePath,
+  type DatabaseScope,
+  retryWhileWarehouseSettles,
+  syncSetting,
+} from "./setting.ts";
 
 /** The policy is a singleton named `Default`. */
 const SETTING_NAME = "Default";
@@ -163,11 +168,14 @@ export const GeoBackupPolicyProvider = () =>
         get: getSetting(subscriptionId, scope),
         converged: (observed) =>
           lower(observed.properties?.state) === lower(desired.state),
-        put: sql.GeoBackupPoliciesCreateOrUpdate({
-          ...databasePath(subscriptionId, scope),
-          geoBackupPolicyName: SETTING_NAME,
-          properties: desired,
-        }),
+        // A freshly created pool answers InternalServerError for a while.
+        put: retryWhileWarehouseSettles(
+          sql.GeoBackupPoliciesCreateOrUpdate({
+            ...databasePath(subscriptionId, scope),
+            geoBackupPolicyName: SETTING_NAME,
+            properties: desired,
+          }),
+        ),
       });
       return toAttrs(scope, fresh);
     }),
@@ -183,11 +191,13 @@ export const GeoBackupPolicyProvider = () =>
           get: getSetting(subscriptionId, output),
           converged: (observed) =>
             fieldsMatch(observed.properties, { state: "Enabled" }),
-          put: sql.GeoBackupPoliciesCreateOrUpdate({
-            ...databasePath(subscriptionId, output),
-            geoBackupPolicyName: SETTING_NAME,
-            properties: { state: "Enabled" },
-          }),
+          put: retryWhileWarehouseSettles(
+            sql.GeoBackupPoliciesCreateOrUpdate({
+              ...databasePath(subscriptionId, output),
+              geoBackupPolicyName: SETTING_NAME,
+              properties: { state: "Enabled" },
+            }),
+          ),
         }),
       );
     }),

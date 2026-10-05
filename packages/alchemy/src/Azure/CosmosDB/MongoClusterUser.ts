@@ -1,5 +1,6 @@
 import * as mongocluster from "@distilled.cloud/azure/mongocluster";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -220,7 +221,16 @@ export const MongoClusterUserProvider = () =>
               roles: news.roles ?? DEFAULT_ROLES,
             },
           })
-          .pipe(Effect.retry(whileMongoClusterBusy));
+          .pipe(
+            Effect.retry(whileMongoClusterBusy),
+            // A freshly created principal takes a while to replicate to
+            // the cluster's Entra ID validation.
+            Effect.retry({
+              while: (e) => e._tag === "MongoClusterPrincipalNotFound",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+          );
       }
       const settled = yield* waitForProvisioned(
         `Mongo cluster user ${name}`,

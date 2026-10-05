@@ -38,7 +38,10 @@ export interface SqlPoolMaintenanceWindowProps extends SqlPoolChildProps {
       | "Saturday";
     /** Start time (UTC) as `HH:mm:ss`, e.g. `00:00:00`. */
     startTime: string;
-    /** ISO 8601 duration, e.g. `PT3H`. */
+    /**
+     * ISO 8601 duration of 3 to 8 hours in whole hours, e.g. `PT3H` or
+     * `PT180M` (sent to Azure as minutes).
+     */
     duration: string;
   }[];
 }
@@ -105,6 +108,32 @@ const toAttrs = (
   timeRanges: [...(setting.properties?.timeRanges ?? [])],
 });
 
+/**
+ * Canonical form of a window: Azure only accepts durations in whole
+ * minutes (`PT180M`; `PT3H` is rejected with
+ * `InvalidMaintenanceWindowSelection`) and reports start times as
+ * `HH:mm:ss`.
+ */
+const normalizeRange = (
+  range: synapse.MaintenanceWindowTimeRange,
+): synapse.MaintenanceWindowTimeRange => {
+  const match = /^PT(?:(\d+)H)?(?:(\d+)M)?$/i.exec(range.duration ?? "");
+  const minutes =
+    match === null
+      ? undefined
+      : Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0);
+  const start = range.startTime ?? "";
+  return {
+    dayOfWeek: range.dayOfWeek,
+    startTime: /^\d{2}:\d{2}$/.test(start) ? `${start}:00` : start,
+    duration: minutes === undefined ? range.duration : `PT${minutes}M`,
+  };
+};
+
+const normalizeRanges = (
+  ranges: readonly synapse.MaintenanceWindowTimeRange[] | undefined,
+) => (ranges ?? []).map(normalizeRange);
+
 const settingSync = (
   subscriptionId: string,
   ref: SqlPoolChildAttrs,
@@ -112,11 +141,15 @@ const settingSync = (
 ) => ({
   label: `synapse maintenance window on sql pool ${ref.sqlPoolName}`,
   get: getSetting(subscriptionId, ref),
-  matches: (setting: Observed) => fieldsMatch(setting.properties, desired),
+  matches: (setting: Observed) =>
+    fieldsMatch(
+      normalizeRanges(setting.properties?.timeRanges),
+      normalizeRanges(desired.timeRanges),
+    ),
   put: synapse.SqlPoolMaintenanceWindowsCreateOrUpdate({
     ...sqlPoolWhere(subscriptionId, ref),
     maintenanceWindowName: SETTING_NAME,
-    properties: desired,
+    properties: { timeRanges: normalizeRanges(desired.timeRanges) },
   }),
 });
 

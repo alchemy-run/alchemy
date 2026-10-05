@@ -191,21 +191,40 @@ export const PublicCertificateProvider = () =>
         name,
       );
 
-      // Ensure + sync the store (a synchronous PUT; the blob is immutable).
-      const result =
-        observed === undefined ||
-        lower(observed.properties?.publicCertificateLocation) !==
-          lower(location)
-          ? yield* web.WebAppsCreateOrUpdatePublicCertificate({
-              ...siteWhere(subscriptionId, resourceGroup, siteName),
-              publicCertificateName: name,
-              properties: {
-                blob: news.blob,
-                publicCertificateLocation: location,
-              },
-            })
-          : observed;
-      return toAttrs(resourceGroup, siteName, name, result);
+      const inStore = (cert: ObservedCertificate | undefined) =>
+        cert !== undefined &&
+        lower(cert.properties?.publicCertificateLocation) === lower(location);
+      const put = web.WebAppsCreateOrUpdatePublicCertificate({
+        ...siteWhere(subscriptionId, resourceGroup, siteName),
+        publicCertificateName: name,
+        properties: {
+          blob: news.blob,
+          publicCertificateLocation: location,
+        },
+      });
+
+      // Ensure (a synchronous PUT; the blob is immutable).
+      if (observed === undefined) {
+        return toAttrs(resourceGroup, siteName, name, yield* put);
+      }
+      if (inStore(observed)) {
+        return toAttrs(resourceGroup, siteName, name, observed);
+      }
+
+      // Sync the store. Microsoft.Web accepts a PUT on an existing
+      // certificate but keeps its original store, so a store change
+      // re-installs the certificate under the same name.
+      yield* ignoreNotFound(
+        web.DeleteWebAppPublicCertificate({
+          ...siteWhere(subscriptionId, resourceGroup, siteName),
+          publicCertificateName: name,
+        }),
+      );
+      yield* waitUntilGone(
+        `public certificate ${name}`,
+        getCertificate(subscriptionId, resourceGroup, siteName, name),
+      );
+      return toAttrs(resourceGroup, siteName, name, yield* put);
     }),
 
     delete: Effect.fn(function* ({ output }) {

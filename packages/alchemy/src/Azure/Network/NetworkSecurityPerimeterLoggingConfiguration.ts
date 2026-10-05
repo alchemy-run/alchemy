@@ -78,6 +78,10 @@ export const NetworkSecurityPerimeterLoggingConfigurationProvider = () =>
       parents: ["networkSecurityPerimeter"],
       tracked: false,
       physicalName: () => Effect.succeed("instance"),
+      // Without the EnableServiceTagsInNsp flag every call on the child
+      // answers `SubscriptionFeatureNotRegistered`: such a subscription can
+      // never hold one (the PUT is rejected the same way), so it is absent
+      // and deleting it is a no-op (the perimeter delete removes children).
       get: (subscriptionId, path) =>
         orUndefinedIfNotFound(
           network.GetNetworkSecurityPerimeterLoggingConfiguration({
@@ -86,6 +90,10 @@ export const NetworkSecurityPerimeterLoggingConfigurationProvider = () =>
             networkSecurityPerimeterName: path.networkSecurityPerimeter!,
             loggingConfigurationName: path.name,
           }),
+        ).pipe(
+          Effect.catchTag("SubscriptionFeatureNotRegistered", () =>
+            Effect.succeed(undefined),
+          ),
         ),
       put: (subscriptionId, path, body) =>
         network.NetworkSecurityPerimeterLoggingConfigurationsCreateOrUpdate({
@@ -96,12 +104,18 @@ export const NetworkSecurityPerimeterLoggingConfigurationProvider = () =>
           ...body,
         }),
       del: (subscriptionId, path) =>
-        network.DeleteNetworkSecurityPerimeterLoggingConfiguration({
-          subscriptionId,
-          resourceGroupName: path.resourceGroup,
-          networkSecurityPerimeterName: path.networkSecurityPerimeter!,
-          loggingConfigurationName: path.name,
-        }),
+        network
+          .DeleteNetworkSecurityPerimeterLoggingConfiguration({
+            subscriptionId,
+            resourceGroupName: path.resourceGroup,
+            networkSecurityPerimeterName: path.networkSecurityPerimeter!,
+            loggingConfigurationName: path.name,
+          })
+          .pipe(
+            Effect.catchTag("SubscriptionFeatureNotRegistered", () =>
+              Effect.void,
+            ),
+          ),
       ownerTags: perimeterTags,
       body: (news) => ({
         properties: { enabledLogCategories: news.enabledLogCategories },

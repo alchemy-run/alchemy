@@ -8,11 +8,15 @@ import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-// A VM source: Standard_F1als_v7 (~$0.04/hour) plus disk, ~10-15 minutes
+// A VM source: Standard_D2as_v4 (~$0.10/hour) plus disk, ~10-15 minutes
 // with the Network Watcher agent install. Runs only with
-// AZURE_TEST_EXPENSIVE=1. The test owns the region's watcher, so it runs in
-// a region without VNets and orders the VNet after the watcher.
-const REGION = "canadacentral";
+// AZURE_TEST_EXPENSIVE=1. A subscription holds one watcher per region and
+// Azure auto-creates it (NetworkWatcher_<region> in NetworkWatcherRG) with
+// the first VNet, so the test uses eastus's existing watcher: other regions
+// refuse this subscription small VM sizes (SkuNotAvailable).
+const REGION = "eastus";
+const WATCHER_GROUP = "NetworkWatcherRG";
+const WATCHER = "NetworkWatcher_eastus";
 const PUBLIC_KEY =
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDENxJhC8/syZZ882HXvsvtHroY2qgTIi0Pbxn3I8ypeeKuerxliUK1Ht9xFcz2phTMNwoHzDcS5hdHT6GiYX+kxhbrrWA/b7D1MoqRu0WlIhB/vocs4WU06nWGQi0UXKWfVyfIHGZKgnw9vTcIutmW8KbQySIzgCYtYMD6a9PLL61O0LJaDcH5XDXEeygGLN9yVWitUJy0RNCZmS4qHB3QYzrXisDD0lzxRleIlp4KDpWvriuI8Chswe5rQ6RAEZXpEXYQfEwXm7jO7yO7ZSACh22am2suq4TRcTKlEFPw0V8ksCNzstQdbGsCStfB396XqmPEvz2IqSzMDljGodF/ alchemy-test-1";
 
@@ -20,15 +24,11 @@ const base = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
     location: REGION,
   });
-  const watcher = yield* Azure.Network.NetworkWatcher("Watcher", {
-    resourceGroup: group.resourceGroupName,
-    location: REGION,
-  });
+  const watcher = { networkWatcherName: WATCHER };
   const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
     resourceGroup: group.resourceGroupName,
     location: REGION,
     addressPrefixes: ["10.0.0.0/16"],
-    tags: { watcher: watcher.networkWatcherName },
   });
   const subnet = yield* Azure.Network.Subnet("Default", {
     resourceGroup: group.resourceGroupName,
@@ -43,7 +43,7 @@ const base = Effect.gen(function* () {
   const vm = yield* Azure.Compute.VirtualMachine("Vm", {
     resourceGroup: group.resourceGroupName,
     location: REGION,
-    vmSize: "Standard_F1als_v7",
+    vmSize: "Standard_D2as_v4",
     networkInterfaceIds: [nic.networkInterfaceId],
     adminUsername: "azureuser",
     sshPublicKeys: [PUBLIC_KEY],
@@ -76,7 +76,7 @@ const program = (props: { frequency: number; env: string }) =>
   Effect.gen(function* () {
     const { group, watcher, vm, agent } = yield* base;
     const monitor = yield* Azure.Network.ConnectionMonitor("Web", {
-      resourceGroup: group.resourceGroupName,
+      resourceGroup: WATCHER_GROUP,
       networkWatcher: watcher.networkWatcherName,
       location: REGION,
       endpoints: [
@@ -111,7 +111,7 @@ test.provider.skipIf(!runExpensive)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, watcher, monitor } = yield* stack.deploy(
+      const { watcher, monitor } = yield* stack.deploy(
         program({ frequency: 60, env: "test" }),
       );
       expect(monitor.testGroupNames).toEqual(["web"]);
@@ -123,7 +123,7 @@ test.provider.skipIf(!runExpensive)(
         monitor.connectionMonitorId,
       );
       const observed = yield* getMonitor(
-        group.resourceGroupName,
+        WATCHER_GROUP,
         watcher.networkWatcherName,
         monitor.connectionMonitorName,
       );
@@ -136,12 +136,12 @@ test.provider.skipIf(!runExpensive)(
       expect(
         yield* untilGone(
           getMonitor(
-            group.resourceGroupName,
+            WATCHER_GROUP,
             watcher.networkWatcherName,
             monitor.connectionMonitorName,
           ),
         ),
       ).toEqual("gone");
-    }).pipe(withVcpus(1), logLevel),
-  { tags, timeout: 900_000 },
+    }).pipe(withVcpus(2), logLevel),
+  { tags, timeout: 1_800_000 },
 );

@@ -74,14 +74,17 @@ test.provider(
         })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("QuotaExceeded");
-      expect(error.message).toContain("DedicatedVCpu quota");
+      // Pay-as-you-go subscriptions check the host's VM family quota
+      // (standardDSv3Family, 10 cores) against the whole host (119 cores).
+      expect(error.message).toContain("standardDSv3Family Cores quota");
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags, timeout: 300_000 },
 );
 
-// A whole DSv3 host costs ~$4-7/hour and needs dedicated host family quota
-// (0 on the free trial): paid subscriptions only.
+// A whole DSv3 host costs ~$4-7/hour and needs 119 cores of
+// standardDSv3Family quota (10 on a new pay-as-you-go subscription): paid
+// subscriptions with raised quota only.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete a dedicated host",
   (stack) =>

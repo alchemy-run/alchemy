@@ -142,5 +142,5 @@ test.provider.skipIf(!runExpensive)(
         "gone",
       );
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

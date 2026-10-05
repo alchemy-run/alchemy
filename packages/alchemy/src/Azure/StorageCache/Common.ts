@@ -17,9 +17,12 @@ export const createLustreName = Effect.fn(function* (
 
 /**
  * Azure Managed Lustre file systems take 10-30 minutes to create and
- * 5-20 minutes to delete; poll every 30 seconds for up to 30 minutes.
+ * 5-20 minutes to delete; poll every 30 seconds for up to 60 minutes.
  */
-export const FILESYSTEM_BUDGET = { interval: "30 seconds", times: 60 } as const;
+export const FILESYSTEM_BUDGET = {
+  interval: "30 seconds",
+  times: 120,
+} as const;
 
 /** Polling budget for auto import/export jobs (minutes, not seconds). */
 export const JOB_BUDGET = { interval: "10 seconds", times: 60 } as const;

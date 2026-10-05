@@ -50,7 +50,7 @@ const program = (props: { kind: "Union" | "Replace" }) =>
 // Needs TWO Dev Kusto clusters (~$0.50/hour together, 10-20 minutes to
 // create, 5-10 to delete): ~$0.40 per run, 30+ minutes.
 test.provider.skipIf(!runExpensive)(
-  "create, update, and delete a Kusto attached database configuration",
+  "create, replace, and delete a Kusto attached database configuration",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -71,17 +71,25 @@ test.provider.skipIf(!runExpensive)(
       );
       expect(config.attachedDatabaseNames).toContain(database.databaseName);
 
-      // In place: change how principals are combined.
-      const updated = yield* stack.deploy(program({ kind: "Replace" }));
-      expect(updated.config.attachedDatabaseConfigurationId).toEqual(
+      // Replacement (delete first): Azure cannot update the principals
+      // modification kind of an attached configuration.
+      const replaced = yield* stack.deploy(program({ kind: "Replace" }));
+      expect(replaced.config.attachedDatabaseConfigurationId).not.toEqual(
         config.attachedDatabaseConfigurationId,
       );
+      const getReplaced = () =>
+        getConfiguration(
+          group.resourceGroupName,
+          follower.clusterName,
+          replaced.config.attachedDatabaseConfigurationName,
+        );
       expect(
-        (yield* get()).properties?.defaultPrincipalsModificationKind,
+        (yield* getReplaced()).properties?.defaultPrincipalsModificationKind,
       ).toEqual("Replace");
+      expect(yield* waitGone(get(), 60)).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitGone(get(), 60)).toEqual("gone");
+      expect(yield* waitGone(getReplaced(), 60)).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

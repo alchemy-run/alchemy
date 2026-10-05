@@ -168,6 +168,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:grafana", "live"],
-    timeout: 900_000,
+    timeout: 2_400_000,
   },
 );

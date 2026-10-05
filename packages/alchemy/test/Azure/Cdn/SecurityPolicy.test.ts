@@ -73,7 +73,7 @@ const program = (props: { wafPolicyId?: string; patternsToMatch: string[] }) =>
 // Door profiles. The WAF policy lives in the stack's resource group and is
 // deleted with it.
 test.provider.skipIf(!runPaidOnly)(
-  "security policy lifecycle",
+  "lifecycle",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

@@ -5,13 +5,13 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { runPaidOnly } from "../gates.ts";
 import {
   clusterStack,
   logLevel,
   subscription,
   tags,
   waitGone,
+  runWithConfluentUser,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -23,7 +23,7 @@ interface Secrets {
 }
 
 const parents = Effect.gen(function* () {
-  const base = yield* clusterStack;
+  const base = yield* clusterStack("connector");
   const account = yield* Azure.Storage.StorageAccount("Sink", {
     resourceGroup: base.group.resourceGroupName,
     location: "eastus",
@@ -77,8 +77,8 @@ const program = (secrets: Secrets, flushSize: string) =>
 // Needs a Confluent organization (Marketplace SaaS purchase, blocked on the
 // free trial), a Basic cluster, and a managed connector (billed per task
 // hour + throughput, ~$0.20 for a short run); ~20 minutes. Run only with
-// AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// AZURE_TEST_PAID=1 and AZURE_TEST_CONFLUENT_USER_TOKEN=1 (user sign-in).
+test.provider.skipIf(!runWithConfluentUser)(
   "create, update, and delete a confluent blob sink connector",
   (stack) =>
     Effect.gen(function* () {

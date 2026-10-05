@@ -130,6 +130,18 @@ export const whileClusterBusy = {
 } as const;
 
 /**
+ * Cluster creation is additionally throttled per subscription ("Too soon
+ * to create another managed cluster. Please retry after 35 seconds"),
+ * e.g. while a create-before-delete replacement provisions its successor.
+ */
+export const whileClusterCreateBlocked = {
+  while: (e: { readonly _tag: string }) =>
+    whileClusterBusy.while(e) || e._tag === "RequestRateLimitExceeded",
+  schedule: Schedule.spaced("15 seconds"),
+  times: 40,
+} as const;
+
+/**
  * Fleet writes conflict with an in-flight fleet operation (409), and a
  * fleet cannot be deleted while members are still leaving it; both clear
  * on their own.

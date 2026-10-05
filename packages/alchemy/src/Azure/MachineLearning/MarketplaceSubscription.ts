@@ -1,5 +1,6 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -30,7 +31,7 @@ export interface MarketplaceSubscriptionProps {
   name?: string;
   /**
    * Catalog model to subscribe to, e.g.
-   * `azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct`.
+   * `azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct`.
    * Changing it replaces the subscription.
    */
   modelId: string;
@@ -80,7 +81,7 @@ export interface MarketplaceSubscription extends Resource<
  *   {
  *     resourceGroup: group.resourceGroupName,
  *     workspace: project.workspaceName,
- *     modelId: "azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct",
+ *     modelId: "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct",
  *   },
  * );
  * ```
@@ -88,7 +89,7 @@ export interface MarketplaceSubscription extends Resource<
  * **Example:** Serverless endpoint backed by the subscription
  * ```typescript
  * const modelId =
- *   "azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct";
+ *   "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct";
  * const subscription = yield* Azure.MachineLearning.MarketplaceSubscription(
  *   "llama",
  *   {
@@ -234,11 +235,24 @@ export const MarketplaceSubscriptionProvider = () =>
           workspaceName: workspace,
           name,
           properties: { modelId: news.modelId },
-        });
+        }).pipe(
+          // ARM often answers the accepted PUT with a 500 (or, on the SDK's
+          // retry, an in-progress conflict) while the create runs; the
+          // bounded wait below observes whether it lands.
+          Effect.catchTag(
+            ["MachineLearningOperationInProgress", "InternalServerError"],
+            () => Effect.void,
+          ),
+        );
       }
       const ready = yield* waitForProvisioned(
         `machine learning marketplace subscription ${name}`,
-        get,
+        // GET also answers 500 while the purchase is in flight.
+        get.pipe(
+          Effect.catchTag("InternalServerError", () =>
+            Effect.succeed(undefined),
+          ),
+        ),
         (subscription) => subscription.properties.provisioningState,
         { interval: "5 seconds", times: 60 },
       );
@@ -249,12 +263,25 @@ export const MarketplaceSubscriptionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        ml.DeleteMarketplaceSubscription({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          workspaceName: output.workspace,
-          name: output.marketplaceSubscriptionName,
-        }),
+        ml
+          .DeleteMarketplaceSubscription({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            workspaceName: output.workspace,
+            name: output.marketplaceSubscriptionName,
+          })
+          .pipe(
+            // A create, or this delete's own SDK retry after a 500, is
+            // still running; retry until the delete is accepted or the
+            // subscription is gone.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "MachineLearningOperationInProgress" ||
+                e._tag === "InternalServerError",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `machine learning marketplace subscription ${output.marketplaceSubscriptionName}`,

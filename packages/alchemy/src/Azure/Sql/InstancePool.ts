@@ -270,10 +270,12 @@ export const InstancePoolProvider = () =>
           properties,
         });
       }
+      // The pool has no provisioning state; while its virtual cluster is
+      // being built GET answers without `properties`.
       observed = yield* waitForProvisioned(
         `sql instance pool ${name}`,
         get,
-        () => undefined,
+        (pool) => (pool.properties === undefined ? "Creating" : undefined),
         SLOW,
       );
 

@@ -13,7 +13,11 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { isAccountOwnedByStack } from "./Account.ts";
+import {
+  getAccount,
+  isAccountOwnedByStack,
+  usesMicrosoftManagedNetwork,
+} from "./Account.ts";
 import { sameArm, whileAccountBusy } from "./Common.ts";
 import type { WaitBudget } from "../Arm.ts";
 
@@ -245,6 +249,21 @@ export const ManagedNetworkProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // While the account is injected into the managed network, Azure's
+      // auto-provisioned agent capability host holds its subnet and the
+      // delete fails ("Subnet is still in use"), leaving the network
+      // `Failed`. The network then lives and dies with the account.
+      if (
+        usesMicrosoftManagedNetwork(
+          yield* getAccount(
+            subscriptionId,
+            output.resourceGroup,
+            output.account,
+          ),
+        )
+      ) {
+        return;
+      }
       // A network still provisioning rejects the delete; let it settle.
       yield* waitForProvisioned(
         `managed network of ${output.account}`,

@@ -17,7 +17,11 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { createRegistryName, normalizeLocation, sameName } from "./Common.ts";
+import { normalizeLocation, sameName } from "./Common.ts";
+
+/** Default replication name: the region, letters and digits only. */
+const defaultReplicationName = (location: string) =>
+  (normalizeLocation(location) ?? "").replace(/[^a-z0-9]/g, "");
 
 export interface ReplicationProps {
   /** Resource group of the registry. Changing it replaces the replication. */
@@ -25,9 +29,11 @@ export interface ReplicationProps {
   /** Premium registry to replicate. Changing it replaces the replication. */
   registry: string;
   /**
-   * Replication name: 5-50 letters and digits (conventionally the region
-   * name). If omitted, a unique name is generated from the app, stage, and
-   * logical ID. Changing it replaces the replication.
+   * Replication name: 5-50 letters and digits. If omitted, the normalized
+   * region name is used (`westus2`), matching the Azure CLI convention; a
+   * registry holds at most one replication per region, and a short name keeps
+   * the ARM resource ID under its 256-character limit. Changing it replaces
+   * the replication.
    */
   name?: string;
   /**
@@ -162,12 +168,13 @@ export const ReplicationProvider = () =>
         (news.zoneRedundancy !== undefined &&
           news.zoneRedundancy !== output.zoneRedundancy)
       ) {
-        // A kept explicit name must be freed before it can be reused.
+        // A kept name must be freed before it can be reused.
         return {
           action: "replace",
-          deleteFirst:
-            news.name !== undefined &&
-            sameName(news.name, output.replicationName),
+          deleteFirst: sameName(
+            news.name ?? defaultReplicationName(news.location),
+            output.replicationName,
+          ),
         } as const;
       }
       return undefined;
@@ -183,7 +190,10 @@ export const ReplicationProvider = () =>
       const name =
         output?.replicationName ??
         olds?.name ??
-        (yield* createRegistryName(id));
+        (olds?.location !== undefined
+          ? defaultReplicationName(olds.location)
+          : undefined);
+      if (name === undefined) return undefined;
       const observed = yield* getReplication(
         subscriptionId,
         resourceGroup,
@@ -200,7 +210,9 @@ export const ReplicationProvider = () =>
       yield* ensureRegistered(subscriptionId, "Microsoft.ContainerRegistry");
       const { resourceGroup, registry } = news;
       const name =
-        news.name ?? output?.replicationName ?? (yield* createRegistryName(id));
+        news.name ??
+        output?.replicationName ??
+        defaultReplicationName(news.location);
       const tags = yield* desiredTags(id, news.tags);
       const regionEndpointEnabled = news.regionEndpointEnabled ?? true;
       const where = {

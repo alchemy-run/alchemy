@@ -158,7 +158,13 @@ const toAttrs = (
 
 export const ServiceProvider = () =>
   Provider.succeed(Service, {
-    stables: ["serviceName", "serviceType", "serviceId", "account", "resourceGroup"],
+    stables: [
+      "serviceName",
+      "serviceType",
+      "serviceId",
+      "account",
+      "resourceGroup",
+    ],
 
     // Services disappear with their account.
     list: Effect.fn(function* () {
@@ -210,7 +216,12 @@ export const ServiceProvider = () =>
       const instanceSize = news.instanceSize ?? "Cosmos.D4s";
       const instanceCount = news.instanceCount ?? 1;
       const label = `Cosmos DB service ${serviceType}`;
-      const get = getService(subscriptionId, resourceGroup, account, serviceType);
+      const get = getService(
+        subscriptionId,
+        resourceGroup,
+        account,
+        serviceType,
+      );
 
       // Observe.
       let observed = yield* get;
@@ -232,15 +243,28 @@ export const ServiceProvider = () =>
           .pipe(Effect.retry(whileAccountBusy));
       }
 
-      // Block until the instances are running at the desired shape.
+      // Block until the instances are running at the desired shape. A
+      // failed resize (e.g. regional capacity) leaves the service `Running`
+      // at its old shape: once a transition has been observed, returning
+      // to `Running` with the wrong shape is a failure, not progress.
+      let transitioned = false;
       observed = yield* waitForProvisioned(
         label,
         get,
-        (service) =>
-          service.properties?.instanceSize === instanceSize &&
-          service.properties?.instanceCount === instanceCount
-            ? stateOf(service)
-            : "Updating",
+        (service) => {
+          const state = stateOf(service);
+          if (
+            service.properties?.instanceSize === instanceSize &&
+            service.properties?.instanceCount === instanceCount
+          ) {
+            return state;
+          }
+          if (state !== "Succeeded") {
+            transitioned = true;
+            return state;
+          }
+          return transitioned ? "Failed" : "Updating";
+        },
         { interval: "15 seconds", times: 80 },
       );
 

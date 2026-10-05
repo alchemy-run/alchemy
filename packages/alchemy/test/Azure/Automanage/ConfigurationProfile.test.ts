@@ -38,10 +38,11 @@ const program = (props: {
     return { group, profile };
   });
 
-// Configuration profiles are free and provision synchronously, but the
-// free-trial subscription rejects every profile PUT with
-// `AutomanageSubscriptionNotSupported` (400 InvalidSubscriptionState,
-// "Subscription state: -1"). Runs with AZURE_TEST_PAID=1.
+// Configuration profiles are free and provision synchronously, but Automanage
+// is retiring (2027-09-30) and is closed to new subscriptions: every profile
+// PUT fails with `AutomanageSubscriptionNotSupported` (400
+// InvalidSubscriptionState, "Subscription state: -1"), also on pay-as-you-go
+// (verified 2026-10-04). Runs with AZURE_TEST_PAID=1 on an onboarded subscription.
 test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete a configuration profile",
   (stack) =>
@@ -145,10 +146,10 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 600_000 },
 );
 
-// Ungated probe: the trial subscription rejects profile creation with the
+// Ungated probe: a non-onboarded subscription rejects profile creation with the
 // typed subscription-state error. Only a resource group is created (free).
 test.provider(
-  "the trial subscription rejects configuration profiles with a typed error",
+  "a non-onboarded subscription rejects configuration profiles with a typed error",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

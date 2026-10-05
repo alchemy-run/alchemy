@@ -59,7 +59,7 @@ const program = (props: {
 // delete). Free Trial subscriptions cannot create Front Door profiles. The
 // domain stays in `Pending` validation; the provider does not wait for it.
 test.provider.skipIf(!runPaidOnly)(
-  "custom domain lifecycle",
+  "lifecycle",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

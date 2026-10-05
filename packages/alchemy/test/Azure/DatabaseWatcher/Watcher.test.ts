@@ -89,8 +89,8 @@ test.provider(
   },
 );
 
-// Free, but slow: two creates (~2.5 min each) and two deletes (~4 min
-// each) take ~13 minutes, past the ~10 minute budget.
+// Free, but slow: two creates (~2.5 min each), two deletes (~5 min each)
+// and the resource group delete take ~16 minutes, past the ~10 minute budget.
 test.provider.skipIf(!runExpensive)(
   "rename replaces a database watcher",
   (stack) =>
@@ -114,6 +114,6 @@ test.provider.skipIf(!runExpensive)(
     }),
   {
     tags: ["provider:azure", "provider:azure:databasewatcher", "live"],
-    timeout: 900_000,
+    timeout: 1_800_000,
   },
 );

@@ -34,10 +34,20 @@ const getUpload = (
 
 const program = (password: Redacted.Redacted<string>, upload: boolean) =>
   Effect.gen(function* () {
-    const mi = yield* managedDatabase(password);
+    const mi = yield* managedDatabase(password, {
+      identity: { type: "SystemAssigned" },
+    });
     const account = yield* Azure.Storage.StorageAccount("Digests", {
       resourceGroup: mi.group.resourceGroupName,
       location: mi.group.location,
+    });
+    // The instance writes digests with its managed identity.
+    yield* Azure.Authorization.RoleAssignment("DigestWriter", {
+      scope: account.storageAccountId,
+      roleDefinitionId:
+        Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
+      principalId: mi.instance.principalId.as<string>(),
+      principalType: "ServicePrincipal",
     });
     const digests = upload
       ? yield* Azure.Sql.ManagedLedgerDigestUpload("DigestUpload", {
@@ -53,8 +63,6 @@ const program = (password: Redacted.Redacted<string>, upload: boolean) =>
 // Needs a SQL Managed Instance (~$0.70/hour; the first instance in a subnet
 // takes 30 minutes to 6 hours): several dollars per run, so this only runs
 // with AZURE_TEST_EXPENSIVE=1.
-// The instance's managed identity also needs Storage Blob Data Contributor
-// on the account for uploads to succeed.
 test.provider.skipIf(!runExpensive)(
   "enable and disable managed ledger digest uploads",
   (stack) =>
@@ -79,5 +87,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* awaitGone(get)).toEqual("gone");
     }).pipe(logLevel),
-  { tags: SQL_TAGS, timeout: 6 * 3_600_000 },
+  { tags: SQL_TAGS, timeout: 4 * 3_600_000 },
 );

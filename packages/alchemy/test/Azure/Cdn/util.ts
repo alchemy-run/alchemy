@@ -21,9 +21,10 @@ export const subscription = Effect.map(
  * stays well under $1, but Azure forbids Front Door profiles on the Free
  * Trial testing subscription (`FrontDoorFreeTrialForbidden`), so every
  * lifecycle needs `AZURE_TEST_PAID=1` on a Pay-As-You-Go subscription.
- * Profile deletes take 5-15 minutes.
+ * Profile deletes take 5-20 minutes and a lifecycle that replaces the
+ * profile waits for two of them.
  */
-export const FRONT_DOOR_TIMEOUT = 900_000;
+export const FRONT_DOOR_TIMEOUT = 3_600_000;
 
 /** Poll an out-of-band GET until it reports a typed not-found. */
 export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
@@ -36,7 +37,7 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
     Effect.repeat({
       schedule: Schedule.spaced("10 seconds"),
       until: (status) => status === "gone",
-      times: 60,
+      times: 180,
     }),
   );
 

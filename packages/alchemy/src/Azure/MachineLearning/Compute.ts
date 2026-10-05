@@ -10,6 +10,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  ProvisioningFailed,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -350,7 +351,32 @@ export const ComputeProvider = () =>
         `machine learning compute ${name}`,
         get,
         (compute) => compute.properties?.provisioningState,
-        { interval: "5 seconds", times: 90 },
+        // Compute instances regularly take 10-20 minutes to provision.
+        { interval: "10 seconds", times: 150 },
+      ).pipe(
+        // Surface Azure's provisioning errors (e.g. exhausted core quota).
+        Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
+          get.pipe(
+            Effect.flatMap((compute) => {
+              const errors = (compute?.properties?.provisioningErrors ?? [])
+                .flatMap((item) =>
+                  item.error === undefined
+                    ? []
+                    : [`${item.error.code}: ${item.error.message}`],
+                )
+                .join("; ");
+              return Effect.fail(
+                errors.length === 0
+                  ? failure
+                  : new ProvisioningFailed({
+                      resource: failure.resource,
+                      state: failure.state,
+                      message: `${failure.message}: ${errors}`,
+                    }),
+              );
+            }),
+          ),
+        ),
       );
 
       // Observe.
@@ -438,7 +464,7 @@ export const ComputeProvider = () =>
           output.workspace,
           output.computeName,
         ),
-        { interval: "5 seconds", times: 72 },
+        { interval: "10 seconds", times: 90 },
       );
     }),
 

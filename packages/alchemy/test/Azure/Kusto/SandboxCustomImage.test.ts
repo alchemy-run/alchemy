@@ -25,6 +25,9 @@ const getImage = (
 const program = (props: { requirements: string }) =>
   Effect.gen(function* () {
     const { group, cluster } = yield* devCluster({
+      // Sandboxes need nested virtualization, which the Dev E2a_v4 SKU
+      // lacks: the cheapest supported option is 2 x Standard_E2ads_v5.
+      sku: { name: "Standard_E2ads_v5", tier: "Standard", capacity: 2 },
       languageExtensions: [{ name: "PYTHON", imageName: "Python3_10_8" }],
     });
     const image = yield* Azure.Kusto.SandboxCustomImage("Image", {
@@ -36,9 +39,9 @@ const program = (props: { requirements: string }) =>
     return { group, cluster, image };
   });
 
-// Needs a Dev Kusto cluster with the Python extension (~$0.25/hour, 10-20
-// minutes to create plus ~10 minutes to enable the extension) and two
-// image builds (several minutes each): ~$0.30 per run, ~45 minutes.
+// Needs a 2-node Standard_E2ads_v5 Kusto cluster with the Python extension
+// (~$0.80/hour, 10-20 minutes to create plus up to an hour to enable the
+// extension) and two image builds: ~$1.50 per run, up to ~2 hours.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a Kusto sandbox custom image",
   (stack) =>
@@ -75,5 +78,5 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get(), 60)).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

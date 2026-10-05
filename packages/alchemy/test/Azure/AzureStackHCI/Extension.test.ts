@@ -100,8 +100,8 @@ test.provider.skipIf(!runPaidOnly)(
 );
 
 // Ungated probe (free): an unregistered cluster record has no Arc nodes to
-// install onto, so Azure rejects the extension. The service returns a
-// code-less 400, surfaced as the status-derived `BadRequest`.
+// install onto, so Azure rejects the extension with HTTP 400
+// `ResourceCreationValidateFailed`.
 test.provider(
   "an unregistered cluster rejects extensions",
   (stack) =>
@@ -140,7 +140,9 @@ test.provider(
           },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("BadRequest");
+      // ARM code `ResourceCreationValidateFailed` is matched client-wide to
+      // the (Datadog-named) DatadogMonitorCreationValidateFailed tag.
+      expect(error._tag).toEqual("DatadogMonitorCreationValidateFailed");
       expect(error.message).toContain("resource validation failed");
       const getError = yield* getExtension(
         group.resourceGroupName,

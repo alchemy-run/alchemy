@@ -1,6 +1,5 @@
 import * as Azure from "@/Azure";
 import * as Test from "@/Test/Alchemy";
-import * as network from "@distilled.cloud/azure/network";
 import * as sql from "@distilled.cloud/azure/sql";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -43,66 +42,7 @@ const instanceGone = (resourceGroupName: string, managedInstanceName: string) =>
     }),
   );
 
-/**
- * A subnet delegated to `Microsoft.Sql/managedInstances` with the NSG and
- * route table SQL MI requires. Azure Network is not modelled in Alchemy
- * yet, so it is created out of band in the stack's resource group (and
- * removed with it).
- */
-const ensureSubnet = (resourceGroupName: string) =>
-  Effect.gen(function* () {
-    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-    const where = { subscriptionId, resourceGroupName };
-    const nsg = yield* network.NetworkSecurityGroupsCreateOrUpdate({
-      ...where,
-      networkSecurityGroupName: "alchemy-mi-nsg",
-      location: LOCATION,
-    });
-    const routes = yield* network.RouteTablesCreateOrUpdate({
-      ...where,
-      routeTableName: "alchemy-mi-routes",
-      location: LOCATION,
-    });
-    yield* network.VirtualNetworksCreateOrUpdate({
-      ...where,
-      virtualNetworkName: "alchemy-mi-vnet",
-      location: LOCATION,
-      properties: { addressSpace: { addressPrefixes: ["10.42.0.0/16"] } },
-    });
-    yield* network.SubnetsCreateOrUpdate({
-      ...where,
-      virtualNetworkName: "alchemy-mi-vnet",
-      subnetName: "mi",
-      properties: {
-        addressPrefix: "10.42.0.0/24",
-        networkSecurityGroup: { id: nsg.id },
-        routeTable: { id: routes.id },
-        delegations: [
-          {
-            name: "mi",
-            properties: { serviceName: "Microsoft.Sql/managedInstances" },
-          },
-        ],
-      },
-    });
-    const subnet = yield* network
-      .GetSubnet({
-        ...where,
-        virtualNetworkName: "alchemy-mi-vnet",
-        subnetName: "mi",
-      })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          until: (s) => s.properties?.provisioningState === "Succeeded",
-          times: 24,
-        }),
-      );
-    return subnet.id!;
-  });
-
 const program = (props: {
-  subnetId: string | undefined;
   password: Redacted.Redacted<string>;
   tags: Record<string, string>;
 }) =>
@@ -110,11 +50,31 @@ const program = (props: {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
     });
-    if (props.subnetId === undefined) return { group, instance: undefined };
+    const nsg = yield* Azure.Network.NetworkSecurityGroup("MiNsg", {
+      resourceGroup: group.resourceGroupName,
+      location: LOCATION,
+    });
+    const routes = yield* Azure.Network.RouteTable("MiRoutes", {
+      resourceGroup: group.resourceGroupName,
+      location: LOCATION,
+    });
+    const vnet = yield* Azure.Network.VirtualNetwork("MiVnet", {
+      resourceGroup: group.resourceGroupName,
+      location: LOCATION,
+      addressPrefixes: ["10.42.0.0/16"],
+    });
+    const subnet = yield* Azure.Network.Subnet("MiSubnet", {
+      resourceGroup: group.resourceGroupName,
+      virtualNetwork: vnet.virtualNetworkName,
+      addressPrefix: "10.42.0.0/24",
+      networkSecurityGroupId: nsg.networkSecurityGroupId,
+      routeTableId: routes.routeTableId,
+      delegations: [{ serviceName: "Microsoft.Sql/managedInstances" }],
+    });
     const instance = yield* Azure.Sql.ManagedInstance("Mi", {
       resourceGroup: group.resourceGroupName,
       location: LOCATION,
-      subnetId: props.subnetId,
+      subnetId: subnet.subnetId,
       administratorLogin: "alchemyadmin",
       administratorLoginPassword: props.password,
       sku: { name: "GP_Gen5", tier: "GeneralPurpose", family: "Gen5" },
@@ -123,7 +83,7 @@ const program = (props: {
       licenseType: "LicenseIncluded",
       tags: props.tags,
     });
-    return { group, instance };
+    return { group, subnet, instance };
   });
 
 // SQL Managed Instance: 4 vCore General Purpose (~$0.70/hour) and the first
@@ -139,32 +99,25 @@ test.provider.skipIf(!runExpensive)(
         `Az!${yield* Effect.sync(() => randomUUID())}`,
       );
 
-      const { group } = yield* stack.deploy(
-        program({ subnetId: undefined, password, tags: {} }),
+      const { group, subnet, instance } = yield* stack.deploy(
+        program({ password, tags: { env: "test" } }),
       );
-      const subnetId = yield* ensureSubnet(group.resourceGroupName);
-
-      const { instance } = yield* stack.deploy(
-        program({ subnetId, password, tags: { env: "test" } }),
-      );
-      expect(instance?.provisioningState).toEqual("Succeeded");
-      expect(instance?.vCores).toEqual(4);
+      expect(instance.provisioningState).toEqual("Succeeded");
+      expect(instance.vCores).toEqual(4);
       const observed = yield* getInstance(
         group.resourceGroupName,
-        instance!.managedInstanceName,
+        instance.managedInstanceName,
       );
       expect(observed.properties?.subnetId?.toLowerCase()).toEqual(
-        subnetId.toLowerCase(),
+        subnet.subnetId.toLowerCase(),
       );
       expect(observed.tags?.env).toEqual("test");
 
       // In place: tags.
-      yield* stack.deploy(
-        program({ subnetId, password, tags: { env: "prod" } }),
-      );
+      yield* stack.deploy(program({ password, tags: { env: "prod" } }));
       const reobserved = yield* getInstance(
         group.resourceGroupName,
-        instance!.managedInstanceName,
+        instance.managedInstanceName,
       );
       expect(reobserved.tags?.env).toEqual("prod");
 
@@ -172,12 +125,12 @@ test.provider.skipIf(!runExpensive)(
       expect(
         yield* instanceGone(
           group.resourceGroupName,
-          instance!.managedInstanceName,
+          instance.managedInstanceName,
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:sql", "live"],
-    timeout: 6 * 3_600_000,
+    timeout: 4 * 3_600_000,
   },
 );

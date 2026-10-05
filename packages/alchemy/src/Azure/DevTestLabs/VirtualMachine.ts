@@ -321,7 +321,9 @@ export const VirtualMachineProvider = () =>
               : vm.properties?.size?.toLowerCase() === news.size.toLowerCase()
                 ? vm.properties?.provisioningState
                 : "Updating",
-          { interval: "10 seconds", times: 60 },
+          // Resizing a running lab VM (deallocate, resize, start) takes
+          // 10-15 minutes.
+          { interval: "10 seconds", times: 90 },
         );
       }
 

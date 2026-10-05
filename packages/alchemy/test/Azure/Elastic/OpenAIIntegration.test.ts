@@ -75,7 +75,7 @@ const program = (key: string) =>
   });
 
 // Needs an Elastic monitor (Marketplace SaaS purchase + hosted deployment,
-// ~$0.50-1/hour, ~5-15 minutes; the free trial cannot create one, see the
+// ~$0.50-1/hour, ~10-50 minutes; the free trial cannot create one, see the
 // Monitor probe) plus an Azure OpenAI account (no charge while idle). Run
 // only with AZURE_TEST_PAID=1.
 test.provider.skipIf(!runPaidOnly)(
@@ -117,5 +117,5 @@ test.provider.skipIf(!runPaidOnly)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 5_400_000 },
 );

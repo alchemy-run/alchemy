@@ -320,7 +320,8 @@ export const DevCenterProvider = () =>
       yield* waitUntilGone(
         `dev center ${output.devCenterName}`,
         getDevCenter(subscriptionId, output.resourceGroup, output.devCenterName),
-        { interval: "5 seconds", times: 72 },
+        // Observed ~350s for a dev center delete; allow up to 10 minutes.
+        { interval: "5 seconds", times: 120 },
       );
     }),
 

@@ -14,7 +14,10 @@ export const MANAGED_LOCATION = "centralus";
  * quota. Every managed-instance child test therefore only runs with
  * AZURE_TEST_EXPENSIVE=1.
  */
-export const managedInstance = (password: Redacted.Redacted<string>) =>
+export const managedInstance = (
+  password: Redacted.Redacted<string>,
+  extra: Pick<Azure.Sql.ManagedInstanceProps, "identity"> = {},
+) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: MANAGED_LOCATION,
@@ -50,14 +53,18 @@ export const managedInstance = (password: Redacted.Redacted<string>) =>
       vCores: 4,
       storageSizeInGB: 32,
       licenseType: "LicenseIncluded",
+      ...extra,
     });
     return { group, vnet, subnet, instance };
   });
 
 /** The managed instance fixture plus one empty database. */
-export const managedDatabase = (password: Redacted.Redacted<string>) =>
+export const managedDatabase = (
+  password: Redacted.Redacted<string>,
+  extra: Pick<Azure.Sql.ManagedInstanceProps, "identity"> = {},
+) =>
   Effect.gen(function* () {
-    const mi = yield* managedInstance(password);
+    const mi = yield* managedInstance(password, extra);
     const database = yield* Azure.Sql.ManagedDatabase("MiDb", {
       resourceGroup: mi.group.resourceGroupName,
       managedInstance: mi.instance.managedInstanceName,

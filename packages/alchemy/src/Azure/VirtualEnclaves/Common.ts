@@ -23,11 +23,11 @@ export const lastSegment = (armId: string | undefined) =>
 
 /**
  * Name for a Microsoft.Mission resource: letters, digits and hyphens,
- * starting with a letter and ending with a letter or digit.
+ * starting with a letter and ending with a letter or digit, 3-30 characters.
  */
 export const createMissionName = Effect.fn(function* (
   id: string,
-  maxLength = 40,
+  maxLength = 30,
 ) {
   const name = (yield* createPhysicalName({ id, maxLength, lowercase: true }))
     .replace(/[^a-z0-9-]/g, "-")

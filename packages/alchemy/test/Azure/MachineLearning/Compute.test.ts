@@ -37,15 +37,17 @@ const program = (props: { tags: Record<string, string> }) =>
       resourceGroup: base.group.resourceGroupName,
       workspace: base.workspace.workspaceName,
       computeType: "ComputeInstance",
-      vmSize: "Standard_DS11_v2",
+      vmSize: "Standard_D2s_v3",
       tags: props.tags,
     });
     return { ...base, compute };
   });
 
-// A Standard_DS11_v2 compute instance (2 vCPUs, ~$0.19/hour, ~$0.10 per
-// run). Two live runs exceeded the 15-minute budget (instance provisioning
-// plus deletion of the instance and its hub/project), so it is gated.
+// A Standard_D2s_v3 compute instance (2 vCPUs, ~$0.10/hour, ~$0.10 per
+// run; Standard_DS11_v2 instances never left 'Creating' in eastus).
+// Instance provisioning alone regularly takes 10-20 minutes, plus
+// deletion of the instance and its hub/project, so it is gated (~30-40
+// minutes per run).
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a compute instance",
   (stack) =>
@@ -58,7 +60,7 @@ test.provider.skipIf(!runExpensive)(
       const get = (name: string) =>
         getCompute(group.resourceGroupName, workspace.workspaceName, name);
       expect(compute.computeType).toEqual("ComputeInstance");
-      expect(compute.vmSize?.toLowerCase()).toEqual("standard_ds11_v2");
+      expect(compute.vmSize?.toLowerCase()).toEqual("standard_d2s_v3");
       const observed = yield* get(compute.computeName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("test");
@@ -73,14 +75,14 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
       expect(yield* waitGone(get(compute.computeName))).toEqual("gone");
     }).pipe(withVcpus(2), logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );
 
 // AmlCompute clusters are rejected by hub and project workspaces; they need
 // a `Default` workspace, which requires an Application Insights component
 // Alchemy cannot create yet. Set AZURE_ML_APP_INSIGHTS_ID to an existing
 // component to run it. A cluster with minNodeCount 0 is free; ~6-10
-// minutes including a replacement.
+// minutes including a replacement (needs 4 dedicated DSv2 ML cores).
 test.provider.skipIf(!runExpensive || !appInsightsId)(
   "create, update, replace, and delete an AmlCompute cluster",
   (stack) =>
@@ -96,7 +98,10 @@ test.provider.skipIf(!runExpensive || !appInsightsId)(
             resourceGroup: base.group.resourceGroupName,
             workspace: base.workspace.workspaceName,
             vmSize: props.vmSize,
-            vmPriority: "LowPriority",
+            // Low-priority ML core quota is 0 on new subscriptions
+            // (ClusterMinNodesExceedCoreQuota); dedicated nodes cost
+            // nothing at minNodeCount 0.
+            vmPriority: "Dedicated",
             scaleSettings: {
               minNodeCount: 0,
               maxNodeCount: props.maxNodeCount,

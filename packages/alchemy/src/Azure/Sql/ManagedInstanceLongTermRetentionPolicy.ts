@@ -213,11 +213,12 @@ export const ManagedInstanceLongTermRetentionPolicyProvider = () =>
           put: sql.ManagedInstanceLongTermRetentionPoliciesCreateOrUpdate({
             ...managedDatabasePath(subscriptionId, output),
             policyName: SETTING_NAME,
+            // Yearly retention and its week cannot be sent as "off"
+            // (`LongTermRetentionMissingWeekOfYear` for week 0); omitting
+            // them resets both.
             properties: {
               weeklyRetention: "PT0S",
               monthlyRetention: "PT0S",
-              yearlyRetention: "PT0S",
-              weekOfYear: 0,
             },
           }),
         }),

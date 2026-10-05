@@ -58,7 +58,7 @@ const program = (props: {
 // Front Door Standard profile (<$0.10 per run, 10-20 minutes with the profile
 // delete). Free Trial subscriptions cannot create Front Door profiles.
 test.provider.skipIf(!runPaidOnly)(
-  "origin group lifecycle",
+  "lifecycle",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

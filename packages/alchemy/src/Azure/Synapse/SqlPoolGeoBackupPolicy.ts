@@ -171,10 +171,12 @@ export const SqlPoolGeoBackupPolicyProvider = () =>
         workspaceName: output.workspaceName,
         sqlPoolName: output.sqlPoolName,
       };
-      // The setting is never removed; restore the default (`Enabled`).
+      // The setting is never removed; restore the default (`Enabled`). A
+      // locally redundant (LRS) pool cannot take geo-backups at all, so
+      // there is nothing to restore.
       yield* resetSetting(
         settingSync(subscriptionId, ref, { state: "Enabled" }),
-      );
+      ).pipe(Effect.catchTag("SynapseGeoBackupNotAllowed", () => Effect.void));
     }),
 
     nuke: { singleton: true },

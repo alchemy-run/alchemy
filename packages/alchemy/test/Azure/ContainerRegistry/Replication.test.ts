@@ -5,7 +5,6 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { runExpensive } from "../gates.ts";
 import {
-  basicRegistry,
   getRegistry,
   logLevel,
   subscription,
@@ -35,7 +34,17 @@ const program = (props: {
   tags: Record<string, string>;
 }) =>
   Effect.gen(function* () {
-    const { group, registry } = yield* basicRegistry("Premium");
+    // A replication's ARM ID (subscription + group + registry + replica)
+    // must stay under 256 characters; the engine-default group name for this
+    // test alone is 90, so the group gets a short deterministic name.
+    const group = yield* Azure.Resources.ResourceGroup("Group", {
+      name: "alchemy-acr-replication-test",
+      location: "eastus",
+    });
+    const registry = yield* Azure.ContainerRegistry.Registry("Registry", {
+      resourceGroup: group.resourceGroupName,
+      sku: "Premium",
+    });
     const replication = yield* Azure.ContainerRegistry.Replication("Replica", {
       resourceGroup: group.resourceGroupName,
       registry: registry.registryName,

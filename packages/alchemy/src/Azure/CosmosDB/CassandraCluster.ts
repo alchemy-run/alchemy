@@ -291,8 +291,9 @@ const toAttrs = (
   tags: userTags(cluster.tags),
 });
 
-// Cluster creation takes 5-15 minutes.
-const BUDGET = { interval: "15 seconds", times: 100 } as const;
+// Cluster creation and deletion take 10-15 minutes, but the regional
+// operation queue has held creates in `Creating` for 25+ minutes.
+const BUDGET = { interval: "15 seconds", times: 240 } as const;
 
 export const CassandraClusterProvider = () =>
   Provider.succeed(CassandraCluster, {

@@ -158,5 +158,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withPublicIps(1), logLevel),
-  { tags, timeout: 3_600_000 },
+  { tags, timeout: 7_200_000 },
 );

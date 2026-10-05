@@ -131,7 +131,7 @@ test.provider.skipIf(!runPaidOnly)(
 
 // Probe: F1 plan creates are throttled for the subscription (see
 // fixtures/f1-plan.ts).
-test.provider(
+test.provider.skipIf(runPaidOnly)(
   "F1 plan create is rejected with AppServicePlanCreateThrottled",
   (stack) =>
     Effect.gen(function* () {

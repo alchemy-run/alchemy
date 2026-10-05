@@ -3,20 +3,20 @@ import * as Test from "@/Test/Alchemy";
 import * as confluent from "@distilled.cloud/azure/confluent";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
 import {
   clusterStack,
   logLevel,
   subscription,
   tags,
   waitGone,
+  runWithConfluentUser,
 } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
 const program = (configs: Record<string, string>, partitionsCount: number) =>
   Effect.gen(function* () {
-    const parents = yield* clusterStack;
+    const parents = yield* clusterStack("topic");
     const topic = yield* Azure.Confluent.Topic("Orders", {
       resourceGroup: parents.group.resourceGroupName,
       organization: parents.organization.organizationName,
@@ -30,8 +30,9 @@ const program = (configs: Record<string, string>, partitionsCount: number) =>
 
 // Needs a Confluent organization (Marketplace SaaS purchase, blocked on the
 // free trial) and a Basic cluster (usage-billed, well under $1); ~15
-// minutes. Run only with AZURE_TEST_PAID=1.
-test.provider.skipIf(!runPaidOnly)(
+// minutes. Run only with AZURE_TEST_PAID=1 and
+// AZURE_TEST_CONFLUENT_USER_TOKEN=1 (user sign-in).
+test.provider.skipIf(!runWithConfluentUser)(
   "create, update, replace, and delete a confluent topic",
   (stack) =>
     Effect.gen(function* () {

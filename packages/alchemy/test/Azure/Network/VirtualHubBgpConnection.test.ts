@@ -49,7 +49,7 @@ const program = (peerAsn: number) =>
 // Needs a Standard hub (~$0.25/hour, 15-30 min) and a VNet connection:
 // ≈$0.40 and ~45 minutes per run.
 test.provider.skipIf(!runExpensive)(
-  "create, update, and delete a virtual hub BGP connection",
+  "create, replace, and delete a virtual hub BGP connection",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -63,21 +63,31 @@ test.provider.skipIf(!runExpensive)(
       );
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
 
+      // Azure rejects an in-place peer ASN change: it replaces the peering.
       const updated = yield* stack.deploy(program(65020));
-      expect(updated.peer.connectionId).toEqual(peer.connectionId);
+      expect(updated.peer.connectionId).not.toEqual(peer.connectionId);
       const reobserved = yield* getPeer(
         group.resourceGroupName,
         hub.virtualHubName,
-        peer.connectionName,
+        updated.peer.connectionName,
       );
       expect(reobserved.properties?.peerAsn).toEqual(65020);
-
-      yield* stack.destroy();
       expect(
         yield* untilGone(
           getPeer(group.resourceGroupName, hub.virtualHubName, peer.connectionName),
         ),
       ).toEqual("gone");
+
+      yield* stack.destroy();
+      expect(
+        yield* untilGone(
+          getPeer(
+            group.resourceGroupName,
+            hub.virtualHubName,
+            updated.peer.connectionName,
+          ),
+        ),
+      ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );

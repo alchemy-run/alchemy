@@ -150,6 +150,6 @@ test.provider.skipIf(!runExpensive)(
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:sql", "live"],
-    timeout: 12 * 3_600_000,
+    timeout: 4 * 3_600_000,
   },
 );

@@ -36,13 +36,13 @@ const program = (props: { linked: "Secondary" | "Tertiary" }) =>
     // Both candidate secondaries stay deployed across the replacement step.
     const secondary = yield* Azure.Redis.Cache("Secondary", {
       resourceGroup: group.resourceGroupName,
-      location: "westus2",
+      location: "westus3",
       sku: "Premium",
       capacity: 1,
     });
     const tertiary = yield* Azure.Redis.Cache("Tertiary", {
       resourceGroup: group.resourceGroupName,
-      location: "westus2",
+      location: "westus3",
       sku: "Premium",
       capacity: 1,
     });
@@ -58,9 +58,9 @@ const program = (props: { linked: "Secondary" | "Tertiary" }) =>
 
 // Three Premium P1 caches (~$0.55/hour each) that take 30-40 minutes to
 // provision, plus 5-15 minutes per link/unlink: roughly $2-3 and well over
-// an hour per run. Geo-replication needs a cache in a second region, and
-// the testing subscription may only create Azure Cache for Redis in eastus
-// (see the probe below), so this runs only on an entitled subscription.
+// an hour per run. Geo-replication needs a cache in a second region; the
+// testing subscription is refused new caches in most regions (see the probe
+// below) but still accepts them in eastus and westus3.
 test.provider.skipIf(!runPaidOnly)(
   "link, re-link (replace), and unlink geo-replicated redis caches",
   (stack) =>
@@ -113,7 +113,7 @@ test.provider.skipIf(!runPaidOnly)(
 
 // Ungated probe (instant, no cost): outside the regions where it already
 // had caches, the subscription is refused new Azure Cache for Redis caches
-// with a typed error, so the secondary of a link cannot be created.
+// with a typed error.
 test.provider(
   "a new redis cache in a second region is refused with a typed error",
   (stack) =>

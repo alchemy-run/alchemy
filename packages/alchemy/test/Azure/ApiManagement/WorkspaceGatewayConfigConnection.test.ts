@@ -24,12 +24,14 @@ const getConnection = (
 
 const program = (hostnames?: string[]) =>
   Effect.gen(function* () {
+    // WorkspaceGatewayPremium is offered in a subset of regions (not eastus).
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "eastus",
+      location: "westus",
     });
     // Workspace gateways connect to workspaces of a Premium service.
     const service = yield* Azure.ApiManagement.Service("Premium", {
       resourceGroup: group.resourceGroupName,
+      location: "westus",
       sku: { name: "Premium", capacity: 1 },
       publisherEmail: "ops@example.com",
       publisherName: "Alchemy",
@@ -41,6 +43,7 @@ const program = (hostnames?: string[]) =>
     });
     const gateway = yield* Azure.ApiManagement.WorkspaceGateway("Gateway", {
       resourceGroup: group.resourceGroupName,
+      location: "westus",
     });
     const connection =
       hostnames === undefined
@@ -56,7 +59,7 @@ const program = (hostnames?: string[]) =>
   });
 
 // Needs a Premium service (~$2.8/h, 30-45 min) plus a premium workspace
-// gateway (several $/h, 30+ min): est. ~$8 and ~90 minutes per run.
+// gateway (several $/h, 30+ min): est. ~$10 and ~2-3 hours per run.
 test.provider.skipIf(!runExpensive)(
   "connect, update, and disconnect a workspace on a gateway",
   (stack) =>
@@ -85,5 +88,5 @@ test.provider.skipIf(!runExpensive)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 10_800_000 },
 );

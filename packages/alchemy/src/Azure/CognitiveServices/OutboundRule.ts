@@ -1,5 +1,6 @@
 import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -103,11 +104,21 @@ export interface OutboundRule extends Resource<
  * rules are accepted; FQDN rules need `AllowOnlyApprovedOutbound`, which
  * deploys a billed Azure Firewall.
  *
+ * A `PrivateEndpoint` rule is approved by the account's managed identity,
+ * which needs the "Azure AI Enterprise Network Connection Approver" role
+ * (`b556d68e-0be0-4f35-a333-ad7ee1ce17ea`) on the target resource.
+ *
  * @see https://learn.microsoft.com/azure/ai-foundry/how-to/managed-network
  *
  * ### Private Endpoints
  * **Example:** Reach a storage account privately
  * ```typescript
+ * yield* Azure.Authorization.RoleAssignment("approver", {
+ *   scope: storage.storageAccountId,
+ *   roleDefinitionId: "b556d68e-0be0-4f35-a333-ad7ee1ce17ea",
+ *   principalId: account.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
  * yield* Azure.CognitiveServices.OutboundRule("storage", {
  *   resourceGroup: group.resourceGroupName,
  *   account: network.account,
@@ -166,6 +177,12 @@ const toAttrs = (
   status: rule.properties.status,
 });
 
+/** Rule `status` as a provisioning state: `Active`/`Inactive` are settled. */
+const ruleState = (rule: cognitiveservices.GetOutboundRuleResponse) => {
+  const status = rule.properties.status;
+  return status === "Active" || status === "Inactive" ? "Succeeded" : status;
+};
+
 const normalize = (destination: unknown) =>
   typeof destination === "string"
     ? destination.toLowerCase()
@@ -193,7 +210,7 @@ export const OutboundRuleProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         !sameArm(news.resourceGroup, output.resourceGroup) ||
@@ -201,6 +218,18 @@ export const OutboundRuleProvider = () =>
         (news.name !== undefined && !sameArm(news.name, output.ruleName))
       ) {
         return { action: "replace" } as const;
+      }
+      // Azure rejects any change to an existing user-defined rule ("Outbound
+      // rules are immutable after creation"); the name stays, so the old
+      // rule must go first.
+      if (
+        olds !== undefined &&
+        (olds.type !== news.type ||
+          (olds.category ?? "UserDefined") !==
+            (news.category ?? "UserDefined") ||
+          !destinationMatches(olds.destination, news.destination))
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
     }),
@@ -262,12 +291,22 @@ export const OutboundRuleProvider = () =>
               destination: news.destination,
             },
           })
-          .pipe(Effect.retry(whileAccountBusy));
+          .pipe(
+            Effect.retry(whileAccountBusy),
+            // A just-granted approver role takes minutes to propagate to the
+            // account's managed identity.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "CognitiveServicesPrivateEndpointApprovalForbidden",
+              schedule: Schedule.spaced("15 seconds"),
+              times: 20,
+            }),
+          );
       }
       const fresh = yield* waitForProvisioned(
         `outbound rule ${name}`,
         get,
-        () => undefined,
+        ruleState,
         MANAGED_NETWORK_BUDGET,
       );
       return toAttrs(resourceGroup, account, name, fresh);
@@ -275,6 +314,20 @@ export const OutboundRuleProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const get = getRule(
+        subscriptionId,
+        output.resourceGroup,
+        output.account,
+        output.ruleName,
+      );
+      // A rule still provisioning its private endpoint rejects the delete
+      // as "in conflicting state"; let it settle first.
+      yield* waitForProvisioned(
+        `outbound rule ${output.ruleName}`,
+        get,
+        ruleState,
+        MANAGED_NETWORK_BUDGET,
+      ).pipe(Effect.ignore);
       yield* ignoreNotFound(
         cognitiveservices
           .DeleteOutboundRule({
@@ -284,7 +337,15 @@ export const OutboundRuleProvider = () =>
             managedNetworkName: MANAGED_NETWORK_NAME,
             ruleName: output.ruleName,
           })
-          .pipe(Effect.retry(whileAccountBusy)),
+          .pipe(
+            Effect.retry(whileAccountBusy),
+            Effect.retry({
+              while: (e) =>
+                e._tag === "CognitiveServicesOutboundRuleConflictingState",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `outbound rule ${output.ruleName}`,

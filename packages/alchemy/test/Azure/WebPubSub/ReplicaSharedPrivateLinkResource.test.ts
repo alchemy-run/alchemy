@@ -141,7 +141,7 @@ const program = (props: {
 
 // Premium_P1 primary + replica (~$0.07/hour per unit) and two vaults:
 // ~$0.05 per run, but ~15 minutes (two link approvals and replications), so
-// it only runs with AZURE_TEST_EXPENSIVE=1 (with a longer --timeout).
+// it only runs with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "track, replace, and forget a replica shared private link resource",
   (stack) =>
@@ -227,5 +227,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 2_400_000 },
 );

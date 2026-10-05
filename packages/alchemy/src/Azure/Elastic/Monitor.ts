@@ -1,5 +1,6 @@
 import * as elastic from "@distilled.cloud/azure/elastic";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -297,7 +298,9 @@ const waitForMonitor = (
     `Elastic monitor ${name}`,
     getMonitor(subscriptionId, resourceGroup, name),
     (monitor) => monitor.properties?.provisioningState,
-    { interval: "15 seconds", times: 60 },
+    // Elastic Cloud onboarding (Marketplace SaaS + deployment) can stay
+    // `Accepted` for ~45 minutes before reaching a terminal state.
+    { interval: "30 seconds", times: 120 },
   );
 
 export const MonitorProvider = () =>
@@ -413,12 +416,22 @@ export const MonitorProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // DELETE is rejected with `Conflict` while provisioning is still
+      // in flight; retry until the monitor settles.
       yield* ignoreNotFound(
-        elastic.DeleteMonitor({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          monitorName: output.monitorName,
-        }),
+        elastic
+          .DeleteMonitor({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            monitorName: output.monitorName,
+          })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceConflict",
+              schedule: Schedule.spaced("30 seconds"),
+              times: 120,
+            }),
+          ),
       );
       yield* waitUntilGone(
         `Elastic monitor ${output.monitorName}`,

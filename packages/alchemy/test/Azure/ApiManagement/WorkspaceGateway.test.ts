@@ -15,12 +15,14 @@ const getGateway = (resourceGroupName: string, gatewayName: string) =>
 
 const program = (gateway?: { team: string }) =>
   Effect.gen(function* () {
+    // WorkspaceGatewayPremium is offered in a subset of regions (not eastus).
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: "eastus",
+      location: "westus",
     });
     const created = gateway
       ? yield* Azure.ApiManagement.WorkspaceGateway("Gateway", {
           resourceGroup: group.resourceGroupName,
+          location: "westus",
           sku: "WorkspaceGatewayPremium",
           capacity: 1,
           tags: { team: gateway.team },
@@ -30,7 +32,7 @@ const program = (gateway?: { team: string }) =>
   });
 
 // A premium workspace gateway bills per scale unit (several $/h) and takes
-// 30+ minutes to create: est. ~$3 and ~60 minutes per run.
+// 30+ minutes to create: est. ~$3 and ~60-90 minutes per run.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a workspace gateway",
   (stack) =>
@@ -54,5 +56,5 @@ test.provider.skipIf(!runExpensive)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );

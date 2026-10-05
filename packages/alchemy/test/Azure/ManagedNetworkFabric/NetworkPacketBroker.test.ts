@@ -96,7 +96,9 @@ test.provider(
           properties: { networkFabricId: `${base}/networkFabrics/nofabric` },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("BadRequest");
+      // ARM code `ResourceCreationValidateFailed`; errors.ts maps it client-wide
+      // to the (Datadog-named) DatadogMonitorCreationValidateFailed tag.
+      expect(error._tag).toEqual("DatadogMonitorCreationValidateFailed");
       expect(error.message).toContain("PUT not allowed");
 
       yield* stack.destroy();

@@ -8,8 +8,33 @@ import {
   stackAndStage,
 } from "../Arm.ts";
 
-/** Polling budget for NetApp long-running operations (up to ~10 minutes). */
-export const LRO_BUDGET = { interval: "5 seconds", times: 120 } as const;
+/**
+ * Polling budget for NetApp long-running operations (up to ~30 minutes;
+ * volume creates regularly take over 10 minutes in busy regions).
+ */
+export const LRO_BUDGET = { interval: "5 seconds", times: 360 } as const;
+
+const TRANSITIONAL = new Set(["creating", "updating", "patching", "moving"]);
+
+/**
+ * Wait (bounded by {@link LRO_BUDGET}) until a NetApp resource leaves a
+ * transitional provisioning state; NetApp refuses deletes mid-operation.
+ * Resolves on any settled state, including `undefined` (gone).
+ */
+export const waitSettled = <A, E, R>(
+  get: Effect.Effect<A | undefined, E, R>,
+  stateOf: (value: A) => string | undefined,
+) =>
+  get.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(LRO_BUDGET.interval),
+      until: (value) =>
+        value === undefined ||
+        !TRANSITIONAL.has(stateOf(value)?.toLowerCase() ?? ""),
+      times: LRO_BUDGET.times,
+    }),
+    Effect.asVoid,
+  );
 
 /**
  * NetApp Files rejects writes and deletes while a sibling or parent

@@ -10,6 +10,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  ProvisioningFailed,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -350,6 +351,34 @@ export const OnlineDeploymentProvider = () =>
         get,
         (deployment) => deployment.properties.provisioningState,
         { interval: "10 seconds", times: 150 },
+      ).pipe(
+        // A failed deployment carries no error on GET; surface the tail of
+        // the container logs (image pull, model load, scoring init).
+        Effect.catchTag("Azure.ProvisioningFailed", (failure) =>
+          Effect.gen(function* () {
+            const logs: string[] = [];
+            for (const containerType of [
+              "StorageInitializer",
+              "InferenceServer",
+            ] as const) {
+              const result = yield* ml
+                .GetOnlineDeploymentLogs({ ...where, containerType, tail: 20 })
+                .pipe(Effect.result);
+              const content =
+                result._tag === "Success" ? result.success.content : undefined;
+              if (content) logs.push(`[${containerType}] ${content}`);
+            }
+            return yield* Effect.fail(
+              logs.length === 0
+                ? failure
+                : new ProvisioningFailed({
+                    resource: failure.resource,
+                    state: failure.state,
+                    message: `${failure.message}\n${logs.join("\n")}`,
+                  }),
+            );
+          }),
+        ),
       );
 
       // Observe.

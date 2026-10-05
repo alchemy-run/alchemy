@@ -1,5 +1,6 @@
 import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -22,6 +23,7 @@ import {
 } from "./BackupShared.ts";
 
 export type BackupProtectionIntentItemType =
+  | "RecoveryServiceVaultItem"
   | "AzureWorkloadSQLAutoProtectionIntent"
   | "AzureWorkloadAutoProtectionIntent"
   | "AzureWorkloadContainerAutoProtectionIntent"
@@ -39,18 +41,24 @@ export interface BackupProtectionIntentProps {
    */
   name?: string;
   /**
-   * Kind of intent, e.g. `AzureWorkloadSQLAutoProtectionIntent` to
-   * auto-protect every database of a SQL instance in a VM. Changing it
-   * replaces the intent.
+   * Kind of intent. `RecoveryServiceVaultItem` with the protectable SQL
+   * instance (or availability group) as `itemId` auto-protects every
+   * current and future database in it; Azure Backup rejects the other
+   * kinds for SQL auto-protection with `BMSUserErrorInvalidInput`.
+   * Changing it replaces the intent.
+   * @default "RecoveryServiceVaultItem"
    */
-  protectionIntentItemType: BackupProtectionIntentItemType;
+  protectionIntentItemType?: BackupProtectionIntentItemType;
   /**
    * Workload family of the intent.
    * @default "AzureWorkload"
    */
   backupManagementType?: "AzureWorkload" | "AzureIaasVM";
-  /** ARM ID of the source (the VM hosting the workload). Changing it replaces the intent. */
-  sourceResourceId: string;
+  /**
+   * ARM ID of the source (the VM hosting the workload). Not needed for
+   * `RecoveryServiceVaultItem` intents. Changing it replaces the intent.
+   */
+  sourceResourceId?: string;
   /**
    * ID of the item to auto-protect, e.g. the protectable SQL instance's
    * ARM ID. Changing it replaces the intent.
@@ -89,9 +97,13 @@ export interface BackupProtectionIntent extends Resource<
  * with a {@link BackupPolicy}.
  *
  * Intents cannot be tagged; Alchemy treats an intent as owned when its
- * vault is tagged for the current stack and stage. Changing the policy
- * updates the intent in place; destroying it stops auto-protection
- * (already protected items stay protected).
+ * vault is tagged for the current stack and stage. Creating the intent
+ * immediately configures backup for the instance's existing databases
+ * (including `master`, `model`, and `msdb`). Changing the policy updates
+ * the intent in place, but Azure Backup rejects it with
+ * `BackupProtectionOperationInProgress` while that configuration is still
+ * running; destroying the intent stops auto-protection (already protected
+ * items stay protected).
  *
  * @see https://learn.microsoft.com/azure/backup/backup-sql-server-database-azure-vms#enable-auto-protection
  *
@@ -101,13 +113,12 @@ export interface BackupProtectionIntent extends Resource<
  * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
  *   resourceGroup: group.resourceGroupName,
  * });
+ * // The VM is registered with BackupProtectionContainer; the SQL instance
+ * // ID comes from the vault's protectable items after an inquiry.
  * yield* Azure.RecoveryServices.BackupProtectionIntent("sql-auto", {
  *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
- *   protectionIntentItemType: "AzureWorkloadSQLAutoProtectionIntent",
- *   sourceResourceId: vm.id,
  *   itemId: sqlInstanceItemId,
- *   workloadItemType: "SQLInstance",
  *   policyId: sqlPolicy.policyId,
  * });
  * ```
@@ -119,6 +130,25 @@ export const BackupProtectionIntent = Resource<BackupProtectionIntent>(
 );
 
 type Observed = backup.GetProtectionIntentResponse;
+
+const DEFAULT_ITEM_TYPE: BackupProtectionIntentItemType =
+  "RecoveryServiceVaultItem";
+
+/**
+ * Azure Backup rejects intent writes while the previous configure-protection
+ * operation on the same item is still running (e.g. a policy switch right
+ * after creation); retry for up to ~5 minutes.
+ */
+const retryWhileConfiguring = <A, E extends { readonly _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+) =>
+  self.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "BackupProtectionOperationInProgress",
+      schedule: Schedule.spaced("10 seconds"),
+      times: 30,
+    }),
+  );
 
 const getIntent = (
   subscriptionId: string,
@@ -173,7 +203,8 @@ export const BackupProtectionIntentProvider = () =>
         (news.name !== undefined &&
           !sameId(news.name, output.intentObjectName)) ||
         (olds !== undefined &&
-          (news.protectionIntentItemType !== olds.protectionIntentItemType ||
+          ((news.protectionIntentItemType ?? DEFAULT_ITEM_TYPE) !==
+            (olds.protectionIntentItemType ?? DEFAULT_ITEM_TYPE) ||
             !sameId(news.sourceResourceId, olds.sourceResourceId) ||
             !sameId(news.itemId, olds.itemId) ||
             !sameId(news.workloadItemType, olds.workloadItemType)))
@@ -220,21 +251,25 @@ export const BackupProtectionIntentProvider = () =>
         observed === undefined ||
         !sameId(observed.properties?.policyId, news.policyId)
       ) {
-        yield* backup.ProtectionIntentCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          vaultName: vault,
-          fabricName: BACKUP_FABRIC,
-          intentObjectName: name,
-          properties: {
-            protectionIntentItemType: news.protectionIntentItemType,
-            backupManagementType: news.backupManagementType ?? "AzureWorkload",
-            sourceResourceId: news.sourceResourceId,
-            itemId: news.itemId,
-            policyId: news.policyId,
-            workloadItemType: news.workloadItemType,
-          },
-        });
+        yield* retryWhileConfiguring(
+          backup.ProtectionIntentCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            vaultName: vault,
+            fabricName: BACKUP_FABRIC,
+            intentObjectName: name,
+            properties: {
+              protectionIntentItemType:
+                news.protectionIntentItemType ?? DEFAULT_ITEM_TYPE,
+              backupManagementType:
+                news.backupManagementType ?? "AzureWorkload",
+              sourceResourceId: news.sourceResourceId,
+              itemId: news.itemId,
+              policyId: news.policyId,
+              workloadItemType: news.workloadItemType,
+            },
+          }),
+        );
       }
 
       const fresh = yield* waitForProvisioned(
@@ -256,13 +291,15 @@ export const BackupProtectionIntentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        backup.DeleteProtectionIntent({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          vaultName: output.vault,
-          fabricName: BACKUP_FABRIC,
-          intentObjectName: output.intentObjectName,
-        }),
+        retryWhileConfiguring(
+          backup.DeleteProtectionIntent({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            vaultName: output.vault,
+            fabricName: BACKUP_FABRIC,
+            intentObjectName: output.intentObjectName,
+          }),
+        ),
       );
       yield* waitUntilGone(
         `backup protection intent ${output.intentObjectName}`,

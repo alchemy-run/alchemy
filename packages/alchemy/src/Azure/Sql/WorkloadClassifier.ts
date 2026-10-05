@@ -21,6 +21,13 @@ import {
 } from "./common.ts";
 import { workloadGroupPath, type WorkloadGroupScope } from "./setting.ts";
 
+/**
+ * Azure answers InternalServerError when the workload group and classifier
+ * names together exceed ~125 characters (T-SQL allows 128 each), so
+ * generated names stay short. See `WorkloadGroup`'s matching limit.
+ */
+const MAX_NAME_LENGTH = 60;
+
 export interface WorkloadClassifierProps {
   /** Resource group of the server. Changing it replaces the classifier. */
   resourceGroup: string;
@@ -32,7 +39,9 @@ export interface WorkloadClassifierProps {
   workloadGroup: string;
   /**
    * Name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the classifier.
+   * stage, and logical ID. Changing it replaces the classifier. Azure
+   * answers InternalServerError when this name and the workload group's
+   * name together exceed ~125 characters.
    */
   name?: string;
   /** Database user or role whose requests are classified. */
@@ -181,7 +190,7 @@ export const WorkloadClassifierProvider = () =>
         databaseName,
         workloadGroupName,
       };
-      const generated = yield* createChildName(id, 128);
+      const generated = yield* createChildName(id, MAX_NAME_LENGTH);
       const name = output?.workloadClassifierName ?? olds?.name ?? generated;
       const observed = yield* getChild(subscriptionId, scope, name);
       if (observed === undefined) return undefined;
@@ -205,7 +214,7 @@ export const WorkloadClassifierProvider = () =>
       const name =
         news.name ??
         output?.workloadClassifierName ??
-        (yield* createChildName(id, 128));
+        (yield* createChildName(id, MAX_NAME_LENGTH));
       const desired = {
         memberName: news.memberName,
         label: news.label,

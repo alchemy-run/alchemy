@@ -147,6 +147,16 @@ export const CHILD_BUDGET: WaitBudget = { interval: "3 seconds", times: 40 };
 export const ACCOUNT_BUDGET: WaitBudget = { interval: "5 seconds", times: 72 };
 
 /**
+ * An account injected into a Microsoft-managed network provisions the
+ * managed VNet and agent subnet with it: creates measured 5-7+ minutes,
+ * deletes ~22-28 minutes.
+ */
+export const MANAGED_NETWORK_ACCOUNT_BUDGET: WaitBudget = {
+  interval: "30 seconds",
+  times: 90,
+};
+
+/**
  * The account rejects a write while another write to it or one of its
  * children (projects, RAI policies, blocklists, ...) is still in progress.
  */

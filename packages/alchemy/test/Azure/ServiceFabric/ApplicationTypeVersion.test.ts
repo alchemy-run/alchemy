@@ -56,9 +56,9 @@ const program = (props: {
     return { group, cluster, appType, version };
   });
 
-// Provisioning a package needs a cluster with nodes: 3 × Standard_D2s_v3
-// (6 vCPUs, over the free trial's ~4) at ~$0.60/hour, 20-40 minutes to
-// provision. Also needs AZURE_TEST_SF_APP_PACKAGE_URL (see util.ts).
+// Provisioning a package needs a cluster with nodes: 3 × Standard_D2s_v4
+// (6 vCPUs) at ~$0.60/hour, 20-40 minutes to provision and as long to
+// delete. Also needs AZURE_TEST_SF_APP_PACKAGE_URL (see util.ts).
 test.provider.skipIf(!runPaidOnly || appPackage.url === undefined)(
   "create, update, and delete an application type version",
   (stack) =>
@@ -96,5 +96,5 @@ test.provider.skipIf(!runPaidOnly || appPackage.url === undefined)(
         }),
       ),
     ).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 7_200_000 },
 );

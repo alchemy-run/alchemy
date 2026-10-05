@@ -33,7 +33,11 @@ const getStorage = (
     });
   });
 
-const accountKey = (resourceGroupName: string, accountName: string) =>
+const accountKey = (
+  resourceGroupName: string,
+  accountName: string,
+  index: 0 | 1 = 0,
+) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
     const result = yield* storage.ListStorageAccountKeys({
@@ -41,7 +45,7 @@ const accountKey = (resourceGroupName: string, accountName: string) =>
       resourceGroupName,
       accountName,
     });
-    return result.keys?.[0]?.value ?? "";
+    return result.keys?.[index]?.value ?? "";
   });
 
 const program = (mount?: {
@@ -89,7 +93,7 @@ const program = (mount?: {
 // `withStandardEnvironment`, and an environment delete takes 5-25 minutes
 // (~15-35 minutes per test). Run with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
-  "register, update, and delete an environment storage",
+  "register, rotate key, replace, and delete an environment storage",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -120,23 +124,51 @@ test.provider.skipIf(!runExpensive)(
       );
       expect(observed.properties?.azureFile?.accessMode).toEqual("ReadOnly");
 
-      // In-place update: access mode.
-      const updated = yield* stack.deploy(
-        program({ accountKey: key, accessMode: "ReadWrite" }),
+      // In-place update: rotate to the secondary account key (the only
+      // mutable aspect; ARM rejects account, share, and access-mode edits).
+      const key2 = yield* accountKey(
+        base.group.resourceGroupName,
+        base.account.storageAccountName,
+        1,
       );
-      expect(updated.mounted?.storageId).toEqual(mounted?.storageId);
+      expect(key2.length).toBeGreaterThan(0);
+      expect(key2).not.toEqual(key);
+      const rotated = yield* stack.deploy(
+        program({ accountKey: key2, accessMode: "ReadOnly" }),
+      );
+      expect(rotated.mounted?.storageId).toEqual(mounted?.storageId);
+      expect(
+        (yield* getStorage(
+          group.resourceGroupName,
+          env.environmentName,
+          storageName,
+        )).properties?.azureFile?.accessMode,
+      ).toEqual("ReadOnly");
+
+      // Replacement: the access mode is immutable.
+      const replaced = yield* stack.deploy(
+        program({ accountKey: key2, accessMode: "ReadWrite" }),
+      );
+      const newName = replaced.mounted?.storageName ?? "";
+      expect(newName).not.toEqual(storageName);
+      expect(replaced.mounted?.accessMode).toEqual("ReadWrite");
       const reobserved = yield* getStorage(
         group.resourceGroupName,
         env.environmentName,
-        storageName,
+        newName,
       );
       expect(reobserved.properties?.azureFile?.accessMode).toEqual("ReadWrite");
+      expect(
+        yield* waitGone(
+          getStorage(group.resourceGroupName, env.environmentName, storageName),
+        ),
+      ).toEqual("gone");
 
       // Removing it from the stack deletes only the storage.
       yield* stack.deploy(program());
       expect(
         yield* waitGone(
-          getStorage(group.resourceGroupName, env.environmentName, storageName),
+          getStorage(group.resourceGroupName, env.environmentName, newName),
         ),
       ).toEqual("gone");
 

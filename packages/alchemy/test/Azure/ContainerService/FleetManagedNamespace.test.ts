@@ -101,5 +101,5 @@ test.provider.skipIf(!runExpensive)(
         ),
       ).toEqual("gone");
     }).pipe(withPublicIps(1), withVcpus(2), logLevel),
-  { tags: [...tags], timeout: 900_000 },
+  { tags: [...tags], timeout: 3_600_000 },
 );

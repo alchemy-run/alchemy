@@ -68,8 +68,9 @@ const program = (props: { useCustomProfile: boolean }) =>
     return { group, vm, profile, assignment };
   });
 
-// One 1-vCPU VM (~$0.02/hour) for ~10-15 minutes. The free-trial
-// subscription cannot create Automanage profiles or assignments
+// One 1-vCPU VM (~$0.02/hour) for ~10-15 minutes. Automanage is retiring and
+// closed to new subscriptions (pay-as-you-go included), so profiles and
+// assignments fail
 // (`AutomanageSubscriptionNotSupported`, 400 InvalidSubscriptionState), and
 // onboarding with best-practice profiles provisions Log Analytics /
 // Automation resources in default resource groups. Runs with
@@ -118,10 +119,11 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: one 1-vCPU VM (~$0.02/hour) for ~5 minutes. The trial
-// subscription rejects assignments with the typed subscription-state error.
+// Ungated probe: one 1-vCPU VM (~$0.02/hour) for ~5 minutes.
+// A non-onboarded subscription rejects assignments with the typed
+// subscription-state error.
 test.provider(
-  "the trial subscription rejects profile assignments with a typed error",
+  "a non-onboarded subscription rejects profile assignments with a typed error",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

@@ -21,8 +21,11 @@ export interface GatewayHostnameConfigurationProps {
   name?: string;
   /** Hostname the gateway serves, e.g. `api.contoso.com` (`*` for any). */
   hostname: string;
-  /** ARM resource ID of the TLS {@link Certificate} (`Certificate.certificateId`). */
-  certificateId?: string;
+  /**
+   * ARM resource ID of the TLS {@link Certificate} (`Certificate.certificateId`).
+   * Required by the API ("One or more fields contain incorrect values" without it).
+   */
+  certificateId: string;
   /**
    * Whether the gateway asks clients for a certificate.
    * @default false

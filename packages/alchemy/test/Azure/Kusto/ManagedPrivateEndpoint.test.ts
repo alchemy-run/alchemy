@@ -41,7 +41,7 @@ const program = (props: { requestMessage: string }) =>
 // Needs a Dev Kusto cluster (~$0.25/hour, 10-20 minutes to create, 5-10
 // to delete) plus a storage account: ~$0.20 per run, ~30 minutes.
 test.provider.skipIf(!runExpensive)(
-  "create, update, and delete a Kusto managed private endpoint",
+  "create, replace, and delete a Kusto managed private endpoint",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -62,19 +62,26 @@ test.provider.skipIf(!runExpensive)(
       expect(observed.properties?.groupId).toEqual("blob");
       expect(observed.properties?.requestMessage).toEqual("alchemy test");
 
-      // In place: change the approval request message.
-      const updated = yield* stack.deploy(
+      // Replacement: Azure never applies a new request message in place.
+      const replaced = yield* stack.deploy(
         program({ requestMessage: "alchemy test updated" }),
       );
-      expect(updated.endpoint.managedPrivateEndpointId).toEqual(
+      expect(replaced.endpoint.managedPrivateEndpointId).not.toEqual(
         endpoint.managedPrivateEndpointId,
       );
-      expect((yield* get()).properties?.requestMessage).toEqual(
+      const getReplaced = () =>
+        getEndpoint(
+          group.resourceGroupName,
+          cluster.clusterName,
+          replaced.endpoint.managedPrivateEndpointName,
+        );
+      expect((yield* getReplaced()).properties?.requestMessage).toEqual(
         "alchemy test updated",
       );
+      expect(yield* waitGone(get(), 60)).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitGone(get(), 60)).toEqual("gone");
+      expect(yield* waitGone(getReplaced(), 60)).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 3_600_000 },
 );

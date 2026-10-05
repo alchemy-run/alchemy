@@ -138,9 +138,11 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 600_000 },
 );
 
-// Ungated probe: the free trial rejects ACR Tasks with a typed error.
+// Probe for free-trial / free-credit subscriptions, which reject ACR Tasks
+// with a typed error. A paid subscription (AZURE_TEST_PAID) accepts the
+// create, so there the full lifecycle above runs instead.
 // Basic registry (~$0.17/day), about a minute.
-test.provider(
+test.provider.skipIf(runPaidOnly)(
   "the free trial rejects ACR Tasks with a typed error",
   (stack) =>
     Effect.gen(function* () {

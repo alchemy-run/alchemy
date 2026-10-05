@@ -53,16 +53,20 @@ export const waitGone = <A, R>(
  * storage account with data + logging containers the HPC Cache resource
  * provider may use.
  */
-export const lustreDependencies = (opts: { hsm: boolean }) =>
+export const lustreDependencies = (opts: { hsm: boolean; group: string }) =>
   Effect.gen(function* () {
+    // Microsoft.StorageCache rejects resource group names over 80 characters
+    // ("Resource group name can not be more than 80 characters"), which the
+    // engine-default name for a long test title exceeds.
     const group = yield* Azure.Resources.ResourceGroup("Group", {
+      name: opts.group,
       location: "eastus",
     });
     const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
       resourceGroup: group.resourceGroupName,
       addressPrefixes: ["10.42.0.0/16"],
     });
-    const subnet = yield* Azure.Network.Subnet("Lustre", {
+    const subnet = yield* Azure.Network.Subnet("LustreSubnet", {
       resourceGroup: group.resourceGroupName,
       virtualNetwork: vnet.virtualNetworkName,
       addressPrefix: "10.42.0.0/24",

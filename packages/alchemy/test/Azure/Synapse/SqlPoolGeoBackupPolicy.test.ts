@@ -15,7 +15,11 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 const program = (value: "Enabled" | "Disabled") =>
   Effect.gen(function* () {
-    const { group, workspace, pool } = yield* lakeSqlPool();
+    // Geo-backups only exist on geo-redundant pool storage; an LRS pool
+    // rejects every change with `SynapseGeoBackupNotAllowed`.
+    const { group, workspace, pool } = yield* lakeSqlPool({
+      storageAccountType: "GRS",
+    });
     const resource = yield* Azure.Synapse.SqlPoolGeoBackupPolicy("Geo", {
       resourceGroup: group.resourceGroupName,
       workspace: workspace.workspaceName,

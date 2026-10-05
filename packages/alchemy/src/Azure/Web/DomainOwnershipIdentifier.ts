@@ -103,7 +103,7 @@ const toAttrs = (
   identifierId: observed.id ?? "",
   siteName,
   resourceGroup,
-  value: observed.properties?.id,
+  value: observed.properties?.value,
 });
 
 export const DomainOwnershipIdentifierProvider = () =>
@@ -162,7 +162,7 @@ export const DomainOwnershipIdentifierProvider = () =>
       const request = {
         ...siteWhere(subscriptionId, resourceGroup, siteName),
         domainOwnershipIdentifierName: identifierName,
-        properties: { id: news.value },
+        properties: { value: news.value },
       };
 
       // Observe.
@@ -177,7 +177,7 @@ export const DomainOwnershipIdentifierProvider = () =>
       const result =
         observed === undefined
           ? yield* web.WebAppsCreateOrUpdateDomainOwnershipIdentifier(request)
-          : observed.properties?.id !== news.value
+          : observed.properties?.value !== news.value
             ? yield* web.UpdateWebAppDomainOwnershipIdentifier(request)
             : observed;
       return toAttrs(resourceGroup, siteName, identifierName, result);

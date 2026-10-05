@@ -5,7 +5,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { runExpensive, withPublicIps, withVcpus } from "../gates.ts";
+import { runExpensive } from "../gates.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -56,11 +56,6 @@ const program = (props: { scenarios: string[]; tags: Record<string, string> }) =
       resourceGroup: group.resourceGroupName,
       location: "westus3",
     });
-    const cluster = yield* Azure.ContainerService.ManagedCluster("Cluster", {
-      resourceGroup: group.resourceGroupName,
-      location: "westus3",
-      defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
-    });
     const workspace = yield* Azure.Grafana.Workspace("Grafana", {
       resourceGroup: group.resourceGroupName,
       location: "westus3",
@@ -70,7 +65,6 @@ const program = (props: { scenarios: string[]; tags: Record<string, string> }) =
     const fabric = yield* Azure.Grafana.IntegrationFabric("Fabric", {
       resourceGroup: group.resourceGroupName,
       workspace: workspace.workspaceName,
-      targetResourceId: cluster.clusterId,
       dataSourceResourceId: metrics.workspaceId,
       scenarios: props.scenarios,
       tags: props.tags,
@@ -78,9 +72,10 @@ const program = (props: { scenarios: string[]; tags: Record<string, string> }) =
     return { group, workspace, fabric };
   });
 
-// Needs an AKS cluster (1 × Standard_D2s_v7, ~6 min create / ~5 min delete),
-// an Azure Monitor workspace, and a Standard Grafana workspace (~3 min
-// create / ~8 min delete): about $0.30 per run, but ~25 min end to end.
+// Needs an Azure Monitor workspace and a Standard Grafana workspace (~3 min
+// create / ~10 min delete): a few cents per run, but ~15 min end to end.
+// Azure only accepts target types NoneType/BundledAMW/SreAgent, so the
+// fabric has no target and uses the AMW data source with `aks`/`istio`.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a Grafana integration fabric",
   (stack) =>
@@ -88,9 +83,9 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const { group, workspace, fabric } = yield* stack.deploy(
-        program({ scenarios: ["ContainerInsights"], tags: { env: "test" } }),
+        program({ scenarios: ["aks"], tags: { env: "test" } }),
       );
-      expect(fabric.scenarios).toEqual(["ContainerInsights"]);
+      expect(fabric.scenarios).toEqual(["aks"]);
       const observed = yield* getFabric(
         group.resourceGroupName,
         workspace.workspaceName,
@@ -103,7 +98,7 @@ test.provider.skipIf(!runExpensive)(
       // In-place updates: scenarios and tags.
       const updated = yield* stack.deploy(
         program({
-          scenarios: ["ContainerInsights", "PrometheusMetrics"],
+          scenarios: ["aks", "istio"],
           tags: { env: "prod" },
         }),
       );
@@ -116,8 +111,8 @@ test.provider.skipIf(!runExpensive)(
         fabric.integrationFabricName,
       );
       expect([...(reobserved.properties?.scenarios ?? [])].sort()).toEqual([
-        "ContainerInsights",
-        "PrometheusMetrics",
+        "aks",
+        "istio",
       ]);
       expect(reobserved.tags?.env).toEqual("prod");
 
@@ -129,9 +124,9 @@ test.provider.skipIf(!runExpensive)(
           fabric.integrationFabricName,
         ),
       ).toEqual("gone");
-    }).pipe(withPublicIps(1), withVcpus(2), logLevel),
+    }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:grafana", "live"],
-    timeout: 900_000,
+    timeout: 2_400_000,
   },
 );

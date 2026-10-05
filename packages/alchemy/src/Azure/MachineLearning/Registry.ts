@@ -52,9 +52,10 @@ export interface RegistryProps {
   /** Resource group the registry is created in. Changing it replaces the registry. */
   resourceGroup: string;
   /**
-   * Registry name: 3-33 letters, digits, `-`, and `_`. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the registry.
+   * Registry name: 3-33 letters, digits, `-`, and `_`, without the
+   * keywords `azureml`, `microsoft`, or `azure`. If omitted, a unique name
+   * is generated from the app, stage, and logical ID (blocked keywords
+   * stripped). Changing it replaces the registry.
    */
   name?: string;
   /**
@@ -154,6 +155,19 @@ const getRegistry = (
   orUndefinedIfNotFound(
     ml.GetRegistry({ subscriptionId, resourceGroupName, registryName }),
   );
+
+/**
+ * Generate a registry name. ARM rejects names containing the blocked
+ * keywords `azureml`, `microsoft`, and `azure` (asynchronously, after the
+ * PUT is accepted), so they are stripped from the generated name.
+ */
+const createRegistryName = Effect.fn(function* (id: string) {
+  const name = yield* createWorkspaceName(id);
+  return name
+    .replace(/azureml|microsoft|azure/g, "")
+    .replace(/[-_]{2,}/g, "-")
+    .replace(/^[^a-z0-9]+|[-_]+$/g, "");
+});
 
 const regionsOf = (registry: ObservedRegistry) =>
   (registry.properties.regionDetails ?? []).flatMap((region) =>
@@ -255,7 +269,7 @@ export const RegistryProvider = () =>
       const resourceGroup = output?.resourceGroup ?? olds?.resourceGroup;
       if (resourceGroup === undefined) return undefined;
       const name =
-        output?.registryName ?? olds?.name ?? (yield* createWorkspaceName(id));
+        output?.registryName ?? olds?.name ?? (yield* createRegistryName(id));
       const observed = yield* getRegistry(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(resourceGroup, name, observed);
@@ -271,7 +285,7 @@ export const RegistryProvider = () =>
       );
       const resourceGroup = news.resourceGroup;
       const name =
-        news.name ?? output?.registryName ?? (yield* createWorkspaceName(id));
+        news.name ?? output?.registryName ?? (yield* createRegistryName(id));
       const location = news.location ?? output?.location ?? env.location;
       const regions = news.regions ?? [{ location }];
       const tags = yield* desiredTags(id, news.tags);

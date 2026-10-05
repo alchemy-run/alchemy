@@ -78,10 +78,14 @@ export interface AttachedDatabaseConfigurationProps {
   databaseNamePrefix?: string;
   /**
    * How principals of the leader and follower databases are combined.
+   * Azure cannot update it, so changing it replaces the configuration.
    * @default "Union"
    */
   defaultPrincipalsModificationKind?: "Union" | "Replace" | "None";
-  /** Restrict which tables, views, and functions are followed. */
+  /**
+   * Restrict which tables, views, and functions are followed. Changing it
+   * replaces the configuration.
+   */
   tableLevelSharingProperties?: KustoTableLevelSharingProperties;
 }
 
@@ -213,6 +217,17 @@ export const AttachedDatabaseConfigurationProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
+      // Azure rejects updates to an attached configuration; the follower
+      // cannot attach the same database twice, so delete the old one first.
+      if (
+        olds !== undefined &&
+        ((news.defaultPrincipalsModificationKind ?? "Union") !==
+          (olds.defaultPrincipalsModificationKind ?? "Union") ||
+          normalizeSharing(news.tableLevelSharingProperties) !==
+            normalizeSharing(olds.tableLevelSharingProperties))
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       return undefined;
     }),
 
@@ -260,18 +275,10 @@ export const AttachedDatabaseConfigurationProvider = () =>
       // Observe.
       const observed = yield* get;
 
-      // Ensure + sync: the PUT creates the configuration and updates its
-      // mutable settings; skip it when observed state already matches.
-      if (
-        observed === undefined ||
-        observed.properties?.defaultPrincipalsModificationKind !== kind ||
-        (news.tableLevelSharingProperties !== undefined &&
-          normalizeSharing(news.tableLevelSharingProperties) !==
-            normalizeSharing(observed.properties?.tableLevelSharingProperties))
-      ) {
+      // Ensure only: Azure rejects updates, so every change replaces.
+      if (observed === undefined) {
         const location =
           news.location ??
-          observed?.location ??
           (yield* clusterLocation(subscriptionId, resourceGroup, cluster));
         yield* kusto
           .AttachedDatabaseConfigurationsCreateOrUpdate({

@@ -9,8 +9,12 @@ import { baseProject, logLevel, subscription, tags, waitGone } from "./util.ts";
 const { test } = Test.make({ providers: Azure.providers() });
 
 const llama =
+  "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct";
+const mistral =
+  "azureml://registries/azureml-mistral/models/mistral-small-2503";
+// A retired catalog model, no longer offered through the marketplace.
+const retired =
   "azureml://registries/azureml-meta/models/Meta-Llama-3-8B-Instruct";
-const mistral = "azureml://registries/azureml-mistral/models/Mistral-small";
 
 const getSubscription = (
   resourceGroupName: string,
@@ -41,8 +45,8 @@ const program = (modelId: string) =>
   });
 
 // Marketplace subscriptions purchase a third-party Azure Marketplace offer,
-// which the free trial blocks. The subscription itself has no hourly
-// charge (pay-per-token through a serverless endpoint); ~5 minutes.
+// which needs a paid subscription. The subscription itself has no fixed or
+// hourly charge (pay-per-token through a serverless endpoint); ~6 minutes.
 test.provider.skipIf(!runPaidOnly)(
   "create, replace, and delete a marketplace subscription",
   (stack) =>
@@ -81,12 +85,12 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe: third-party catalog models are not offered to the free
-// trial, so the subscription is rejected with the typed error ("The
-// requested model ... is not available."; hub + project have no hourly
-// charge; ~3-5 minutes).
+// Ungated probe: a model the catalog no longer offers (or one not offered
+// to the subscription, e.g. on a free trial) is rejected with the typed
+// error ("The requested model ... is not available."; hub + project have
+// no hourly charge; ~3-5 minutes).
 test.provider(
-  "a marketplace subscription on the free trial is rejected",
+  "a marketplace subscription for an unavailable model is rejected",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -97,7 +101,7 @@ test.provider(
           resourceGroupName: group.resourceGroupName,
           workspaceName: workspace.workspaceName,
           name: "probe-marketplace",
-          properties: { modelId: llama },
+          properties: { modelId: retired },
         })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("MachineLearningModelNotAvailable");

@@ -39,7 +39,10 @@ export const waitGone = <A, R>(
  * ~$0.25/hour, 10-20 minutes to create, 5-10 minutes to delete).
  */
 export const devCluster = (
-  props: { languageExtensions?: Azure.Kusto.KustoLanguageExtension[] } = {},
+  props: {
+    sku?: Azure.Kusto.KustoClusterSku;
+    languageExtensions?: Azure.Kusto.KustoLanguageExtension[];
+  } = {},
 ) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -47,6 +50,7 @@ export const devCluster = (
     });
     const cluster = yield* Azure.Kusto.Cluster("Cluster", {
       resourceGroup: group.resourceGroupName,
+      sku: props.sku,
       languageExtensions: props.languageExtensions,
     });
     return { group, cluster };

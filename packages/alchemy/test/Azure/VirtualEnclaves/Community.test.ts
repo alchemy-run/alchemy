@@ -34,14 +34,15 @@ const program = (props: {
     const community = yield* Azure.VirtualEnclaves.Community("Community", {
       resourceGroup: group.resourceGroupName,
       addressSpace: "10.20.0.0/16",
-      firewallSku: "Basic",
+      // Azure provisions Standard even when Basic is requested.
+      firewallSku: "Standard",
       ...props,
     });
     return { group, community };
   });
 
-// A community deploys a Virtual WAN hub (~$0.25/h) and a Basic Azure
-// Firewall (~$0.40/h) and takes 30-60+ minutes to create and to delete:
+// A community deploys a Virtual WAN hub (~$0.25/h) and a Standard Azure
+// Firewall (~$1.25/h) and takes 30-60+ minutes to create and to delete:
 // ~$1.5-3 and up to two hours per run. Run with AZURE_TEST_EXPENSIVE=1.
 test.provider.skipIf(!runExpensive)(
   "create, update, and delete a virtual enclaves community",
@@ -58,7 +59,7 @@ test.provider.skipIf(!runExpensive)(
         group.resourceGroupName,
         community.communityName,
       );
-      expect(observed.properties?.firewallSku).toEqual("Basic");
+      expect(observed.properties?.firewallSku).toEqual("Standard");
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Community");
 
