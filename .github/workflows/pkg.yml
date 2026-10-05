@@ -47,7 +47,10 @@ concurrency:
 jobs:
   publish:
     name: Publish preview packages
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # The emitting build of the alchemy package (with the Azure provider)
+    # peaks above what the 32 GB 8-vCPU runner holds and the runner drops
+    # the job; the 16-vCPU runner has 64 GB.
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
