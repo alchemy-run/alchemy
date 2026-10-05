@@ -325,6 +325,18 @@ Scarce account quotas (networks, clusters, IP addresses) are shared with a
 semaphore in a test helper, or moved to less-used regions. The suite still
 runs in one process: `pnpm test test/<Provider> --profile testing`.
 
+Unblock account prerequisites yourself as soon as a test hits them. Request
+quota increases and register preview features through the provider's API,
+and put any setup a fresh account would need again into the test helper.
+Do one-time console work (free trials, free organizations, sign-ups) in the
+browser with the `puppeteer` skill, and ask the user only to sign in.
+A row stays `blocked` only when it needs payment, a vendor's approval, or
+hardware; report each one with the exact request that would unblock it.
+
+Failure-path tests assert the typed error and finish in minutes. Give them
+a short timeout and never let them wait out a slow provisioning or delete;
+a single test case that runs for an hour is a bug in the test.
+
 ## Step 7 — framework websites
 
 A provider that can run a web server or serve static files ships
