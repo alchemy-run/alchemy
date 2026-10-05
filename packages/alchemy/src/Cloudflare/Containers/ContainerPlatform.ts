@@ -12,16 +12,13 @@ import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import {
-  ContainerTypeId,
-  type Container,
-  type ContainerStartupOptions,
-} from "./Container.ts";
+import { ContainerTypeId, type Container, type ContainerStartupOptions } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
+import { workerContainerBinding } from "./ContainerConfiguration.ts";
 
 const toHttpUrl = (url: string) =>
   url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
@@ -59,21 +56,9 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
   });
 
   const worker = yield* Worker;
-  const className = namespace.name;
 
   yield* worker.bind`${container.LogicalId}`({
-    containers: [
-      {
-        className,
-        name: Output.all(container.schedulingPolicy, container.applicationName).pipe(
-          Output.map(([policy, name]) => (policy === "durable_object" ? name : undefined)),
-        ),
-        images: container.images,
-        devImages: container.devImages,
-        dev: container.dev,
-        hash: container.hash.pipe(Output.map((h) => h?.image)),
-      },
-    ],
+    containers: [workerContainerBinding(namespace.name, container)],
   });
 
   // TODO(sam): register this in the Container Execution Context

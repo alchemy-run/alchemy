@@ -415,6 +415,10 @@ export interface DurableObjectContainerProps extends PlatformProps {
    * Supports up to 100 images, with names between 1 and 128 characters.
    */
   images?: Record<string, ContainerImageProps>;
+  /** Application-wide SSH access configuration. */
+  wranglerSsh?: Containers.WranglerSSHConfiguration;
+  /** SSH public keys allowed to access instances of this application. */
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
   /** Application-wide logging. Changes do not restart running containers. */
   observability?: Containers.ContainerApplicationObservability;
 }
@@ -442,6 +446,8 @@ export interface AnyContainerApplicationProps extends Omit<
   "schedulingPolicy"
 > {
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  wranglerSsh?: Containers.WranglerSSHConfiguration;
+  authorizedKeys?: Containers.UserSSHPublicKeyList;
   images?: Record<string, ContainerImageProps>;
   main?: string;
   image?: string;
@@ -811,7 +817,8 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * checks, etc.) currently applied to the application.
      * Durable Object-managed applications configure each instance at start().
      */
-    configuration: Partial<ContainerApplication.Configuration>;
+    configuration: Partial<ContainerApplication.Configuration> &
+      Containers.DurableObjectContainerConfiguration;
     /** Application-wide logging for Durable Object-managed containers. */
     observability?: Containers.ContainerApplicationObservability;
     /** Prepared, digest-pinned images keyed by their runtime names. */

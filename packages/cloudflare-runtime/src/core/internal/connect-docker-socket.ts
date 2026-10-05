@@ -1,28 +1,39 @@
 import * as NodeNet from "node:net";
 import * as NodeStream from "node:stream";
 
-/** Docker exec needs stdin EOF without closing its stdout/stderr connection. */
+/**
+ * Connect to the Docker unix socket with working half-close.
+ *
+ * A `docker exec` stream signals stdin EOF by shutting down the write half of
+ * the socket while stdout/stderr keep flowing on the read half. Node supports
+ * that with `allowHalfOpen`. Bun 1.3's `node:net` `Socket.end()` closes both
+ * halves, so under Bun this wraps `Bun.connect`, whose `shutdown()` closes
+ * only the write half, in a Node `Duplex`.
+ */
 export const connectDockerSocket = (path: string): NodeStream.Duplex => {
-  if (typeof Bun === "undefined")
+  if (typeof Bun === "undefined") {
     return NodeNet.createConnection({ path, allowHalfOpen: true });
+  }
 
-  // Bun 1.3's node:net Socket.end() closes both halves. Its public socket
-  // API exposes the write-only shutdown Docker's hijacked streams require.
   let socket: Bun.Socket | undefined;
-  let pending: Buffer | undefined;
-  let written: ((error?: Error | null) => void) | undefined;
-  const flush = () => {
-    if (!socket || !pending) return;
-    const count = socket.write(pending);
-    pending = pending.subarray(count);
-    if (pending.length === 0) {
-      pending = undefined;
-      const callback = written;
-      written = undefined;
-      callback?.();
-    }
+  // The chunk being written and its completion callback. Bun's `write`
+  // may accept only part of a chunk; the rest is retried on `drain`.
+  let unwritten: Buffer | undefined;
+  let onWritten: ((error?: Error | null) => void) | undefined;
+
+  const writeUnwritten = () => {
+    if (!socket || !unwritten) return;
+    const accepted = socket.write(unwritten);
+    unwritten = unwritten.subarray(accepted);
+    if (unwritten.length > 0) return;
+
+    unwritten = undefined;
+    const callback = onWritten;
+    onWritten = undefined;
+    callback?.();
   };
-  const stream = new NodeStream.Duplex({
+
+  const stream: NodeStream.Duplex = new NodeStream.Duplex({
     allowHalfOpen: true,
     construct(callback) {
       Bun.connect({
@@ -30,16 +41,19 @@ export const connectDockerSocket = (path: string): NodeStream.Duplex => {
         allowHalfOpen: true,
         socket: {
           data(socket, data) {
+            // Apply backpressure until Node asks for more via read().
             if (!stream.push(data)) socket.pause();
           },
-          drain: flush,
+          drain: writeUnwritten,
           end() {
             stream.push(null);
           },
           close() {
-            if (written)
+            if (onWritten) {
               stream.destroy(new Error("Docker socket closed during a write."));
-            else stream.push(null);
+            } else {
+              stream.push(null);
+            }
           },
           error(_socket, error) {
             stream.destroy(error);
@@ -54,13 +68,13 @@ export const connectDockerSocket = (path: string): NodeStream.Duplex => {
       socket?.resume();
     },
     write(chunk: Buffer, _encoding, callback) {
-      pending = chunk;
-      written = callback;
-      flush();
+      unwritten = chunk;
+      onWritten = callback;
+      writeUnwritten();
     },
     final(callback) {
-      // Bun's implementation uses shutdown() for SHUT_WR; passing true
-      // shuts down reads, despite the 1.3 type declaration's description.
+      // No argument means SHUT_WR. Despite the 1.3 type declaration,
+      // `shutdown(true)` shuts down reads instead.
       socket?.shutdown();
       callback();
     },

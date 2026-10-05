@@ -4,15 +4,11 @@ import type * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import {
-  fromCloudflareFetcher,
-  toCloudflareFetcher,
-  type Fetcher,
-} from "../Fetcher.ts";
+import { fromCloudflareFetcher, toCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { ContainerError, type ContainerStartupOptions } from "./Container.ts";
-import { ContainerPlatform, httpSchemePort } from "./ContainerPlatform.ts";
 import type { ContainerApplication } from "./ContainerApplication.ts";
+import { ContainerPlatform, httpSchemePort } from "./ContainerPlatform.ts";
 
 export type ContainerExecOptions = cf.ContainerExecOptions;
 export type ContainerExecOutput = cf.ExecOutput;
@@ -31,17 +27,11 @@ export interface ContainerProcess {
   /** Whether the process has a pseudo-terminal. */
   readonly isPty: boolean;
   /** Piped standard input. Completing the sink closes stdin. */
-  readonly stdin:
-    | Sink.Sink<void, Uint8Array, never, ContainerError, RuntimeContext>
-    | undefined;
+  readonly stdin: Sink.Sink<void, Uint8Array, never, ContainerError, RuntimeContext> | undefined;
   /** Piped standard output. Consume this or call output(), not both. */
-  readonly stdout:
-    | Stream.Stream<Uint8Array, ContainerError, RuntimeContext>
-    | undefined;
+  readonly stdout: Stream.Stream<Uint8Array, ContainerError, RuntimeContext> | undefined;
   /** Standard error, absent when ignored or combined with stdout. */
-  readonly stderr:
-    | Stream.Stream<Uint8Array, ContainerError, RuntimeContext>
-    | undefined;
+  readonly stderr: Stream.Stream<Uint8Array, ContainerError, RuntimeContext> | undefined;
   /** Wait for completion. Nonzero exit codes are returned normally. */
   readonly exitCode: Effect.Effect<number, ContainerError, RuntimeContext>;
   /** Collect output once. For large output, consume stdout and stderr concurrently. */
@@ -49,10 +39,7 @@ export interface ContainerProcess {
   /** Signal this process. Defaults to SIGTERM; child processes are not signaled. */
   kill(signal?: number): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Resize the process's pseudo-terminal. */
-  resize(
-    cols: number,
-    rows: number,
-  ): Effect.Effect<void, ContainerError, RuntimeContext>;
+  resize(cols: number, rows: number): Effect.Effect<void, ContainerError, RuntimeContext>;
 }
 
 /**
@@ -61,23 +48,13 @@ export interface ContainerProcess {
  */
 export interface ContainerClient<ImageName extends string = string> {
   /** Prepared image references. Required names retain their declaration's keys. */
-  readonly images: Effect.Effect<
-    PreparedImages<ImageName>,
-    ContainerError,
-    RuntimeContext
-  >;
+  readonly images: Effect.Effect<PreparedImages<ImageName>, ContainerError, RuntimeContext>;
   /** Whether the process is running; this does not imply port readiness. */
   readonly running: Effect.Effect<boolean, ContainerError, RuntimeContext>;
   /** Start from an image or snapshot. Returns before ports are ready. */
-  start(
-    options?: ContainerStartupOptions,
-  ): Effect.Effect<void, ContainerError, RuntimeContext>;
+  start(options?: ContainerStartupOptions): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
-  inspect(): Effect.Effect<
-    ContainerInfo | null,
-    ContainerError,
-    RuntimeContext
-  >;
+  inspect(): Effect.Effect<ContainerInfo | null, ContainerError, RuntimeContext>;
   /**
    * Execute an argument vector without a shell. The container must already
    * be started. Scope closure kills this process with SIGKILL; descendants
@@ -86,11 +63,7 @@ export interface ContainerClient<ImageName extends string = string> {
   exec(
     cmd: string[],
     options?: ContainerExecOptions,
-  ): Effect.Effect<
-    ContainerProcess,
-    ContainerError,
-    RuntimeContext | Scope.Scope
-  >;
+  ): Effect.Effect<ContainerProcess, ContainerError, RuntimeContext | Scope.Scope>;
   /**
    * Save the writable root filesystem. Memory and running processes are not
    * captured. Restore by passing the handle to start({ containerSnapshot }).
@@ -105,9 +78,7 @@ export interface ContainerClient<ImageName extends string = string> {
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Access a port. Check readiness before sending application requests. */
-  getTcpPort(
-    port: number,
-  ): Effect.Effect<Fetcher, ContainerError, RuntimeContext>;
+  getTcpPort(port: number): Effect.Effect<Fetcher, ContainerError, RuntimeContext>;
   /** Set the idle timeout for this Durable Object instance, in milliseconds. */
   setInactivityTimeout(
     durationMs: number | bigint,
@@ -118,9 +89,7 @@ export interface ContainerClient<ImageName extends string = string> {
     binding: Fetcher,
   ): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Intercept all outbound HTTP requests. */
-  interceptAllOutboundHttp(
-    binding: Fetcher,
-  ): Effect.Effect<void, ContainerError, RuntimeContext>;
+  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Intercept matching outbound HTTPS requests. */
   interceptOutboundHttps(
     addr: string,
@@ -134,39 +103,61 @@ const containerError = (cause: unknown) =>
     cause,
   });
 
+// workers-types and the DOM lib declare the same web stream / AbortSignal
+// classes in separate modules, so values crossing between them need a cast.
+const toReadable = (
+  stream: cf.ReadableStream | null | undefined,
+): Stream.Stream<Uint8Array, ContainerError> | undefined => {
+  if (!stream) return undefined;
+  return Stream.fromReadableStream({
+    evaluate: () => stream as unknown as ReadableStream<Uint8Array>,
+    onError: containerError,
+  });
+};
+
+const toWritable = (
+  stream: cf.WritableStream | null | undefined,
+): Sink.Sink<void, Uint8Array, never, ContainerError> | undefined => {
+  if (!stream) return undefined;
+  return Sink.fromWritableStream({
+    evaluate: () => stream as unknown as WritableStream<Uint8Array>,
+    onError: containerError,
+  });
+};
+
+/** Abort the exec when either the Effect is interrupted or the caller aborts. */
+const combineSignals = (
+  interrupt: AbortSignal,
+  caller: cf.AbortSignal | undefined,
+): cf.AbortSignal => {
+  const combined = caller
+    ? AbortSignal.any([interrupt, caller as unknown as AbortSignal])
+    : interrupt;
+  return combined as unknown as cf.AbortSignal;
+};
+
 const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
+  // Once the exit code is observed, the PID may be reused: stop signaling it.
   let exited = false;
-  const finished = Effect.sync(() => {
+  const markExited = Effect.sync(() => {
     exited = true;
   });
-  const readable = (stream: cf.ReadableStream | null | undefined) =>
-    stream
-      ? Stream.fromReadableStream({
-          evaluate: () => stream as unknown as ReadableStream<Uint8Array>,
-          onError: containerError,
-        })
-      : undefined;
+
   return {
     pid: process.pid,
     isPty: process.isPty,
-    stdin: process.stdin
-      ? Sink.fromWritableStream({
-          evaluate: () =>
-            process.stdin as unknown as WritableStream<Uint8Array>,
-          onError: containerError,
-        })
-      : undefined,
-    stdout: readable(process.stdout),
-    stderr: readable(process.stderr),
+    stdin: toWritable(process.stdin),
+    stdout: toReadable(process.stdout),
+    stderr: toReadable(process.stderr),
     exitCode: Effect.tryPromise({
       try: () => process.exitCode,
       catch: containerError,
-    }).pipe(Effect.tap(() => finished)),
+    }).pipe(Effect.tap(() => markExited)),
     output: () =>
       Effect.tryPromise({
         try: () => process.output(),
         catch: containerError,
-      }).pipe(Effect.tap(() => finished)),
+      }).pipe(Effect.tap(() => markExited)),
     kill: (signal) =>
       Effect.try({
         try: () => {
@@ -182,73 +173,72 @@ const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
   };
 };
 
-/** @internal Adapt lazily: construction also runs while planning a Worker. */
+/**
+ * @internal Adapt `ctx.container` to the Effect client. The container is
+ * looked up on every call, never at construction: the client is also built
+ * while planning a Worker, where no Durable Object state exists.
+ */
 export const fromContainer = <ImageName extends string = string>(
-  get: () => cf.Container | undefined,
+  getContainer: () => cf.Container | undefined,
 ): ContainerClient<ImageName> => {
-  const container = () => {
-    const value = get();
-    if (!value)
+  const attached = (): cf.Container => {
+    const container = getContainer();
+    if (!container) {
       throw new Error("No container is attached to this Durable Object.");
-    return value;
+    }
+    return container;
   };
-  const sync = <A>(f: (value: cf.Container) => A) =>
-    Effect.try({ try: () => f(container()), catch: containerError });
-  const promise = <A>(f: (value: cf.Container) => Promise<A>) =>
-    Effect.tryPromise({ try: () => f(container()), catch: containerError });
+
+  const call = <A>(f: (container: cf.Container) => A) =>
+    Effect.try({ try: () => f(attached()), catch: containerError });
+
+  const callAsync = <A>(f: (container: cf.Container) => Promise<A>) =>
+    Effect.tryPromise({ try: () => f(attached()), catch: containerError });
+
+  const startProcess = (cmd: string[], options?: ContainerExecOptions) =>
+    Effect.tryPromise({
+      try: (interrupt) =>
+        attached().exec(cmd, {
+          ...options,
+          signal: combineSignals(interrupt, options?.signal),
+        }),
+      catch: containerError,
+    }).pipe(Effect.map(fromProcess));
+
   return {
-    // The binding publishes every required image under its declared name.
-    images: sync((c) => c.images as PreparedImages<ImageName>),
-    running: sync((c) => c.running),
-    start: (options) => sync((c) => c.start(options)),
-    inspect: () => promise((c) => c.inspect()),
+    // The binding publishes every declared image under its declared name.
+    images: call((container) => container.images as PreparedImages<ImageName>),
+    running: call((container) => container.running),
+    start: (options) => call((container) => container.start(options)),
+    inspect: () => callAsync((container) => container.inspect()),
     exec: (cmd, options) =>
       Effect.acquireRelease(
-        Effect.tryPromise({
-          try: (signal) =>
-            container().exec(cmd, {
-              ...options,
-              // Workers' ambient web types and the host's DOM types describe
-              // the same AbortSignal but are declared in separate modules.
-              signal: (options?.signal
-                ? AbortSignal.any([
-                    signal,
-                    options.signal as unknown as AbortSignal,
-                  ])
-                : signal) as unknown as cf.AbortSignal,
-            }),
-          catch: containerError,
-        }).pipe(Effect.map(fromProcess)),
-        (process) => process.kill(9).pipe(Effect.ignore),
+        startProcess(cmd, options),
+        // SIGKILL a process that is still running when its scope closes.
+        (process) => Effect.ignore(process.kill(9)),
         { interruptible: true },
       ),
     snapshotContainer: (options = {}) =>
-      promise((c) => c.snapshotContainer(options)),
-    monitor: () => promise((c) => c.monitor()),
-    destroy: (error) => promise((c) => c.destroy(error)),
-    signal: (signo) => sync((c) => c.signal(signo)),
+      callAsync((container) => container.snapshotContainer(options)),
+    monitor: () => callAsync((container) => container.monitor()),
+    destroy: (error) => callAsync((container) => container.destroy(error)),
+    signal: (signo) => call((container) => container.signal(signo)),
     getTcpPort: (port) =>
-      sync((c) => fromCloudflareFetcher(httpSchemePort(c.getTcpPort(port)))),
+      call((container) => fromCloudflareFetcher(httpSchemePort(container.getTcpPort(port)))),
     setInactivityTimeout: (durationMs) =>
-      promise((c) => c.setInactivityTimeout(durationMs)),
-    interceptOutboundHttp: (addr, binding) =>
-      toCloudflareFetcher(binding).pipe(
-        Effect.flatMap((fetcher) =>
-          promise((c) => c.interceptOutboundHttp(addr, fetcher)),
-        ),
-      ),
-    interceptAllOutboundHttp: (binding) =>
-      toCloudflareFetcher(binding).pipe(
-        Effect.flatMap((fetcher) =>
-          promise((c) => c.interceptAllOutboundHttp(fetcher)),
-        ),
-      ),
-    interceptOutboundHttps: (addr, binding) =>
-      toCloudflareFetcher(binding).pipe(
-        Effect.flatMap((fetcher) =>
-          promise((c) => c.interceptOutboundHttps(addr, fetcher)),
-        ),
-      ),
+      callAsync((container) => container.setInactivityTimeout(durationMs)),
+    interceptOutboundHttp: Effect.fnUntraced(function* (addr, binding) {
+      const fetcher = yield* toCloudflareFetcher(binding);
+      yield* callAsync((container) => container.interceptOutboundHttp(addr, fetcher));
+    }),
+    interceptAllOutboundHttp: Effect.fnUntraced(function* (binding) {
+      const fetcher = yield* toCloudflareFetcher(binding);
+      yield* callAsync((container) => container.interceptAllOutboundHttp(fetcher));
+    }),
+    interceptOutboundHttps: Effect.fnUntraced(function* (addr, binding) {
+      const fetcher = yield* toCloudflareFetcher(binding);
+      yield* callAsync((container) => container.interceptOutboundHttps(addr, fetcher));
+    }),
   };
 };
 

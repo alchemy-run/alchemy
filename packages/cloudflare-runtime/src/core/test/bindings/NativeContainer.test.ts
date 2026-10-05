@@ -70,8 +70,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 120_000 })(
               },
             ],
           });
-          const images =
-            yield* worker.fetchJson<Record<string, string>>("/images");
+          const images = yield* worker.fetchJson<Record<string, string>>("/images");
           expect(Object.keys(images).sort()).toEqual(["alpine", "alpine:3.21"]);
           for (const name of ["alpine", "alpine:3.21"]) {
             expect(yield* worker.fetchJson(`/${name}`)).toEqual({

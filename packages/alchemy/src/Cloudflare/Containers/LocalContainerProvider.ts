@@ -16,6 +16,7 @@ import type {
   AnyContainerApplicationProps,
   ContainerApplication,
   DevContainerImage,
+  DurableObjectContainerProps,
 } from "./ContainerApplication.ts";
 import {
   createContainerApplicationName,
@@ -173,21 +174,33 @@ export const LocalContainerProvider = () =>
         return picked as AnyContainerApplicationProps;
       };
 
+      /**
+       * Prepare every named image of a Durable Object-managed container.
+       * Each image is cached under its own `${id}-${name}` artifact key.
+       */
       const prepareNamedImages = Effect.fn(function* (
         id: string,
-        news: AnyContainerApplicationProps,
+        props: DurableObjectContainerProps,
       ) {
-        const images = yield* Effect.forEach(
-          Object.entries(news.images ?? {}),
-          Effect.fn(function* ([name, source]) {
-            return { name, ...(yield* prepareImage(`${id}-${name}`, source)) };
-          }),
-        );
-        const hashes = Object.fromEntries(images.map(({ name, hash }) => [name, hash] as const));
+        const devImages: Record<string, DevContainerImage> = {};
+        const hashes: Record<string, string> = {};
+        for (const [name, source] of Object.entries(props.images ?? {})) {
+          const image = yield* prepareImage(`${id}-${name}`, source);
+          devImages[name] = image.dev;
+          hashes[name] = image.hash;
+        }
         return {
-          devImages: Object.fromEntries(images.map(({ name, dev }) => [name, dev] as const)),
+          devImages,
           hash: { image: yield* sha256Object(hashes), images: hashes },
         };
+      });
+
+      /** Drop memoized image hashes so the next prepare re-reads the sources. */
+      const forgetPreparedImages = Effect.fn(function* (keys: string[]) {
+        const artifacts = yield* Artifacts.Artifacts;
+        for (const key of keys) {
+          yield* artifacts.delete(`container-image:${key}`);
+        }
       });
 
       const placeholderConfiguration = (
@@ -231,6 +244,9 @@ export const LocalContainerProvider = () =>
         yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
         if (isDurableObjectContainer(news)) {
+          // workerd resolves each image by its declared name, so locally the
+          // runtime image reference is just the name.
+          const imageNames = Object.keys(news.images ?? {});
           return {
             applicationId: output?.applicationId ?? generateLocalId(),
             applicationName: yield* createContainerApplicationName(id, news.name),
@@ -242,9 +258,7 @@ export const LocalContainerProvider = () =>
             affinities: undefined,
             configuration: {},
             observability: news.observability,
-            images: Object.fromEntries(
-              Object.keys(news.images ?? {}).map((name) => [name, name] as const),
-            ),
+            images: Object.fromEntries(imageNames.map((name) => [name, name])),
             durableObjects: undefined,
             createdAt: output?.createdAt ?? new Date().toISOString(),
             version: 1,
@@ -275,8 +289,9 @@ export const LocalContainerProvider = () =>
       return {
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output }) {
-          if (isResolved(news))
+          if (isResolved(news)) {
             yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          }
           if (!output) return { action: "update" };
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
@@ -289,22 +304,20 @@ export const LocalContainerProvider = () =>
           const imageInputs = resolvedImageInputs(news);
           if (imageInputs !== undefined) {
             if (isDurableObjectContainer(imageInputs)) {
-              const artifacts = yield* Artifacts.Artifacts;
-              for (const name of Object.keys(imageInputs.images ?? {})) {
-                yield* artifacts.delete(`container-image:${id}-${name}`);
-              }
-              const input = yield* prepareNamedImages(id, imageInputs);
-              return !deepEqual(input.hash.images, output.hash?.images) ||
-                output.devImages === undefined
-                ? { action: "update" }
-                : undefined;
+              const names = Object.keys(imageInputs.images ?? {});
+              yield* forgetPreparedImages(names.map((name) => `${id}-${name}`));
+              const prepared = yield* prepareNamedImages(id, imageInputs);
+              const changed =
+                output.devImages === undefined ||
+                !deepEqual(prepared.hash.images, output.hash?.images);
+              return changed ? { action: "update" } : undefined;
             }
             // Recompute fresh on every plan. `prepareImage` is memoized so
             // a plan's diff→precreate→reconcile chain bundles once — but
             // this provider runs in the RPC sidecar, whose `ArtifactStore`
             // outlives every run, so without this eviction the FIRST run's
             // hash would be compared forever.
-            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
+            yield* forgetPreparedImages([id]);
             const input = yield* prepareImage(id, imageInputs);
             if (input.hash !== output.hash?.image || !output.dev) {
               return { action: "update" };

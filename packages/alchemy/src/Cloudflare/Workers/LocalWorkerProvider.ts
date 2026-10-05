@@ -10,6 +10,7 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
+import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -48,6 +49,7 @@ import {
 import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -411,21 +413,20 @@ export const LocalWorkerProvider = () =>
             }
           }
           if (data.containers) {
+            const toRuntimeImage = (image: DevContainerImage) => ({
+              ...image,
+              env: unwrapRedacted(image.env),
+            });
             for (const container of data.containers) {
               if (container.devImages !== undefined) {
-                containers[container.className] = {
-                  images: Object.fromEntries(
-                    Object.entries(container.devImages).map(([name, image]) => [
-                      name,
-                      { ...image, env: unwrapRedacted(image.env) },
-                    ]),
-                  ),
-                };
+                // Durable Object-managed: named images, selected at start().
+                const images: Record<string, RuntimeContainerImage> = {};
+                for (const [name, image] of Object.entries(container.devImages)) {
+                  images[name] = toRuntimeImage(image);
+                }
+                containers[container.className] = { images };
               } else if (container.dev) {
-                containers[container.className] = {
-                  ...container.dev,
-                  env: unwrapRedacted(container.dev.env),
-                };
+                containers[container.className] = toRuntimeImage(container.dev);
               } else {
                 return yield* Effect.die(`Container ${container.className} has no dev image`);
               }

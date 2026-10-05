@@ -19,6 +19,7 @@ import { isDataset } from "../AnalyticsEngine/Dataset.ts";
 import { isNamespace } from "../Artifacts/Namespace.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { ContainerApplication } from "../Containers/ContainerApplication.ts";
+import { workerContainerBinding } from "../Containers/ContainerConfiguration.ts";
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
@@ -369,23 +370,7 @@ const bindContainerClass = Effect.fn(function* (
         className,
       },
     ],
-    containers: [
-      {
-        className,
-        name: Output.all(
-          application.schedulingPolicy,
-          application.applicationName,
-        ).pipe(
-          Output.map(([policy, name]) =>
-            policy === "durable_object" ? name : undefined,
-          ),
-        ),
-        images: application.images,
-        devImages: application.devImages,
-        dev: application.dev,
-        hash: application.hash.pipe(Output.map((h) => h?.image)),
-      },
-    ],
+    containers: [workerContainerBinding(className, application)],
   });
   yield* application.bind`${bindingName}`({
     durableObjects: {

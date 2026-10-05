@@ -109,18 +109,38 @@ export const RuntimeLive = Layer.effect(
           hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",
         });
       }
+      // workerd container options per Durable Object class name.
       const imageNames = new Map<
         string,
         WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions
       >();
+
+      /**
+       * Make an image available to Docker and return the name workerd should
+       * use for it. Images with env get a unique alias, which the Docker proxy
+       * maps back to the real tag while injecting the env.
+       */
       const prepareImage = Effect.fnUntraced(function* (
-        name: string,
+        className: string,
         image: Docker.ContainerImage,
       ) {
-        const tag = "tag" in image ? image.tag : docker.generateImageTag(name);
-        if (!("tag" in image)) {
-          yield* "imageUri" in image ? docker.pull(tag, image) : docker.build(tag, image);
-          // Own only this start's tag; another workerd may still use a sibling tag.
+        let tag: string;
+        if ("tag" in image) {
+          tag = image.tag;
+        } else {
+          tag = docker.generateImageTag(className);
+          if ("imageUri" in image) {
+            yield* docker.pull(tag, image);
+          } else {
+            yield* docker.build(tag, image);
+          }
+          // Each start cleans up ONLY its own image tag when its scope
+          // closes. Do NOT prune other same-name tags as "stale" here: a
+          // dev session starts the worker more than once (precreate stub
+          // → reconcile), and a cleanup that guesses which sibling tags
+          // are dead can untag the tag a live workerd is about to
+          // `docker create` from — every container start then fails and
+          // the session serves 500s until redeploy.
           yield* Effect.addFinalizer(() =>
             docker
               .removeContainer(tag)
@@ -128,29 +148,37 @@ export const RuntimeLive = Layer.effect(
           );
         }
         yield* docker.validate(tag);
-        return image.env ? yield* docker.registerImageEnv(name, tag, image.env) : tag;
+        if (image.env) {
+          return yield* docker.registerImageEnv(className, tag, image.env);
+        }
+        return tag;
       });
+
+      /** A Durable Object-managed container exposes every image by name. */
+      const prepareNamedImages = (
+        className: string,
+        images: Record<string, Docker.ContainerImage>,
+      ) =>
+        Effect.forEach(
+          Object.entries(images),
+          Effect.fnUntraced(function* ([name, image]) {
+            return { name, image: yield* prepareImage(className, image) };
+          }),
+          { concurrency: "unbounded" },
+        );
 
       const [, containerEngine] = yield* Effect.forEach(
         containers,
         Effect.fnUntraced(function* ({ className, container }) {
-          const options =
-            "images" in container
-              ? {
-                  images: yield* Effect.forEach(
-                    Object.entries(container.images),
-                    Effect.fnUntraced(function* ([name, image]) {
-                      return {
-                        name,
-                        // Docker generates a unique tag for each source.
-                        image: yield* prepareImage(className, image),
-                      };
-                    }),
-                    { concurrency: "unbounded" },
-                  ),
-                }
-              : { imageName: yield* prepareImage(className, container) };
-          imageNames.set(className, options);
+          if ("images" in container) {
+            imageNames.set(className, {
+              images: yield* prepareNamedImages(className, container.images),
+            });
+          } else {
+            imageNames.set(className, {
+              imageName: yield* prepareImage(className, container),
+            });
+          }
         }),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.zip(docker.getWorkerdDockerConfiguration, { concurrent: true }));

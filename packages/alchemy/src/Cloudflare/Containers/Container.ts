@@ -125,21 +125,17 @@ export type ImageContainerProps<Req = never> =
       Req
     >;
 
+/**
+ * Durable Object container props with statically known image names, so the
+ * native client can type `images.<name>` as present.
+ */
+type NamedImageProps<ImageName extends string> = Omit<DurableObjectContainerProps, "images"> & {
+  images: Record<ImageName, ContainerImageProps>;
+};
+
 type NamedImageContainerProps<ImageName extends string, Req> =
-  | InputProps<
-      Omit<DurableObjectContainerProps, "images"> & {
-        images: Record<ImageName, ContainerImageProps>;
-      }
-    >
-  | Effect.Effect<
-      InputProps<
-        Omit<DurableObjectContainerProps, "images"> & {
-          images: Record<ImageName, ContainerImageProps>;
-        }
-      >,
-      Config.ConfigError,
-      Req
-    >;
+  | InputProps<NamedImageProps<ImageName>>
+  | Effect.Effect<InputProps<NamedImageProps<ImageName>>, Config.ConfigError, Req>;
 
 export type Container<Id extends string = string> = Named<Id> & {
   get running(): Effect.Effect<boolean, never, RuntimeContext>;

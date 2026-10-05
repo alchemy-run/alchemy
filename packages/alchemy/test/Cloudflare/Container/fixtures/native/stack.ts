@@ -1,15 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
+import * as Cloudflare from "@/Cloudflare";
 import type { NativeAsyncObject } from "./async-worker.ts";
+import { NativeImages } from "./images.ts";
 import { NativeImage } from "./object.ts";
 import { NativeWorker } from "./worker.ts";
 
-export const NativeImages = Context.Reference<
-  Record<string, Cloudflare.Containers.ContainerImageProps>
->("NativeImages", {
-  defaultValue: () => ({ shell: { image: "alpine:3.21" } }),
-});
+export { NativeImages } from "./images.ts";
 
 export const NativeAsyncImage = Cloudflare.Container<NativeAsyncObject>(
   "SANDBOX",
@@ -20,10 +16,13 @@ export const NativeAsyncImage = Cloudflare.Container<NativeAsyncObject>(
   })),
 );
 
-export const NativeAsyncWorker = Cloudflare.Worker("NativeAsyncWorker", {
-  main: `${import.meta.dirname}/async-worker.ts`,
-  env: { SANDBOX: NativeAsyncImage },
-});
+export const NativeAsyncWorker = Cloudflare.Worker(
+  "NativeAsyncWorker",
+  Effect.map(NativeImages, (images) => ({
+    main: `${import.meta.dirname}/async-worker.ts`,
+    env: { SANDBOX: NativeAsyncImage, IMAGE_REVISION: JSON.stringify(images) },
+  })),
+);
 
 export const nativeStack = Effect.gen(function* () {
   return {
