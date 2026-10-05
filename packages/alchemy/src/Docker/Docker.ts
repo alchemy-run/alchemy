@@ -603,19 +603,6 @@ export const DockerLive = Layer.effect(
       }),
     );
 
-    const registryConfig = Effect.fn(function* (credentials: RegistryCredentials) {
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
-      const config = yield* Effect.sync(() => {
-        const password = Redacted.isRedacted(credentials.password)
-          ? Redacted.value(credentials.password)
-          : credentials.password;
-        const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-        return JSON.stringify({ auths: { [credentials.server]: { auth } } });
-      });
-      yield* fs.writeFileString(path.join(dir, "config.json"), config);
-      return dir;
-    });
-
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
         // Write the registry credentials directly into an isolated docker config
@@ -632,7 +619,16 @@ export const DockerLive = Layer.effect(
         // deploy fully self-contained: no credential helper, no keychain, no login
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
-        const dir = yield* registryConfig(credentials);
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        const config = yield* Effect.sync(() => {
+          const password = Redacted.isRedacted(credentials.password)
+            ? Redacted.value(credentials.password)
+            : credentials.password;
+          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
+          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
+        });
+        yield* fs.writeFileString(path.join(dir, "config.json"), config);
+
         if (platform === undefined) {
           return yield* run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir });
         }
@@ -697,9 +693,16 @@ export const DockerLive = Layer.effect(
       },
       image: {
         registryDigest: Effect.fn(function* (ref, credentials) {
-          const dir = yield* registryConfig(credentials);
+          if ((yield* publication) !== "export") {
+            return yield* systemError({
+              _tag: "InvalidData",
+              args: ["buildx", "imagetools", "inspect"],
+              description: "Registry-backed Docker.Image requires Buildx 0.26 or newer.",
+            });
+          }
+          const env = yield* registryEnvironment(credentials);
           const args = ["buildx", "imagetools", "inspect", ref, "--format", "{{json .Manifest}}"];
-          return yield* run(args, { DOCKER_CONFIG: dir }).pipe(
+          return yield* run(args, env).pipe(
             Effect.flatMap((result) =>
               Schema.decodeEffect(
                 Schema.Struct({

@@ -139,7 +139,7 @@ const fakeDocker = (
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
         exitCode: Effect.succeed(
-          ChildProcessSpawner.ExitCode(missing ? 1 : (reply?.exitCode ?? 0)),
+          ChildProcessSpawner.ExitCode(probe ? (missing ? 1 : 0) : (reply?.exitCode ?? 0)),
         ),
         isRunning: Effect.succeed(false),
         kill: () => Effect.void,
@@ -444,6 +444,21 @@ describe("Docker.image", (it) => {
 });
 
 describe("Docker.image.registryDigest", (it) => {
+  it.effect(
+    "requires Buildx with per-command registry authentication",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeDocker("v0.23.0");
+        const result = yield* Effect.gen(function* () {
+          const docker = yield* Docker;
+          return yield* docker.image.registryDigest("registry.invalid/app:tag", registry);
+        }).pipe(Effect.provide(fake.layer), Effect.flip);
+        expect(result.reason.description).toContain("Buildx 0.26 or newer");
+        expect(fake.calls).toHaveLength(0);
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
   for (const [name, reply, expected] of [
     [
       "manifest",
@@ -456,7 +471,6 @@ describe("Docker.image.registryDigest", (it) => {
       `reads ${name} without a local engine`,
       () =>
         Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
           const fake = fakeDocker("v0.26.1", reply);
           const digest = yield* Effect.gen(function* () {
             const docker = yield* Docker;
@@ -465,9 +479,8 @@ describe("Docker.image.registryDigest", (it) => {
           expect(digest).toBe(expected);
           expect(fake.calls).toHaveLength(1);
           expect(fake.calls[0]!.args.slice(0, 3)).toEqual(["buildx", "imagetools", "inspect"]);
-          const config = fake.calls[0]!.env.DOCKER_CONFIG!;
-          expect(config).toBeTruthy();
-          expect(yield* fs.exists(config)).toBe(false);
+          expect(fake.calls[0]!.env.DOCKER_CONFIG).toBeUndefined();
+          expect(fake.calls[0]!.env.DOCKER_AUTH_CONFIG).toContain("registry.invalid");
         }),
       { tags: ["unit", "provider:docker", "local"] },
     );

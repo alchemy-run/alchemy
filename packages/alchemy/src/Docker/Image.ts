@@ -30,7 +30,7 @@ export interface DockerBuildOptions {
    * @default "Dockerfile"
    */
   dockerfile?: string;
-  /** Target platform, e.g. `"linux/amd64"`. */
+  /** Target platform. Registry publications default to `"linux/amd64"`. */
   platform?: string;
   /** Docker build arguments. */
   args?: Record<string, string>;
@@ -96,7 +96,7 @@ export interface Image extends Resource<
  * cloud container platforms.
  *
  * With `registry` configured, images are published through Buildx and observed
- * in the registry, without requiring a local image store. Plans hash the build
+ * in the registry, without requiring a local image store (Buildx 0.26+). Plans hash the build
  * inputs without building or publishing. Omit `tag` to reuse content-addressed
  * publications across fresh runners. Published images are retained on deletion.
  * Set `build.platform` explicitly when sharing builds across architectures.

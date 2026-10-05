@@ -150,8 +150,8 @@ For `Docker.Image` resources with `registry` configured and `skipPush` unset:
   planning does not build or publish images.
 - Omitting `tag` uses that hash as the registry tag. A subsequent runner can reuse
   the published image without a local Docker image store or build cache.
-- Buildx 0.26+ publishes directly to the registry. Older versions load the build
-  result into the selected Docker engine before pushing.
+- Registry-backed `Docker.Image` requires Buildx 0.26+ and publishes directly.
+  Its per-command authentication preserves the runner's builder and CLI plugins.
 - `imageRef` and `repoDigest` contain the immutable registry reference.
   `imageId` is absent for registry publications.
 - Destroying the resource retains published artifacts. Registry retention policy
