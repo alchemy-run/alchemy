@@ -3659,6 +3659,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
+        const observability = resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -3676,7 +3677,7 @@ export const LiveWorkerProvider = () =>
           logpush: news.logpush,
           mainModule: bundle.main,
           migrations,
-          observability: resolveObservability(news, bindings),
+          observability,
           placement: news.placement,
           tags: metadataTags,
           tailConsumers,
@@ -3865,6 +3866,50 @@ export const LiveWorkerProvider = () =>
             streamingTailConsumers,
             hash,
           } satisfies Worker["Attributes"];
+        }
+        const issuesEnabled = observability.issues?.enabled ?? false;
+        if (
+          versionId === undefined &&
+          (settings.observability?.issues?.enabled ?? false) !== issuesEnabled
+        ) {
+          // PATCH replaces observability; preserve the full observed configuration.
+          const observed = settings.observability;
+          yield* workers
+            .patchScriptSetting({
+              accountId,
+              scriptName: name,
+              observability: {
+                ...observed,
+                headSamplingRate: observed?.headSamplingRate ?? undefined,
+                redactQueryString: observed?.redactQueryString ?? undefined,
+                logs: observed?.logs
+                  ? {
+                      ...observed.logs,
+                      destinations: observed.logs.destinations ?? undefined,
+                      headSamplingRate: observed.logs.headSamplingRate ?? undefined,
+                      persist: observed.logs.persist ?? undefined,
+                    }
+                  : undefined,
+                traces: observed?.traces
+                  ? {
+                      ...observed.traces,
+                      destinations: observed.traces.destinations ?? undefined,
+                      enabled: observed.traces.enabled ?? undefined,
+                      headSamplingRate: observed.traces.headSamplingRate ?? undefined,
+                      persist: observed.traces.persist ?? undefined,
+                      propagationPolicy: observed.traces.propagationPolicy ?? undefined,
+                    }
+                  : undefined,
+                issues: { enabled: issuesEnabled },
+              },
+            })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.exponential("100 millis"),
+                times: 6,
+              }),
+            );
         }
         // Reconcile the workers.dev settings against observed cloud state.
         // We can't diff `news.workersDev` against `olds.workersDev` here

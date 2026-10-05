@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { afterEach, vi } from "vitest";
@@ -62,6 +63,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           }),
         );
         const exits: Array<Workerd.WorkerdExit> = [];
+        const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
         const url = yield* runtime.start({
           name: "restarting",
           compatibilityDate: "2026-03-10",
@@ -70,6 +72,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
           onRestart: (exit) => {
             exits.push(exit);
+            Queue.offerUnsafe(restarts, exit);
           },
         });
         expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
@@ -83,6 +86,8 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
             }),
           );
           expect(answer).toBe("hello");
+          // The replacement can serve HTTP before its restart callback runs.
+          yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
           expect(exits).toHaveLength(crash);
           expect(exits[crash - 1].stderr).toContain("JavaScript heap out of memory");
           expect(active).toBe(1);
