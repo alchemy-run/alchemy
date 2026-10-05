@@ -774,6 +774,7 @@ export const TableProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       const table = output?.identifier ?? "<new>";
       const reasons: string[] = [];
       if (output !== undefined) {

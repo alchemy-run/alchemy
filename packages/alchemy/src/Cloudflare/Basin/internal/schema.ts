@@ -217,7 +217,7 @@ const structFieldsOf = (ast: AST.Objects, path: string): TableColumn[] =>
  * descriptor persisted in Table props. Plain descriptors pass through.
  */
 export const toTableSchema = (schema: TableSchemaInput): TableSchema => {
-  if (!S.isSchema(schema)) return schema;
+  if (!S.isSchema(schema)) return schema as TableSchema;
   const root = columnTypeOf(schema.ast, "").type;
   if (typeof root === "string" || root.type !== "struct") {
     throw unsupported("", "not a struct (a table schema must be a Struct or Class)");
