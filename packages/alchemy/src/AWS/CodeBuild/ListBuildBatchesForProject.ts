@@ -24,13 +24,9 @@ export interface ListBuildBatchesForProject extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListBuildBatchesForProjectInput, "projectName">,
-    ) => Effect.Effect<
-      SVC.ListBuildBatchesForProjectOutput,
-      SVC.ListBuildBatchesForProjectError
-    >
+    ) => Effect.Effect<SVC.ListBuildBatchesForProjectOutput, SVC.ListBuildBatchesForProjectError>
   >
 > {}
-export const ListBuildBatchesForProject =
-  Binding.Service<ListBuildBatchesForProject>(
-    "AWS.CodeBuild.ListBuildBatchesForProject",
-  );
+export const ListBuildBatchesForProject = Binding.Service<ListBuildBatchesForProject>(
+  "AWS.CodeBuild.ListBuildBatchesForProject",
+);

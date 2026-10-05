@@ -3,19 +3,16 @@ import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { unwrapRpcHandlers } from "./RpcSerialization.ts";
 import type { RpcProxyApi } from "./RpcServer.ts";
-import {
-  encodeSessionEnvironment,
-  SESSION_ENV_PARAM,
-} from "./RpcServerEnvironment.ts";
+import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
 
 export class RpcProviderProxy extends Context.Service<
@@ -85,12 +82,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     (effect) =>
       Effect.catch(effect, (error) =>
         Effect.die(
-          new Error(
-            "Failed to create a provider RPC session with the sidecar",
-            {
-              cause: error,
-            },
-          ),
+          new Error("Failed to create a provider RPC session with the sidecar", {
+            cause: error,
+          }),
         ),
       ),
   );
@@ -108,9 +102,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
     lookup: (sessionEnv: string) =>
       getSession(sessionEnv).pipe(
         Effect.tap((session) =>
-          Effect.sync(() =>
-            session.onRpcBroken(() => evictBrokenSession(sessionEnv)),
-          ),
+          Effect.sync(() => session.onRpcBroken(() => evictBrokenSession(sessionEnv))),
         ),
       ),
     capacity: Infinity,
@@ -138,9 +130,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       // callback may not have evicted it yet), drop it and re-register once
       // before giving up.
       const provider = yield* fetchProvider.pipe(
-        Effect.catch(() =>
-          Cache.invalidate(cache, key).pipe(Effect.andThen(fetchProvider)),
-        ),
+        Effect.catch(() => Cache.invalidate(cache, key).pipe(Effect.andThen(fetchProvider))),
         Effect.orDie,
       );
       // The served shape omits the process-local `mode`/`modes` variant
@@ -154,7 +144,4 @@ const make = Effect.fn(function* (spawnerUrl: string) {
 export const layer = (url: string) => Layer.effect(RpcProviderProxy, make(url));
 
 export const fromEnv = () =>
-  Layer.effect(
-    RpcProviderProxy,
-    Config.String(SPAWNER_URL_ENV_KEY).pipe(Effect.flatMap(make)),
-  );
+  Layer.effect(RpcProviderProxy, Config.String(SPAWNER_URL_ENV_KEY).pipe(Effect.flatMap(make)));

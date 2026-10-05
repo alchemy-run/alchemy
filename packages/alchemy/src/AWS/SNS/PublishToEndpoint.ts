@@ -33,12 +33,8 @@ export interface PublishToEndpoint extends Binding.Service<
   (
     application: PlatformApplication,
   ) => Effect.Effect<
-    (
-      request: PublishToEndpointRequest,
-    ) => Effect.Effect<sns.PublishResponse, sns.PublishError>
+    (request: PublishToEndpointRequest) => Effect.Effect<sns.PublishResponse, sns.PublishError>
   >
 > {}
 
-export const PublishToEndpoint = Binding.Service<PublishToEndpoint>(
-  "AWS.SNS.PublishToEndpoint",
-);
+export const PublishToEndpoint = Binding.Service<PublishToEndpoint>("AWS.SNS.PublishToEndpoint");

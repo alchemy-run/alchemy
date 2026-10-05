@@ -18,7 +18,6 @@ import { tagRecord } from "../Tags.ts";
 import { recordsEqual as labelsEqual } from "../Util/equal.ts";
 import { waitForZoneAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   hasAlchemyLabels,
@@ -38,9 +37,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * Zone identity an RRSet belongs to. A `Hetzner.Zone` resource satisfies
  * this via `zoneId`.
  */
-export type RecordSetZone = {
-  readonly zoneId: number;
-};
+export type RecordSetZone = { readonly zoneId: number };
 
 export type RecordSetType =
   | "A"
@@ -221,9 +218,7 @@ export type RecordSet = Resource<
  */
 export const RecordSet = Resource<RecordSet>("Hetzner.RecordSet");
 
-export class RecordSetZoneMissing extends Data.TaggedError(
-  "Hetzner.RecordSetZoneMissing",
-)<{
+export class RecordSetZoneMissing extends Data.TaggedError("Hetzner.RecordSetZoneMissing")<{
   name: string;
   type: string;
 }> {}
@@ -238,28 +233,19 @@ type CloudRrset = GetZoneRrsetResponseRrset | ListZoneRrsetsResponseRrsetsItem;
 
 const NAME_MAX_LENGTH = 63;
 
-const normalizeName = (name: string): string =>
-  name.toLowerCase().replace(/\.$/, "");
+const normalizeName = (name: string): string => name.toLowerCase().replace(/\.$/, "");
 
-const normalizeType = (type: string): RecordSetType =>
-  type.toUpperCase() as RecordSetType;
+const normalizeType = (type: string): RecordSetType => type.toUpperCase() as RecordSetType;
 
-const compactRecord = (record: {
-  value: string;
-  comment?: string | null;
-}): RecordSetRecord => {
+const compactRecord = (record: { value: string; comment?: string | null }): RecordSetRecord => {
   const comment = record.comment ?? undefined;
   return comment !== undefined && comment.length > 0
     ? { value: record.value, comment }
     : { value: record.value };
 };
 
-const sortRecords = (
-  records: ReadonlyArray<RecordSetRecord>,
-): RecordSetRecord[] =>
-  [...records]
-    .map(compactRecord)
-    .sort((a, b) => a.value.localeCompare(b.value));
+const sortRecords = (records: ReadonlyArray<RecordSetRecord>): RecordSetRecord[] =>
+  [...records].map(compactRecord).sort((a, b) => a.value.localeCompare(b.value));
 
 const recordsEqual = (
   a: ReadonlyArray<RecordSetRecord>,
@@ -295,21 +281,11 @@ const resolveName = (
     if (output?.name !== undefined) {
       return output.name;
     }
-    return yield* createPhysicalName({
-      id,
-      lowercase: true,
-      maxLength: NAME_MAX_LENGTH,
-    });
+    return yield* createPhysicalName({ id, lowercase: true, maxLength: NAME_MAX_LENGTH });
   });
 
-const desiredLabels = Effect.fn(function* (
-  id: string,
-  user: Record<string, string> | undefined,
-) {
-  return {
-    ...toLabels(user),
-    ...(yield* createInternalLabels(id)),
-  };
+const desiredLabels = Effect.fn(function* (id: string, user: Record<string, string> | undefined) {
+  return { ...toLabels(user), ...(yield* createInternalLabels(id)) };
 });
 
 const toAttrs = (rrset: CloudRrset): RecordSetAttributes => ({
@@ -328,24 +304,12 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const retryLocked = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
-  effect.pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Locked",
-      times: 8,
-      schedule: backoff,
-    }),
-  );
+const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.retry({ while: (e) => e._tag === "Locked", times: 8, schedule: backoff }));
 
 const getRrset = (zoneId: number, name: string, type: string) =>
   Hetzner.zoneRrsets
-    .getZoneRrset({
-      id_or_name: String(zoneId),
-      rr_name: name,
-      rr_type: type,
-    })
+    .getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
     .pipe(
       Effect.map(({ rrset }) => rrset),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
@@ -356,17 +320,11 @@ const findByLabels = (zoneId: number, id: string) =>
     const selector = labelSelector(yield* createInternalLabels(id));
     if (selector.length === 0) return undefined;
     return yield* Hetzner.zoneRrsets.listZoneRrsets
-      .items({
-        id_or_name: String(zoneId),
-        label_selector: selector,
-        per_page: 100,
-      })
+      .items({ id_or_name: String(zoneId), label_selector: selector, per_page: 100 })
       .pipe(
         Stream.take(1),
         Stream.runHead,
-        Effect.map((option) =>
-          option._tag === "Some" ? option.value : undefined,
-        ),
+        Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       );
   });
 
@@ -375,9 +333,7 @@ export const RecordSetProvider = () =>
     stables: ["id", "zoneId", "name", "type"],
     nuke: { dependsOn: ["Hetzner.Zone"] },
     list: Effect.fn(function* () {
-      const zones = yield* Hetzner.zones.listZones
-        .items({ per_page: 50 })
-        .pipe(Stream.runCollect);
+      const zones = yield* Hetzner.zones.listZones.items({ per_page: 50 }).pipe(Stream.runCollect);
       const rows = yield* Effect.forEach(
         [...zones],
         (zone) =>
@@ -390,9 +346,8 @@ export const RecordSetProvider = () =>
             .pipe(
               Stream.runCollect,
               Effect.map((chunk) => [...chunk].map(toAttrs)),
-              Effect.catchTag(
-                ["NotFound", "BadRequest", "UnprocessableEntity"],
-                () => Effect.succeed([] as RecordSetAttributes[]),
+              Effect.catchTag(["NotFound", "BadRequest", "UnprocessableEntity"], () =>
+                Effect.succeed([] as RecordSetAttributes[]),
               ),
             ),
         { concurrency: 5 },
@@ -417,11 +372,9 @@ export const RecordSetProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds?.zone);
       const name =
-        output?.name ??
-        (olds?.name !== undefined ? normalizeName(olds.name) : undefined);
+        output?.name ?? (olds?.name !== undefined ? normalizeName(olds.name) : undefined);
       const type =
-        output?.type ??
-        (olds?.type !== undefined ? normalizeType(olds.type) : undefined);
+        output?.type ?? (olds?.type !== undefined ? normalizeType(olds.type) : undefined);
 
       let current: CloudRrset | undefined;
       if (zoneId !== undefined && name !== undefined && type !== undefined) {
@@ -432,9 +385,7 @@ export const RecordSetProvider = () =>
       }
       if (current === undefined) return undefined;
       const attrs = toAttrs(current);
-      return (yield* hasAlchemyLabels(id, tagRecord(current.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(current.labels))) ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const zoneId = zoneIdOf(news.zone) ?? output?.zoneId;
@@ -473,9 +424,7 @@ export const RecordSetProvider = () =>
               Effect.catchTag("Conflict", () =>
                 getRrset(zoneId, name, type).pipe(
                   Effect.map((rrset) =>
-                    rrset !== undefined
-                      ? { rrset, action: undefined }
-                      : undefined,
+                    rrset !== undefined ? { rrset, action: undefined } : undefined,
                   ),
                 ),
               ),
@@ -576,11 +525,7 @@ export const RecordSetProvider = () =>
 
       const deleted = yield* retryLocked(
         Hetzner.zoneRrsets
-          .deleteZoneRrset({
-            id_or_name: String(zoneId),
-            rr_name: name,
-            rr_type: type,
-          })
+          .deleteZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
           .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
       );
       if (deleted !== undefined) {
@@ -589,9 +534,7 @@ export const RecordSetProvider = () =>
 
       yield* getRrset(zoneId, name, type).pipe(
         Effect.flatMap((rrset) =>
-          rrset === undefined
-            ? Effect.void
-            : new RecordSetStillExists({ zoneId, name, type }),
+          rrset === undefined ? Effect.void : new RecordSetStillExists({ zoneId, name, type }),
         ),
         Effect.retry({
           while: (e) => e._tag === "RecordSetStillExists",

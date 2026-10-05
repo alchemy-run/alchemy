@@ -3,8 +3,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import {
   createAlchemyTagFilters,
@@ -20,9 +20,8 @@ import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type InternetGatewayId<ID extends string = string> = `igw-${ID}`;
-export const InternetGatewayId = <ID extends string>(
-  id: ID,
-): ID & InternetGatewayId<ID> => `igw-${id}` as ID & InternetGatewayId<ID>;
+export const InternetGatewayId = <ID extends string>(id: ID): ID & InternetGatewayId<ID> =>
+  `igw-${id}` as ID & InternetGatewayId<ID>;
 
 export interface InternetGatewayProps {
   /**
@@ -142,9 +141,7 @@ export interface InternetGateway extends Resource<
  *
  * @resource
  */
-export const InternetGateway = Resource<InternetGateway>(
-  "AWS.EC2.InternetGateway",
-);
+export const InternetGateway = Resource<InternetGateway>("AWS.EC2.InternetGateway");
 
 export const InternetGatewayProvider = () =>
   Provider.effect(
@@ -184,16 +181,12 @@ export const InternetGatewayProvider = () =>
                     .filter(
                       (igw) =>
                         defaultVpc.vpcId === undefined ||
-                        !igw.Attachments?.some(
-                          (a) => a.VpcId === defaultVpc.vpcId,
-                        ),
+                        !igw.Attachments?.some((a) => a.VpcId === defaultVpc.vpcId),
                     )
                     .map((igw) => {
-                      const internetGatewayId =
-                        igw.InternetGatewayId as InternetGatewayId;
+                      const internetGatewayId = igw.InternetGatewayId as InternetGatewayId;
                       const attachedVpcId = igw.Attachments?.find(
-                        (a) =>
-                          a.State === "available" || a.State === "attaching",
+                        (a) => a.State === "available" || a.State === "attaching",
                       )?.VpcId as VpcId | undefined;
                       return {
                         internetGatewayId,
@@ -202,11 +195,7 @@ export const InternetGatewayProvider = () =>
                         vpcId: attachedVpcId,
                         ownerId: igw.OwnerId,
                         attachments: igw.Attachments?.map((a) => ({
-                          state: a.State! as
-                            | "attaching"
-                            | "available"
-                            | "detaching"
-                            | "detached",
+                          state: a.State! as "attaching" | "available" | "detaching" | "detached",
                           vpcId: a.VpcId!,
                         })),
                       };
@@ -216,13 +205,7 @@ export const InternetGatewayProvider = () =>
             );
           }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news = {},
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
           const desiredTags = {
@@ -265,8 +248,7 @@ export const InternetGatewayProvider = () =>
               ],
               DryRun: false,
             });
-            const newIgwId = createResult.InternetGateway!
-              .InternetGatewayId! as InternetGatewayId;
+            const newIgwId = createResult.InternetGateway!.InternetGatewayId! as InternetGatewayId;
             yield* session.note(`Internet gateway created: ${newIgwId}`);
             // EC2 can return the new ID before DescribeInternetGateways sees
             // it. Retain and poll that ID rather than failing the reconcile
@@ -287,9 +269,7 @@ export const InternetGatewayProvider = () =>
                   InternetGatewayId: internetGatewayId,
                   VpcId: attachedVpcId,
                 })
-                .pipe(
-                  Effect.catchTag("Gateway.NotAttached", () => Effect.void),
-                );
+                .pipe(Effect.catchTag("Gateway.NotAttached", () => Effect.void));
               yield* session.note(`Detached from VPC: ${attachedVpcId}`);
             }
             if (news.vpcId) {
@@ -303,10 +283,7 @@ export const InternetGatewayProvider = () =>
                     while: (e) =>
                       e._tag === "InvalidVpcID.NotFound" ||
                       e._tag === "InvalidInternetGatewayID.NotFound",
-                    schedule: Schedule.max([
-                      Schedule.fixed(500),
-                      Schedule.recurs(10),
-                    ]),
+                    schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(10)]),
                   }),
                 );
               yield* session.note(`Attached to VPC: ${news.vpcId}`);
@@ -317,11 +294,7 @@ export const InternetGatewayProvider = () =>
             // observed attachment was already `attaching`, as can happen when
             // a reconcile resumes after interruption. Do not publish outputs
             // to a dependent Route until AWS reports it as available.
-            igw = yield* waitForInternetGatewayAttached(
-              internetGatewayId,
-              news.vpcId,
-              session,
-            );
+            igw = yield* waitForInternetGatewayAttached(internetGatewayId, news.vpcId, session);
           }
 
           // Sync tags — observed cloud tags vs desired.
@@ -350,11 +323,7 @@ export const InternetGatewayProvider = () =>
             vpcId: news.vpcId,
             ownerId: final.OwnerId,
             attachments: final.Attachments?.map((a) => ({
-              state: a.State! as
-                | "attaching"
-                | "available"
-                | "detaching"
-                | "detached",
+              state: a.State! as "attaching" | "available" | "detaching" | "detached",
               vpcId: a.VpcId!,
             })),
           };
@@ -363,17 +332,13 @@ export const InternetGatewayProvider = () =>
         delete: Effect.fn(function* ({ output, session }) {
           const internetGatewayId = output.internetGatewayId;
 
-          yield* session.note(
-            `Deleting internet gateway: ${internetGatewayId}`,
-          );
+          yield* session.note(`Deleting internet gateway: ${internetGatewayId}`);
 
           // Re-describe to get current attachments from AWS (don't rely on stored state)
           // This handles cases where state is incomplete from a previous crashed run
           const igw = yield* findInternetGateway(internetGatewayId);
           if (igw === undefined) {
-            yield* session.note(
-              `Internet gateway ${internetGatewayId} is already absent`,
-            );
+            yield* session.note(`Internet gateway ${internetGatewayId} is already absent`);
             return;
           }
           const attachments = igw.Attachments ?? [];
@@ -396,15 +361,11 @@ export const InternetGatewayProvider = () =>
                   .pipe(
                     Effect.tapError(Effect.logDebug),
                     Effect.catchTag("Gateway.NotAttached", () => Effect.void),
-                    Effect.catchTag(
-                      "InvalidInternetGatewayID.NotFound",
-                      () => Effect.void,
-                    ),
+                    Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
                   ),
                 {
                   scope: { name: "vpc-id", value: attachment.VpcId! },
-                  isDependencyViolation: (e) =>
-                    e._tag === "DependencyViolation",
+                  isDependencyViolation: (e) => e._tag === "DependencyViolation",
                   session,
                 },
               );
@@ -420,10 +381,7 @@ export const InternetGatewayProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.logDebug),
-              Effect.catchTag(
-                "InvalidInternetGatewayID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidInternetGatewayID.NotFound", () => Effect.void),
               // Retry on dependency violations. Public addresses on a
               // draining EKS/HyperPod control plane's ENIs can take
               // several minutes to release — 5s x 60 = ~5 min.
@@ -431,18 +389,12 @@ export const InternetGatewayProvider = () =>
                 while: (e) => {
                   return (
                     e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" &&
-                      e.message?.includes("DependencyViolation"))
+                    (e._tag === "ValidationError" && e.message?.includes("DependencyViolation"))
                   );
                 },
-                schedule: Schedule.max([
-                  Schedule.fixed(5000),
-                  Schedule.recurs(60),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
+                    session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
                   ),
                 ),
               }),
@@ -451,9 +403,7 @@ export const InternetGatewayProvider = () =>
           // 3. Wait for internet gateway to be fully deleted
           yield* waitForInternetGatewayDeleted(internetGatewayId, session);
 
-          yield* session.note(
-            `Internet gateway ${internetGatewayId} deleted successfully`,
-          );
+          yield* session.note(`Internet gateway ${internetGatewayId} deleted successfully`);
         }),
       };
     }),
@@ -478,9 +428,7 @@ const findInternetGateway = (internetGatewayId: string) =>
 const describeInternetGateway = (internetGatewayId: string) =>
   findInternetGateway(internetGatewayId).pipe(
     Effect.flatMap((igw) =>
-      igw
-        ? Effect.succeed(igw)
-        : Effect.fail(new InternetGatewayNotVisible({ internetGatewayId })),
+      igw ? Effect.succeed(igw) : Effect.fail(new InternetGatewayNotVisible({ internetGatewayId })),
     ),
     Effect.retry({
       while: (error) => error instanceof InternetGatewayNotVisible,
@@ -488,9 +436,7 @@ const describeInternetGateway = (internetGatewayId: string) =>
     }),
   );
 
-class InternetGatewayNotVisible extends Data.TaggedError(
-  "InternetGatewayNotVisible",
-)<{
+class InternetGatewayNotVisible extends Data.TaggedError("InternetGatewayNotVisible")<{
   internetGatewayId: string;
 }> {}
 
@@ -509,9 +455,7 @@ const waitForInternetGatewayAttached = (
 ) =>
   Effect.gen(function* () {
     const igw = yield* describeInternetGateway(internetGatewayId);
-    const attachment = igw.Attachments?.find(
-      (candidate) => candidate.VpcId === vpcId,
-    );
+    const attachment = igw.Attachments?.find((candidate) => candidate.VpcId === vpcId);
     if (attachment?.State === "available") {
       return igw;
     }
@@ -560,14 +504,9 @@ const waitForInternetGatewayDeleted = (
         return yield* Effect.fail(new Error("Internet gateway still exists"));
       }),
       {
-        schedule: Schedule.max([
-          Schedule.fixed(2000),
-          Schedule.recurs(15),
-        ]).pipe(
+        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
           Schedule.tap(({ attempt }) =>
-            session.note(
-              `Waiting for internet gateway deletion... (${attempt * 2}s)`,
-            ),
+            session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
           ),
         ),
       },

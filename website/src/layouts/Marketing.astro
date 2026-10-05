@@ -1,4 +1,5 @@
 ---
+import FontPreloads from "../components/FontPreloads.astro";
 import "../styles/tokens.css";
 import "../styles/marketing.css";
 
@@ -46,14 +47,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    {/* Pre-paint theme script + color-scheme/theme-color metas. Must
-        run before any paint so navigating from a docs page (where the
-        Starlight head includes the same partial) doesn't drop the
-        user's theme on a marketing page. */}
+    <FontPreloads />
+    {/* The site is dark-only: `data-theme="dark"` is set on <html> above
+        so it holds without JavaScript, and ThemeProvider adds the
+        color-scheme/theme-color metas. */}
     <ThemeProvider />
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
@@ -103,6 +104,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     font-family: var(--alc-font-sans);
     -webkit-font-smoothing: antialiased;
     overflow-x: clip;
+  }
+  /* In-page links glide, and land clear of the 64px sticky header.
+     tokens.css turns this off for reduced motion. */
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 80px;
   }
   a:focus-visible {
     outline: 2px solid var(--alc-accent);

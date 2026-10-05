@@ -123,18 +123,14 @@ export const ClusterPolicyProvider = () =>
       const readPolicy = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getClusterPolicy({ identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
-      const toAttrs = (
-        clusterId: string,
-        policy: string,
-        policyVersion: string,
-      ) => ({ clusterId, policy, policyVersion });
+      const toAttrs = (clusterId: string, policy: string, policyVersion: string) => ({
+        clusterId,
+        policy,
+        policyVersion,
+      });
 
       return {
         stables: ["clusterId"],
@@ -177,8 +173,7 @@ export const ClusterPolicyProvider = () =>
           const updated = yield* dsql.putClusterPolicy({
             identifier: clusterId,
             policy: news!.policy,
-            bypassPolicyLockoutSafetyCheck:
-              news!.bypassPolicyLockoutSafetyCheck,
+            bypassPolicyLockoutSafetyCheck: news!.bypassPolicyLockoutSafetyCheck,
             expectedPolicyVersion: observed?.policyVersion,
           });
 
@@ -187,18 +182,13 @@ export const ClusterPolicyProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* dsql
-            .deleteClusterPolicy({ identifier: output.clusterId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* dsql.deleteClusterPolicy({ identifier: output.clusterId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent cluster.

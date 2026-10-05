@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readQuickSightTags,
-  syncQuickSightTags,
-  toWireTags,
-  waitForSettled,
-} from "./internal.ts";
+import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
 
 /**
  * Properties for an Amazon QuickSight analysis — an editable workspace built
@@ -128,17 +123,10 @@ export const AnalysisProvider = () =>
           ? Effect.succeed(props.analysisId)
           : createPhysicalName({ id, maxLength: 64 });
 
-      const readAnalysis = Effect.fn(function* (
-        accountId: string,
-        analysisId: string,
-      ) {
+      const readAnalysis = Effect.fn(function* (accountId: string, analysisId: string) {
         const response = yield* quicksight
           .describeAnalysis({ AwsAccountId: accountId, AnalysisId: analysisId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const analysis = response?.Analysis;
         if (analysis === undefined || analysis.Status === "DELETED") {
           return undefined;
@@ -150,9 +138,7 @@ export const AnalysisProvider = () =>
         waitForSettled(
           analysisId,
           readAnalysis(accountId, analysisId).pipe(
-            Effect.map((a) =>
-              a === undefined ? undefined : { ...a, status: a.Status },
-            ),
+            Effect.map((a) => (a === undefined ? undefined : { ...a, status: a.Status })),
           ),
         );
 
@@ -206,9 +192,7 @@ export const AnalysisProvider = () =>
                 ThemeArn: news.themeArn,
                 Tags: toWireTags(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
             // 3. Sync.
             yield* quicksight.updateAnalysis({
@@ -225,9 +209,7 @@ export const AnalysisProvider = () =>
           observed = yield* settle(accountId, analysisId);
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `QuickSight analysis '${analysisId}' not found after reconcile`,
-              ),
+              new Error(`QuickSight analysis '${analysisId}' not found after reconcile`),
             );
           }
 
@@ -244,40 +226,33 @@ export const AnalysisProvider = () =>
             .deleteAnalysis({
               AwsAccountId: accountId,
               AnalysisId: output.analysisId,
-              ForceDeleteWithoutRecovery:
-                olds?.forceDeleteWithoutRecovery ?? true,
+              ForceDeleteWithoutRecovery: olds?.forceDeleteWithoutRecovery ?? true,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* quicksight.listAnalyses
-              .pages({ AwsAccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.AnalysisSummaryList ?? [])
-                    .flatMap((s) =>
-                      s.AnalysisId !== undefined &&
-                      s.Arn !== undefined &&
-                      s.Status !== "DELETED"
-                        ? [
-                            {
-                              analysisId: s.AnalysisId,
-                              arn: s.Arn,
-                              name: s.Name ?? "",
-                              status: s.Status ?? "",
-                            },
-                          ]
-                        : [],
-                    ),
-                ),
-              );
+            return yield* quicksight.listAnalyses.pages({ AwsAccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.AnalysisSummaryList ?? [])
+                  .flatMap((s) =>
+                    s.AnalysisId !== undefined && s.Arn !== undefined && s.Status !== "DELETED"
+                      ? [
+                          {
+                            analysisId: s.AnalysisId,
+                            arn: s.Arn,
+                            name: s.Name ?? "",
+                            status: s.Status ?? "",
+                          },
+                        ]
+                      : [],
+                  ),
+              ),
+            );
           }),
       });
     }),

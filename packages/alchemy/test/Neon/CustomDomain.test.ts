@@ -1,21 +1,21 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import { Project } from "@/Neon/Project";
-import { Function } from "@/Neon/Function";
-import { CustomDomain } from "@/Neon/CustomDomain";
-import { providers } from "@/Neon/Providers";
-import * as AlchemyOutput from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import { CustomDomain } from "@/Neon/CustomDomain";
+import { Function } from "@/Neon/Function";
+import { Project } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as AlchemyOutput from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(providers(), Cloudflare.providers()),
@@ -53,9 +53,7 @@ test.provider(
           const { project, api } = yield* resources;
           const domain = yield* CustomDomain("Domain", {
             function: api,
-            hostname: api.slug.pipe(
-              AlchemyOutput.map((slug) => `${slug}.alchemy-test-2.us`),
-            ),
+            hostname: api.slug.pipe(AlchemyOutput.map((slug) => `${slug}.alchemy-test-2.us`)),
           });
           const record = yield* Cloudflare.DNS.Record("DomainCname", {
             zoneId,
@@ -84,9 +82,7 @@ test.provider(
         branch_id: deployed.api.branchId,
       }).pipe(
         Effect.map(({ custom_domains }) =>
-          custom_domains.find(
-            (domain) => domain.domain === deployed.domain.hostname,
-          ),
+          custom_domains.find((domain) => domain.domain === deployed.domain.hostname),
         ),
       );
       const registered = yield* observeDomain;
@@ -115,8 +111,9 @@ test.provider(
         return { domain, https };
       }).pipe(
         Effect.repeat({
+          // Neon's background DNS check lands around 45-50s, so leave headroom.
           schedule: Schedule.spaced("5 seconds"),
-          times: 9,
+          times: 23,
           until: ({ domain, https }) =>
             domain?.status === "active" &&
             domain.dns_status === "ok" &&
@@ -124,7 +121,7 @@ test.provider(
             https.status === 200 &&
             https.body === "bare-v2",
         }),
-        Effect.timeout("90 seconds"),
+        Effect.timeout("150 seconds"),
       );
       expect(activation.domain?.status).toBe("active");
       expect(activation.domain?.dns_status).toBe("ok");
@@ -156,9 +153,7 @@ test.provider(
         Effect.catchTag("NotFound", () => Effect.succeed(false)),
       );
       expect(projectExists).toBe(false);
-      yield* Effect.logInfo(
-        "Custom domain, DNS record, and project independently absent",
-      );
+      yield* Effect.logInfo("Custom domain, DNS record, and project independently absent");
     }),
   {
     tags: [
@@ -171,6 +166,6 @@ test.provider(
       "provider:neon:project",
       "live",
     ],
-    timeout: 180_000,
+    timeout: 240_000,
   },
 );

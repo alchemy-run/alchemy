@@ -13,12 +13,10 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
-export type EgressOnlyInternetGatewayId<ID extends string = string> =
-  `eigw-${ID}`;
+export type EgressOnlyInternetGatewayId<ID extends string = string> = `eigw-${ID}`;
 export const EgressOnlyInternetGatewayId = <ID extends string>(
   id: ID,
-): ID & EgressOnlyInternetGatewayId<ID> =>
-  `eigw-${id}` as ID & EgressOnlyInternetGatewayId<ID>;
+): ID & EgressOnlyInternetGatewayId<ID> => `eigw-${id}` as ID & EgressOnlyInternetGatewayId<ID>;
 
 export type EgressOnlyInternetGatewayArn<
   ID extends EgressOnlyInternetGatewayId = EgressOnlyInternetGatewayId,
@@ -144,10 +142,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
   Provider.effect(
     EgressOnlyInternetGateway,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -165,11 +160,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
             Effect.flatMap((gw) =>
               gw
                 ? Effect.succeed(gw)
-                : Effect.fail(
-                    new Error(
-                      `Egress-Only Internet Gateway ${eigwId} not found`,
-                    ),
-                  ),
+                : Effect.fail(new Error(`Egress-Only Internet Gateway ${eigwId} not found`)),
             ),
           );
 
@@ -181,64 +172,49 @@ export const EgressOnlyInternetGatewayProvider = () =>
             egressOnlyInternetGatewayArn:
               `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
             attachments: gw.Attachments?.map((a) => ({
-              state: a.State as
-                | "attaching"
-                | "attached"
-                | "detaching"
-                | "detached",
+              state: a.State as "attaching" | "attached" | "detaching" | "detached",
               vpcId: a.VpcId as VpcId,
             })),
           })),
         );
 
       return {
-        stables: [
-          "egressOnlyInternetGatewayId",
-          "egressOnlyInternetGatewayArn",
-        ],
+        stables: ["egressOnlyInternetGatewayId", "egressOnlyInternetGatewayArn"],
 
         list: () =>
           Effect.gen(function* () {
             const env = yield* AWSEnvironment.current;
-            const items = yield* ec2.describeEgressOnlyInternetGateways
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.EgressOnlyInternetGateways ?? [])
-                      .filter(
-                        (
-                          gw,
-                        ): gw is ec2.EgressOnlyInternetGateway & {
-                          EgressOnlyInternetGatewayId: string;
-                        } => gw.EgressOnlyInternetGatewayId != null,
-                      )
-                      .map((gw) => ({
-                        egressOnlyInternetGatewayId:
-                          gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
-                        egressOnlyInternetGatewayArn:
-                          `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
-                        attachments: gw.Attachments?.map((a) => ({
-                          state: a.State as
-                            | "attaching"
-                            | "attached"
-                            | "detaching"
-                            | "detached",
-                          vpcId: a.VpcId as VpcId,
-                        })),
+            const items = yield* ec2.describeEgressOnlyInternetGateways.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.EgressOnlyInternetGateways ?? [])
+                    .filter(
+                      (
+                        gw,
+                      ): gw is ec2.EgressOnlyInternetGateway & {
+                        EgressOnlyInternetGatewayId: string;
+                      } => gw.EgressOnlyInternetGatewayId != null,
+                    )
+                    .map((gw) => ({
+                      egressOnlyInternetGatewayId:
+                        gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
+                      egressOnlyInternetGatewayArn:
+                        `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+                      attachments: gw.Attachments?.map((a) => ({
+                        state: a.State as "attaching" | "attached" | "detaching" | "detached",
+                        vpcId: a.VpcId as VpcId,
                       })),
-                  ),
+                    })),
                 ),
-              );
+              ),
+            );
             return items satisfies EgressOnlyInternetGateway["Attributes"][];
           }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
-          const gw = yield* describeEgressOnlyInternetGateway(
-            output.egressOnlyInternetGatewayId,
-          );
+          const gw = yield* describeEgressOnlyInternetGateway(output.egressOnlyInternetGatewayId);
           return yield* toAttrs(gw);
         }),
 
@@ -259,14 +235,11 @@ export const EgressOnlyInternetGatewayProvider = () =>
           if (output?.egressOnlyInternetGatewayId) {
             const lookup = yield* ec2
               .describeEgressOnlyInternetGateways({
-                EgressOnlyInternetGatewayIds: [
-                  output.egressOnlyInternetGatewayId,
-                ],
+                EgressOnlyInternetGatewayIds: [output.egressOnlyInternetGatewayId],
               })
               .pipe(
-                Effect.catchTag(
-                  "InvalidEgressOnlyInternetGatewayId.NotFound",
-                  () => Effect.succeed({ EgressOnlyInternetGateways: [] }),
+                Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () =>
+                  Effect.succeed({ EgressOnlyInternetGateways: [] }),
                 ),
               );
             gw = lookup.EgressOnlyInternetGateways?.[0];
@@ -285,11 +258,8 @@ export const EgressOnlyInternetGatewayProvider = () =>
               ],
               DryRun: false,
             });
-            const newGwId =
-              result.EgressOnlyInternetGateway!.EgressOnlyInternetGatewayId!;
-            yield* session.note(
-              `Egress-Only Internet Gateway created: ${newGwId}`,
-            );
+            const newGwId = result.EgressOnlyInternetGateway!.EgressOnlyInternetGatewayId!;
+            yield* session.note(`Egress-Only Internet Gateway created: ${newGwId}`);
             gw = yield* describeEgressOnlyInternetGateway(newGwId);
           }
 
@@ -310,9 +280,10 @@ export const EgressOnlyInternetGatewayProvider = () =>
               .pipe(
                 Effect.map(
                   (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                    Object.fromEntries(r.Tags?.map((t) => [t.Key!, t.Value!]) ?? []) as Record<
+                      string,
+                      string
+                    >,
                 ),
               )) ?? {};
           const { removed, upsert } = diffTags(currentTags, desiredTags);
@@ -339,9 +310,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
         delete: Effect.fn(function* ({ output, session }) {
           const eigwId = output.egressOnlyInternetGatewayId;
 
-          yield* session.note(
-            `Deleting Egress-Only Internet Gateway: ${eigwId}`,
-          );
+          yield* session.note(`Deleting Egress-Only Internet Gateway: ${eigwId}`);
 
           yield* ec2
             .deleteEgressOnlyInternetGateway({
@@ -363,23 +332,13 @@ export const EgressOnlyInternetGatewayProvider = () =>
                   : Effect.void,
               ),
               Effect.catchTag("InvalidGatewayID.NotFound", () => Effect.void),
-              Effect.catchTag(
-                "InvalidEgressOnlyInternetGatewayId.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () => Effect.void),
               // Retry on dependency violations (e.g., routes still using the EIGW)
               Effect.retry({
-                while: (e) =>
-                  e._tag === "DependencyViolation" ||
-                  e._tag === "EigwDeleteFailed",
-                schedule: Schedule.max([
-                  Schedule.fixed(5000),
-                  Schedule.recurs(30),
-                ]).pipe(
+                while: (e) => e._tag === "DependencyViolation" || e._tag === "EigwDeleteFailed",
+                schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(30)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
+                    session.note(`Waiting for dependencies to clear... (attempt ${attempt})`),
                   ),
                 ),
               }),
@@ -400,15 +359,9 @@ export const EgressOnlyInternetGatewayProvider = () =>
               ),
               Effect.retry({
                 while: (e) => e._tag === "EigwStillExists",
-                schedule: Schedule.max([
-                  Schedule.fixed(2000),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]),
               }),
-              Effect.catchTag(
-                "InvalidEgressOnlyInternetGatewayId.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidEgressOnlyInternetGatewayId.NotFound", () => Effect.void),
             );
 
           yield* session.note(`Egress-Only Internet Gateway ${eigwId} deleted`);
