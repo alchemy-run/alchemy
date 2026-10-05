@@ -95,6 +95,10 @@ Coordinator duties during a long run:
   A PR with merge conflicts runs no `pull_request` workflows, so a stale
   green check means nothing. Dependency bumps on `main` (Effect, Node
   types) break new code; catch them at the checkpoint.
+- When a rebase or pull brings in a newer version of this skill, re-read
+  the whole skill and review.md before the next wave. Add an index row for
+  every new deliverable, then build those rows and run review.md with a
+  fresh reviewer.
 - `tsc` reads distilled's built declarations, while the test runner reads
   its `src/`. After distilled patches, rebuild that package before the
   type check, or new error types show up as false type errors.
