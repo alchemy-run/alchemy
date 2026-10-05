@@ -3,12 +3,19 @@ import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import type { WorkerObservability } from "@/Cloudflare/Workers/Worker.ts";
-import { syncWorkerIssues } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import type { Worker, WorkerObservability } from "@/Cloudflare/Workers/Worker.ts";
+import { LiveWorkerProvider } from "@/Cloudflare/Workers/WorkerProvider.ts";
+import * as Provider from "@/Provider.ts";
+import { Stack } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
 import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -22,6 +29,132 @@ const observability = {
   traces: { enabled: true, headSamplingRate: 0.1, persist: true },
   issues: { enabled: true },
 } satisfies WorkerObservability;
+
+const scriptPath = "/accounts/account/workers/scripts/worker";
+
+const mockReconcile = (
+  desired: WorkerObservability | undefined,
+  observed: boolean | null | undefined,
+  missingPatches = 0,
+) => {
+  const calls: Array<{ method: string; path: string; body: unknown }> = [];
+  let patches = 0;
+  const client = HttpClient.make((request) =>
+    Effect.sync(() => {
+      const path = new URL(request.url).pathname.replace(/^\/client\/v4/, "");
+      calls.push({
+        method: request.method,
+        path,
+        body:
+          request.body._tag === "Uint8Array"
+            ? JSON.parse(new TextDecoder().decode(request.body.body))
+            : undefined,
+      });
+      let result: object;
+      if (request.method === "PUT" && path === scriptPath) {
+        result = {
+          id: "worker",
+          tag: "worker-id",
+          startup_time_ms: 0,
+          observability:
+            observed === undefined
+              ? undefined
+              : observed === null
+                ? null
+                : { enabled: true, issues: { enabled: observed } },
+        };
+      } else if (request.method === "PATCH" && path === `${scriptPath}/script-settings`) {
+        if (++patches <= missingPatches) {
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json(
+              { success: false, errors: [{ code: 10007, message: "Worker not found" }] },
+              { status: 404 },
+            ),
+          );
+        }
+        result = {};
+      } else if (request.method === "GET" && path === `${scriptPath}/settings`) {
+        // Deliberately disagree with the upload: Issues must use the PUT response.
+        result = { bindings: [], tags: [], observability: { issues: { enabled: !observed } } };
+      } else if (request.method === "GET" && path === `${scriptPath}/subdomain`) {
+        result = { enabled: false, previews_enabled: false };
+      } else {
+        throw new Error(`Unexpected request: ${request.method} ${path}`);
+      }
+      return HttpClientResponse.fromWeb(
+        request,
+        Response.json({ success: true, errors: [], messages: [], result }),
+      );
+    }),
+  );
+  const reconcile = Effect.gen(function* () {
+    const provider = yield* Provider.Provider<Worker>(Cloudflare.Worker.Type);
+    return yield* provider.reconcile({
+      id: "IssuesWorker",
+      fqn: "IssuesWorker",
+      instanceId: "issues-unit",
+      news: {
+        name: "worker",
+        script: 'export default { fetch() { return new Response("ok"); } };',
+        bundle: false,
+        workersDev: false,
+        observability: desired,
+      },
+      olds: undefined,
+      output: undefined,
+      bindings: [],
+      session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+    });
+  }).pipe(
+    Effect.provide(LiveWorkerProvider()),
+    Retry.none,
+    Effect.provide(credentials({ apiToken: "test" })),
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.provideService(
+      CloudflareEnvironment,
+      Effect.succeed({
+        type: "apiToken",
+        apiToken: Redacted.make("test"),
+        accountId: "account",
+        source: { type: "env" },
+      }),
+    ),
+    Effect.provideService(Stack, {
+      name: "worker-issues-unit",
+      stage: "test",
+      resources: {},
+      bindings: {},
+      actions: {},
+    }),
+    Effect.provideService(Stage, "test"),
+    Effect.provideService(
+      ChildProcessSpawner.ChildProcessSpawner,
+      ChildProcessSpawner.make(() => Effect.die("Unexpected process spawn")),
+    ),
+    Effect.provide(FileSystem.layerNoop({})),
+    Effect.provide(Path.layer),
+  );
+  return { calls, reconcile };
+};
+
+const expectedCalls = (patches: number, completed = true) => [
+  { method: "GET", path: `${scriptPath}/settings` },
+  { method: "PUT", path: scriptPath },
+  ...Array.from({ length: patches }, () => ({
+    method: "PATCH",
+    path: `${scriptPath}/script-settings`,
+  })),
+  ...(completed
+    ? [
+        { method: "GET", path: `${scriptPath}/settings` },
+        { method: "GET", path: `${scriptPath}/subdomain` },
+      ]
+    : []),
+];
+
+const requestSequence = (calls: ReturnType<typeof mockReconcile>["calls"]) =>
+  calls.map(({ method, path }) => ({ method, path }));
 
 describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
   for (const [name, observed, desired, expectedPatch] of [
@@ -78,110 +211,53 @@ describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
         issues: { enabled: true },
       },
     ],
-  ] satisfies Array<[string, boolean | undefined, WorkerObservability, object | undefined]>) {
-    it.effect(name, () => {
-      const calls: Array<{ method: string; url: string; body: unknown }> = [];
-      const client = HttpClient.make((request) =>
-        Effect.sync(() => {
-          calls.push({
-            method: request.method,
-            url: request.url,
-            body:
-              request.body._tag === "Uint8Array"
-                ? JSON.parse(new TextDecoder().decode(request.body.body))
-                : undefined,
-          });
-          return HttpClientResponse.fromWeb(
-            request,
-            Response.json({
-              success: true,
-              errors: [],
-              messages: [],
-              result: {
-                observability: observed === undefined ? {} : { issues: { enabled: observed } },
-              },
-            }),
-          );
-        }),
-      );
-      return Effect.gen(function* () {
-        yield* syncWorkerIssues(
-          "account",
-          "worker",
-          desired,
-          observed === undefined ? undefined : { enabled: true, issues: { enabled: observed } },
-        );
-        expect(calls.map((call) => call.method)).toEqual(expectedPatch ? ["PATCH"] : []);
+    ["skips the default disabled flag", false, undefined, undefined],
+    [
+      "restores default logs while disabling omitted Issues",
+      true,
+      undefined,
+      {
+        enabled: true,
+        logs: { enabled: true, invocation_logs: true },
+        issues: { enabled: false },
+      },
+    ],
+    ["disables Issues when upload observability is null", null, {}, { issues: { enabled: false } }],
+  ] satisfies Array<
+    [string, boolean | null | undefined, WorkerObservability | undefined, object | undefined]
+  >) {
+    it.effect(name, () =>
+      Effect.gen(function* () {
+        const { calls, reconcile } = mockReconcile(desired, observed);
+        const worker = yield* reconcile;
+        expect(worker.workerId).toBe("worker-id");
+        expect(requestSequence(calls)).toEqual(expectedCalls(expectedPatch ? 1 : 0));
         if (expectedPatch) {
-          expect(
-            calls[0]?.url.endsWith("/accounts/account/workers/scripts/worker/script-settings"),
-          ).toBe(true);
-          expect(calls[0]?.body).toEqual({ observability: expectedPatch });
+          expect(calls.find((call) => call.method === "PATCH")?.body).toEqual({
+            observability: expectedPatch,
+          });
         }
-      }).pipe(
-        Retry.none,
-        Effect.provide(credentials({ apiToken: "test" })),
-        Effect.provideService(HttpClient.HttpClient, client),
-      );
-    });
-  }
-
-  it.live("retries registry propagation on patches without rereading settings", () => {
-    const calls: string[] = [];
-    const client = HttpClient.make((request) =>
-      Effect.sync(() => {
-        calls.push(request.method);
-        const transient = calls.length <= 2;
-        return HttpClientResponse.fromWeb(
-          request,
-          Response.json(
-            transient
-              ? { success: false, errors: [{ code: 10007, message: "Worker not found" }] }
-              : {
-                  success: true,
-                  errors: [],
-                  messages: [],
-                  result: { observability: { issues: { enabled: false } } },
-                },
-            { status: transient ? 404 : 200 },
-          ),
-        );
       }),
     );
-    return syncWorkerIssues(
-      "account",
-      "worker",
-      { issues: { enabled: true } },
-      { enabled: true, issues: { enabled: false } },
-    ).pipe(
-      Retry.none,
-      Effect.tap(() => Effect.sync(() => expect(calls).toEqual(["PATCH", "PATCH", "PATCH"]))),
-      Effect.provide(credentials({ apiToken: "test" })),
-      Effect.provideService(HttpClient.HttpClient, client),
-    );
-  });
+  }
+
+  it.live("retries registry propagation on patches without rereading settings", () =>
+    Effect.gen(function* () {
+      const { calls, reconcile } = mockReconcile(observability, false, 2);
+      yield* reconcile;
+      expect(requestSequence(calls)).toEqual(expectedCalls(3));
+      const bodies = calls.filter((call) => call.method === "PATCH").map((call) => call.body);
+      expect(bodies).toEqual([bodies[0], bodies[0], bodies[0]]);
+    }),
+  );
 
   it.live("propagates settings failures after bounded retries", () =>
-    syncWorkerIssues("account", "worker", observability, undefined).pipe(
-      Retry.none,
-      Effect.flip,
-      Effect.tap((error) => Effect.sync(() => expect(error._tag).toBe("WorkerNotFound"))),
-      Effect.provide(credentials({ apiToken: "test" })),
-      Effect.provideService(
-        HttpClient.HttpClient,
-        HttpClient.make((request) =>
-          Effect.sync(() =>
-            HttpClientResponse.fromWeb(
-              request,
-              Response.json(
-                { success: false, errors: [{ code: 10007, message: "Worker not found" }] },
-                { status: 404 },
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+    Effect.gen(function* () {
+      const { calls, reconcile } = mockReconcile(observability, undefined, Infinity);
+      const error = yield* reconcile.pipe(Effect.flip);
+      expect(error._tag).toBe("WorkerNotFound");
+      expect(requestSequence(calls)).toEqual(expectedCalls(7, false));
+    }),
   );
 });
 

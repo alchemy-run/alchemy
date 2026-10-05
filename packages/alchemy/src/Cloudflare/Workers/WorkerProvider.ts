@@ -50,7 +50,6 @@ import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   isSelfUrl,
   Worker,
-  type WorkerObservability,
   type WorkerProps,
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
@@ -707,53 +706,6 @@ const getScriptSettings = (
     }
     return yield* workers.getScriptScriptAndVersionSetting({ accountId, scriptName });
   });
-
-/**
- * Reconcile Issues from the full upload response, which can report a reset flag.
- * @internal
- */
-export const syncWorkerIssues = Effect.fn(
-  function* (
-    accountId: string,
-    scriptName: string,
-    observability: WorkerObservability,
-    uploaded: workers.PutScriptResponse["observability"],
-  ) {
-    const enabled = observability.issues?.enabled ?? false;
-    // An omitted flag is unconfirmed: apply the desired value explicitly.
-    if (uploaded?.issues?.enabled !== enabled) {
-      // The settings endpoint replaces observability, so carry logs and traces
-      // (including Telemetry bindings) through with the desired Issues flag.
-      yield* workers.patchScriptSetting({
-        accountId,
-        scriptName,
-        observability: {
-          ...observability,
-          headSamplingRate: observability.headSamplingRate ?? undefined,
-          logs: observability.logs
-            ? {
-                ...observability.logs,
-                headSamplingRate: observability.logs.headSamplingRate ?? undefined,
-              }
-            : undefined,
-          traces: observability.traces
-            ? {
-                ...observability.traces,
-                headSamplingRate: observability.traces.headSamplingRate ?? undefined,
-              }
-            : undefined,
-          issues: { enabled },
-        },
-      });
-    }
-  },
-  Effect.retry({
-    // A fresh upload can reach the settings endpoint before the script registry.
-    while: (error) => error._tag === "WorkerNotFound",
-    schedule: Schedule.exponential("100 millis"),
-    times: 6,
-  }),
-);
 
 /**
  * Deploy-time binding validation rejects an upload whose bindings
@@ -3738,6 +3690,7 @@ export const LiveWorkerProvider = () =>
         let worker: {
           id?: string | null;
           logpush?: boolean | null;
+          observability?: workers.PutScriptResponse["observability"];
           /** The immutable script id (Cloudflare's script "tag"). */
           tag?: string | null;
         };
@@ -3834,10 +3787,40 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
             );
           }
-          const uploaded = yield* putWorkerScriptWithMigrationRecovery();
-          worker = uploaded;
-          if (!dispatchNamespace) {
-            yield* syncWorkerIssues(accountId, name, observability, uploaded.observability);
+          worker = yield* putWorkerScriptWithMigrationRecovery();
+          const issuesEnabled = observability.issues?.enabled ?? false;
+          if (!dispatchNamespace && worker.observability?.issues?.enabled !== issuesEnabled) {
+            // Uploads can reset Issues. Reuse their response and preserve the
+            // resolved logs/traces when replacing observability settings.
+            yield* workers
+              .patchScriptSetting({
+                accountId,
+                scriptName: name,
+                observability: {
+                  ...observability,
+                  headSamplingRate: observability.headSamplingRate ?? undefined,
+                  logs: observability.logs
+                    ? {
+                        ...observability.logs,
+                        headSamplingRate: observability.logs.headSamplingRate ?? undefined,
+                      }
+                    : undefined,
+                  traces: observability.traces
+                    ? {
+                        ...observability.traces,
+                        headSamplingRate: observability.traces.headSamplingRate ?? undefined,
+                      }
+                    : undefined,
+                  issues: { enabled: issuesEnabled },
+                },
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "WorkerNotFound",
+                  schedule: Schedule.exponential("100 millis"),
+                  times: 6,
+                }),
+              );
           }
         }
 
