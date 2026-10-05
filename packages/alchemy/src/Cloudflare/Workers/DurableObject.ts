@@ -1238,7 +1238,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }),
         );
 
-        return {
+        // A function because `jurisdiction` wraps the sub-namespace it returns.
+        const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): any => ({
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
@@ -1246,7 +1247,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[namespace]),
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(binding.getByName(name, options), { errors }),
+            makeRpcStub(ns!.getByName(name, options), { errors }),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
@@ -1254,9 +1255,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           //   id: cf.DurableObjectId,
           //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
           // ) => use((ns) => makeRpcStub(ns.get(id, options))),
-          // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-          //   use((ns) => ns.jurisdiction(jurisdiction) as any),
-        };
+          jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
+            makeNamespace(ns?.jurisdiction(jurisdiction)),
+        });
+
+        return makeNamespace(binding);
       });
 
     // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
