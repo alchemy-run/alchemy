@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
 import {
@@ -148,7 +149,10 @@ describe(
           HttpClient.HttpClient,
           HttpClient.make(() => Effect.never),
         ),
-        fromApiToken({ apiToken: "fake-service-token", apiBaseUrl: FAKE_API_BASE_URL }),
+        fromApiToken({
+          apiToken: Redacted.make("fake-service-token"),
+          apiBaseUrl: FAKE_API_BASE_URL,
+        }),
       );
 
       return Effect.gen(function* () {
