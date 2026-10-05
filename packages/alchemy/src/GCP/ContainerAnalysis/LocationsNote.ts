@@ -7,7 +7,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type { NoteProps } from "./Note.ts";
 import {
   expandNoteName,
   hasOwnershipMarker,
@@ -24,6 +23,7 @@ import {
   retryTransient,
   toPhysicalId,
 } from "./internal.ts";
+import type { NoteProps } from "./Note.ts";
 
 export type LocationsNoteProps = NoteProps & {
   /**
@@ -78,9 +78,7 @@ export type LocationsNote = Resource<
     /** Upgrade metadata. */
     upgrade: containeranalysis.UpgradeNote | undefined;
     /** Vulnerability assessment metadata. */
-    vulnerabilityAssessment:
-      | containeranalysis.VulnerabilityAssessmentNote
-      | undefined;
+    vulnerabilityAssessment: containeranalysis.VulnerabilityAssessmentNote | undefined;
     /** Secret metadata. */
     secret: containeranalysis.SecretNote | undefined;
     /** DSSE attestation metadata. */
@@ -119,9 +117,7 @@ export type LocationsNote = Resource<
  * @resource
  * @category ContainerAnalysis
  */
-export const LocationsNote = Resource<LocationsNote>(
-  "GCP.ContainerAnalysis.LocationsNote",
-);
+export const LocationsNote = Resource<LocationsNote>("GCP.ContainerAnalysis.LocationsNote");
 
 const resourceName = (project: string, location: string, noteId: string) =>
   expandNoteName(noteId, project, location);
@@ -182,24 +178,15 @@ export const LocationsNoteProvider = () =>
         ),
         nextParent: locationParent(
           "x",
-          normalizeLocation(
-            news.location ?? olds?.location ?? output?.location,
-            env.region,
-          ),
+          normalizeLocation(news.location ?? olds?.location ?? output?.location, env.region),
         ),
-        extra:
-          previousKind !== undefined &&
-          nextKind !== undefined &&
-          previousKind !== nextKind,
+        extra: previousKind !== undefined && nextKind !== undefined && previousKind !== nextKind,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const noteId = yield* toPhysicalId(id, olds?.noteId, output?.noteId);
       const name = output?.name ?? resourceName(env.project, location, noteId);
       const existing = yield* getByName(name);
@@ -220,10 +207,7 @@ export const LocationsNoteProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const noteId = yield* toPhysicalId(id, news.noteId, output?.noteId);
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, noteId);
@@ -261,8 +245,6 @@ export const LocationsNoteProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreGone(
-        containeranalysis.deleteProjectsLocationsNotes({ name: output.name }),
-      );
+      yield* ignoreGone(containeranalysis.deleteProjectsLocationsNotes({ name: output.name }));
     }),
   });

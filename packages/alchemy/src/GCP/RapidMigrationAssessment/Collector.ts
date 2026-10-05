@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expectedAssetCountOf,
@@ -186,9 +181,7 @@ export type Collector = Resource<
  * @resource
  * @category RapidMigrationAssessment
  */
-export const Collector = Resource<Collector>(
-  "GCP.RapidMigrationAssessment.Collector",
-);
+export const Collector = Resource<Collector>("GCP.RapidMigrationAssessment.Collector");
 
 const resourceName = (project: string, location: string, collectorId: string) =>
   `${locationParent(project, location)}/collectors/${collectorId}`;
@@ -225,9 +218,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : rma.getProjectsLocationsCollectors({ name }).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.map((item) =>
-          item === undefined || isGoneState(item.state) ? undefined : item,
-        ),
+        Effect.map((item) => (item === undefined || isGoneState(item.state) ? undefined : item)),
       );
 
 const ignoreConflict = <A, R>(
@@ -240,24 +231,16 @@ const ignoreConflict = <A, R>(
   >,
 ) =>
   effect.pipe(
-    Effect.catchTag(["Conflict", "BadRequest"], () =>
-      Effect.succeed<A | undefined>(undefined),
-    ),
+    Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed<A | undefined>(undefined)),
   );
 
-const applyDesiredState = (
-  name: string,
-  current: rma.Collector,
-  news: CollectorProps,
-) =>
+const applyDesiredState = (name: string, current: rma.Collector, news: CollectorProps) =>
   Effect.gen(function* () {
     let next = current;
     const state = next.state;
 
     if (news.registered === true && !isRegisteredState(state)) {
-      const operation = yield* ignoreConflict(
-        rma.registerProjectsLocationsCollectors({ name }),
-      );
+      const operation = yield* ignoreConflict(rma.registerProjectsLocationsCollectors({ name }));
       if (operation !== undefined) {
         yield* waitForOperation(operation);
         next = yield* waitUntilExists(getByName(name), name);
@@ -265,9 +248,7 @@ const applyDesiredState = (
     }
 
     if (news.paused === true && !isPausedState(next.state)) {
-      const operation = yield* ignoreConflict(
-        rma.pauseProjectsLocationsCollectors({ name }),
-      );
+      const operation = yield* ignoreConflict(rma.pauseProjectsLocationsCollectors({ name }));
       if (operation !== undefined) {
         yield* waitForOperation(operation);
         next = yield* waitUntilExists(getByName(name), name);
@@ -275,9 +256,7 @@ const applyDesiredState = (
     }
 
     if (news.paused === false && isPausedState(next.state)) {
-      const operation = yield* ignoreConflict(
-        rma.resumeProjectsLocationsCollectors({ name }),
-      );
+      const operation = yield* ignoreConflict(rma.resumeProjectsLocationsCollectors({ name }));
       if (operation !== undefined) {
         yield* waitForOperation(operation);
         next = yield* waitUntilExists(getByName(name), name);
@@ -297,10 +276,7 @@ export const CollectorProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.collectorId ?? output?.collectorId,
         nextId: news.collectorId ?? olds?.collectorId ?? output?.collectorId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -310,23 +286,13 @@ export const CollectorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const collectorId = yield* toPhysicalId(
-        id,
-        olds?.collectorId,
-        output?.collectorId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, collectorId);
+      const collectorId = yield* toPhysicalId(id, olds?.collectorId, output?.collectorId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, collectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -340,15 +306,8 @@ export const CollectorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const collectorId = yield* toPhysicalId(
-        id,
-        news.collectorId,
-        output?.collectorId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const collectorId = yield* toPhysicalId(id, news.collectorId, output?.collectorId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, collectorId);
       const displayName = news.displayName ?? collectorId;
       const expectedAssetCount = expectedAssetCountOf(news.expectedAssetCount);
@@ -409,9 +368,7 @@ export const CollectorProvider = () =>
         expectedAssetCount !== undefined &&
           !sameText(current.expectedAssetCount, expectedAssetCount) &&
           "expectedAssetCount",
-        news.eulaUri !== undefined &&
-          !sameText(current.eulaUri, news.eulaUri) &&
-          "eulaUri",
+        news.eulaUri !== undefined && !sameText(current.eulaUri, news.eulaUri) && "eulaUri",
       ]);
 
       if (mask.length > 0) {
@@ -430,10 +387,7 @@ export const CollectorProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       current = yield* applyDesiredState(current.name ?? name, current, news);
@@ -441,16 +395,14 @@ export const CollectorProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* rma
-        .deleteProjectsLocationsCollectors({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* rma.deleteProjectsLocationsCollectors({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -1,22 +1,19 @@
-import * as GCP from "@/GCP";
-import { Document, DocumentProvider } from "@/GCP/Firestore/Document.ts";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import { Document, DocumentProvider } from "@/GCP/Firestore/Document.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: DocumentProvider().pipe(Layer.provideMerge(GCP.providers())),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const defaultDocOf = (project: string) =>
   `projects/${project}/databases/(default)/documents/_alchemy/alchemy-missing`;
 

@@ -25,10 +25,7 @@ export interface ModifyInstanceGroups extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.ModifyInstanceGroupsInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.ModifyInstanceGroupsResponse,
-      SVC.ModifyInstanceGroupsError
-    >
+    ) => Effect.Effect<SVC.ModifyInstanceGroupsResponse, SVC.ModifyInstanceGroupsError>
   >
 > {}
 export const ModifyInstanceGroups = Binding.Service<ModifyInstanceGroups>(

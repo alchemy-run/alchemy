@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   accountId,
   logLevel,
@@ -102,9 +102,7 @@ test.provider.skipIf(!runMerchantReviewLifecycle)(
       expect(created.name).toContain("/merchantReviews/");
       expect(created.account).toEqual(accountId);
       expect(created.merchantReviewAttributes?.title).toEqual("Great shop");
-      expect(created.merchantReviewAttributes?.content).toEqual(
-        "Fast shipping",
-      );
+      expect(created.merchantReviewAttributes?.content).toEqual("Fast shipping");
 
       const fetched = yield* reviews.getAccountsMerchantReviews({
         name: created.name,
@@ -133,9 +131,7 @@ test.provider.skipIf(!runMerchantReviewLifecycle)(
 
       expect(updated.merchantReviewId).toEqual(created.merchantReviewId);
       expect(updated.merchantReviewAttributes?.title).toEqual("Even better");
-      expect(updated.merchantReviewAttributes?.content).toEqual(
-        "Fast shipping and packing",
-      );
+      expect(updated.merchantReviewAttributes?.content).toEqual("Fast shipping and packing");
 
       yield* stack.destroy();
 

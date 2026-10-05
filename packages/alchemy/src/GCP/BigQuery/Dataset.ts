@@ -197,9 +197,7 @@ export type Dataset = Resource<
  */
 export const Dataset = Resource<Dataset>("GCP.BigQuery.Dataset");
 
-export class DatasetNotResolved extends Data.TaggedError(
-  "GCP.BigQuery.DatasetNotResolved",
-)<{
+export class DatasetNotResolved extends Data.TaggedError("GCP.BigQuery.DatasetNotResolved")<{
   name: string;
 }> {}
 
@@ -210,9 +208,7 @@ const userLabels = (
 const resourceName = (project: string, datasetId: string) =>
   `projects/${project}/datasets/${datasetId}`;
 
-const datasetIdOf = (
-  dataset: bigquery.Dataset | bigquery.DatasetListDatasetsItem,
-) => {
+const datasetIdOf = (dataset: bigquery.Dataset | bigquery.DatasetListDatasetsItem) => {
   const fromRef = dataset.datasetReference?.datasetId;
   if (fromRef !== undefined && fromRef.length > 0) return fromRef;
   const id = dataset.id ?? "";
@@ -286,8 +282,7 @@ const getById = (project: string, datasetId: string) =>
 const sameString = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-const accessJson = (access: readonly DatasetAccess[] | undefined) =>
-  JSON.stringify(access ?? []);
+const accessJson = (access: readonly DatasetAccess[] | undefined) => JSON.stringify(access ?? []);
 
 export const DatasetProvider = () =>
   Provider.succeed(Dataset, {
@@ -326,9 +321,7 @@ export const DatasetProvider = () =>
       const existing = yield* getById(project, datasetId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -343,9 +336,7 @@ export const DatasetProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.datasets ?? [])),
             Stream.filter((dataset) =>
-              Object.keys(dataset.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(dataset.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((dataset) => toAttrs(dataset, env.project, env.region)),
             Stream.runCollect,
@@ -380,12 +371,10 @@ export const DatasetProvider = () =>
               defaultPartitionExpirationMs: news.defaultPartitionExpirationMs,
               maxTimeTravelHours: news.maxTimeTravelHours,
               storageBillingModel: news.storageBillingModel,
-              isCaseInsensitive:
-                news.isCaseInsensitive === true ? true : undefined,
+              isCaseInsensitive: news.isCaseInsensitive === true ? true : undefined,
               defaultCollation: news.defaultCollation,
               defaultRoundingMode: news.defaultRoundingMode,
-              defaultEncryptionConfiguration:
-                news.defaultEncryptionConfiguration,
+              defaultEncryptionConfiguration: news.defaultEncryptionConfiguration,
               access: news.access,
             },
           })
@@ -409,26 +398,14 @@ export const DatasetProvider = () =>
         });
       }
       const labelsChanged = removed.length === 0 && upsert.length > 0;
-      const descriptionChanged = !sameString(
-        current.description,
-        news.description,
-      );
-      const friendlyNameChanged = !sameString(
-        current.friendlyName,
-        news.friendlyName,
-      );
+      const descriptionChanged = !sameString(current.description, news.description);
+      const friendlyNameChanged = !sameString(current.friendlyName, news.friendlyName);
       const tableExpirationChanged =
         news.defaultTableExpirationMs !== undefined &&
-        !sameString(
-          current.defaultTableExpirationMs,
-          news.defaultTableExpirationMs,
-        );
+        !sameString(current.defaultTableExpirationMs, news.defaultTableExpirationMs);
       const partitionExpirationChanged =
         news.defaultPartitionExpirationMs !== undefined &&
-        !sameString(
-          current.defaultPartitionExpirationMs,
-          news.defaultPartitionExpirationMs,
-        );
+        !sameString(current.defaultPartitionExpirationMs, news.defaultPartitionExpirationMs);
       const timeTravelChanged =
         news.maxTimeTravelHours !== undefined &&
         !sameString(current.maxTimeTravelHours, news.maxTimeTravelHours);
@@ -436,8 +413,7 @@ export const DatasetProvider = () =>
         news.storageBillingModel !== undefined &&
         (current.storageBillingModel ?? "") !== news.storageBillingModel;
       const caseChanged =
-        (current.isCaseInsensitive === true) !==
-        (news.isCaseInsensitive === true);
+        (current.isCaseInsensitive === true) !== (news.isCaseInsensitive === true);
       const collationChanged =
         news.defaultCollation !== undefined &&
         !sameString(current.defaultCollation, news.defaultCollation);
@@ -449,8 +425,7 @@ export const DatasetProvider = () =>
         (current.defaultEncryptionConfiguration?.kmsKeyName ?? "") !==
           (news.defaultEncryptionConfiguration.kmsKeyName ?? "");
       const accessChanged =
-        news.access !== undefined &&
-        accessJson(current.access) !== accessJson(news.access);
+        news.access !== undefined && accessJson(current.access) !== accessJson(news.access);
 
       const metadataChanged =
         labelsChanged ||
@@ -498,8 +473,7 @@ export const DatasetProvider = () =>
           body.defaultRoundingMode = news.defaultRoundingMode;
         }
         if (encryptionChanged) {
-          body.defaultEncryptionConfiguration =
-            news.defaultEncryptionConfiguration;
+          body.defaultEncryptionConfiguration = news.defaultEncryptionConfiguration;
         }
         if (accessChanged) {
           body.access = news.access;

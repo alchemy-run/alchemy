@@ -175,136 +175,112 @@ const findByOwnership = (id: string, project: string) =>
     return yield* findOwned(id, rows, (row) => row.body);
   });
 
-export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider =
-  () =>
-    Provider.succeed(DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage, {
-      stables: [
-        "name",
-        "feedbackMessageId",
-        "parent",
-        "project",
-        "datasetId",
-        "createTime",
-      ],
+export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider = () =>
+  Provider.succeed(DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage, {
+    stables: ["name", "feedbackMessageId", "parent", "project", "datasetId", "createTime"],
 
-      diff: Effect.fn(function* ({ news, olds, output }) {
-        if (!isResolved(news)) return undefined;
-        const extra =
-          (olds !== undefined && !sameText(news.body, output?.body)) ||
-          (output !== undefined && !sameText(news.image, output.image));
-        return replaceOnIdentity({
-          previousId: olds?.feedbackMessageId ?? output?.feedbackMessageId,
-          nextId: news.feedbackMessageId,
-          previousParent: olds?.parent ?? output?.parent,
-          nextParent: news.parent,
-          extra,
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      const extra =
+        (olds !== undefined && !sameText(news.body, output?.body)) ||
+        (output !== undefined && !sameText(news.image, output.image));
+      return replaceOnIdentity({
+        previousId: olds?.feedbackMessageId ?? output?.feedbackMessageId,
+        nextId: news.feedbackMessageId,
+        previousParent: olds?.parent ?? output?.parent,
+        nextParent: news.parent,
+        extra,
+      });
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const env = yield* GcpEnvironment.current;
+      const parent =
+        olds?.parent !== undefined
+          ? expandParent(olds.parent, env.project)
+          : (output?.parent ?? "");
+      const feedbackMessageId =
+        olds?.feedbackMessageId ??
+        output?.feedbackMessageId ??
+        (output?.name
+          ? parseResourceName(
+              output.name.replace(/\/feedbackMessage\//, "/feedbackMessages/"),
+              "feedbackMessages",
+            ).id
+          : "");
+      const name =
+        output?.name ??
+        (parent.length > 0 && feedbackMessageId.length > 0
+          ? resourceNameOf(parent, feedbackMessageId)
+          : "");
+      const existing = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return (yield* ownedByAlchemy(id, existing.body)) ? attrs : Unowned(attrs);
+    }),
+
+    list: () =>
+      Effect.gen(function* () {
+        const env = yield* GcpEnvironment.current;
+        const rows = yield* listAllFeedbackMessages(env.project);
+        return rows
+          .filter((row) => hasOwnershipMarker(row.body))
+          .map((row) => toAttrs(row, env.project));
+      }),
+
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = expandParent(news.parent, env.project);
+      const feedbackMessageId = news.feedbackMessageId ?? output?.feedbackMessageId;
+      const name =
+        output?.name ??
+        (feedbackMessageId !== undefined ? resourceNameOf(parent, feedbackMessageId) : "");
+      const ownership = yield* createInternalLabels(id);
+      const body = encodeOwnership(ownership, news.body, MAX_FEEDBACK_BODY_LENGTH);
+
+      let current = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+
+      if (current === undefined) {
+        const created = yield* retryTransient(
+          datalabeling.createProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+            parent,
+            body: {
+              body,
+              image: news.image,
+              requesterFeedbackMetadata: {},
+            },
+          }),
+        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        if (created !== undefined) {
+          const done = yield* waitForOperation(created);
+          const createdName = resourceNameFromOperation(done);
+          if (createdName !== undefined) {
+            current = yield* waitForVisible(getByName(createdName));
+          }
+        }
+        if (current === undefined) {
+          current = yield* findByOwnership(id, env.project);
+        }
+      }
+
+      if (current === undefined) {
+        return yield* new DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageNotResolved({
+          name: name || parent,
         });
-      }),
+      }
 
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const env = yield* GcpEnvironment.current;
-        const parent =
-          olds?.parent !== undefined
-            ? expandParent(olds.parent, env.project)
-            : (output?.parent ?? "");
-        const feedbackMessageId =
-          olds?.feedbackMessageId ??
-          output?.feedbackMessageId ??
-          (output?.name
-            ? parseResourceName(
-                output.name.replace(
-                  /\/feedbackMessage\//,
-                  "/feedbackMessages/",
-                ),
-                "feedbackMessages",
-              ).id
-            : "");
-        const name =
-          output?.name ??
-          (parent.length > 0 && feedbackMessageId.length > 0
-            ? resourceNameOf(parent, feedbackMessageId)
-            : "");
-        const existing =
-          (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
-        if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.body))
-          ? attrs
-          : Unowned(attrs);
-      }),
+      return toAttrs(current, env.project);
+    }),
 
-      list: () =>
-        Effect.gen(function* () {
-          const env = yield* GcpEnvironment.current;
-          const rows = yield* listAllFeedbackMessages(env.project);
-          return rows
-            .filter((row) => hasOwnershipMarker(row.body))
-            .map((row) => toAttrs(row, env.project));
-        }),
-
-      reconcile: Effect.fn(function* ({ id, news, output }) {
-        const env = yield* GcpEnvironment.current;
-        const parent = expandParent(news.parent, env.project);
-        const feedbackMessageId =
-          news.feedbackMessageId ?? output?.feedbackMessageId;
-        const name =
-          output?.name ??
-          (feedbackMessageId !== undefined
-            ? resourceNameOf(parent, feedbackMessageId)
-            : "");
-        const ownership = yield* createInternalLabels(id);
-        const body = encodeOwnership(
-          ownership,
-          news.body,
-          MAX_FEEDBACK_BODY_LENGTH,
-        );
-
-        let current =
-          (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
-
-        if (current === undefined) {
-          const created = yield* retryTransient(
-            datalabeling.createProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages(
-              {
-                parent,
-                body: {
-                  body,
-                  image: news.image,
-                  requesterFeedbackMetadata: {},
-                },
-              },
-            ),
-          ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-          if (created !== undefined) {
-            const done = yield* waitForOperation(created);
-            const createdName = resourceNameFromOperation(done);
-            if (createdName !== undefined) {
-              current = yield* waitForVisible(getByName(createdName));
-            }
-          }
-          if (current === undefined) {
-            current = yield* findByOwnership(id, env.project);
-          }
-        }
-
-        if (current === undefined) {
-          return yield* new DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageNotResolved(
-            { name: name || parent },
-          );
-        }
-
-        return toAttrs(current, env.project);
-      }),
-
-      delete: Effect.fn(function* ({ output }) {
-        if (!output.name) return;
-        yield* ignoreGone(
-          retryDelete(
-            datalabeling.deleteProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages(
-              { name: output.name },
-            ),
-          ),
-        );
-        yield* waitUntilGone(getByName(output.name));
-      }),
-    });
+    delete: Effect.fn(function* ({ output }) {
+      if (!output.name) return;
+      yield* ignoreGone(
+        retryDelete(
+          datalabeling.deleteProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
+            name: output.name,
+          }),
+        ),
+      );
+      yield* waitUntilGone(getByName(output.name));
+    }),
+  });

@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { Store } from "./serverless-resources.ts";
 
 /**

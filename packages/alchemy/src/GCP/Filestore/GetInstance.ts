@@ -33,14 +33,8 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      file.Instance,
-      file.GetProjectsLocationsInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<file.Instance, file.GetProjectsLocationsInstancesError, RuntimeContext>
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Filestore.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Filestore.GetInstance");

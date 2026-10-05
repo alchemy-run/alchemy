@@ -171,16 +171,11 @@ export class OrganizationSavedQueryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organization: string,
-  location: string,
-  savedQueryId: string,
-) => `${organization}/locations/${location}/savedQueries/${savedQueryId}`;
+const resourceName = (organization: string, location: string, savedQueryId: string) =>
+  `${organization}/locations/${location}/savedQueries/${savedQueryId}`;
 
 const parseQueryName = (name: string) => {
-  const match = name.match(
-    /^(organizations\/[^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/,
-  );
+  const match = name.match(/^(organizations\/[^/]+)\/locations\/([^/]+)\/savedQueries\/([^/]+)$/);
   if (!match) return undefined;
   return {
     organization: match[1]!,
@@ -228,10 +223,7 @@ const toAttrs = (
   const resolvedLocation = parsed?.location ?? location;
   return {
     name:
-      query.name ??
-      (savedQueryId
-        ? resourceName(resolvedOrg, resolvedLocation, savedQueryId)
-        : ""),
+      query.name ?? (savedQueryId ? resourceName(resolvedOrg, resolvedLocation, savedQueryId) : ""),
     savedQueryId,
     organization: resolvedOrg,
     organizationId: organizationIdOf(resolvedOrg),
@@ -261,18 +253,14 @@ const toCreateBody = (
   const visibility = props.visibility ?? "PRIVATE";
   const loggingQuery =
     props.loggingQuery ??
-    (props.sqlQueryText === undefined
-      ? { filter: "severity>=DEFAULT" }
-      : undefined);
+    (props.sqlQueryText === undefined ? { filter: "severity>=DEFAULT" } : undefined);
   return {
     displayName,
     visibility,
     description,
     loggingQuery: fromLoggingQuery(loggingQuery),
     opsAnalyticsQuery:
-      props.sqlQueryText !== undefined
-        ? { sqlQueryText: props.sqlQueryText }
-        : undefined,
+      props.sqlQueryText !== undefined ? { sqlQueryText: props.sqlQueryText } : undefined,
   };
 };
 
@@ -316,14 +304,8 @@ export const OrganizationSavedQueryProvider = () =>
         output?.organization,
       );
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        olds?.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
-      const name =
-        output?.name ?? resourceName(organization, location, savedQueryId);
+      const savedQueryId = yield* toPhysicalId(id, olds?.savedQueryId, output?.savedQueryId, "q");
+      const name = output?.name ?? resourceName(organization, location, savedQueryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project, location);
@@ -342,13 +324,9 @@ export const OrganizationSavedQueryProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.savedQueries ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.savedQueries ?? [])),
             Stream.filter((query) => hasOwnershipMarker(query.description)),
-            Stream.map((query) =>
-              toAttrs(query, organization, env.project, DEFAULT_LOCATION),
-            ),
+            Stream.map((query) => toAttrs(query, organization, env.project, DEFAULT_LOCATION)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -357,17 +335,9 @@ export const OrganizationSavedQueryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        news.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
+      const savedQueryId = yield* toPhysicalId(id, news.savedQueryId, output?.savedQueryId, "q");
       const name = resourceName(organization, location, savedQueryId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -375,9 +345,7 @@ export const OrganizationSavedQueryProvider = () =>
       const desiredVisibility = news.visibility ?? "PRIVATE";
       const desiredLogging =
         news.loggingQuery ??
-        (news.sqlQueryText === undefined
-          ? { filter: "severity>=DEFAULT" }
-          : undefined);
+        (news.sqlQueryText === undefined ? { filter: "severity>=DEFAULT" } : undefined);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -396,17 +364,12 @@ export const OrganizationSavedQueryProvider = () =>
         return yield* new OrganizationSavedQueryNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const displayNameChanged =
-        (current.displayName ?? "") !== desiredDisplayName;
-      const visibilityChanged =
-        (current.visibility ?? "PRIVATE") !== desiredVisibility;
-      const filterChanged =
-        (current.loggingQuery?.filter ?? "") !== (desiredLogging?.filter ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const displayNameChanged = (current.displayName ?? "") !== desiredDisplayName;
+      const visibilityChanged = (current.visibility ?? "PRIVATE") !== desiredVisibility;
+      const filterChanged = (current.loggingQuery?.filter ?? "") !== (desiredLogging?.filter ?? "");
       const sqlChanged =
-        (current.opsAnalyticsQuery?.sqlQueryText ?? "") !==
-        (news.sqlQueryText ?? "");
+        (current.opsAnalyticsQuery?.sqlQueryText ?? "") !== (news.sqlQueryText ?? "");
 
       const updateMask = [
         descriptionChanged ? "description" : undefined,
@@ -426,9 +389,7 @@ export const OrganizationSavedQueryProvider = () =>
             visibility: desiredVisibility,
             loggingQuery: fromLoggingQuery(desiredLogging),
             opsAnalyticsQuery:
-              news.sqlQueryText !== undefined
-                ? { sqlQueryText: news.sqlQueryText }
-                : undefined,
+              news.sqlQueryText !== undefined ? { sqlQueryText: news.sqlQueryText } : undefined,
           },
         });
       }

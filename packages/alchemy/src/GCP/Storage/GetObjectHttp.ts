@@ -16,11 +16,7 @@ export const GetObjectHttp = Layer.effect(
   Effect.gen(function* () {
     const media = yield* makeObjectMedia;
     return Effect.fn(function* (bucket: Bucket) {
-      yield* grantOnBucket(
-        "GCP.Storage.GetObject",
-        bucket,
-        "roles/storage.objectViewer",
-      );
+      yield* grantOnBucket("GCP.Storage.GetObject", bucket, "roles/storage.objectViewer");
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`GCP.Storage.GetObject(${bucket.LogicalId})`)(function* (
         request: GetObjectRequest,

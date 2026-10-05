@@ -14,10 +14,8 @@ const handler = async () => {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      makeDir: (nodeRequire("make-dir/package.json") as { version: string })
-        .version,
-      semver: (nodeRequire("semver/package.json") as { version: string })
-        .version,
+      makeDir: (nodeRequire("make-dir/package.json") as { version: string }).version,
+      semver: (nodeRequire("semver/package.json") as { version: string }).version,
     }),
   };
 };

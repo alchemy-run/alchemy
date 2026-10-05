@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 100;
@@ -213,9 +209,7 @@ export type Sink = Resource<
  */
 export const Sink = Resource<Sink>("GCP.Logging.Sink");
 
-export class SinkNotResolved extends Data.TaggedError(
-  "GCP.Logging.SinkNotResolved",
-)<{
+export class SinkNotResolved extends Data.TaggedError("GCP.Logging.SinkNotResolved")<{
   name: string;
 }> {}
 
@@ -225,8 +219,7 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const resourceName = (project: string, sinkId: string) =>
-  `projects/${project}/sinks/${sinkId}`;
+const resourceName = (project: string, sinkId: string) => `projects/${project}/sinks/${sinkId}`;
 
 const sinkIdOf = (sink: logging.LogSink) => {
   const raw = sink.name ?? sink.resourceName ?? "";
@@ -242,9 +235,7 @@ const toId = (id: string, sinkId: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -278,9 +269,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const exclusionsOf = (
   list: readonly logging.LogExclusion[] | readonly SinkExclusion[] | undefined,
@@ -341,11 +330,7 @@ const getByName = (name: string) =>
     .getSinks({ sinkName: name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toCreateBody = (
-  sinkId: string,
-  props: SinkProps,
-  description: string,
-): logging.LogSink => ({
+const toCreateBody = (sinkId: string, props: SinkProps, description: string): logging.LogSink => ({
   name: sinkId,
   destination: props.destination,
   filter: props.filter,
@@ -364,11 +349,7 @@ export const SinkProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.sinkId ?? output?.sinkId;
-      if (
-        previous !== undefined &&
-        news.sinkId !== undefined &&
-        news.sinkId !== previous
-      ) {
+      if (previous !== undefined && news.sinkId !== undefined && news.sinkId !== previous) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -433,18 +414,12 @@ export const SinkProvider = () =>
       const desiredBq = news.bigqueryOptions?.usePartitionedTables === true;
       const observedBq = current.bigqueryOptions?.usePartitionedTables === true;
 
-      const destinationChanged =
-        (current.destination ?? "") !== news.destination;
+      const destinationChanged = (current.destination ?? "") !== news.destination;
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
-      const exclusionsChanged = !sameExclusions(
-        current.exclusions,
-        news.exclusions,
-      );
-      const bqChanged =
-        news.bigqueryOptions !== undefined && desiredBq !== observedBq;
+      const exclusionsChanged = !sameExclusions(current.exclusions, news.exclusions);
+      const bqChanged = news.bigqueryOptions !== undefined && desiredBq !== observedBq;
       const includeChildrenChanged =
         news.includeChildren !== undefined &&
         (current.includeChildren === true) !== desiredIncludeChildren;

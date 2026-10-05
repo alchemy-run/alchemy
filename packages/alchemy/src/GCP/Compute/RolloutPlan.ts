@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,19 +9,14 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_SCOPE: compute.RolloutPlanLocationScopeEnum = "ZONAL";
 
-export type RolloutPlanLocationScope =
-  | compute.RolloutPlanLocationScopeEnum
-  | (string & {});
+export type RolloutPlanLocationScope = compute.RolloutPlanLocationScopeEnum | (string & {});
 export type RolloutPlanWave = compute.RolloutPlanWave;
 
 export type RolloutPlanProps = {
@@ -133,15 +127,11 @@ export type RolloutPlan = Resource<
  */
 export const RolloutPlan = Resource<RolloutPlan>("GCP.Compute.RolloutPlan");
 
-export class RolloutPlanNotResolved extends Data.TaggedError(
-  "GCP.Compute.RolloutPlanNotResolved",
-)<{
+export class RolloutPlanNotResolved extends Data.TaggedError("GCP.Compute.RolloutPlanNotResolved")<{
   rolloutPlanName: string;
 }> {}
 
-export class RolloutPlanStillExists extends Data.TaggedError(
-  "GCP.Compute.RolloutPlanStillExists",
-)<{
+export class RolloutPlanStillExists extends Data.TaggedError("GCP.Compute.RolloutPlanStillExists")<{
   rolloutPlanName: string;
 }> {}
 
@@ -171,9 +161,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `p${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `p${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -207,9 +195,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -225,10 +211,7 @@ const toBody = (
   waves: [...(props.waves ?? defaultWaves())],
 });
 
-const toAttrs = (
-  plan: compute.RolloutPlan,
-  project: string,
-): RolloutPlan["Attributes"] => {
+const toAttrs = (plan: compute.RolloutPlan, project: string): RolloutPlan["Attributes"] => {
   const parsed = parseDescription(plan.description);
   return {
     rolloutPlanName: plan.name ?? plan.id ?? "",
@@ -267,13 +250,7 @@ const waitPlanGone = (project: string, rolloutPlanName: string) =>
 
 export const RolloutPlanProvider = () =>
   Provider.succeed(RolloutPlan, {
-    stables: [
-      "rolloutPlanName",
-      "rolloutPlanId",
-      "project",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["rolloutPlanName", "rolloutPlanId", "project", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -281,12 +258,9 @@ export const RolloutPlanProvider = () =>
       const previousName = olds?.rolloutPlanName ?? output?.rolloutPlanName;
       const nextName = news.rolloutPlanName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
-      const previousScope =
-        olds?.locationScope ?? output?.locationScope ?? DEFAULT_SCOPE;
+      const previousScope = olds?.locationScope ?? output?.locationScope ?? DEFAULT_SCOPE;
       const nextScope = news.locationScope ?? DEFAULT_SCOPE;
       const previousWaves = olds?.waves ?? output?.waves;
       const nextWaves = news.waves;
@@ -314,11 +288,7 @@ export const RolloutPlanProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const rolloutPlanName = yield* toName(
-        id,
-        olds?.rolloutPlanName,
-        output?.rolloutPlanName,
-      );
+      const rolloutPlanName = yield* toName(id, olds?.rolloutPlanName, output?.rolloutPlanName);
       const existing = yield* getByName(env.project, rolloutPlanName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -346,11 +316,7 @@ export const RolloutPlanProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const rolloutPlanName = yield* toName(
-        id,
-        news.rolloutPlanName,
-        output?.rolloutPlanName,
-      );
+      const rolloutPlanName = yield* toName(id, news.rolloutPlanName, output?.rolloutPlanName);
       const ownership = yield* createInternalLabels(id);
       const desired = toBody(rolloutPlanName, news, ownership);
 
@@ -374,8 +340,7 @@ export const RolloutPlanProvider = () =>
             () => new RolloutPlanNotResolved({ rolloutPlanName }),
           ),
           Effect.retry({
-            while: (error) =>
-              error._tag === "GCP.Compute.RolloutPlanNotResolved",
+            while: (error) => error._tag === "GCP.Compute.RolloutPlanNotResolved",
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),

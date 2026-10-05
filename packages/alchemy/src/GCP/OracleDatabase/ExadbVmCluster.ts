@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   OracleDatabaseNotResolved,
@@ -58,9 +53,7 @@ export type ExadbVmClusterPropertiesInput = {
   /** Grid image id. Immutable. Required on create. */
   gridImageId?: string;
   /** License model. Immutable. */
-  licenseModel?:
-    | oracle.ExadbVmClusterPropertiesLicenseModelEnum
-    | (string & {});
+  licenseModel?: oracle.ExadbVmClusterPropertiesLicenseModelEnum | (string & {});
   /** VM file system storage. Immutable. Required on create. */
   vmFileSystemStorage?: ExadbVmClusterStorageDetails;
   /** Additional ECPUs per node. Immutable. */
@@ -68,9 +61,7 @@ export type ExadbVmClusterPropertiesInput = {
   /** Data collection options. Immutable. */
   dataCollectionOptions?: DataCollectionOptionsCommon;
   /** Shape attribute (`SMART_STORAGE`, `BLOCK_STORAGE`). Immutable. */
-  shapeAttribute?:
-    | oracle.ExadbVmClusterPropertiesShapeAttributeEnum
-    | (string & {});
+  shapeAttribute?: oracle.ExadbVmClusterPropertiesShapeAttributeEnum | (string & {});
   /** Node/VM count. Mutable via patch. */
   nodeCount?: number;
   /** Enabled ECPUs per node. Immutable. */
@@ -208,22 +199,16 @@ export type ExadbVmCluster = Resource<
  * @resource
  * @category OracleDatabase
  */
-export const ExadbVmCluster = Resource<ExadbVmCluster>(
-  "GCP.OracleDatabase.ExadbVmCluster",
-);
+export const ExadbVmCluster = Resource<ExadbVmCluster>("GCP.OracleDatabase.ExadbVmCluster");
 
-const mergedProperties = (
-  news: ExadbVmClusterProps,
-): ExadbVmClusterPropertiesInput => ({
+const mergedProperties = (news: ExadbVmClusterProps): ExadbVmClusterPropertiesInput => ({
   ...(news.properties ?? {}),
   nodeCount: news.nodeCount ?? news.properties?.nodeCount,
   gridImageId: news.gridImageId ?? news.properties?.gridImageId,
   hostnamePrefix: news.hostnamePrefix ?? news.properties?.hostnamePrefix,
   sshPublicKeys: news.sshPublicKeys ?? news.properties?.sshPublicKeys,
-  exascaleDbStorageVault:
-    news.exascaleDbStorageVault ?? news.properties?.exascaleDbStorageVault,
-  enabledEcpuCountPerNode:
-    news.enabledEcpuCountPerNode ?? news.properties?.enabledEcpuCountPerNode,
+  exascaleDbStorageVault: news.exascaleDbStorageVault ?? news.properties?.exascaleDbStorageVault,
+  enabledEcpuCountPerNode: news.enabledEcpuCountPerNode ?? news.properties?.enabledEcpuCountPerNode,
 });
 
 const toCreateBody = (
@@ -232,10 +217,8 @@ const toCreateBody = (
 ): oracle.ExadbVmCluster => {
   const props = mergedProperties(news);
   const properties: oracle.ExadbVmClusterProperties = {};
-  if (props.clusterName !== undefined)
-    properties.clusterName = props.clusterName;
-  if (props.gridImageId !== undefined)
-    properties.gridImageId = props.gridImageId;
+  if (props.clusterName !== undefined) properties.clusterName = props.clusterName;
+  if (props.gridImageId !== undefined) properties.gridImageId = props.gridImageId;
   if (props.licenseModel !== undefined) {
     properties.licenseModel = props.licenseModel;
   }
@@ -317,11 +300,7 @@ const listClusters = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.exadbVmClusters,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -336,33 +315,21 @@ export const ExadbVmClusterProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousOdb = olds?.odbSubnet ?? output?.odbSubnet ?? "";
       const nextOdb = news.odbSubnet ?? previousOdb;
-      const previousBackup =
-        olds?.backupOdbSubnet ?? output?.backupOdbSubnet ?? "";
+      const previousBackup = olds?.backupOdbSubnet ?? output?.backupOdbSubnet ?? "";
       const nextBackup = news.backupOdbSubnet ?? previousBackup;
       const previousVault =
-        olds?.exascaleDbStorageVault ??
-        olds?.properties?.exascaleDbStorageVault ??
-        "";
+        olds?.exascaleDbStorageVault ?? olds?.properties?.exascaleDbStorageVault ?? "";
       const nextVault =
-        news.exascaleDbStorageVault ??
-        news.properties?.exascaleDbStorageVault ??
-        previousVault;
+        news.exascaleDbStorageVault ?? news.properties?.exascaleDbStorageVault ?? previousVault;
       return replaceOnIdentity({
         previousId: olds?.exadbVmClusterId ?? output?.exadbVmClusterId,
-        nextId:
-          news.exadbVmClusterId ??
-          olds?.exadbVmClusterId ??
-          output?.exadbVmClusterId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.exadbVmClusterId ?? olds?.exadbVmClusterId ?? output?.exadbVmClusterId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
-          nextOdb !== previousOdb ||
-          nextBackup !== previousBackup ||
-          nextVault !== previousVault,
+          nextOdb !== previousOdb || nextBackup !== previousBackup || nextVault !== previousVault,
       });
     }),
 
@@ -374,18 +341,13 @@ export const ExadbVmClusterProvider = () =>
         output?.exadbVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceNameOf(env.project, location, COLLECTION, exadbVmClusterId);
+        output?.name ?? resourceNameOf(env.project, location, COLLECTION, exadbVmClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -403,15 +365,8 @@ export const ExadbVmClusterProvider = () =>
         output?.exadbVmClusterId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        exadbVmClusterId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, exadbVmClusterId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -474,10 +429,7 @@ export const ExadbVmClusterProvider = () =>
         );
         yield* waitForOperation(operation);
         return toAttrs(
-          yield* waitUntilExists(
-            getByName(ready.name ?? name),
-            ready.name ?? name,
-          ),
+          yield* waitUntilExists(getByName(ready.name ?? name), ready.name ?? name),
           env.project,
         );
       }

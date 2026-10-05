@@ -43,11 +43,7 @@ export interface CreateJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: CreateJobRequest,
-    ) => Effect.Effect<
-      transcoder.Job,
-      transcoder.CreateProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<transcoder.Job, transcoder.CreateProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 

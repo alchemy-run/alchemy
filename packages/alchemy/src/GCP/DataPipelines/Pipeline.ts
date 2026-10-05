@@ -31,9 +31,7 @@ import {
   userSources,
 } from "./internal.ts";
 
-export type PipelineType =
-  | datapipelines.GoogleCloudDatapipelinesV1PipelineTypeEnum
-  | (string & {});
+export type PipelineType = datapipelines.GoogleCloudDatapipelinesV1PipelineTypeEnum | (string & {});
 
 export type PipelineState =
   | datapipelines.GoogleCloudDatapipelinesV1PipelineStateEnum
@@ -210,9 +208,7 @@ export type Pipeline = Resource<
  */
 export const Pipeline = Resource<Pipeline>("GCP.DataPipelines.Pipeline");
 
-export class PipelineNotResolved extends Data.TaggedError(
-  "GCP.DataPipelines.PipelineNotResolved",
-)<{
+export class PipelineNotResolved extends Data.TaggedError("GCP.DataPipelines.PipelineNotResolved")<{
   name: string;
 }> {}
 
@@ -288,22 +284,12 @@ const desiredSchedule = (
 
 export const PipelineProvider = () =>
   Provider.succeed(Pipeline, {
-    stables: [
-      "name",
-      "pipelineId",
-      "location",
-      "project",
-      "parent",
-      "createTime",
-    ],
+    stables: ["name", "pipelineId", "location", "project", "parent", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -322,28 +308,13 @@ export const PipelineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const pipelineId = yield* toPipelineId(
-        id,
-        olds?.pipelineId,
-        output?.pipelineId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, pipelineId);
-      const existing = yield* findOwnedPipeline(
-        id,
-        env.project,
-        env.region,
-        name,
-      );
+      const pipelineId = yield* toPipelineId(id, olds?.pipelineId, output?.pipelineId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, pipelineId);
+      const existing = yield* findOwnedPipeline(id, env.project, env.region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.pipelineSources))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.pipelineSources)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -355,15 +326,8 @@ export const PipelineProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const pipelineId = yield* toPipelineId(
-        id,
-        news.pipelineId,
-        output?.pipelineId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const pipelineId = yield* toPipelineId(id, news.pipelineId, output?.pipelineId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, pipelineId);
       const displayName = toDisplayName(news.displayName, pipelineId);
@@ -378,12 +342,7 @@ export const PipelineProvider = () =>
       const workload = fillWorkload(news.workload, env.project, location);
       const schedulerServiceAccountEmail = news.schedulerServiceAccountEmail;
 
-      let current = yield* findOwnedPipeline(
-        id,
-        env.project,
-        env.region,
-        output?.name ?? name,
-      );
+      let current = yield* findOwnedPipeline(id, env.project, env.region, output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* datapipelines
@@ -412,18 +371,11 @@ export const PipelineProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const scheduleChanged =
         news.scheduleInfo !== undefined &&
-        !jsonEqual(
-          scheduleKey(current.scheduleInfo),
-          scheduleKey(scheduleInfo),
-        );
+        !jsonEqual(scheduleKey(current.scheduleInfo), scheduleKey(scheduleInfo));
       const schedulerChanged =
         news.schedulerServiceAccountEmail !== undefined &&
-        !sameText(
-          current.schedulerServiceAccountEmail,
-          schedulerServiceAccountEmail,
-        );
-      const workloadChanged =
-        news.workload !== undefined && !jsonEqual(current.workload, workload);
+        !sameText(current.schedulerServiceAccountEmail, schedulerServiceAccountEmail);
+      const workloadChanged = news.workload !== undefined && !jsonEqual(current.workload, workload);
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         scheduleChanged ? "scheduleInfo" : undefined,
@@ -466,8 +418,6 @@ export const PipelineProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreMissing(
-        datapipelines.deleteProjectsLocationsPipelines({ name: output.name }),
-      );
+      yield* ignoreMissing(datapipelines.deleteProjectsLocationsPipelines({ name: output.name }));
     }),
   });

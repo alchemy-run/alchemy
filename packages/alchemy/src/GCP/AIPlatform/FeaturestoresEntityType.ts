@@ -3,21 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   expandParent,
   hasAlchemyLabelMap,
@@ -28,6 +21,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 60;
 
@@ -85,9 +80,7 @@ export type FeaturestoresEntityType = Resource<
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
     /** Monitoring config. */
-    monitoringConfig:
-      | aiplatform.GoogleCloudAiplatformV1FeaturestoreMonitoringConfig
-      | undefined;
+    monitoringConfig: aiplatform.GoogleCloudAiplatformV1FeaturestoreMonitoringConfig | undefined;
     /** Offline storage TTL in days. */
     offlineStorageTtlDays: number | undefined;
     /** RFC3339 creation timestamp. */
@@ -143,10 +136,7 @@ const parentOf = (project: string, location: string, featurestore: string) =>
 const resourceName = (parent: string, entityTypeId: string) =>
   `${parent}/entityTypes/${entityTypeId}`;
 
-const toAttrs = (
-  entity: aiplatform.GoogleCloudAiplatformV1EntityType,
-  project: string,
-) => {
+const toAttrs = (entity: aiplatform.GoogleCloudAiplatformV1EntityType, project: string) => {
   const name = entity.name ?? "";
   const parsed = parseResourceName(name, "entityTypes");
   const store = parseResourceName(parsed.parent, "featurestores");
@@ -180,8 +170,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new FeaturestoresEntityTypeNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -195,24 +184,21 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new FeaturestoresEntityTypeStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listEntitiesUnder = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsFeaturestoresEntityTypes
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.entityTypes ?? [])),
-      Stream.filter((entity) => hasAlchemyLabelMap(entity.labels)),
-      Stream.map((entity) => toAttrs(entity, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsFeaturestoresEntityTypes.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.entityTypes ?? [])),
+    Stream.filter((entity) => hasAlchemyLabelMap(entity.labels)),
+    Stream.map((entity) => toAttrs(entity, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const FeaturestoresEntityTypeProvider = () =>
   Provider.succeed(FeaturestoresEntityType, {
@@ -233,21 +219,12 @@ export const FeaturestoresEntityTypeProvider = () =>
       const nextId = news.entityTypeId ?? previousId;
       const previousParent = olds?.featurestore ?? output?.featurestore ?? "";
       const nextParent = news.featurestore ?? previousParent;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const parentChanged =
-        previousParent.length > 0 &&
-        lastSegment(nextParent) !== lastSegment(previousParent);
+        previousParent.length > 0 && lastSegment(nextParent) !== lastSegment(previousParent);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         parentChanged ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
@@ -256,10 +233,7 @@ export const FeaturestoresEntityTypeProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parentRef = olds?.featurestore ?? output?.featurestore;
       // A create interrupted before its parent resolved has nothing to find.
       if (output?.name === undefined && typeof parentRef !== "string") {
@@ -276,9 +250,7 @@ export const FeaturestoresEntityTypeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,9 +266,7 @@ export const FeaturestoresEntityTypeProvider = () =>
             ),
           )
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featurestores ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.featurestores ?? [])),
             Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -304,10 +274,7 @@ export const FeaturestoresEntityTypeProvider = () =>
           );
         const nested = yield* Effect.forEach(
           stores,
-          (store) =>
-            store.name
-              ? listEntitiesUnder(store.name, env.project)
-              : Effect.succeed([]),
+          (store) => (store.name ? listEntitiesUnder(store.name, env.project) : Effect.succeed([])),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -315,10 +282,7 @@ export const FeaturestoresEntityTypeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location, news.featurestore);
       const entityTypeId = yield* toPhysicalSnake(
         id,
@@ -360,8 +324,7 @@ export const FeaturestoresEntityTypeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const ttlChanged =
         news.offlineStorageTtlDays !== undefined &&
         (current.offlineStorageTtlDays ?? 0) !== news.offlineStorageTtlDays;
@@ -369,12 +332,7 @@ export const FeaturestoresEntityTypeProvider = () =>
         news.monitoringConfig !== undefined &&
         !specifiedEquals(news.monitoringConfig, current.monitoringConfig);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        ttlChanged ||
-        monitoringChanged
-      ) {
+      if (labelsChanged || descriptionChanged || ttlChanged || monitoringChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,

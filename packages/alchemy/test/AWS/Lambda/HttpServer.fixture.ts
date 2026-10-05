@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Option from "effect/Option";
 
 export const TestHttpEffect = Effect.gen(function* () {
   const request = yield* HttpServerRequest;
@@ -38,15 +38,10 @@ export const TestHttpEffect = Effect.gen(function* () {
       },
     );
 
-    return HttpServerResponse.setCookieUnsafe(
-      response,
-      "job-session",
-      "created",
-      {
-        httpOnly: true,
-        path: "/",
-      },
-    );
+    return HttpServerResponse.setCookieUnsafe(response, "job-session", "created", {
+      httpOnly: true,
+      path: "/",
+    });
   }
 
   if (request.method === "GET" && pathname === "/binary") {

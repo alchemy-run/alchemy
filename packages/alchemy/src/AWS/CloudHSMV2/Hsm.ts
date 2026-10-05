@@ -102,32 +102,20 @@ export const HsmProvider = () =>
       // each cluster's Hsms.
       const findHsm = Effect.fn(function* (clusterId: string, hsmId: string) {
         const cluster = yield* findClusterById(clusterId);
-        return cluster?.Hsms?.find(
-          (hsm) => hsm.HsmId === hsmId && hsm.State !== "DELETED",
-        );
+        return cluster?.Hsms?.find((hsm) => hsm.HsmId === hsmId && hsm.State !== "DELETED");
       });
 
       // Bounded readiness wait. HSM provisioning typically completes in
       // 10-20 minutes; budget ~25 min (100 * 15s).
-      const waitForActive = Effect.fn(function* (
-        clusterId: string,
-        hsmId: string,
-      ) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(100),
-        ]);
+      const waitForActive = Effect.fn(function* (clusterId: string, hsmId: string) {
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(100)]);
         return yield* findHsm(clusterId, hsmId).pipe(
           Effect.flatMap((hsm) => {
             if (hsm === undefined) {
-              return Effect.fail(
-                new Error(`HSM '${hsmId}' not found in cluster '${clusterId}'`),
-              );
+              return Effect.fail(new Error(`HSM '${hsmId}' not found in cluster '${clusterId}'`));
             }
             if (hsm.State !== "ACTIVE") {
-              return Effect.fail(
-                new Error(`HSM '${hsmId}' not active (state: ${hsm.State})`),
-              );
+              return Effect.fail(new Error(`HSM '${hsmId}' not active (state: ${hsm.State})`));
             }
             return Effect.succeed(hsm);
           }),
@@ -137,23 +125,13 @@ export const HsmProvider = () =>
 
       // Bounded wait-until-gone after delete initiation (~15 min = 60 * 15s).
       // The whole cluster disappearing counts as gone too.
-      const waitUntilGone = Effect.fn(function* (
-        clusterId: string,
-        hsmId: string,
-      ) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(60),
-        ]);
+      const waitUntilGone = Effect.fn(function* (clusterId: string, hsmId: string) {
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]);
         yield* findHsm(clusterId, hsmId).pipe(
           Effect.flatMap((hsm) =>
             hsm === undefined
               ? Effect.void
-              : Effect.fail(
-                  new Error(
-                    `HSM '${hsmId}' still deleting (state: ${hsm.State})`,
-                  ),
-                ),
+              : Effect.fail(new Error(`HSM '${hsmId}' still deleting (state: ${hsm.State})`)),
           ),
           Effect.retry({ schedule: policy }),
         );
@@ -161,9 +139,7 @@ export const HsmProvider = () =>
 
       const toAttrs = Effect.fn(function* (hsm: cloudhsm.Hsm) {
         if (!hsm.ClusterId) {
-          return yield* Effect.fail(
-            new Error(`HSM '${hsm.HsmId}' is missing its ClusterId`),
-          );
+          return yield* Effect.fail(new Error(`HSM '${hsm.HsmId}' is missing its ClusterId`));
         }
         return {
           hsmId: hsm.HsmId,
@@ -209,9 +185,7 @@ export const HsmProvider = () =>
 
           // 1. Observe — the cached id is only a hint; the cluster's HSM
           //    list is authoritative.
-          let observed = output
-            ? yield* findHsm(output.clusterId, output.hsmId)
-            : undefined;
+          let observed = output ? yield* findHsm(output.clusterId, output.hsmId) : undefined;
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {
@@ -237,12 +211,7 @@ export const HsmProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* cloudhsm
             .deleteHsm({ ClusterId: output.clusterId, HsmId: output.hsmId })
-            .pipe(
-              Effect.catchTag(
-                "CloudHsmResourceNotFoundException",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("CloudHsmResourceNotFoundException", () => Effect.void));
           // Deletion is asynchronous and the parent cluster cannot be
           // deleted until the HSM is gone — wait it out (bounded).
           yield* waitUntilGone(output.clusterId, output.hsmId);
@@ -250,9 +219,7 @@ export const HsmProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* cloudhsm.describeClusters
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* cloudhsm.describeClusters.pages({}).pipe(Stream.runCollect);
             const hsms = Array.from(pages)
               .flatMap((page) => page.Clusters ?? [])
               .flatMap((cluster) => cluster.Hsms ?? [])

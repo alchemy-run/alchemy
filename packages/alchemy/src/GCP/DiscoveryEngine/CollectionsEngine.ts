@@ -195,37 +195,25 @@ export class CollectionsEngineStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  collectionId: string,
-  engineId: string,
-) => `${collectionParent(project, location, collectionId)}/engines/${engineId}`;
+const resourceName = (project: string, location: string, collectionId: string, engineId: string) =>
+  `${collectionParent(project, location, collectionId)}/engines/${engineId}`;
 
 const solutionOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1EngineSolutionTypeEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1EngineSolutionTypeEnum | undefined,
 ) => value ?? "SOLUTION_TYPE_SEARCH";
 
 const verticalOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1EngineIndustryVerticalEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1EngineIndustryVerticalEnum | undefined,
 ) => value ?? "GENERIC";
 
-const idsOf = (values: readonly string[] | undefined) =>
-  (values ?? []).map(dataStoreIdOf);
+const idsOf = (values: readonly string[] | undefined) => (values ?? []).map(dataStoreIdOf);
 
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEngines({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toAttrs = (
-  engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine,
-  project: string,
-) => {
+const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, project: string) => {
   const name = engine.name ?? "";
   const parsed = parseResourceName(name, "engines");
   return {
@@ -248,13 +236,10 @@ const toAttrs = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine
-        ? Effect.succeed(engine)
-        : Effect.fail(new CollectionsEngineNotResolved({ name })),
+      engine ? Effect.succeed(engine) : Effect.fail(new CollectionsEngineNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -263,13 +248,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined
-        ? Effect.void
-        : Effect.fail(new CollectionsEngineStillExists({ name })),
+      engine === undefined ? Effect.void : Effect.fail(new CollectionsEngineStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.CollectionsEngineStillExists",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -292,25 +274,17 @@ export const CollectionsEngineProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.engineId ?? output?.engineId;
       const nextId = news.engineId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
-      const previousCollection = normalizeCollection(
-        olds?.collectionId ?? output?.collectionId,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
+      const previousCollection = normalizeCollection(olds?.collectionId ?? output?.collectionId);
       const nextCollection = normalizeCollection(
         news.collectionId ?? olds?.collectionId ?? output?.collectionId,
       );
       const previousSolution = solutionOf(
-        olds?.solutionType ??
-          (output?.solutionType as CollectionsEngineProps["solutionType"]),
+        olds?.solutionType ?? (output?.solutionType as CollectionsEngineProps["solutionType"]),
       );
       const nextSolution = solutionOf(
-        news.solutionType ??
-          (output?.solutionType as CollectionsEngineProps["solutionType"]),
+        news.solutionType ?? (output?.solutionType as CollectionsEngineProps["solutionType"]),
       );
       const previousVertical = verticalOf(
         olds?.industryVertical ??
@@ -321,9 +295,7 @@ export const CollectionsEngineProvider = () =>
           (output?.industryVertical as CollectionsEngineProps["industryVertical"]),
       );
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousCollection !== nextCollection ||
         previousSolution !== nextSolution ||
@@ -341,18 +313,11 @@ export const CollectionsEngineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const engineId = yield* toResourceId(
-        id,
-        olds?.engineId,
-        output?.engineId,
-      );
+      const engineId = yield* toResourceId(id, olds?.engineId, output?.engineId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const collectionId = normalizeCollection(
-        olds?.collectionId ?? output?.collectionId,
-      );
+      const collectionId = normalizeCollection(olds?.collectionId ?? output?.collectionId);
       const existing = yield* getByName(
-        output?.name ??
-          resourceName(env.project, location, collectionId, engineId),
+        output?.name ?? resourceName(env.project, location, collectionId, engineId),
       );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -363,9 +328,7 @@ export const CollectionsEngineProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const collectionId = normalizeCollection(
-        news.collectionId ?? output?.collectionId,
-      );
+      const collectionId = normalizeCollection(news.collectionId ?? output?.collectionId);
       const engineId = yield* toResourceId(id, news.engineId, output?.engineId);
       const displayName = news.displayName ?? engineId;
       const solutionType = solutionOf(news.solutionType);
@@ -373,8 +336,7 @@ export const CollectionsEngineProvider = () =>
       const dataStoreIds = idsOf(news.dataStoreIds ?? output?.dataStoreIds);
       const parent = collectionParent(env.project, location, collectionId);
       const fallbackName =
-        output?.name ??
-        resourceName(env.project, location, collectionId, engineId);
+        output?.name ?? resourceName(env.project, location, collectionId, engineId);
       const searchEngineConfig =
         solutionType === "SOLUTION_TYPE_SEARCH"
           ? (news.searchEngineConfig ?? {})
@@ -396,8 +358,7 @@ export const CollectionsEngineProvider = () =>
               searchEngineConfig,
               commonConfig: news.commonConfig,
               chatEngineConfig: news.chatEngineConfig,
-              mediaRecommendationEngineConfig:
-                news.mediaRecommendationEngineConfig,
+              mediaRecommendationEngineConfig: news.mediaRecommendationEngineConfig,
               disableAnalytics: disableAnalytics ? true : undefined,
               appType: news.appType,
             },
@@ -415,18 +376,13 @@ export const CollectionsEngineProvider = () =>
 
       const name = current.name ?? fallbackName;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const analyticsChanged =
-        (current.disableAnalytics === true) !== disableAnalytics;
+      const analyticsChanged = (current.disableAnalytics === true) !== disableAnalytics;
       const companyChanged =
-        (current.commonConfig?.companyName ?? "") !==
-        (news.commonConfig?.companyName ?? "");
+        (current.commonConfig?.companyName ?? "") !== (news.commonConfig?.companyName ?? "");
       const searchChanged =
         searchEngineConfig !== undefined &&
         !sameJson(current.searchEngineConfig, searchEngineConfig);
-      const dataStoresChanged = !sameStringList(
-        current.dataStoreIds,
-        dataStoreIds,
-      );
+      const dataStoresChanged = !sameStringList(current.dataStoreIds, dataStoreIds);
 
       if (
         displayNameChanged ||
@@ -435,27 +391,26 @@ export const CollectionsEngineProvider = () =>
         searchChanged ||
         dataStoresChanged
       ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEngines({
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEngines({
+          name,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            analyticsChanged ? "disable_analytics" : undefined,
+            companyChanged ? "common_config" : undefined,
+            searchChanged ? "search_engine_config" : undefined,
+            dataStoresChanged ? "data_store_ids" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              displayNameChanged ? "display_name" : undefined,
-              analyticsChanged ? "disable_analytics" : undefined,
-              companyChanged ? "common_config" : undefined,
-              searchChanged ? "search_engine_config" : undefined,
-              dataStoresChanged ? "data_store_ids" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              disableAnalytics,
-              commonConfig: news.commonConfig,
-              searchEngineConfig,
-              dataStoreIds,
-            },
-          });
+            displayName,
+            disableAnalytics,
+            commonConfig: news.commonConfig,
+            searchEngineConfig,
+            dataStoreIds,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

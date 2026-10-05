@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   privateca.getProjectsLocationsCaPools({ name }).pipe(
@@ -87,11 +84,9 @@ test.provider(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.tier).toEqual("DEVOPS");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const trust = yield* privateca.fetchCaCertsProjectsLocationsCaPools({
         caPool: created.name,
@@ -134,10 +129,9 @@ test.provider(
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ca");
       expect(refetched.issuancePolicy?.maximumLifetime).toEqual("2592000s");
-      expect(
-        refetched.issuancePolicy?.allowedIssuanceModes
-          ?.allowConfigBasedIssuance,
-      ).toEqual(true);
+      expect(refetched.issuancePolicy?.allowedIssuanceModes?.allowConfigBasedIssuance).toEqual(
+        true,
+      );
 
       yield* stack.destroy();
 

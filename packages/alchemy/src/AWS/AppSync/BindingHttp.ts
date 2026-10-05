@@ -30,12 +30,7 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
  * the request; the deploy-time half grants `actions` on `*` (these actions
  * define no IAM resource types).
  */
-export const makeAppSyncApiHttpBinding = <
-  I extends { apiId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeAppSyncApiHttpBinding = <I extends { apiId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.AppSync.FlushApiCache`. */
   tag: string;
   /** The distilled operation; `apiId` is injected from the bound API. */
@@ -69,9 +64,7 @@ export const makeAppSyncApiHttpBinding = <
         }
       }
 
-      return Effect.fn(`${options.tag}(${api.LogicalId})`)(function* (
-        request?: Omit<I, "apiId">,
-      ) {
+      return Effect.fn(`${options.tag}(${api.LogicalId})`)(function* (request?: Omit<I, "apiId">) {
         return yield* op({ ...request, apiId: yield* ApiId } as I);
       });
     });

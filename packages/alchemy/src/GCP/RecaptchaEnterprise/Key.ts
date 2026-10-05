@@ -274,9 +274,7 @@ export type Key = Resource<
  */
 export const Key = Resource<Key>("GCP.RecaptchaEnterprise.Key");
 
-export class KeyNotResolved extends Data.TaggedError(
-  "GCP.RecaptchaEnterprise.KeyNotResolved",
-)<{
+export class KeyNotResolved extends Data.TaggedError("GCP.RecaptchaEnterprise.KeyNotResolved")<{
   name: string;
 }> {}
 
@@ -309,10 +307,7 @@ const toTestingOptions = (
     | undefined,
 ): TestingOptions | undefined => {
   if (options === undefined) return undefined;
-  if (
-    options.testingScore === undefined &&
-    options.testingChallenge === undefined
-  ) {
+  if (options.testingScore === undefined && options.testingChallenge === undefined) {
     return undefined;
   }
   return {
@@ -347,8 +342,7 @@ const toAndroidSettings = (
   if (settings === undefined) return undefined;
   return {
     allowedPackageNames: stringList(settings.allowedPackageNames),
-    supportNonGoogleAppStoreDistribution:
-      settings.supportNonGoogleAppStoreDistribution,
+    supportNonGoogleAppStoreDistribution: settings.supportNonGoogleAppStoreDistribution,
     allowAllPackageNames: settings.allowAllPackageNames,
   };
 };
@@ -396,8 +390,7 @@ const toExpressSettings = (
     | Record<string, never>
     | {}
     | undefined,
-): Record<string, never> | {} | undefined =>
-  settings === undefined ? undefined : {};
+): Record<string, never> | {} | undefined => (settings === undefined ? undefined : {});
 
 const desiredWebSettings = (news: KeyProps): WebKeySettings => ({
   allowAllDomains: true,
@@ -432,9 +425,7 @@ const toKeyBody = (
 });
 
 const unspecified = (value: string | undefined) =>
-  value === undefined || value.length === 0 || value.endsWith("_UNSPECIFIED")
-    ? ""
-    : value;
+  value === undefined || value.length === 0 || value.endsWith("_UNSPECIFIED") ? "" : value;
 
 const testingFingerprint = (options: TestingOptions | undefined) =>
   JSON.stringify({
@@ -444,13 +435,9 @@ const testingFingerprint = (options: TestingOptions | undefined) =>
 
 const webFingerprint = (settings: WebKeySettings | undefined) =>
   JSON.stringify({
-    allowedDomains: settings?.allowedDomains
-      ? [...settings.allowedDomains].slice().sort()
-      : [],
+    allowedDomains: settings?.allowedDomains ? [...settings.allowedDomains].slice().sort() : [],
     integrationType: unspecified(settings?.integrationType),
-    challengeSecurityPreference: unspecified(
-      settings?.challengeSecurityPreference,
-    ),
+    challengeSecurityPreference: unspecified(settings?.challengeSecurityPreference),
     allowAllDomains: settings?.allowAllDomains === true,
     allowAmpTraffic: settings?.allowAmpTraffic === true,
     challengeSettings: settings?.challengeSettings ?? null,
@@ -461,8 +448,7 @@ const androidFingerprint = (settings: AndroidKeySettings | undefined) =>
     allowedPackageNames: settings?.allowedPackageNames
       ? [...settings.allowedPackageNames].slice().sort()
       : [],
-    supportNonGoogleAppStoreDistribution:
-      settings?.supportNonGoogleAppStoreDistribution === true,
+    supportNonGoogleAppStoreDistribution: settings?.supportNonGoogleAppStoreDistribution === true,
     allowAllPackageNames: settings?.allowAllPackageNames === true,
   });
 
@@ -482,10 +468,7 @@ const wafFingerprint = (settings: WafSettings | undefined) =>
     wafFeature: settings?.wafFeature ?? "",
   });
 
-const toAttrs = (
-  key: recaptchaenterprise.GoogleCloudRecaptchaenterpriseV1Key,
-  project: string,
-) => {
+const toAttrs = (key: recaptchaenterprise.GoogleCloudRecaptchaenterpriseV1Key, project: string) => {
   const name = key.name ?? "";
   return {
     name,
@@ -510,11 +493,7 @@ export const KeyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.keyId ?? output?.keyId;
-      if (
-        news.keyId !== undefined &&
-        previousId !== undefined &&
-        news.keyId !== previousId
-      ) {
+      if (news.keyId !== undefined && previousId !== undefined && news.keyId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousKind = kindOf(olds ?? output ?? {});
@@ -523,19 +502,13 @@ export const KeyProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousType =
-        olds?.webSettings?.integrationType ??
-        output?.webSettings?.integrationType;
+        olds?.webSettings?.integrationType ?? output?.webSettings?.integrationType;
       const nextType = news.webSettings?.integrationType;
-      if (
-        previousType !== undefined &&
-        nextType !== undefined &&
-        previousType !== nextType
-      ) {
+      if (previousType !== undefined && nextType !== undefined && previousType !== nextType) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousAmp =
-        olds?.webSettings?.allowAmpTraffic ??
-        output?.webSettings?.allowAmpTraffic;
+        olds?.webSettings?.allowAmpTraffic ?? output?.webSettings?.allowAmpTraffic;
       if (
         news.webSettings?.allowAmpTraffic !== undefined &&
         previousAmp !== undefined &&
@@ -575,9 +548,7 @@ export const KeyProvider = () =>
       const existing = yield* findOwnedKey(env.project, id, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -586,9 +557,7 @@ export const KeyProvider = () =>
         const keys = yield* listKeys(env.project);
         return keys
           .filter((key) =>
-            Object.keys(key.labels ?? {}).some((label) =>
-              label.startsWith("alchemy-"),
-            ),
+            Object.keys(key.labels ?? {}).some((label) => label.startsWith("alchemy-")),
           )
           .map((key) => toAttrs(key, env.project));
       }),
@@ -622,11 +591,7 @@ export const KeyProvider = () =>
             parent: `projects/${env.project}`,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedKey(env.project, id, lookupName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedKey(env.project, id, lookupName)));
         current = created ?? undefined;
       }
 
@@ -638,10 +603,7 @@ export const KeyProvider = () =>
 
       const name = current.name ?? lookupName;
       const labelsChanged = (() => {
-        const { upsert, removed } = diffLabels(
-          tagRecord(current.labels),
-          desiredLabels,
-        );
+        const { upsert, removed } = diffLabels(tagRecord(current.labels), desiredLabels);
         return upsert.length > 0 || removed.length > 0;
       })();
       const displayChanged = !sameText(current.displayName, displayName);
@@ -657,8 +619,7 @@ export const KeyProvider = () =>
         kind === "ios" &&
         iosFingerprint(toIosSettings(current.iosSettings)) !==
           iosFingerprint(toIosSettings(news.iosSettings ?? {}));
-      const expressChanged =
-        kind === "express" && current.expressSettings === undefined;
+      const expressChanged = kind === "express" && current.expressSettings === undefined;
       const wafChanged =
         wafFingerprint(toWafSettings(current.wafSettings)) !==
         wafFingerprint(toWafSettings(news.wafSettings));

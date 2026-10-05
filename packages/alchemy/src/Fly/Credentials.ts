@@ -4,7 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import {
+  deferUntilFirstUse,
+  orDieCredentialsUnavailable,
+  resolveProviderConfig,
+} from "../Auth/Resolve.ts";
 import * as Output from "../Output.ts";
 import {
   FLY_AUTH_PROVIDER_NAME,
@@ -49,15 +53,14 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
  * into Machine env as `FLY_API_TOKEN`. So: reuse the ambient
  * `Credentials` when present, otherwise read the env.
  */
-export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> =
-  Layer.effect(
-    Credentials,
-    Effect.gen(function* () {
-      const ambient = yield* Effect.serviceOption(Credentials);
-      if (Option.isSome(ambient)) return ambient.value;
-      return yield* Credentials.pipe(Effect.provide(CredentialsFromEnv));
-    }),
-  );
+export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effect(
+  Credentials,
+  Effect.gen(function* () {
+    const ambient = yield* Effect.serviceOption(Credentials);
+    if (Option.isSome(ambient)) return ambient.value;
+    return yield* Credentials.pipe(Effect.provide(CredentialsFromEnv));
+  }),
+);
 
 /**
  * Build a `Credentials` layer that resolves Fly credentials via the current
@@ -71,23 +74,29 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const { profileName, resolve } = yield* resolveProviderConfig<
-        FlyAuthConfig,
-        FlyResolvedCredentials
-      >(FLY_AUTH_PROVIDER_NAME);
-
-      return yield* resolve.pipe(
-        Effect.map((creds) => ({
-          apiKey: creds.apiKey,
-          apiBaseUrl: creds.apiBaseUrl,
-        })),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({
-              message: `Failed to resolve Fly credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
+      // Defer profile lookup and credential resolution until first use, so
+      // building the provider layers never requires a configured profile.
+      const resolve = yield* resolveProviderConfig<FlyAuthConfig, FlyResolvedCredentials>(
+        FLY_AUTH_PROVIDER_NAME,
+      ).pipe(
+        Effect.flatMap(({ profileName, resolve }) =>
+          resolve.pipe(
+            Effect.map((creds) => ({
+              apiKey: creds.apiKey,
+              apiBaseUrl: creds.apiBaseUrl,
+            })),
+            Effect.mapError(
+              (e) =>
+                new ConfigError({
+                  message: `Failed to resolve Fly credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+                }),
+            ),
+          ),
         ),
-        Effect.orDie,
+        deferUntilFirstUse,
+      );
+      return yield* resolve.pipe(
+        orDieCredentialsUnavailable(FLY_AUTH_PROVIDER_NAME),
         Effect.cached,
       );
     }),

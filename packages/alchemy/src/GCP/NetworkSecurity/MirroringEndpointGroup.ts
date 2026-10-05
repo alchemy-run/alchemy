@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -30,8 +25,7 @@ import {
 import { waitForOperation } from "./operations.ts";
 
 const COLLECTION = "mirroringEndpointGroups";
-const DEFAULT_TYPE =
-  "DIRECT" satisfies networksecurity.MirroringEndpointGroupTypeEnum;
+const DEFAULT_TYPE = "DIRECT" satisfies networksecurity.MirroringEndpointGroupTypeEnum;
 
 export type MirroringEndpointGroupType =
   | networksecurity.MirroringEndpointGroupTypeEnum
@@ -196,9 +190,7 @@ const isPendingState = (state: string | undefined) =>
   state === "CREATING" || state === "DELETING" || state === "STATE_UNSPECIFIED";
 
 const toAssociations = (
-  associations:
-    | networksecurity.MirroringEndpointGroupAssociationDetailsList
-    | undefined,
+  associations: networksecurity.MirroringEndpointGroupAssociationDetailsList | undefined,
 ): MirroringEndpointGroupAssociationDetail[] =>
   (associations ?? []).map((item) => ({
     name: item.name,
@@ -207,9 +199,7 @@ const toAssociations = (
   }));
 
 const toConnected = (
-  groups:
-    | networksecurity.MirroringEndpointGroupConnectedDeploymentGroupList
-    | undefined,
+  groups: networksecurity.MirroringEndpointGroupConnectedDeploymentGroupList | undefined,
 ): MirroringEndpointGroupConnectedDeploymentGroup[] =>
   (groups ?? []).map((item) => ({
     name: item.name,
@@ -219,10 +209,7 @@ const toConnected = (
     })),
   }));
 
-const toAttrs = (
-  group: networksecurity.MirroringEndpointGroup,
-  project: string,
-) => {
+const toAttrs = (group: networksecurity.MirroringEndpointGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -251,8 +238,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (group): group is networksecurity.MirroringEndpointGroup =>
-        group !== undefined,
+      (group): group is networksecurity.MirroringEndpointGroup => group !== undefined,
       () => new MirroringEndpointGroupNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -264,8 +250,7 @@ const waitUntilReady = (name: string) =>
       () => new MirroringEndpointGroupNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -279,8 +264,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new MirroringEndpointGroupStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -293,13 +277,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.mirroringEndpointGroups ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.mirroringEndpointGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((group) => toAttrs(group, project)),
       Stream.runCollect,
@@ -321,31 +301,18 @@ export const MirroringEndpointGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.mirroringEndpointGroupId ?? output?.mirroringEndpointGroupId;
+      const previousId = olds?.mirroringEndpointGroupId ?? output?.mirroringEndpointGroupId;
       const nextId = news.mirroringEndpointGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousGroup = lastSegment(
-        olds?.mirroringDeploymentGroup ??
-          output?.mirroringDeploymentGroup ??
-          "",
+        olds?.mirroringDeploymentGroup ?? output?.mirroringDeploymentGroup ?? "",
       );
       const nextGroup = lastSegment(news.mirroringDeploymentGroup);
-      const previousType = (
-        olds?.type ??
-        output?.type ??
-        DEFAULT_TYPE
-      ).toUpperCase();
+      const previousType = (olds?.type ?? output?.type ?? DEFAULT_TYPE).toUpperCase();
       const nextType = (news.type ?? previousType).toUpperCase();
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup) ||
         previousType !== nextType;
@@ -363,19 +330,11 @@ export const MirroringEndpointGroupProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          mirroringEndpointGroupId,
-        );
+        output?.name ?? resourceName(env.project, location, COLLECTION, mirroringEndpointGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -393,15 +352,8 @@ export const MirroringEndpointGroupProvider = () =>
         "meg",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        mirroringEndpointGroupId,
-      );
-      const mirroringDeploymentGroup = toResourcePath(
-        news.mirroringDeploymentGroup,
-      );
+      const name = resourceName(env.project, location, COLLECTION, mirroringEndpointGroupId);
+      const mirroringDeploymentGroup = toResourcePath(news.mirroringDeploymentGroup);
       const type = news.type ?? DEFAULT_TYPE;
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -443,24 +395,22 @@ export const MirroringEndpointGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsMirroringEndpointGroups({
+        const operation = yield* networksecurity.patchProjectsLocationsMirroringEndpointGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

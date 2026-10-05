@@ -99,52 +99,29 @@ export type Lien = Resource<
  */
 export const Lien = Resource<Lien>("GCP.ResourceManager.Lien");
 
-export class LienNotResolved extends Data.TaggedError(
-  "GCP.ResourceManager.LienNotResolved",
-)<{
+export class LienNotResolved extends Data.TaggedError("GCP.ResourceManager.LienNotResolved")<{
   name: string;
 }> {}
 
-export class LienStillExists extends Data.TaggedError(
-  "GCP.ResourceManager.LienStillExists",
-)<{
+export class LienStillExists extends Data.TaggedError("GCP.ResourceManager.LienStillExists")<{
   name: string;
 }> {}
 
-const unique = (values: string[]) => [
-  ...new Set(values.filter((value) => value.length > 0)),
-];
+const unique = (values: string[]) => [...new Set(values.filter((value) => value.length > 0))];
 
-const parentAliases = (
-  parent: string,
-  project: string,
-  projectNumber: string,
-) => {
+const parentAliases = (parent: string, project: string, projectNumber: string) => {
   const normalized = projectParent(parent);
   if (!normalized.startsWith("projects/")) return [normalized];
-  return unique([
-    normalized,
-    `projects/${project}`,
-    `projects/${projectNumber}`,
-  ]);
+  return unique([normalized, `projects/${project}`, `projects/${projectNumber}`]);
 };
 
-const sameParent = (
-  left: string,
-  right: string,
-  project: string,
-  projectNumber: string,
-) => {
+const sameParent = (left: string, right: string, project: string, projectNumber: string) => {
   const aliases = new Set(parentAliases(left, project, projectNumber));
-  return parentAliases(right, project, projectNumber).some((alias) =>
-    aliases.has(alias),
-  );
+  return parentAliases(right, project, projectNumber).some((alias) => aliases.has(alias));
 };
 
 const restrictionsOf = (values: readonly string[] | undefined) => {
-  const next = [...(values ?? DEFAULT_LIEN_RESTRICTIONS)].filter(
-    (value) => value.length > 0,
-  );
+  const next = [...(values ?? DEFAULT_LIEN_RESTRICTIONS)].filter((value) => value.length > 0);
   return next.length > 0 ? next : [...DEFAULT_LIEN_RESTRICTIONS];
 };
 
@@ -175,11 +152,7 @@ const listOnParent = (parent: string) =>
       pageSize: 300,
     }),
     (page) => page.liens,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as resourcemanager.Lien[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as resourcemanager.Lien[])));
 
 const listOnParents = (parents: string[]) =>
   Effect.gen(function* () {
@@ -230,19 +203,9 @@ const findMatching = (
       const byName = yield* getByName(resourceName);
       if (byName !== undefined) return byName;
     }
-    const liens = yield* listOnParents(
-      parentAliases(parent, project, projectNumber),
-    );
+    const liens = yield* listOnParents(parentAliases(parent, project, projectNumber));
     return liens.find((lien) =>
-      matchesDesired(
-        lien,
-        parent,
-        origin,
-        reason,
-        restrictions,
-        project,
-        projectNumber,
-      ),
+      matchesDesired(lien, parent, origin, reason, restrictions, project, projectNumber),
     );
   });
 
@@ -254,14 +217,7 @@ const waitUntilExists = (
   project: string,
   projectNumber: string,
 ) =>
-  findMatching(
-    parent,
-    origin,
-    reason,
-    restrictions,
-    project,
-    projectNumber,
-  ).pipe(
+  findMatching(parent, origin, reason, restrictions, project, projectNumber).pipe(
     Effect.filterOrFail(
       (lien): lien is resourcemanager.Lien => lien !== undefined,
       () => new LienNotResolved({ name: parent }),
@@ -276,9 +232,7 @@ const waitUntilExists = (
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lien) =>
-      lien === undefined
-        ? Effect.void
-        : Effect.fail(new LienStillExists({ name })),
+      lien === undefined ? Effect.void : Effect.fail(new LienStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.LienStillExists",
@@ -296,34 +250,22 @@ export const LienProvider = () =>
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
       const previousParent = olds?.parent ?? output?.parent;
-      const nextParent = projectParent(
-        news.parent ?? previousParent ?? env.project,
-      );
+      const nextParent = projectParent(news.parent ?? previousParent ?? env.project);
       const parentChanged =
         previousParent !== undefined &&
         !sameParent(previousParent, nextParent, env.project, projectNumber);
 
       const previousOrigin = originOf(olds?.origin ?? output?.origin);
-      const originChanged =
-        news.origin !== undefined && originOf(news.origin) !== previousOrigin;
+      const originChanged = news.origin !== undefined && originOf(news.origin) !== previousOrigin;
 
-      const previousRestrictions = restrictionsOf(
-        olds?.restrictions ?? output?.restrictions,
-      );
+      const previousRestrictions = restrictionsOf(olds?.restrictions ?? output?.restrictions);
       const restrictionsChanged =
-        news.restrictions !== undefined &&
-        !sameStringList(news.restrictions, previousRestrictions);
+        news.restrictions !== undefined && !sameStringList(news.restrictions, previousRestrictions);
 
       const previousReason = olds?.reason ?? output?.reason;
-      const reasonChanged =
-        news.reason !== undefined && news.reason !== previousReason;
+      const reasonChanged = news.reason !== undefined && news.reason !== previousReason;
 
-      if (
-        !parentChanged &&
-        !originChanged &&
-        !restrictionsChanged &&
-        !reasonChanged
-      ) {
+      if (!parentChanged && !originChanged && !restrictionsChanged && !reasonChanged) {
         return undefined;
       }
       return { action: "replace" as const, deleteFirst: true };
@@ -332,9 +274,7 @@ export const LienProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
-      const parent = projectParent(
-        output?.parent ?? olds?.parent ?? `projects/${projectNumber}`,
-      );
+      const parent = projectParent(output?.parent ?? olds?.parent ?? `projects/${projectNumber}`);
       const existing = yield* findMatching(
         parent,
         originOf(olds?.origin ?? output?.origin),
@@ -355,11 +295,7 @@ export const LienProvider = () =>
         const env = yield* GcpEnvironment.current;
         const projectNumber = yield* projectNumberOf(env.project);
         const liens = yield* listOnParents(
-          parentAliases(
-            `projects/${projectNumber}`,
-            env.project,
-            projectNumber,
-          ),
+          parentAliases(`projects/${projectNumber}`, env.project, projectNumber),
         );
         // `origin` identifies the system that placed a lien.
         return liens
@@ -370,9 +306,7 @@ export const LienProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const projectNumber = yield* projectNumberOf(env.project);
-      const parent = projectParent(
-        news.parent ?? output?.parent ?? `projects/${projectNumber}`,
-      );
+      const parent = projectParent(news.parent ?? output?.parent ?? `projects/${projectNumber}`);
       const origin = originOf(news.origin);
       const restrictions = restrictionsOf(news.restrictions);
       const reason = reasonOf(news.reason);
@@ -389,15 +323,7 @@ export const LienProvider = () =>
 
       if (
         current !== undefined &&
-        !matchesDesired(
-          current,
-          parent,
-          origin,
-          reason,
-          restrictions,
-          env.project,
-          projectNumber,
-        )
+        !matchesDesired(current, parent, origin, reason, restrictions, env.project, projectNumber)
       ) {
         if (current.name !== undefined) {
           yield* resourcemanager

@@ -1,6 +1,6 @@
-import * as Prisma from "@/Prisma";
-import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
+import * as Alchemy from "@/index.ts";
+import * as Prisma from "@/Prisma";
 import ReadCompute from "./read-compute.ts";
 import ReadWriteCompute from "./readwrite-compute.ts";
 import WriteCompute from "./write-compute.ts";

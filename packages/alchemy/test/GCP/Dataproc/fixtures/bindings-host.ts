@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import { CAPACITY_REGION } from "../../zones.ts";
 
@@ -32,8 +32,5 @@ export default class DataprocBindingsHost extends GCP.Function<DataprocBindingsH
         }),
       }),
     };
-  }).pipe(
-    Effect.provide(GCP.Dataproc.GetClusterHttp),
-    Effect.provide(GCP.Dataproc.SubmitJobHttp),
-  ),
+  }).pipe(Effect.provide(GCP.Dataproc.GetClusterHttp), Effect.provide(GCP.Dataproc.SubmitJobHttp)),
 ) {}

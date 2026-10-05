@@ -4,8 +4,7 @@ import type { ReadTableClient } from "./ReadTable.ts";
 import type { Table } from "./Table.ts";
 import type { WriteTableClient } from "./WriteTable.ts";
 
-export interface ReadWriteTableClient
-  extends ReadTableClient, WriteTableClient {}
+export interface ReadWriteTableClient extends ReadTableClient, WriteTableClient {}
 
 /**
  * Read and write access to a BigQuery {@link Table}. Grants
@@ -35,6 +34,4 @@ export interface ReadWriteTable extends Binding.Service<
   (table: Table) => Effect.Effect<ReadWriteTableClient>
 > {}
 
-export const ReadWriteTable = Binding.Service<ReadWriteTable>(
-  "GCP.BigQuery.ReadWriteTable",
-);
+export const ReadWriteTable = Binding.Service<ReadWriteTable>("GCP.BigQuery.ReadWriteTable");

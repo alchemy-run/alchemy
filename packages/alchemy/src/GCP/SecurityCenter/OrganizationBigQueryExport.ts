@@ -171,14 +171,7 @@ const getByName = (name: string) =>
 
 export const OrganizationBigQueryExportProvider = () =>
   Provider.succeed(OrganizationBigQueryExport, {
-    stables: [
-      "name",
-      "exportId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "exportId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -186,9 +179,7 @@ export const OrganizationBigQueryExportProvider = () =>
         replaceOn(olds?.exportId ?? output?.exportId, news.exportId) ??
         replaceOn(
           olds?.organization ?? output?.organization,
-          news.organization !== undefined
-            ? organizationParent(news.organization)
-            : undefined,
+          news.organization !== undefined ? organizationParent(news.organization) : undefined,
         )
       );
     }),
@@ -199,18 +190,12 @@ export const OrganizationBigQueryExportProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const exportId = yield* toPhysicalId(
-        id,
-        olds?.exportId,
-        output?.exportId,
-      );
+      const exportId = yield* toPhysicalId(id, olds?.exportId, output?.exportId);
       const name = output?.name ?? resourceName(organization, exportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -221,9 +206,7 @@ export const OrganizationBigQueryExportProvider = () =>
         return yield* scc.listOrganizationsBigQueryExports
           .pages({ parent: organization, pageSize: 100 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.bigQueryExports ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.bigQueryExports ?? [])),
             Stream.filter((exp) => hasOwnershipMarker(exp.description)),
             Stream.map((exp) => toAttrs(exp, organization, env.project)),
             Stream.runCollect,
@@ -234,10 +217,7 @@ export const OrganizationBigQueryExportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const exportId = yield* toPhysicalId(id, news.exportId, output?.exportId);
       const name = resourceName(organization, exportId);
       const ownership = yield* createInternalLabels(id);

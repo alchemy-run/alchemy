@@ -11,8 +11,7 @@ import * as Stream from "effect/Stream";
  * backoff gives up before the minute rolls over, so the suite rides it out.
  */
 export const quotaTolerant = GcpRetry.policy({
-  while: (error) =>
-    Category.isThrottling(error) || Category.isTransientError(error),
+  while: (error) => Category.isThrottling(error) || Category.isTransientError(error),
   schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(12)]),
 });
 
@@ -34,11 +33,7 @@ const listAgents = (parent: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
-export const ensureAgent = (
-  project: string,
-  displayName: string,
-  location = DEFAULT_LOCATION,
-) =>
+export const ensureAgent = (project: string, displayName: string, location = DEFAULT_LOCATION) =>
   Effect.gen(function* () {
     const parent = locationParent(project, location);
     const agents = yield* listAgents(parent);
@@ -83,9 +78,7 @@ export const ensureEntityType = (agent: string, displayName: string) =>
         Effect.map((chunk) => Array.from(chunk)),
         Effect.catchTag("NotFound", () => Effect.succeed([])),
       );
-    const existing = listed.find(
-      (entityType) => entityType.displayName === displayName,
-    );
+    const existing = listed.find((entityType) => entityType.displayName === displayName);
     if (existing?.name) {
       const current = yield* getEntityType(existing.name);
       if (current !== undefined) return current;

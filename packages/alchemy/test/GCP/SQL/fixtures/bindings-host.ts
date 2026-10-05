@@ -1,8 +1,8 @@
-import * as Drizzle from "@/Drizzle/Postgres.ts";
-import * as GCP from "@/GCP";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Test-only password; the test writes it into {@link Password}. */
@@ -51,9 +51,7 @@ export default class SqlBindingsHost extends GCP.Function<SqlBindingsHost>()(
     const executeSql = yield* GCP.SQL.ExecuteSql(instance);
     const getInstance = yield* GCP.SQL.GetInstance(instance);
     const getUser = yield* GCP.SQL.GetUser(user);
-    const db = yield* Drizzle.Postgres(
-      connect.pipe(Effect.map((info) => info.url)),
-    );
+    const db = yield* Drizzle.Postgres(connect.pipe(Effect.map((info) => info.url)));
     const databaseName = yield* database.databaseName;
     const userName = yield* user.userName;
     const secretName = yield* password.name;
@@ -88,12 +86,8 @@ export default class SqlBindingsHost extends GCP.Function<SqlBindingsHost>()(
           });
           return {
             status: response.status,
-            columns: (response.results?.[0]?.columns ?? []).map(
-              (column) => column.name,
-            ),
-            values: (response.results?.[0]?.rows?.[0]?.values ?? []).map(
-              (cell) => cell.value,
-            ),
+            columns: (response.results?.[0]?.columns ?? []).map((column) => column.name),
+            values: (response.results?.[0]?.rows?.[0]?.values ?? []).map((cell) => cell.value),
           };
         }),
         getInstance: getInstance().pipe(

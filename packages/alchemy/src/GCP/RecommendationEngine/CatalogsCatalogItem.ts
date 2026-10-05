@@ -202,9 +202,7 @@ const toAttrs = (item: CatalogItem, project: string, nameHint?: string) => {
   const catalogItemId = item.id ?? parsed.id;
   const location = parsed.location || DEFAULT_LOCATION;
   const catalog =
-    parsed.catalog.length > 0
-      ? parsed.catalog
-      : expandCatalog(undefined, project, location);
+    parsed.catalog.length > 0 ? parsed.catalog : expandCatalog(undefined, project, location);
   const name =
     hinted.includes("/catalogItems/") || hinted.includes("/catalogitems/")
       ? hinted
@@ -268,13 +266,8 @@ export const CatalogsCatalogItemProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const catalog =
-        output?.catalog ?? expandCatalog(olds?.catalog, env.project, location);
-      const catalogItemId = yield* toPhysical(
-        id,
-        olds?.catalogItemId,
-        output?.catalogItemId,
-      );
+      const catalog = output?.catalog ?? expandCatalog(olds?.catalog, env.project, location);
+      const catalogItemId = yield* toPhysical(id, olds?.catalogItemId, output?.catalogItemId);
       const name = output?.name ?? itemName(catalog, catalogItemId);
       const existing = yield* getCatalogItem(name);
       if (existing === undefined) return undefined;
@@ -283,9 +276,7 @@ export const CatalogsCatalogItemProvider = () =>
       // ownership marker: a generated id derives from this stack, stage,
       // logical id and instance; an explicit id is only ours when state
       // has it.
-      return output !== undefined || olds?.catalogItemId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.catalogItemId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -313,11 +304,7 @@ export const CatalogsCatalogItemProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
       const catalog = expandCatalog(news.catalog, env.project, location);
-      const catalogItemId = yield* toPhysical(
-        id,
-        news.catalogItemId,
-        output?.catalogItemId,
-      );
+      const catalogItemId = yield* toPhysical(id, news.catalogItemId, output?.catalogItemId);
       const name = itemName(catalog, catalogItemId);
       const description = news.description ?? "";
       const tags = news.tags ?? [];
@@ -340,8 +327,7 @@ export const CatalogsCatalogItemProvider = () =>
       }
 
       const title = news.title ?? catalogItemId;
-      const desiredHierarchies =
-        news.categoryHierarchies ?? defaultHierarchies();
+      const desiredHierarchies = news.categoryHierarchies ?? defaultHierarchies();
       const mask = updateMaskOf(
         sameText(current.title, title) ? undefined : "title",
         sameText(current.description, description) ? undefined : "description",
@@ -349,32 +335,20 @@ export const CatalogsCatalogItemProvider = () =>
           ? undefined
           : "categoryHierarchies",
         sameStringList(current.tags, tags) ? undefined : "tags",
-        sameText(current.itemGroupId, news.itemGroupId)
-          ? undefined
-          : "itemGroupId",
-        sameText(current.languageCode, news.languageCode)
-          ? undefined
-          : "languageCode",
-        sameJson(
-          productMetadataOf(current.productMetadata),
-          news.productMetadata,
-        )
+        sameText(current.itemGroupId, news.itemGroupId) ? undefined : "itemGroupId",
+        sameText(current.languageCode, news.languageCode) ? undefined : "languageCode",
+        sameJson(productMetadataOf(current.productMetadata), news.productMetadata)
           ? undefined
           : "productMetadata",
-        sameJson(current.itemAttributes, news.itemAttributes)
-          ? undefined
-          : "itemAttributes",
+        sameJson(current.itemAttributes, news.itemAttributes) ? undefined : "itemAttributes",
       );
 
       if (mask.length > 0) {
-        current =
-          yield* recommendationengine.patchProjectsLocationsCatalogsCatalogItems(
-            {
-              name,
-              updateMask: mask,
-              body: { ...body, id: catalogItemId },
-            },
-          );
+        current = yield* recommendationengine.patchProjectsLocationsCatalogsCatalogItems({
+          name,
+          updateMask: mask,
+          body: { ...body, id: catalogItemId },
+        });
       }
 
       return toAttrs(current, env.project, name);

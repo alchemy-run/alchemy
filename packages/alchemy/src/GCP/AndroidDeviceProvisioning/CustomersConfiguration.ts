@@ -206,10 +206,7 @@ const lookupName = (
   return toConfigurationName(parent, configurationId);
 };
 
-const toAttrs = (
-  row: androiddeviceprovisioning.Configuration,
-  project: string,
-) => {
+const toAttrs = (row: androiddeviceprovisioning.Configuration, project: string) => {
   const name = row.name ?? "";
   return {
     name,
@@ -240,8 +237,7 @@ const desiredBody = (input: {
   contactPhone: input.news.contactPhone,
   companyName: input.news.companyName,
   dpcExtras: input.news.dpcExtras ?? input.current?.dpcExtras,
-  isDefault:
-    input.news.isDefault ?? input.current?.isDefault ?? DEFAULT_IS_DEFAULT,
+  isDefault: input.news.isDefault ?? input.current?.isDefault ?? DEFAULT_IS_DEFAULT,
   customMessage: input.news.customMessage ?? input.current?.customMessage,
   forcedResetTime: input.news.forcedResetTime ?? input.current?.forcedResetTime,
 });
@@ -274,9 +270,7 @@ export const CustomersConfigurationProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.configurationName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.configurationName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -292,11 +286,7 @@ export const CustomersConfigurationProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = toCustomerName(news.parent);
       const ownership = yield* ownershipLabels(id);
-      const rawName = yield* toDisplayName(
-        id,
-        news.configurationName,
-        output?.configurationName,
-      );
+      const rawName = yield* toDisplayName(id, news.configurationName, output?.configurationName);
       const configurationName = encodeOwnershipLine(
         ownership,
         rawName,
@@ -330,9 +320,7 @@ export const CustomersConfigurationProvider = () =>
             }),
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findConfigurationByName(configurationName, parent),
-            ),
+            Effect.catchTag("Conflict", () => findConfigurationByName(configurationName, parent)),
           );
         current = created ?? undefined;
       }
@@ -345,9 +333,7 @@ export const CustomersConfigurationProvider = () =>
       }
 
       const desiredDpcResourcePath =
-        dpcResourcePath.length > 0
-          ? dpcResourcePath
-          : (current.dpcResourcePath ?? "");
+        dpcResourcePath.length > 0 ? dpcResourcePath : (current.dpcResourcePath ?? "");
       const desired = desiredBody({
         news,
         configurationName,
@@ -363,25 +349,16 @@ export const CustomersConfigurationProvider = () =>
           !sameText(current.dpcResourcePath, desiredDpcResourcePath)
           ? "dpcResourcePath"
           : undefined,
-        news.dpcExtras !== undefined &&
-          !sameText(current.dpcExtras, desired.dpcExtras)
+        news.dpcExtras !== undefined && !sameText(current.dpcExtras, desired.dpcExtras)
           ? "dpcExtras"
           : undefined,
-        !sameText(current.companyName, desired.companyName)
-          ? "companyName"
-          : undefined,
-        !sameText(current.contactEmail, desired.contactEmail)
-          ? "contactEmail"
-          : undefined,
-        !sameText(current.contactPhone, desired.contactPhone)
-          ? "contactPhone"
-          : undefined,
-        news.customMessage !== undefined &&
-          !sameText(current.customMessage, desired.customMessage)
+        !sameText(current.companyName, desired.companyName) ? "companyName" : undefined,
+        !sameText(current.contactEmail, desired.contactEmail) ? "contactEmail" : undefined,
+        !sameText(current.contactPhone, desired.contactPhone) ? "contactPhone" : undefined,
+        news.customMessage !== undefined && !sameText(current.customMessage, desired.customMessage)
           ? "customMessage"
           : undefined,
-        news.isDefault !== undefined &&
-          !sameBoolean(current.isDefault, desired.isDefault)
+        news.isDefault !== undefined && !sameBoolean(current.isDefault, desired.isDefault)
           ? "isDefault"
           : undefined,
         news.forcedResetTime !== undefined &&
@@ -391,17 +368,14 @@ export const CustomersConfigurationProvider = () =>
       );
 
       if (updateMask.length > 0 && currentName.length > 0) {
-        current = yield* androiddeviceprovisioning.patchCustomersConfigurations(
-          {
-            name: currentName,
-            updateMask,
-            body: desired,
-          },
-        );
+        current = yield* androiddeviceprovisioning.patchCustomersConfigurations({
+          name: currentName,
+          updateMask,
+          body: desired,
+        });
       }
 
-      const fresh =
-        (yield* getConfiguration(current.name ?? currentName)) ?? current;
+      const fresh = (yield* getConfiguration(current.name ?? currentName)) ?? current;
       return toAttrs(fresh, env.project);
     }),
 

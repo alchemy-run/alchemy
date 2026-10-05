@@ -1,16 +1,14 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const gone = <A, E extends { readonly _tag: string }, R>(
-  self: Effect.Effect<A, E, R>,
-) =>
+const gone = <A, E extends { readonly _tag: string }, R>(self: Effect.Effect<A, E, R>) =>
   self.pipe(
     Effect.as("found" as const),
     Effect.catchIf(
@@ -42,15 +40,9 @@ test.provider(
       const second = yield* deploy("b");
       expect(second.topic).not.toEqual(first.topic);
       expect(second.bucket).not.toEqual(first.bucket);
-      expect(
-        yield* gone(pubsub.getProjectsTopics({ topic: first.topic })),
-      ).toEqual("gone");
-      expect(yield* gone(storage.getBuckets({ bucket: first.bucket }))).toEqual(
-        "gone",
-      );
-      expect(
-        yield* gone(pubsub.getProjectsTopics({ topic: second.topic })),
-      ).toEqual("found");
+      expect(yield* gone(pubsub.getProjectsTopics({ topic: first.topic }))).toEqual("gone");
+      expect(yield* gone(storage.getBuckets({ bucket: first.bucket }))).toEqual("gone");
+      expect(yield* gone(pubsub.getProjectsTopics({ topic: second.topic }))).toEqual("found");
       yield* stack.destroy();
     }),
   { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 180_000 },

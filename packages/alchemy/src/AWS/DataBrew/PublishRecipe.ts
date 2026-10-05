@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Recipe } from "./Recipe.ts";
 
-export interface PublishRecipeRequest extends Omit<
-  SVC.PublishRecipeRequest,
-  "Name"
-> {}
+export interface PublishRecipeRequest extends Omit<SVC.PublishRecipeRequest, "Name"> {}
 
 /**
  * Runtime binding for `databrew:PublishRecipe` — snapshots the bound
@@ -33,6 +30,4 @@ export interface PublishRecipe extends Binding.Service<
     ) => Effect.Effect<SVC.PublishRecipeResponse, SVC.PublishRecipeError>
   >
 > {}
-export const PublishRecipe = Binding.Service<PublishRecipe>(
-  "AWS.DataBrew.PublishRecipe",
-);
+export const PublishRecipe = Binding.Service<PublishRecipe>("AWS.DataBrew.PublishRecipe");

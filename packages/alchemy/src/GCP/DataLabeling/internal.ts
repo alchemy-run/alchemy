@@ -6,12 +6,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 /**
  * Data Labeling is shut down. The frontend hangs ~20s then returns HTTP
@@ -27,9 +23,7 @@ export const MAX_DESCRIPTION_LENGTH = 10_000;
 export const MAX_EVALUATION_DESCRIPTION_LENGTH = 25_000;
 export const MAX_FEEDBACK_BODY_LENGTH = 10_000;
 
-export class DatalabelingPending extends Data.TaggedError(
-  "GCP.DataLabeling.Pending",
-)<{
+export class DatalabelingPending extends Data.TaggedError("GCP.DataLabeling.Pending")<{
   name: string;
 }> {}
 
@@ -52,18 +46,10 @@ export const parseResourceName = (name: string, collection: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const datasetsAt = parts.lastIndexOf("datasets");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    datasetId:
-      datasetsAt >= 0 && parts[datasetsAt + 1] ? parts[datasetsAt + 1]! : "",
-    dataset:
-      datasetsAt >= 0
-        ? parts.slice(0, datasetsAt + 2).join("/")
-        : parentOf(name),
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    datasetId: datasetsAt >= 0 && parts[datasetsAt + 1] ? parts[datasetsAt + 1]! : "",
+    dataset: datasetsAt >= 0 ? parts.slice(0, datasetsAt + 2).join("/") : parentOf(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -95,11 +81,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -118,18 +102,11 @@ export const toDisplayName = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `d${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `d${generated}`.slice(0, maxLength);
     return next.length > 0 ? next : "d";
   });
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const shrinkMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -137,10 +114,7 @@ const shrinkMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -187,14 +161,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -204,18 +174,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -289,9 +250,7 @@ export class DeleteNotConfirmed extends Data.TaggedError(
 )<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -303,9 +262,7 @@ export const waitUntilGone = <A, E, R>(
     ),
   );
 
-export const waitForVisible = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
@@ -317,20 +274,14 @@ export const waitForVisible = <A, E, R>(
       schedule: Schedule.exponential("250 millis"),
     }),
     Effect.catchIf(
-      (error): error is DatalabelingPending =>
-        error instanceof DatalabelingPending,
+      (error): error is DatalabelingPending => error instanceof DatalabelingPending,
       () => Effect.succeed(undefined),
     ),
   );
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -396,12 +347,10 @@ export const listFeedbackThreads = (parent: string) =>
   parent.length === 0
     ? emptyList<datalabeling.GoogleCloudDatalabelingV1beta1FeedbackThread>()
     : collectPages(
-        datalabeling.listProjectsDatasetsAnnotatedDatasetsFeedbackThreads.pages(
-          {
-            parent,
-            pageSize: 100,
-          },
-        ),
+        datalabeling.listProjectsDatasetsAnnotatedDatasetsFeedbackThreads.pages({
+          parent,
+          pageSize: 100,
+        }),
         (page) => page.feedbackThreads,
       );
 
@@ -409,12 +358,10 @@ export const listFeedbackMessages = (parent: string) =>
   parent.length === 0
     ? emptyList<datalabeling.GoogleCloudDatalabelingV1beta1FeedbackMessage>()
     : collectPages(
-        datalabeling.listProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages.pages(
-          {
-            parent,
-            pageSize: 100,
-          },
-        ),
+        datalabeling.listProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages.pages({
+          parent,
+          pageSize: 100,
+        }),
         (page) => page.feedbackMessages,
       );
 
@@ -444,16 +391,13 @@ export const listAllFeedbackMessages = (project: string) =>
             namedAnnotated,
             (annotatedDataset) =>
               Effect.gen(function* () {
-                const threads = yield* listFeedbackThreads(
-                  annotatedDataset.name,
-                );
+                const threads = yield* listFeedbackThreads(annotatedDataset.name);
                 const namedThreads = threads.filter(
                   (
                     thread,
                   ): thread is datalabeling.GoogleCloudDatalabelingV1beta1FeedbackThread & {
                     name: string;
-                  } =>
-                    typeof thread.name === "string" && thread.name.length > 0,
+                  } => typeof thread.name === "string" && thread.name.length > 0,
                 );
                 const messages = yield* Effect.forEach(
                   namedThreads,

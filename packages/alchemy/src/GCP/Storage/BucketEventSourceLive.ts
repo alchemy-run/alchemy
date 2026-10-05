@@ -68,18 +68,13 @@ export const BucketEventSourceLive = Layer.effect(
     return Effect.fn(function* <Req = never>(
       bucket: Bucket,
       props: BucketEventSourceProps,
-      process: (
-        events: Stream.Stream<BucketEvent>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (events: Stream.Stream<BucketEvent>) => Effect.Effect<void, never, Req>,
     ) {
       const host = yield* Binding.Host;
       const hostId = host?.LogicalId ?? "Host";
       // Declared in both phases: the delivery implementation declares its
       // subscription against this topic at runtime too.
-      const topic = yield* Namespace.push(
-        hostId,
-        topics(`${bucket.LogicalId}-BucketEvents`, {}),
-      );
+      const topic = yield* Namespace.push(hostId, topics(`${bucket.LogicalId}-BucketEvents`, {}));
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* Namespace.push(

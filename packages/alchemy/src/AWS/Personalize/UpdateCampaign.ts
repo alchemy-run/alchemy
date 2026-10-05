@@ -25,12 +25,7 @@ export interface UpdateCampaign extends Binding.Service<
   () => Effect.Effect<
     (
       request: personalize.UpdateCampaignRequest,
-    ) => Effect.Effect<
-      personalize.UpdateCampaignResponse,
-      personalize.UpdateCampaignError
-    >
+    ) => Effect.Effect<personalize.UpdateCampaignResponse, personalize.UpdateCampaignError>
   >
 > {}
-export const UpdateCampaign = Binding.Service<UpdateCampaign>(
-  "AWS.Personalize.UpdateCampaign",
-);
+export const UpdateCampaign = Binding.Service<UpdateCampaign>("AWS.Personalize.UpdateCampaign");

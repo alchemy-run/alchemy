@@ -1,12 +1,12 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Timestream from "@/AWS/Timestream";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Timestream from "@/AWS/Timestream";
 
 const main = path.resolve(import.meta.dirname, "sink-handler.ts");
 
@@ -69,9 +69,7 @@ export default TimestreamSinkFunction.make(
           };
           const base = Date.now() - body.count * 1_000;
           yield* Stream.fromIterable(
-            Array.from({ length: body.count }, (_, i) =>
-              record(body.host, i, base + i * 1_000),
-            ),
+            Array.from({ length: body.count }, (_, i) => record(body.host, i, base + i * 1_000)),
           ).pipe(Stream.run(sink));
           return yield* HttpServerResponse.json({
             ok: true,

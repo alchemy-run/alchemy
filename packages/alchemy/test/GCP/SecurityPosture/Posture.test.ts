@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   logLevel,
   organization,
@@ -83,12 +83,11 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.description).toEqual("updated baseline");
-      expect(updated.policySets.map((set) => set.policySetId)).toContain(
-        "alchemy",
-      );
-      expect(
-        updated.policySets[0]?.policies?.map((policy) => policy.policyId),
-      ).toEqual(["alchemy-sha", "alchemy-sha-2"]);
+      expect(updated.policySets.map((set) => set.policySetId)).toContain("alchemy");
+      expect(updated.policySets[0]?.policies?.map((policy) => policy.policyId)).toEqual([
+        "alchemy-sha",
+        "alchemy-sha-2",
+      ]);
 
       yield* stack.destroy();
 

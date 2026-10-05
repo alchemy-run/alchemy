@@ -1,13 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
 
-export interface ListObjectVersionsRequest extends Omit<
-  S3.ListObjectVersionsRequest,
-  "Bucket"
-> {}
+export interface ListObjectVersionsRequest extends Omit<S3.ListObjectVersionsRequest, "Bucket"> {}
 
 /**
  * Runtime binding for `s3:ListBucketVersions`.
@@ -38,6 +34,4 @@ export interface ListObjectVersions extends Binding.Service<
     ) => Effect.Effect<S3.ListObjectVersionsOutput, S3.ListObjectVersionsError>
   >
 > {}
-export const ListObjectVersions = Binding.Service<ListObjectVersions>(
-  "AWS.S3.ListObjectVersions",
-);
+export const ListObjectVersions = Binding.Service<ListObjectVersions>("AWS.S3.ListObjectVersions");

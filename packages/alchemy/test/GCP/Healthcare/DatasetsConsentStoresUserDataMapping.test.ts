@@ -1,31 +1,26 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as healthcare from "@distilled.cloud/gcp/healthcare_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
-  healthcare
-    .getProjectsLocationsDatasetsConsentStoresUserDataMappings({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  healthcare.getProjectsLocationsDatasetsConsentStoresUserDataMappings({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsDatasetsConsentStoresUserDataMappings on a missing mapping fails with a typed tag",
@@ -64,15 +59,11 @@ test.provider(
             dataset: dataset.name,
             labels: { env: "test" },
           });
-          const mapping =
-            yield* GCP.Healthcare.DatasetsConsentStoresUserDataMapping(
-              "Chart",
-              {
-                consentStore: store.name,
-                userId: "user-123",
-                dataId: "Patient/abc",
-              },
-            );
+          const mapping = yield* GCP.Healthcare.DatasetsConsentStoresUserDataMapping("Chart", {
+            consentStore: store.name,
+            userId: "user-123",
+            dataId: "Patient/abc",
+          });
           return { dataset, store, mapping };
         }),
       );
@@ -81,12 +72,9 @@ test.provider(
       expect(created.mapping.userId).toEqual("user-123");
       expect(created.mapping.dataId).toEqual("Patient/abc");
 
-      const fetched =
-        yield* healthcare.getProjectsLocationsDatasetsConsentStoresUserDataMappings(
-          {
-            name: created.mapping.name,
-          },
-        );
+      const fetched = yield* healthcare.getProjectsLocationsDatasetsConsentStoresUserDataMappings({
+        name: created.mapping.name,
+      });
       expect(fetched.name).toEqual(created.mapping.name);
       expect(fetched.userId).toEqual("user-123");
       expect(fetched.dataId).toContain("Patient/abc");
@@ -103,15 +91,11 @@ test.provider(
             consentStoreId: created.store.consentStoreId,
             labels: { env: "test" },
           });
-          const mapping =
-            yield* GCP.Healthcare.DatasetsConsentStoresUserDataMapping(
-              "Chart",
-              {
-                consentStore: store.name,
-                userId: "user-123",
-                dataId: "Patient/xyz",
-              },
-            );
+          const mapping = yield* GCP.Healthcare.DatasetsConsentStoresUserDataMapping("Chart", {
+            consentStore: store.name,
+            userId: "user-123",
+            dataId: "Patient/xyz",
+          });
           return { dataset, store, mapping };
         }),
       );

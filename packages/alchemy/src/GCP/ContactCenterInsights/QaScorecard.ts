@@ -105,9 +105,7 @@ export type QaScorecard = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const QaScorecard = Resource<QaScorecard>(
-  "GCP.ContactCenterInsights.QaScorecard",
-);
+export const QaScorecard = Resource<QaScorecard>("GCP.ContactCenterInsights.QaScorecard");
 
 export class QaScorecardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardNotResolved",
@@ -115,16 +113,10 @@ export class QaScorecardNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  qaScorecardId: string,
-) => `${locationParent(project, location)}/qaScorecards/${qaScorecardId}`;
+const resourceName = (project: string, location: string, qaScorecardId: string) =>
+  `${locationParent(project, location)}/qaScorecards/${qaScorecardId}`;
 
-const toAttrs = (
-  card: cci.GoogleCloudContactcenterinsightsV1QaScorecard,
-  project: string,
-) => {
+const toAttrs = (card: cci.GoogleCloudContactcenterinsightsV1QaScorecard, project: string) => {
   const name = card.name ?? "";
   const parsed = parseOwnership(card.description);
   return {
@@ -185,44 +177,26 @@ export const QaScorecardProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const qaScorecardId = yield* toResourceId(
-        id,
-        olds?.qaScorecardId,
-        output?.qaScorecardId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, qaScorecardId);
+      const qaScorecardId = yield* toResourceId(id, olds?.qaScorecardId, output?.qaScorecardId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, qaScorecardId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
-      const qaScorecardId = yield* toResourceId(
-        id,
-        news.qaScorecardId,
-        output?.qaScorecardId,
-      );
+      const qaScorecardId = yield* toResourceId(id, news.qaScorecardId, output?.qaScorecardId);
       const name = resourceName(env.project, location, qaScorecardId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

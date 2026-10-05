@@ -27,9 +27,7 @@ export class NetworkservicesStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class NetworkservicesFailed extends Data.TaggedError(
-  "GCP.NetworkServices.Failed",
-)<{
+export class NetworkservicesFailed extends Data.TaggedError("GCP.NetworkServices.Failed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -58,41 +56,25 @@ export const rfc1035 = (
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `projects/${project}/locations/${location}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `projects/${project}/locations/${location}/${collection}/${id}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -157,9 +139,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -191,25 +171,18 @@ export const toMulticastNetwork = (project: string, network: string) => {
   const trimmed = canonicalizeLink(network);
   const parts = trimmed.split("/").filter((part) => part.length > 0);
   const projectsAt = parts.lastIndexOf("projects");
-  const proj =
-    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
+  const proj = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
   const id = lastSegment(trimmed);
   return `projects/${proj}/locations/global/networks/${id || trimmed}`;
 };
 
 export const toBackendServiceResource = (project: string, service: string) => {
   const trimmed = canonicalizeLink(service);
-  if (
-    trimmed.includes("/backendServices/") ||
-    trimmed.includes("/backendservices/")
-  ) {
+  if (trimmed.includes("/backendServices/") || trimmed.includes("/backendservices/")) {
     if (trimmed.includes("/locations/")) return trimmed;
     const parts = trimmed.split("/").filter((part) => part.length > 0);
     const projectsAt = parts.lastIndexOf("projects");
-    const proj =
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : project;
+    const proj = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : project;
     return `projects/${proj}/locations/global/backendServices/${lastSegment(trimmed)}`;
   }
   return `projects/${project}/locations/global/backendServices/${lastSegment(trimmed)}`;
@@ -226,9 +199,8 @@ export const toNamedResource = (
   return resourceName(project, location, collection, lastSegment(trimmed));
 };
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
 /**
  * Wait for a Network Services long-running operation. Agent gateways and
@@ -249,8 +221,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.catchIf(
@@ -259,15 +230,10 @@ export const waitForOperation = (
     ),
   );
 
-export const waitUntilPresent = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new NetworkservicesNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new NetworkservicesNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkservicesNotResolved,
@@ -276,15 +242,10 @@ export const waitUntilPresent = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new NetworkservicesStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new NetworkservicesStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkservicesStillExists,
@@ -301,12 +262,7 @@ const PENDING_STATES = new Set([
   "DELETING",
 ]);
 
-const FAILED_STATES = new Set([
-  "FAILED",
-  "DELETE_FAILED",
-  "UPDATE_FAILED",
-  "OBSOLETE",
-]);
+const FAILED_STATES = new Set(["FAILED", "DELETE_FAILED", "UPDATE_FAILED", "OBSOLETE"]);
 
 export const waitUntilReady = <A extends { state?: string }, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -333,12 +289,7 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   );
 
 /** Collect every page; a missing parent (`NotFound`) lists as empty. */
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>

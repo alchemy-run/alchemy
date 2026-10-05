@@ -1,12 +1,12 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
 import AIPlatformBindingsHost, {
   Agent,
@@ -43,9 +43,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -70,12 +68,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable)(
   "AIPlatform Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:aiplatform",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:aiplatform", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -172,9 +165,7 @@ describe.skipIf(!dockerAvailable)(
             // The engine has no deployed package, so the query is refused
             // after authorization — the same answer the deployer gets.
             const outcome = yield* callProbe(baseUrl, "queryReasoningEngine");
-            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual(
-              "ReasoningEngineNotRunning",
-            );
+            expect(outcome.ok ? "ok" : outcome.error._tag).toEqual("ReasoningEngineNotRunning");
             const expected = yield* aiplatform
               .queryReasoningEngines({
                 name: names.engine,
@@ -182,9 +173,7 @@ describe.skipIf(!dockerAvailable)(
               })
               .pipe(
                 Effect.map(() => "ok"),
-                Effect.catchTag("ReasoningEngineNotRunning", (error) =>
-                  Effect.succeed(error._tag),
-                ),
+                Effect.catchTag("ReasoningEngineNotRunning", (error) => Effect.succeed(error._tag)),
               );
             expect(expected).toEqual("ReasoningEngineNotRunning");
             yield* expectProjectGrants;
@@ -252,10 +241,9 @@ describe.skipIf(!dockerAvailable)(
               name?: string;
               displayName?: string;
             }>(baseUrl, "getSandboxEnvironment");
-            const expected =
-              yield* aiplatform.getReasoningEnginesSandboxEnvironments({
-                name: names.sandbox!,
-              });
+            const expected = yield* aiplatform.getReasoningEnginesSandboxEnvironments({
+              name: names.sandbox!,
+            });
             expect(live.name).toEqual(names.sandbox);
             expect(live.displayName).toEqual(expected.displayName);
             expect(live.displayName).toContain("code");
@@ -277,10 +265,9 @@ describe.skipIf(!dockerAvailable)(
               name?: string;
               displayName?: string;
             }>(baseUrl, "getSandboxEnvironmentTemplate");
-            const expected =
-              yield* aiplatform.getReasoningEnginesSandboxEnvironmentTemplates({
-                name: names.template!,
-              });
+            const expected = yield* aiplatform.getReasoningEnginesSandboxEnvironmentTemplates({
+              name: names.template!,
+            });
             expect(live.name).toEqual(names.template);
             expect(live.displayName).toEqual(expected.displayName);
             expect(live.displayName).toContain("browser");

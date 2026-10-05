@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { KEY_RING_ID } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud KMS KeyRings and ImportJobs cannot be deleted. Reuse constant
 // ids so re-runs observe the existing resources instead of leaking.
@@ -79,9 +76,7 @@ test.provider(
       expect(created.createTime).toEqual(expect.any(String));
       expect(["ACTIVE", "EXPIRED"]).toContain(created.state);
       if (created.state === "ACTIVE") {
-        expect(created.publicKeyPem ?? created.publicKeyData).toEqual(
-          expect.any(String),
-        );
+        expect(created.publicKeyPem ?? created.publicKeyData).toEqual(expect.any(String));
       }
 
       const fetched = yield* kms.getProjectsLocationsKeyRingsImportJobs({

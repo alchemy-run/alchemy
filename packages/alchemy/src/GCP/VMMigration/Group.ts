@@ -26,9 +26,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type GroupMigrationTargetType =
-  | vm.GroupMigrationTargetTypeEnum
-  | (string & {});
+export type GroupMigrationTargetType = vm.GroupMigrationTargetTypeEnum | (string & {});
 
 export type GroupProps = {
   /**
@@ -184,17 +182,12 @@ export const GroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousType =
-        olds?.migrationTargetType ??
-        output?.migrationTargetType ??
-        DEFAULT_TARGET;
+        olds?.migrationTargetType ?? output?.migrationTargetType ?? DEFAULT_TARGET;
       const nextType = news.migrationTargetType ?? previousType;
       return replaceOnIdentity({
         previousId: olds?.groupId ?? output?.groupId,
         nextId: news.groupId ?? olds?.groupId ?? output?.groupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -205,23 +198,13 @@ export const GroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const groupId = yield* toPhysicalId(
-        id,
-        olds?.groupId,
-        output?.groupId,
-        "group",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const groupId = yield* toPhysicalId(id, olds?.groupId, output?.groupId, "group");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, groupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -233,16 +216,8 @@ export const GroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const groupId = yield* toPhysicalId(
-        id,
-        news.groupId,
-        output?.groupId,
-        "group",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const groupId = yield* toPhysicalId(id, news.groupId, output?.groupId, "group");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, groupId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -296,26 +271,21 @@ export const GroupProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* vm
-        .deleteProjectsLocationsGroups({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* vm.deleteProjectsLocationsGroups({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

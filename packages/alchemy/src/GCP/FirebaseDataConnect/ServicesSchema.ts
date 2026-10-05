@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_SCHEMA_ID,
@@ -80,16 +75,12 @@ export type PostgreSql = {
    * How much PostgreSQL schema validation to run before deploying
    * (`NONE`, `STRICT`, `COMPATIBLE`).
    */
-  schemaValidation?:
-    | firebasedataconnect.PostgreSqlSchemaValidationEnum
-    | (string & {});
+  schemaValidation?: firebasedataconnect.PostgreSqlSchemaValidationEnum | (string & {});
   /**
    * Additive-only PostgreSQL schema migration before deploy
    * (`MIGRATE_COMPATIBLE`).
    */
-  schemaMigration?:
-    | firebasedataconnect.PostgreSqlSchemaMigrationEnum
-    | (string & {});
+  schemaMigration?: firebasedataconnect.PostgreSqlSchemaMigrationEnum | (string & {});
   /**
    * PostgreSQL schema name.
    * @default "public"
@@ -254,21 +245,16 @@ export type ServicesSchema = Resource<
  * @resource
  * @category FirebaseDataConnect
  */
-export const ServicesSchema = Resource<ServicesSchema>(
-  "GCP.FirebaseDataConnect.ServicesSchema",
-);
+export const ServicesSchema = Resource<ServicesSchema>("GCP.FirebaseDataConnect.ServicesSchema");
 
-const resourceName = (service: string, schemaId: string) =>
-  `${service}/schemas/${schemaId}`;
+const resourceName = (service: string, schemaId: string) => `${service}/schemas/${schemaId}`;
 
 const toFile = (value: firebasedataconnect.File): File => ({
   content: value.content,
   path: value.path,
 });
 
-const toSource = (
-  value: firebasedataconnect.Source | undefined,
-): Source | undefined =>
+const toSource = (value: firebasedataconnect.Source | undefined): Source | undefined =>
   value === undefined ? undefined : { files: value.files?.map(toFile) };
 
 const toDatasource = (value: firebasedataconnect.Datasource): Datasource => ({
@@ -306,9 +292,7 @@ const toAttrs = (
     datasources: item.datasources?.map(toDatasource),
     displayName: item.displayName,
     reconciling: item.reconciling === true,
-    ephemeral:
-      item.datasources?.some((ds) => ds.postgresql?.ephemeral === true) ===
-      true,
+    ephemeral: item.datasources?.some((ds) => ds.postgresql?.ephemeral === true) === true,
     annotations: stringMap(item.annotations),
     labels: userLabels(item.labels),
     uid: item.uid,
@@ -340,15 +324,7 @@ const schemaIdOf = (value: string | undefined) =>
 
 export const ServicesSchemaProvider = () =>
   Provider.succeed(ServicesSchema, {
-    stables: [
-      "name",
-      "schemaId",
-      "service",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "schemaId", "service", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -357,10 +333,7 @@ export const ServicesSchemaProvider = () =>
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const previousParent =
         (olds?.service ?? output?.service)
           ? expandParent(
@@ -370,12 +343,7 @@ export const ServicesSchemaProvider = () =>
               "services",
             )
           : undefined;
-      const nextParent = expandParent(
-        news.service,
-        env.project,
-        location,
-        "services",
-      );
+      const nextParent = expandParent(news.service, env.project, location, "services");
       return replaceOnIdentity({
         previousId: olds?.schemaId ?? output?.schemaId,
         nextId: schemaIdOf(news.schemaId ?? olds?.schemaId ?? output?.schemaId),
@@ -389,24 +357,16 @@ export const ServicesSchemaProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = schemaIdOf(olds?.schemaId ?? output?.schemaId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const service =
         output?.service ??
-        (olds?.service
-          ? expandParent(olds.service, env.project, location, "services")
-          : undefined);
-      const name =
-        output?.name ?? (service ? resourceName(service, schemaId) : undefined);
+        (olds?.service ? expandParent(olds.service, env.project, location, "services") : undefined);
+      const name = output?.name ?? (service ? resourceName(service, schemaId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -419,16 +379,8 @@ export const ServicesSchemaProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = schemaIdOf(news.schemaId ?? output?.schemaId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const service = expandParent(
-        news.service,
-        env.project,
-        location,
-        "services",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const service = expandParent(news.service, env.project, location, "services");
       const name = resourceName(service, schemaId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -467,13 +419,12 @@ export const ServicesSchemaProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.displayName, news.displayName) && "displayName",
-        fingerprint(toSource(current.source)) !== fingerprint(news.source) &&
-          "source",
-        fingerprint(current.datasources?.map(toDatasource)) !==
-          fingerprint(news.datasources) && "datasources",
+        fingerprint(toSource(current.source)) !== fingerprint(news.source) && "source",
+        fingerprint(current.datasources?.map(toDatasource)) !== fingerprint(news.datasources) &&
+          "datasources",
       ]);
 
       if (mask.length > 0) {
@@ -487,16 +438,10 @@ export const ServicesSchemaProvider = () =>
             })
             .pipe(Effect.flatMap((operation) => waitForOperation(operation))),
         );
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
-      current = yield* waitUntilReady(
-        getByName(current.name ?? name),
-        current.name ?? name,
-      );
+      current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
       return toAttrs(current, env.project, env.region);
     }),
 

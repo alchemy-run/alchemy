@@ -1,35 +1,30 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Private clouds need VMware Engine node quota and bill thousands of dollars
 // a month; set GCP_TEST_VMWAREENGINE=1 on an entitled project to opt in.
 const runLifecycle = !!process.env.GCP_TEST_VMWAREENGINE && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  vmwareengine
-    .getProjectsLocationsPrivateCloudsExternalAddresses({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  vmwareengine.getProjectsLocationsPrivateCloudsExternalAddresses({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsPrivateCloudsExternalAddresses on a missing address fails with a typed tag",
@@ -78,14 +73,11 @@ test.provider.skipIf(!runLifecycle)(
             },
             description: "address parent",
           });
-          const address = yield* GCP.VMwareEngine.PrivateCloudsExternalAddress(
-            "Web",
-            {
-              privateCloud: cloud.name,
-              internalIp: "192.168.1.10",
-              description: "alchemy-test-ea",
-            },
-          );
+          const address = yield* GCP.VMwareEngine.PrivateCloudsExternalAddress("Web", {
+            privateCloud: cloud.name,
+            internalIp: "192.168.1.10",
+            description: "alchemy-test-ea",
+          });
           return { ven, cloud, address };
         }),
       );
@@ -94,10 +86,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.address.internalIp).toEqual("192.168.1.10");
       expect(created.address.description).toEqual("alchemy-test-ea");
 
-      const fetched =
-        yield* vmwareengine.getProjectsLocationsPrivateCloudsExternalAddresses({
-          name: created.address.name,
-        });
+      const fetched = yield* vmwareengine.getProjectsLocationsPrivateCloudsExternalAddresses({
+        name: created.address.name,
+      });
       expect(fetched.name).toEqual(created.address.name);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("alchemy-test-ea");
@@ -122,15 +113,12 @@ test.provider.skipIf(!runLifecycle)(
             },
             description: "address parent",
           });
-          const address = yield* GCP.VMwareEngine.PrivateCloudsExternalAddress(
-            "Web",
-            {
-              privateCloud: cloud.name,
-              externalAddressId: created.address.externalAddressId,
-              internalIp: "192.168.1.11",
-              description: "alchemy-prod-ea",
-            },
-          );
+          const address = yield* GCP.VMwareEngine.PrivateCloudsExternalAddress("Web", {
+            privateCloud: cloud.name,
+            externalAddressId: created.address.externalAddressId,
+            internalIp: "192.168.1.11",
+            description: "alchemy-prod-ea",
+          });
           return { ven, cloud, address };
         }),
       );

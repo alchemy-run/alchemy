@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Model } from "./Model.ts";
 
-export interface PredictRequest extends Omit<
-  ml.PredictProjectsRequest,
-  "name"
-> {}
+export interface PredictRequest extends Omit<ml.PredictProjectsRequest, "name"> {}
 
 /**
  * Runtime binding for AI Platform (legacy ML Engine) `projects.predict`.
@@ -41,11 +38,7 @@ export interface Predict extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PredictRequest,
-    ) => Effect.Effect<
-      ml.GoogleApi__HttpBody,
-      ml.PredictProjectsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<ml.GoogleApi__HttpBody, ml.PredictProjectsError, RuntimeContext>
   >
 > {}
 

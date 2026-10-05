@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_ENABLE: compute.PacketMirroringEnableEnum = "TRUE";
 const DEFAULT_PRIORITY = 1000;
@@ -24,8 +20,7 @@ const MAX_NAME_LENGTH = 63;
 
 export type PacketMirroringEnable = compute.PacketMirroringEnableEnum;
 
-export type PacketMirroringFilterDirection =
-  compute.PacketMirroringFilterDirectionEnum;
+export type PacketMirroringFilterDirection = compute.PacketMirroringFilterDirectionEnum;
 
 export type PacketMirroringFilter = {
   /**
@@ -229,9 +224,7 @@ export type PacketMirroring = Resource<
  * @resource
  * @category Compute
  */
-export const PacketMirroring = Resource<PacketMirroring>(
-  "GCP.Compute.PacketMirroring",
-);
+export const PacketMirroring = Resource<PacketMirroring>("GCP.Compute.PacketMirroring");
 
 export class PacketMirroringNotResolved extends Data.TaggedError(
   "GCP.Compute.PacketMirroringNotResolved",
@@ -313,14 +306,9 @@ const toNetworkUrl = (project: string, network: string) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-const toForwardingRuleUrl = (
-  project: string,
-  region: string,
-  collectorIlb: string,
-) => {
+const toForwardingRuleUrl = (project: string, region: string, collectorIlb: string) => {
   if (collectorIlb.includes("/")) {
-    return collectorIlb.startsWith("projects/") ||
-      collectorIlb.startsWith("http")
+    return collectorIlb.startsWith("projects/") || collectorIlb.startsWith("http")
       ? collectorIlb
       : `projects/${project}/${collectorIlb.replace(/^\//, "")}`;
   }
@@ -345,9 +333,7 @@ const toInstanceUrl = (project: string, instance: string) => {
   return instance;
 };
 
-const enableOf = (
-  value: boolean | string | undefined,
-): compute.PacketMirroringEnableEnum =>
+const enableOf = (value: boolean | string | undefined): compute.PacketMirroringEnableEnum =>
   value === false || value === "FALSE" ? "FALSE" : DEFAULT_ENABLE;
 
 const enableFlag = (value: string | undefined) => enableOf(value) === "TRUE";
@@ -358,8 +344,7 @@ const sorted = (values: ReadonlyArray<string> | undefined) =>
 const urlsKey = (values: ReadonlyArray<string> | undefined) =>
   sorted((values ?? []).map(lastSegment)).join(",");
 
-const listsKey = (values: ReadonlyArray<string> | undefined) =>
-  sorted(values).join(",");
+const listsKey = (values: ReadonlyArray<string> | undefined) => sorted(values).join(",");
 
 const toApiMirrored = (
   project: string,
@@ -375,15 +360,9 @@ const toApiMirrored = (
   })),
 });
 
-const fromApiMirrored = (
-  resources: compute.PacketMirroringMirroredResourceInfo | undefined,
-) => ({
-  subnetworks: (resources?.subnetworks ?? []).flatMap((item) =>
-    item.url ? [item.url] : [],
-  ),
-  instances: (resources?.instances ?? []).flatMap((item) =>
-    item.url ? [item.url] : [],
-  ),
+const fromApiMirrored = (resources: compute.PacketMirroringMirroredResourceInfo | undefined) => ({
+  subnetworks: (resources?.subnetworks ?? []).flatMap((item) => (item.url ? [item.url] : [])),
+  instances: (resources?.instances ?? []).flatMap((item) => (item.url ? [item.url] : [])),
   tags: resources?.tags ?? [],
 });
 
@@ -403,11 +382,7 @@ const fromApiFilter = (filter: compute.PacketMirroringFilter | undefined) => {
   const ipProtocols = filter.IPProtocols ?? [];
   const cidrRanges = filter.cidrRanges ?? [];
   const direction = filter.direction;
-  if (
-    direction === undefined &&
-    ipProtocols.length === 0 &&
-    cidrRanges.length === 0
-  ) {
+  if (direction === undefined && ipProtocols.length === 0 && cidrRanges.length === 0) {
     return undefined;
   }
   return {
@@ -457,18 +432,12 @@ const getByName = (project: string, region: string, packetMirroring: string) =>
     .getPacketMirrorings({ project, region, packetMirroring })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const requirePolicy = (
-  project: string,
-  region: string,
-  packetMirroringName: string,
-) =>
+const requirePolicy = (project: string, region: string, packetMirroringName: string) =>
   getByName(project, region, packetMirroringName).pipe(
     Effect.flatMap((existing) =>
       existing !== undefined
         ? Effect.succeed(existing)
-        : Effect.fail(
-            new PacketMirroringNotResolved({ packetMirroringName, region }),
-          ),
+        : Effect.fail(new PacketMirroringNotResolved({ packetMirroringName, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.PacketMirroringNotResolved",
@@ -492,31 +461,19 @@ export const PacketMirroringProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.packetMirroringName ?? output?.packetMirroringName;
+      const previousName = olds?.packetMirroringName ?? output?.packetMirroringName;
       const nextName = news.packetMirroringName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const previousNetwork = lastSegment(olds?.network ?? output?.network);
       const nextNetwork = lastSegment(news.network);
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousRegion !== nextRegion ||
-        (previousNetwork.length > 0 &&
-          nextNetwork.length > 0 &&
-          previousNetwork !== nextNetwork) ||
+        (previousNetwork.length > 0 && nextNetwork.length > 0 && previousNetwork !== nextNetwork) ||
         previousDescription !== nextDescription;
 
       if (!replace) return undefined;
@@ -537,15 +494,8 @@ export const PacketMirroringProvider = () =>
         olds?.packetMirroringName,
         output?.packetMirroringName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        packetMirroringName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, packetMirroringName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -567,9 +517,7 @@ export const PacketMirroringProvider = () =>
             (scoped?.packetMirrorings ?? [])
               .filter((item) => {
                 const { labels } = parseDescription(item.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -587,18 +535,10 @@ export const PacketMirroringProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const desiredNetwork = toNetworkUrl(env.project, news.network);
-      const desiredCollector = toForwardingRuleUrl(
-        env.project,
-        region,
-        news.collectorIlb,
-      );
+      const desiredCollector = toForwardingRuleUrl(env.project, region, news.collectorIlb);
       const desiredEnable = enableOf(news.enable);
       const desiredPriority = news.priority ?? DEFAULT_PRIORITY;
-      const desiredMirrored = toApiMirrored(
-        env.project,
-        region,
-        news.mirroredResources,
-      );
+      const desiredMirrored = toApiMirrored(env.project, region, news.mirroredResources);
       const desiredFilter = toApiFilter(news.filter);
 
       let current = yield* getByName(env.project, region, packetMirroringName);
@@ -631,11 +571,7 @@ export const PacketMirroringProvider = () =>
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted);
         }
-        current = yield* requirePolicy(
-          env.project,
-          region,
-          packetMirroringName,
-        );
+        current = yield* requirePolicy(env.project, region, packetMirroringName);
       }
 
       if (current === undefined) {
@@ -657,15 +593,10 @@ export const PacketMirroringProvider = () =>
       if (observed.priority !== desiredPriority) {
         patch.priority = desiredPriority;
       }
-      if (
-        lastSegment(observed.collectorIlb) !== lastSegment(desiredCollector)
-      ) {
+      if (lastSegment(observed.collectorIlb) !== lastSegment(desiredCollector)) {
         patch.collectorIlb = { url: desiredCollector };
       }
-      if (
-        mirroredKey(observed.mirroredResources) !==
-        mirroredKey(news.mirroredResources)
-      ) {
+      if (mirroredKey(observed.mirroredResources) !== mirroredKey(news.mirroredResources)) {
         patch.mirroredResources = desiredMirrored;
       }
       if (filterKey(observed.filter) !== filterKey(news.filter)) {
@@ -685,20 +616,14 @@ export const PacketMirroringProvider = () =>
             body: patch,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
           );
-        current = yield* requirePolicy(
-          env.project,
-          region,
-          packetMirroringName,
-        );
+        current = yield* requirePolicy(env.project, region, packetMirroringName);
       }
 
       return toAttrs(current, env.project);

@@ -1,21 +1,17 @@
+import * as databrew from "@distilled.cloud/aws/databrew";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Dataset } from "@/AWS/DataBrew";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import * as databrew from "@distilled.cloud/aws/databrew";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getDataset = (name: string) =>
   databrew
     .describeDataset({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, update, delete DataBrew dataset",
@@ -42,17 +38,13 @@ test.provider(
       );
 
       expect(created.dataset.datasetName).toBeDefined();
-      expect(created.dataset.datasetArn).toContain(
-        `:dataset/${created.dataset.datasetName}`,
-      );
+      expect(created.dataset.datasetArn).toContain(`:dataset/${created.dataset.datasetName}`);
 
       // out-of-band verification
       const observed = yield* getDataset(created.dataset.datasetName);
       expect(observed?.Name).toEqual(created.dataset.datasetName);
       expect(observed?.Format).toEqual("CSV");
-      expect(observed?.Input.S3InputDefinition?.Bucket).toEqual(
-        created.bucket.bucketName,
-      );
+      expect(observed?.Input.S3InputDefinition?.Bucket).toEqual(created.bucket.bucketName);
       expect(observed?.Input.S3InputDefinition?.Key).toEqual("raw/sales.csv");
       expect(observed?.FormatOptions?.Csv?.Delimiter).toEqual(",");
       expect(observed?.Tags?.["alchemy::id"]).toBeDefined();
@@ -78,9 +70,7 @@ test.provider(
       );
 
       const reobserved = yield* getDataset(created.dataset.datasetName);
-      expect(reobserved?.Input.S3InputDefinition?.Key).toEqual(
-        "raw/sales-v2.csv",
-      );
+      expect(reobserved?.Input.S3InputDefinition?.Key).toEqual("raw/sales-v2.csv");
       expect(reobserved?.FormatOptions?.Csv?.Delimiter).toEqual(";");
       expect(reobserved?.Tags?.Environment).toEqual("staging");
 

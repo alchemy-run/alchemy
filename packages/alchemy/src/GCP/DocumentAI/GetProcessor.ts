@@ -41,6 +41,4 @@ export interface GetProcessor extends Binding.Service<
   >
 > {}
 
-export const GetProcessor = Binding.Service<GetProcessor>(
-  "GCP.DocumentAI.GetProcessor",
-);
+export const GetProcessor = Binding.Service<GetProcessor>("GCP.DocumentAI.GetProcessor");

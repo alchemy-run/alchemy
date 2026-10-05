@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import type { Table } from "./Table.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Table } from "./Table.ts";
 
 /**
  * Shared HTTP scaffolding for BigQuery table bindings.

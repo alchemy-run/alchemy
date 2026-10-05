@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViews({ name }).pipe(
@@ -57,18 +54,16 @@ test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet(
-            "QaViews",
-            { displayName: "qa" },
+          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet("QaViews", {
+            displayName: "qa",
+          });
+          const view = yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
+            "Reviewers",
+            {
+              parent: set.name,
+              displayName: "rv",
+            },
           );
-          const view =
-            yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
-              "Reviewers",
-              {
-                parent: set.name,
-                displayName: "rv",
-              },
-            );
           return { set, view };
         }),
       );
@@ -78,50 +73,40 @@ test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
       expect(created.view.parent).toEqual(created.set.name);
       expect(created.view.displayName).toEqual("rv");
 
-      const fetched =
-        yield* cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViews({
-          name: created.view.name,
-        });
+      const fetched = yield* cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViews({
+        name: created.view.name,
+      });
       expect(fetched.name).toEqual(created.view.name);
       expect(fetched.displayName).toContain("alchemy-id=");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet(
-            "QaViews",
+          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet("QaViews", {
+            authorizedViewSetId: created.set.authorizedViewSetId,
+            location: "us-central1",
+            displayName: "qa",
+          });
+          const view = yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
+            "Reviewers",
             {
-              authorizedViewSetId: created.set.authorizedViewSetId,
-              location: "us-central1",
-              displayName: "qa",
+              parent: set.name,
+              authorizedViewId: created.view.authorizedViewId,
+              displayName: "rv-2",
+              conversationFilter: 'agent_id="alchemy-agent"',
             },
           );
-          const view =
-            yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
-              "Reviewers",
-              {
-                parent: set.name,
-                authorizedViewId: created.view.authorizedViewId,
-                displayName: "rv-2",
-                conversationFilter: 'agent_id="alchemy-agent"',
-              },
-            );
           return { set, view };
         }),
       );
 
       expect(updated.view.name).toEqual(created.view.name);
       expect(updated.view.displayName).toEqual("rv-2");
-      expect(updated.view.conversationFilter).toEqual(
-        'agent_id="alchemy-agent"',
-      );
+      expect(updated.view.conversationFilter).toEqual('agent_id="alchemy-agent"');
 
-      const fetchedUpdate =
-        yield* cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViews({
-          name: updated.view.name,
-        });
-      expect(fetchedUpdate.conversationFilter).toEqual(
-        'agent_id="alchemy-agent"',
-      );
+      const fetchedUpdate = yield* cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViews({
+        name: updated.view.name,
+      });
+      expect(fetchedUpdate.conversationFilter).toEqual('agent_id="alchemy-agent"');
 
       yield* stack.destroy();
 

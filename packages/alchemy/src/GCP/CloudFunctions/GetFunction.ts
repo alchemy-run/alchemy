@@ -43,6 +43,4 @@ export interface GetFunction extends Binding.Service<
   >
 > {}
 
-export const GetFunction = Binding.Service<GetFunction>(
-  "GCP.CloudFunctions.GetFunction",
-);
+export const GetFunction = Binding.Service<GetFunction>("GCP.CloudFunctions.GetFunction");

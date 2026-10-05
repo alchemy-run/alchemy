@@ -1,12 +1,12 @@
-import * as Effect from "effect/Effect";
+import { fileURLToPath } from "node:url";
+import { describe, expect, test } from "alchemy-test";
 import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import { fileURLToPath } from "node:url";
 import path from "pathe";
-import { describe, expect, test } from "alchemy-test";
 import {
   collectAuthProviders,
   buildStackProviders,
@@ -16,8 +16,8 @@ import {
   routeCacheLayer,
   StackModuleLoader,
 } from "@/Alchemist/Session.ts";
-import { Secrets, Stack, inMemoryState } from "@/index.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
+import { Secrets, Stack, inMemoryState } from "@/index.ts";
 import { evalStack } from "../../src/Stack";
 import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";
@@ -138,24 +138,17 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     ));
 
   test("loads stack entrypoint via relative path", () =>
-    expect(runFixture(fixtureRelativePath)).resolves.toBe(
-      "import-stack-fixture",
-    ));
+    expect(runFixture(fixtureRelativePath)).resolves.toBe("import-stack-fixture"));
 
   test("loads stack entrypoint via absolute path", () =>
-    expect(runFixture(fixtureAbsolutePath)).resolves.toBe(
-      "import-stack-fixture",
-    ));
+    expect(runFixture(fixtureAbsolutePath)).resolves.toBe("import-stack-fixture"));
 
   test("memoizes an opened stack session within a command scope", async () => {
     const [first, second] = await TestCore.run(
       Effect.all([
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
-      ]).pipe(
-        Effect.provide(routeCacheLayer),
-        Effect.provide(CliKit.layer({ input: false })),
-      ),
+      ]).pipe(Effect.provide(routeCacheLayer), Effect.provide(CliKit.layer({ input: false }))),
       { providers: TestLayers() },
     );
 
@@ -169,10 +162,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
       profile: "default",
     };
     const [first, second] = await TestCore.run(
-      Effect.all([
-        collectAuthProviders(options),
-        collectAuthProviders(options),
-      ]).pipe(
+      Effect.all([collectAuthProviders(options), collectAuthProviders(options)]).pipe(
         Effect.provide(routeCacheLayer),
         Effect.provide(CliKit.layer({ input: false })),
       ),
@@ -184,9 +174,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
 
   test("reports a missing stack entrypoint as a user-facing error", async () => {
     const result = await TestCore.run(
-      importStack(
-        path.join(import.meta.dirname, "missing-alchemy.run.ts"),
-      ).pipe(Effect.result),
+      importStack(path.join(import.meta.dirname, "missing-alchemy.run.ts")).pipe(Effect.result),
       { providers: TestLayers() },
     );
 

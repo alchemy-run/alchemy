@@ -24,10 +24,7 @@ export {
   HttpsHealthCheckNotResolved,
   HttpsHealthCheckProvider,
 } from "./HttpsHealthCheck.ts";
-export type {
-  HttpsHealthCheckProps,
-  HttpsHealthCheckResource,
-} from "./HttpsHealthCheck.ts";
+export type { HttpsHealthCheckProps, HttpsHealthCheckResource } from "./HttpsHealthCheck.ts";
 export * from "./RegionHealthCheck.ts";
 export * from "./CrossSiteNetwork.ts";
 export * from "./FutureReservation.ts";

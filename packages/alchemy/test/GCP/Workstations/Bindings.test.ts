@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import WorkstationsBindingsHost, { Dev } from "./fixtures/bindings-host.ts";
 
@@ -25,9 +25,7 @@ let workstationName: string;
 
 const member = () => `serviceAccount:${hostAccount}`;
 
-const rolesIn = (
-  bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>,
-) =>
+const rolesIn = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>) =>
   bindings
     .filter((binding) => (binding.members ?? []).includes(member()))
     .map((binding) => binding.role)
@@ -60,9 +58,9 @@ const configRoles = () =>
 
 const workstationRoles = () =>
   workstations
-    .getIamPolicyProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
-      { resource: workstationName },
-    )
+    .getIamPolicyProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+      resource: workstationName,
+    })
     .pipe(Effect.map((policy) => rolesIn(policy.bindings ?? [])));
 
 const waitForState = (state: string) =>
@@ -81,12 +79,7 @@ const waitForState = (state: string) =>
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "Workstations Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:workstations",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:workstations", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -172,9 +165,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
             );
             expect(out.name).toEqual(workstationName);
             expect(out.state).toEqual("STATE_STOPPED");
-            expect(yield* workstationRoles()).toContain(
-              "roles/workstations.viewer",
-            );
+            expect(yield* workstationRoles()).toContain("roles/workstations.viewer");
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],
@@ -188,16 +179,11 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "starts the bound workstation as the host",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ name: string }>(
-              baseUrl,
-              "startWorkstation",
-            );
+            const out = yield* expectProbe<{ name: string }>(baseUrl, "startWorkstation");
             expect(out.name).toContain("/operations/");
             const live = yield* waitForState("STATE_RUNNING");
             expect(live.state).toEqual("STATE_RUNNING");
-            expect(yield* workstationRoles()).toContain(
-              "roles/workstations.user",
-            );
+            expect(yield* workstationRoles()).toContain("roles/workstations.user");
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],
@@ -216,12 +202,8 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
               expireTime: string;
             }>(baseUrl, "generateAccessToken");
             expect(out.hasToken).toEqual(true);
-            expect(Date.parse(out.expireTime)).toBeGreaterThan(
-              Date.parse("2026-01-01T00:00:00Z"),
-            );
-            expect(yield* workstationRoles()).toContain(
-              "roles/workstations.user",
-            );
+            expect(Date.parse(out.expireTime)).toBeGreaterThan(Date.parse("2026-01-01T00:00:00Z"));
+            expect(yield* workstationRoles()).toContain("roles/workstations.user");
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],
@@ -235,10 +217,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "stops the bound workstation as the host; the host holds only user and viewer on it",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ name: string }>(
-              baseUrl,
-              "stopWorkstation",
-            );
+            const out = yield* expectProbe<{ name: string }>(baseUrl, "stopWorkstation");
             expect(out.name).toContain("/operations/");
             const live = yield* waitForState("STATE_STOPPED");
             expect(live.state).toEqual("STATE_STOPPED");

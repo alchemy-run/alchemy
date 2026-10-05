@@ -96,19 +96,14 @@ export type View = Resource<
  */
 export const View = Resource<View>("GCP.ContactCenterInsights.View");
 
-export class ViewNotResolved extends Data.TaggedError(
-  "GCP.ContactCenterInsights.ViewNotResolved",
-)<{
+export class ViewNotResolved extends Data.TaggedError("GCP.ContactCenterInsights.ViewNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (project: string, location: string, viewId: string) =>
   `${locationParent(project, location)}/views/${viewId}`;
 
-const toAttrs = (
-  view: cci.GoogleCloudContactcenterinsightsV1View,
-  project: string,
-) => {
+const toAttrs = (view: cci.GoogleCloudContactcenterinsightsV1View, project: string) => {
   const name = view.name ?? "";
   const parsed = parseOwnership(view.displayName);
   return {
@@ -164,11 +159,7 @@ export const ViewProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.viewId ?? output?.viewId;
-      if (
-        previousId !== undefined &&
-        news.viewId !== undefined &&
-        news.viewId !== previousId
-      ) {
+      if (previousId !== undefined && news.viewId !== undefined && news.viewId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -177,43 +168,30 @@ export const ViewProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const viewId = yield* toResourceId(id, olds?.viewId, output?.viewId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name = output?.name ?? resourceName(env.project, location, viewId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
         existing = yield* findByDisplayName(
           locationParent(env.project, location),
-          encodeOwnershipLine(
-            ownership,
-            olds?.displayName,
-            MAX_VIEW_DISPLAY_NAME_LENGTH,
-          ),
+          encodeOwnershipLine(ownership, olds?.displayName, MAX_VIEW_DISPLAY_NAME_LENGTH),
         );
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const viewId = yield* toResourceId(id, news.viewId, output?.viewId);
       const name = output?.name ?? resourceName(env.project, location, viewId);

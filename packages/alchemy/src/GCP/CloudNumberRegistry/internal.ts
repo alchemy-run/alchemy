@@ -1,28 +1,21 @@
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const DEFAULT_LOCATION = "global";
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.CloudNumberRegistry.NotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.CloudNumberRegistry.NotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.CloudNumberRegistry.StillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.CloudNumberRegistry.StillExists")<{
   name: string;
 }> {}
 
@@ -52,12 +45,8 @@ export const normalizeLocation = (location: string | undefined) =>
 export const parentOf = (project: string, location: string | undefined) =>
   `projects/${project}/locations/${normalizeLocation(location)}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `${parentOf(project, location)}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `${parentOf(project, location)}/${collection}/${id}`;
 
 export const toPhysicalId = (
   id: string,
@@ -84,16 +73,10 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -116,9 +99,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -141,13 +123,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -158,9 +137,7 @@ export const sameRef = (left: string | undefined, right: string | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  fingerprint([...(left ?? [])].sort()) ===
-  fingerprint([...(right ?? [])].sort());
+) => fingerprint([...(left ?? [])].sort()) === fingerprint([...(right ?? [])].sort());
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -245,13 +222,9 @@ const OPERATION_BUDGET = "10 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => cnr.getProjectsLocationsOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => cnr.getProjectsLocationsOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -266,8 +239,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

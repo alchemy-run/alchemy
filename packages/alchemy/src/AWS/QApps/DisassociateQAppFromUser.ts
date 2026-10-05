@@ -36,14 +36,10 @@ export interface DisassociateQAppFromUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DisassociateQAppFromUserRequest,
-    ) => Effect.Effect<
-      qapps.DisassociateQAppFromUserResponse,
-      qapps.DisassociateQAppFromUserError
-    >
+    ) => Effect.Effect<qapps.DisassociateQAppFromUserResponse, qapps.DisassociateQAppFromUserError>
   >
 > {}
 
-export const DisassociateQAppFromUser =
-  Binding.Service<DisassociateQAppFromUser>(
-    "AWS.QApps.DisassociateQAppFromUser",
-  );
+export const DisassociateQAppFromUser = Binding.Service<DisassociateQAppFromUser>(
+  "AWS.QApps.DisassociateQAppFromUser",
+);

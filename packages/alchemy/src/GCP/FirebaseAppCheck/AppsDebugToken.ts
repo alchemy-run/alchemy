@@ -125,9 +125,7 @@ export type AppsDebugToken = Resource<
  * @resource
  * @category FirebaseAppCheck
  */
-export const AppsDebugToken = Resource<AppsDebugToken>(
-  "GCP.FirebaseAppCheck.AppsDebugToken",
-);
+export const AppsDebugToken = Resource<AppsDebugToken>("GCP.FirebaseAppCheck.AppsDebugToken");
 
 const getByName = getDebugToken;
 
@@ -159,10 +157,7 @@ export const AppsDebugTokenProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousApp = expandApp(
-        env.project,
-        olds?.app ?? output?.app ?? "",
-      );
+      const previousApp = expandApp(env.project, olds?.app ?? output?.app ?? "");
       const nextApp = expandApp(env.project, news.app);
       return replaceOnIdentity({
         previous: previousApp.length > 0 ? previousApp : undefined,
@@ -180,17 +175,11 @@ export const AppsDebugTokenProvider = () =>
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined && olds?.app) {
         const app = expandApp(env.project, olds.app);
-        existing = yield* findOwnedDebugToken(
-          yield* listDebugTokensForApp(app),
-          id,
-          output?.name,
-        );
+        existing = yield* findOwnedDebugToken(yield* listDebugTokensForApp(app), id, output?.name);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, output?.token);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -204,21 +193,13 @@ export const AppsDebugTokenProvider = () =>
       const env = yield* GcpEnvironment.current;
       const app = expandApp(env.project, news.app);
       const ownership = yield* createOwnership(id);
-      const userDisplay = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const userDisplay = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredDisplay = encodeDisplayName(ownership, userDisplay);
       const secret = yield* toToken(news.token, output?.token);
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
-        current = yield* findOwnedDebugToken(
-          yield* listDebugTokensForApp(app),
-          id,
-          output?.name,
-        );
+        current = yield* findOwnedDebugToken(yield* listDebugTokensForApp(app), id, output?.name);
       }
 
       if (current === undefined) {
@@ -233,9 +214,7 @@ export const AppsDebugTokenProvider = () =>
         ).pipe(
           Effect.catchTag("Conflict", () =>
             listDebugTokensForApp(app).pipe(
-              Effect.flatMap((tokens) =>
-                findOwnedDebugToken(tokens, id, output?.name),
-              ),
+              Effect.flatMap((tokens) => findOwnedDebugToken(tokens, id, output?.name)),
             ),
           ),
         );

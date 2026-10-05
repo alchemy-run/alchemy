@@ -1,10 +1,10 @@
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as container from "@distilled.cloud/gcp/container_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import * as container from "@distilled.cloud/gcp/container_v1";
-import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import ContainerBindingsHost, {
   App,
@@ -34,24 +34,15 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({ role: binding.role, condition: binding.condition }));
-  expect(roles).toEqual([
-    { role: "roles/container.clusterViewer", condition: undefined },
-  ]);
+  expect(roles).toEqual([{ role: "roles/container.clusterViewer", condition: undefined }]);
 });
 
 describe.skipIf(!dockerAvailable || !slow)(
   "Container Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:container",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:container", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -90,10 +81,7 @@ describe.skipIf(!dockerAvailable || !slow)(
         "reads the cluster as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<container.Cluster>(
-              baseUrl,
-              "getCluster",
-            );
+            const live = yield* expectProbe<container.Cluster>(baseUrl, "getCluster");
             const actual = yield* container.getProjectsLocationsClusters({
               name: cluster.name,
             });
@@ -114,10 +102,7 @@ describe.skipIf(!dockerAvailable || !slow)(
         "reads the node pool as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<container.NodePool>(
-              baseUrl,
-              "getNodePool",
-            );
+            const live = yield* expectProbe<container.NodePool>(baseUrl, "getNodePool");
             expect(live.name).toEqual(pool.nodePoolId);
             expect(live.config?.machineType).toEqual("e2-medium");
             expect(live.config?.spot).toEqual(true);
@@ -135,10 +120,7 @@ describe.skipIf(!dockerAvailable || !slow)(
         "reads the zonal node pool as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<container.NodePool>(
-              baseUrl,
-              "getClustersNodePool",
-            );
+            const live = yield* expectProbe<container.NodePool>(baseUrl, "getClustersNodePool");
             expect(live.name).toEqual(zonalPool.nodePoolId);
             expect(live.config?.machineType).toEqual("e2-medium");
             yield* expectProjectGrants;

@@ -41,7 +41,6 @@ export interface ResumeSandboxEnvironment extends Binding.Service<
   >
 > {}
 
-export const ResumeSandboxEnvironment =
-  Binding.Service<ResumeSandboxEnvironment>(
-    "GCP.AIPlatform.ResumeSandboxEnvironment",
-  );
+export const ResumeSandboxEnvironment = Binding.Service<ResumeSandboxEnvironment>(
+  "GCP.AIPlatform.ResumeSandboxEnvironment",
+);

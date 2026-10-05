@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionTargetHttpsProxyProps = {
   /**
@@ -214,29 +210,17 @@ const parseDescription = (
 
 const resourceTail = (value: string | undefined): string => lastSegment(value);
 
-const toUrlMapRef = (
-  project: string,
-  region: string,
-  urlMap: string,
-): string => {
+const toUrlMapRef = (project: string, region: string, urlMap: string): string => {
   if (urlMap.includes("/")) return urlMap;
   return `projects/${project}/regions/${region}/urlMaps/${urlMap}`;
 };
 
-const toSslCertRef = (
-  project: string,
-  region: string,
-  cert: string,
-): string => {
+const toSslCertRef = (project: string, region: string, cert: string): string => {
   if (cert.includes("/")) return cert;
   return `projects/${project}/regions/${region}/sslCertificates/${cert}`;
 };
 
-const toSslPolicyRef = (
-  project: string,
-  region: string,
-  policy: string,
-): string => {
+const toSslPolicyRef = (project: string, region: string, policy: string): string => {
   if (policy.length === 0 || policy.includes("/")) return policy;
   return `projects/${project}/regions/${region}/sslPolicies/${policy}`;
 };
@@ -290,17 +274,10 @@ export const RegionTargetHttpsProxyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previous =
-        olds?.targetHttpsProxyName ?? output?.targetHttpsProxyName;
+      const previous = olds?.targetHttpsProxyName ?? output?.targetHttpsProxyName;
       const next = news.targetHttpsProxyName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       if (previousRegion !== nextRegion) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -317,15 +294,8 @@ export const RegionTargetHttpsProxyProvider = () =>
         olds?.targetHttpsProxyName,
         output?.targetHttpsProxyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        targetHttpsProxyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpsProxyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -348,9 +318,7 @@ export const RegionTargetHttpsProxyProvider = () =>
               .filter((proxy) => (proxy.region ?? "").length > 0)
               .filter((proxy) => {
                 const { labels } = parseDescription(proxy.description);
-                return Object.keys(labels).some((key) =>
-                  key.startsWith("alchemy-"),
-                );
+                return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
               })
               .map((proxy) => toAttrs(proxy, env.project)),
           ),
@@ -431,11 +399,7 @@ export const RegionTargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { urlMap: desiredUrlMap },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new RegionTargetHttpsProxyNotResolved({
@@ -456,11 +420,7 @@ export const RegionTargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body: { sslCertificates: desiredCerts },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new RegionTargetHttpsProxyNotResolved({
@@ -470,14 +430,12 @@ export const RegionTargetHttpsProxyProvider = () =>
         }
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const keepAliveChanged =
         news.httpKeepAliveTimeoutSec !== undefined &&
         current.httpKeepAliveTimeoutSec !== news.httpKeepAliveTimeoutSec;
       const proxyBindChanged =
-        news.proxyBind !== undefined &&
-        (current.proxyBind === true) !== news.proxyBind;
+        news.proxyBind !== undefined && (current.proxyBind === true) !== news.proxyBind;
       const serverTlsChanged =
         news.serverTlsPolicy !== undefined &&
         (current.serverTlsPolicy ?? "") !== news.serverTlsPolicy;
@@ -515,11 +473,7 @@ export const RegionTargetHttpsProxyProvider = () =>
             targetHttpsProxy: targetHttpsProxyName,
             body,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpsProxyName);
         if (current === undefined) {
           return yield* new RegionTargetHttpsProxyNotResolved({

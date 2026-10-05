@@ -250,9 +250,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        template,
-      ): template is aiplatform.GoogleCloudAiplatformV1NotebookRuntimeTemplate =>
+      (template): template is aiplatform.GoogleCloudAiplatformV1NotebookRuntimeTemplate =>
         template !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
@@ -287,52 +285,33 @@ const desiredMachine = (spec: MachineSpec | undefined): MachineSpec => ({
 
 export const NotebookRuntimeTemplateProvider = () =>
   Provider.succeed(NotebookRuntimeTemplate, {
-    stables: [
-      "name",
-      "notebookRuntimeTemplateId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "notebookRuntimeTemplateId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.notebookRuntimeTemplateId ?? output?.notebookRuntimeTemplateId;
+      const previousId = olds?.notebookRuntimeTemplateId ?? output?.notebookRuntimeTemplateId;
       const nextId = news.notebookRuntimeTemplateId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousMachine =
-        olds?.machineSpec?.machineType ?? output?.machineType;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousMachine = olds?.machineSpec?.machineType ?? output?.machineType;
       const nextMachine = desiredMachine(news.machineSpec).machineType;
       const typeChanged =
         (news.notebookRuntimeType ?? olds?.notebookRuntimeType) !==
         (olds?.notebookRuntimeType ?? output?.notebookRuntimeType);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousMachine !== undefined && previousMachine !== nextMachine) ||
         (olds?.notebookRuntimeType !== undefined && typeChanged) ||
         (olds !== undefined &&
           ((news.description ?? "") !== (olds.description ?? "") ||
-            JSON.stringify(news.labels ?? {}) !==
-              JSON.stringify(olds.labels ?? {})));
+            JSON.stringify(news.labels ?? {}) !== JSON.stringify(olds.labels ?? {})));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -343,39 +322,29 @@ export const NotebookRuntimeTemplateProvider = () =>
         olds?.notebookRuntimeTemplateId,
         output?.notebookRuntimeTemplateId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsNotebookRuntimeTemplates.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsNotebookRuntimeTemplates.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.notebookRuntimeTemplates ?? [])
             .filter((template) =>
-              Object.keys(template.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(template.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((template) => toAttrs(template, env.project)),
         );
@@ -388,10 +357,7 @@ export const NotebookRuntimeTemplateProvider = () =>
         news.notebookRuntimeTemplateId,
         output?.notebookRuntimeTemplateId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, templateId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -427,8 +393,7 @@ export const NotebookRuntimeTemplateProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
-        const createdName =
-          resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
+        const createdName = resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
         current = yield* waitUntilExists(createdName);
       }
 
@@ -449,17 +414,16 @@ export const NotebookRuntimeTemplateProvider = () =>
           displayChanged ? "display_name" : undefined,
           softwareChanged ? "software_config" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const patched =
-          yield* aiplatform.patchProjectsLocationsNotebookRuntimeTemplates({
+        const patched = yield* aiplatform.patchProjectsLocationsNotebookRuntimeTemplates({
+          name: observedName,
+          updateMask: updateMask.join(","),
+          body: {
             name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              displayName,
-              softwareConfig: news.softwareConfig,
-              etag: current.etag,
-            },
-          });
+            displayName,
+            softwareConfig: news.softwareConfig,
+            etag: current.etag,
+          },
+        });
         current = patched ?? current;
       }
 

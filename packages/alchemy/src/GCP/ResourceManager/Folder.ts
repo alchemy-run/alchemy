@@ -97,15 +97,11 @@ export type Folder = Resource<
  */
 export const Folder = Resource<Folder>("GCP.ResourceManager.Folder");
 
-export class FolderNotResolved extends Data.TaggedError(
-  "GCP.ResourceManager.FolderNotResolved",
-)<{
+export class FolderNotResolved extends Data.TaggedError("GCP.ResourceManager.FolderNotResolved")<{
   name: string;
 }> {}
 
-export class FolderStillExists extends Data.TaggedError(
-  "GCP.ResourceManager.FolderStillExists",
-)<{
+export class FolderStillExists extends Data.TaggedError("GCP.ResourceManager.FolderStillExists")<{
   name: string;
 }> {}
 
@@ -117,18 +113,13 @@ const sanitizeDisplayName = (value: string) => {
   if (next.length > FOLDER_DISPLAY_MAX) {
     next = next.slice(0, FOLDER_DISPLAY_MAX);
   }
-  if (!/^[a-zA-Z0-9]/.test(next))
-    next = `a${next}`.slice(0, FOLDER_DISPLAY_MAX);
+  if (!/^[a-zA-Z0-9]/.test(next)) next = `a${next}`.slice(0, FOLDER_DISPLAY_MAX);
   next = next.replace(/[^a-zA-Z0-9]+$/g, "");
   if (next.length === 0) next = "az0";
   return next;
 };
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (displayName !== undefined) return sanitizeDisplayName(displayName);
     if (existing !== undefined) return existing;
@@ -157,11 +148,7 @@ const toAttrs = (folder: resourcemanager.Folder) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getFolders({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "FolderNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)));
 
 const listChildren = (parent: string, showDeleted = true) =>
   collectPages(
@@ -171,17 +158,9 @@ const listChildren = (parent: string, showDeleted = true) =>
       showDeleted,
     }),
     (page) => page.folders,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as resourcemanager.Folder[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as resourcemanager.Folder[])));
 
-const findByDisplayName = (
-  parent: string,
-  displayName: string,
-  resourceName?: string,
-) =>
+const findByDisplayName = (parent: string, displayName: string, resourceName?: string) =>
   Effect.gen(function* () {
     if (resourceName !== undefined && resourceName.length > 0) {
       const byName = yield* getByName(resourceName);
@@ -191,11 +170,7 @@ const findByDisplayName = (
     return children.find((folder) => folder.displayName === displayName);
   });
 
-const observe = (
-  resourceName: string | undefined,
-  parent: string,
-  displayName: string,
-) =>
+const observe = (resourceName: string | undefined, parent: string, displayName: string) =>
   Effect.gen(function* () {
     if (resourceName !== undefined && resourceName.length > 0) {
       const byName = yield* getByName(resourceName);
@@ -204,11 +179,7 @@ const observe = (
     return yield* findByDisplayName(parent, displayName, resourceName);
   });
 
-const waitUntilExists = (
-  resourceName: string | undefined,
-  parent: string,
-  displayName: string,
-) =>
+const waitUntilExists = (resourceName: string | undefined, parent: string, displayName: string) =>
   observe(resourceName, parent, displayName).pipe(
     Effect.filterOrFail(
       (folder): folder is resourcemanager.Folder => folder !== undefined,
@@ -249,11 +220,7 @@ const ensureActive = (folder: resourcemanager.Folder) =>
     });
     yield* waitForOperation(operation);
     return (
-      (yield* waitUntilExists(
-        folder.name,
-        folder.parent ?? "",
-        folder.displayName ?? "",
-      )) ?? folder
+      (yield* waitUntilExists(folder.name, folder.parent ?? "", folder.displayName ?? "")) ?? folder
     );
   });
 
@@ -262,22 +229,14 @@ export const FolderProvider = () =>
     stables: ["name", "createTime"],
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const displayName = yield* toDisplayName(
-        id,
-        olds?.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, olds?.displayName, output?.displayName);
       const parent = yield* resolveParent(olds?.parent, output?.parent).pipe(
         Effect.catchTag("GCP.ResourceManager.ParentRequired", () =>
           Effect.succeed(output?.parent ?? ""),
         ),
       );
       if (parent.length === 0 && output?.name === undefined) return undefined;
-      const existing = yield* observe(
-        output?.name,
-        parent || (output?.parent ?? ""),
-        displayName,
-      );
+      const existing = yield* observe(output?.name, parent || (output?.parent ?? ""), displayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
       // No labels field: without prior state it may not be ours.
@@ -285,11 +244,7 @@ export const FolderProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const parent = yield* resolveParent(news.parent, output?.parent);
 
       let current = yield* observe(output?.name, parent, displayName);
@@ -336,27 +291,16 @@ export const FolderProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          current.name ?? name,
-          parent,
-          displayName,
-        );
+        current = yield* waitUntilExists(current.name ?? name, parent, displayName);
       }
 
-      if (
-        current.parent !== undefined &&
-        !sameHierarchyParent(current.parent, parent)
-      ) {
+      if (current.parent !== undefined && !sameHierarchyParent(current.parent, parent)) {
         const operation = yield* resourcemanager.moveFolders({
           name: current.name ?? name,
           body: { destinationParent: parent },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          current.name ?? name,
-          parent,
-          displayName,
-        );
+        current = yield* waitUntilExists(current.name ?? name, parent, displayName);
       }
 
       if (current === undefined) {
@@ -369,18 +313,14 @@ export const FolderProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* resourcemanager
-        .deleteFolders({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag(["NotFound", "FolderNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const operation = yield* resourcemanager.deleteFolders({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

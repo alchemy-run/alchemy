@@ -1,17 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
 // App Check needs a Firebase project with the App Check API enabled; the
 // testing project has neither (App Check calls fail with ServiceDisabled).
@@ -22,17 +20,13 @@ export const runLifecycle = !!lifecycleAppId;
 
 export const missingDebugToken = () =>
   currentProject.pipe(
-    Effect.map(
-      (project) =>
-        `projects/${project}/apps/1:0:web:deadbeef/debugTokens/missing`,
-    ),
+    Effect.map((project) => `projects/${project}/apps/1:0:web:deadbeef/debugTokens/missing`),
   );
 
 export const missingResourcePolicy = () =>
   currentProject.pipe(
     Effect.map(
-      (project) =>
-        `projects/${project}/services/oauth2.googleapis.com/resourcePolicies/missing`,
+      (project) => `projects/${project}/services/oauth2.googleapis.com/resourcePolicies/missing`,
     ),
   );
 

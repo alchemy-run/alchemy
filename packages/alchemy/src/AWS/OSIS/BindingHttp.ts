@@ -70,9 +70,7 @@ export const makeOsisPipelineHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.requestKey]: yield* Identifier,
@@ -123,9 +121,7 @@ export const makeOsisAccountHttpBinding = <I, A, E, R>(options: {
  * A failed `osis:Ingest` request against a pipeline's ingest endpoint —
  * carries the HTTP status and response body returned by Data Prepper.
  */
-export class PipelineIngestError extends Data.TaggedError(
-  "OsisPipelineIngestError",
-)<{
+export class PipelineIngestError extends Data.TaggedError("OsisPipelineIngestError")<{
   readonly pipelineName: string;
   /** Request path on the ingest endpoint, e.g. `/logs/ingest`. */
   readonly path: string;
@@ -156,9 +152,7 @@ export interface IngestRequest {
  * pipeline's ingest endpoint with the host Function's own credentials.
  */
 export const makeOsisIngestBinding = Effect.gen(function* () {
-  const services = yield* Effect.context<
-    Credentials.Credentials | Region.Region
-  >();
+  const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
 
   return Effect.fn(function* (pipeline: Pipeline) {
     const PipelineName = yield* pipeline.pipelineName;
@@ -178,9 +172,7 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
       }
     }
 
-    return Effect.fn(`AWS.OSIS.Ingest(${pipeline.LogicalId})`)(function* (
-      request: IngestRequest,
-    ) {
+    return Effect.fn(`AWS.OSIS.Ingest(${pipeline.LogicalId})`)(function* (request: IngestRequest) {
       const pipelineName = yield* PipelineName;
       const endpoints = yield* IngestEndpointUrls;
       const endpoint = endpoints?.[0];
@@ -200,13 +192,8 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
       // Ingest endpoint URLs are bare hostnames
       // (`{name}-{id}.{region}.osis.amazonaws.com`); sign for the endpoint's
       // own region, parsed from the hostname.
-      const base = endpoint.startsWith("https://")
-        ? endpoint
-        : `https://${endpoint}`;
-      const url = new URL(
-        request.path.startsWith("/") ? request.path : `/${request.path}`,
-        base,
-      );
+      const base = endpoint.startsWith("https://") ? endpoint : `https://${endpoint}`;
+      const url = new URL(request.path.startsWith("/") ? request.path : `/${request.path}`, base);
 
       // Resolve credentials fresh per request (STS sessions rotate).
       const { credentials, region } = yield* Effect.gen(function* () {

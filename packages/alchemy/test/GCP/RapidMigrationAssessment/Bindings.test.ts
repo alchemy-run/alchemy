@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import RmaBindingsHost, { OnPrem } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "RapidMigrationAssessmentBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "RapidMigrationAssessmentBindings");
 
 // Needs the Rapid Migration Assessment API (disabled on the testing
 // project). Set GCP_TEST_RMA=1 on a project with the API enabled.
@@ -50,12 +47,7 @@ const hostProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "RapidMigrationAssessment Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:rapidmigrationassessment",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -88,19 +80,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "starts a pause operation on the collector",
         (_stack) =>
           Effect.gen(function* () {
-            const operation = yield* expectProbe<rma.Operation>(
-              baseUrl,
-              "pause",
-            );
+            const operation = yield* expectProbe<rma.Operation>(baseUrl, "pause");
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
         {
-          tags: [
-            "provider:gcp",
-            "provider:gcp:rapidmigrationassessment",
-            "live",
-          ],
+          tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "live"],
           timeout: 600_000,
         },
       );
@@ -111,19 +96,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "starts a resume operation on the collector",
         (_stack) =>
           Effect.gen(function* () {
-            const operation = yield* expectProbe<rma.Operation>(
-              baseUrl,
-              "resume",
-            );
+            const operation = yield* expectProbe<rma.Operation>(baseUrl, "resume");
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
         {
-          tags: [
-            "provider:gcp",
-            "provider:gcp:rapidmigrationassessment",
-            "live",
-          ],
+          tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "live"],
           timeout: 600_000,
         },
       );
@@ -134,19 +112,12 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "starts a register operation on the collector",
         (_stack) =>
           Effect.gen(function* () {
-            const operation = yield* expectProbe<rma.Operation>(
-              baseUrl,
-              "register",
-            );
+            const operation = yield* expectProbe<rma.Operation>(baseUrl, "register");
             yield* expectOperationOnCollector(operation);
             expect(yield* hostProjectGrants).toEqual(runnerOnProject);
           }),
         {
-          tags: [
-            "provider:gcp",
-            "provider:gcp:rapidmigrationassessment",
-            "live",
-          ],
+          tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "live"],
           timeout: 600_000,
         },
       );

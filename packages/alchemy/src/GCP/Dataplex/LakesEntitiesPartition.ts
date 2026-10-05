@@ -91,8 +91,7 @@ export class LakesEntitiesPartitionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const encodeValue = (value: string) =>
-  encodeURIComponent(encodeURIComponent(value));
+const encodeValue = (value: string) => encodeURIComponent(encodeURIComponent(value));
 
 const resourceNameOf = (entity: string, values: readonly string[]) =>
   `${entity}/partitions/${values.map(encodeValue).join("/")}`;
@@ -127,16 +126,12 @@ const listOwnedEntityNames = (project: string, region: string) =>
     );
     const zones = yield* listChildResources(lakes, listZones);
     const named = zones.filter((zone) => (zone.name ?? "").length > 0);
-    const tables = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "TABLES"),
-      { concurrency: 4 },
-    );
-    const filesets = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "FILESETS"),
-      { concurrency: 4 },
-    );
+    const tables = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "TABLES"), {
+      concurrency: 4,
+    });
+    const filesets = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "FILESETS"), {
+      concurrency: 4,
+    });
     return [...tables.flat(), ...filesets.flat()]
       .map((entity) => entity.name)
       .filter((name): name is string => (name ?? "").length > 0);
@@ -178,8 +173,7 @@ export const LakesEntitiesPartitionProvider = () =>
       const env = yield* GcpEnvironment.current;
       const entity = olds?.entity ?? output?.entity ?? "";
       const values = olds?.values ?? output?.values ?? [];
-      const name =
-        output?.name ?? (entity ? resourceNameOf(entity, values) : "");
+      const name = output?.name ?? (entity ? resourceNameOf(entity, values) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -197,9 +191,7 @@ export const LakesEntitiesPartitionProvider = () =>
           (entity) =>
             listPartitions(entity).pipe(
               Effect.map((partitions) =>
-                partitions.map((partition) =>
-                  toAttrs(partition, env.project, entity),
-                ),
+                partitions.map((partition) => toAttrs(partition, env.project, entity)),
               ),
             ),
           { concurrency: 4 },

@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 60;
@@ -362,9 +358,7 @@ export type Connection = Resource<
  * @resource
  * @category BigQueryConnection
  */
-export const Connection = Resource<Connection>(
-  "GCP.BigQueryConnection.Connection",
-);
+export const Connection = Resource<Connection>("GCP.BigQueryConnection.Connection");
 
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.BigQueryConnection.ConnectionNotResolved",
@@ -384,14 +378,10 @@ const normalizeLocation = (location: string | undefined, fallback: string) => {
   return MULTI_REGION.has(lower) ? lower.toUpperCase() : lower;
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionId: string,
-) => `projects/${project}/locations/${location}/connections/${connectionId}`;
+const resourceName = (project: string, location: string, connectionId: string) =>
+  `projects/${project}/locations/${location}/connections/${connectionId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -399,10 +389,8 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     connectionId:
       connectionsAt >= 0 && parts[connectionsAt + 1]
         ? parts[connectionsAt + 1]!
@@ -410,11 +398,7 @@ const parseName = (name: string) => {
   };
 };
 
-const toId = (
-  id: string,
-  connectionId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, connectionId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (connectionId !== undefined) return connectionId;
     if (existing !== undefined) return existing;
@@ -425,9 +409,7 @@ const toId = (
       delimiter: "_",
     });
     const sanitized = generated.replaceAll("-", "_");
-    return /^[a-z_]/.test(sanitized)
-      ? sanitized
-      : `c${sanitized}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z_]/.test(sanitized) ? sanitized : `c${sanitized}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -461,9 +443,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -500,9 +480,7 @@ const toCloudSql = (
     instanceId: properties.instanceId,
     type: properties.type,
     database: properties.database,
-    credential: properties.credential
-      ? { username: properties.credential.username }
-      : undefined,
+    credential: properties.credential ? { username: properties.credential.username } : undefined,
   };
 };
 
@@ -521,9 +499,7 @@ const toAws = (
 ): AwsProperties | undefined => {
   if (properties === undefined) return undefined;
   return {
-    accessRole: properties.accessRole
-      ? { iamRoleId: properties.accessRole.iamRoleId }
-      : undefined,
+    accessRole: properties.accessRole ? { iamRoleId: properties.accessRole.iamRoleId } : undefined,
   };
 };
 
@@ -566,15 +542,11 @@ const toSecret = (
   secret: bigqueryconnection.ConnectorConfigurationSecret | undefined,
 ): ConnectorSecret | undefined => {
   if (secret === undefined) return undefined;
-  return secret.plaintext !== undefined
-    ? { plaintext: secret.plaintext }
-    : undefined;
+  return secret.plaintext !== undefined ? { plaintext: secret.plaintext } : undefined;
 };
 
 const toParameterMap = (
-  parameters:
-    | bigqueryconnection.ConnectorConfigurationParameterValueMap
-    | undefined,
+  parameters: bigqueryconnection.ConnectorConfigurationParameterValueMap | undefined,
 ): Record<string, ConnectorParameterValue | undefined> | undefined => {
   if (parameters === undefined) return undefined;
   return Object.fromEntries(
@@ -603,11 +575,8 @@ const toConfiguration = (
       ? {
           usernamePassword: configuration.authentication.usernamePassword
             ? {
-                username:
-                  configuration.authentication.usernamePassword.username,
-                password: toSecret(
-                  configuration.authentication.usernamePassword.password,
-                ),
+                username: configuration.authentication.usernamePassword.username,
+                password: toSecret(configuration.authentication.usernamePassword.password),
               }
             : undefined,
           parameters: toParameterMap(configuration.authentication.parameters),
@@ -630,9 +599,7 @@ const toCloudResource = (
   return { serviceAccountId: properties.serviceAccountId };
 };
 
-const serviceAccountOf = (
-  connection: bigqueryconnection.Connection,
-): string | undefined =>
+const serviceAccountOf = (connection: bigqueryconnection.Connection): string | undefined =>
   connection.cloudResource?.serviceAccountId ??
   connection.cloudSql?.serviceAccountId ??
   connection.spark?.serviceAccountId ??
@@ -641,10 +608,7 @@ const serviceAccountOf = (
   connection.azure?.identity ??
   connection.salesforceDataCloud?.identity;
 
-const toAttrs = (
-  connection: bigqueryconnection.Connection,
-  project: string,
-) => {
+const toAttrs = (connection: bigqueryconnection.Connection, project: string) => {
   const name = connection.name ?? "";
   const parsed = parseName(name);
   const kind = kindOf(connection);
@@ -684,9 +648,7 @@ const writableSpark = (properties: SparkProperties | undefined) => {
 const writableAws = (properties: AwsProperties | undefined) => {
   if (properties === undefined) return undefined;
   return {
-    accessRole: properties.accessRole
-      ? { iamRoleId: properties.accessRole.iamRoleId }
-      : undefined,
+    accessRole: properties.accessRole ? { iamRoleId: properties.accessRole.iamRoleId } : undefined,
   };
 };
 
@@ -711,9 +673,7 @@ const writableSpanner = (properties: CloudSpannerProperties | undefined) => {
   };
 };
 
-const writableSalesforce = (
-  properties: SalesforceDataCloudProperties | undefined,
-) => {
+const writableSalesforce = (properties: SalesforceDataCloudProperties | undefined) => {
   if (properties === undefined) return undefined;
   return {
     instanceUri: properties.instanceUri,
@@ -721,9 +681,7 @@ const writableSalesforce = (
   };
 };
 
-const writableConfiguration = (
-  configuration: ConnectorConfiguration | undefined,
-) => {
+const writableConfiguration = (configuration: ConnectorConfiguration | undefined) => {
   if (configuration === undefined) return undefined;
   return {
     connectorId: configuration.connectorId,
@@ -796,15 +754,7 @@ const listOwnedAt = (parent: string, project: string) =>
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {
-    stables: [
-      "name",
-      "connectionId",
-      "project",
-      "location",
-      "kind",
-      "kmsKeyName",
-      "creationTime",
-    ],
+    stables: ["name", "connectionId", "project", "location", "kind", "kmsKeyName", "creationTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -812,19 +762,10 @@ export const ConnectionProvider = () =>
 
       const previousId = olds?.connectionId ?? output?.connectionId;
       const nextId = news.connectionId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
@@ -832,28 +773,19 @@ export const ConnectionProvider = () =>
       const kmsChanged = nextKms !== previousKms;
 
       const previousKind =
-        specifiedKind(olds ?? {}) ??
-        specifiedKind(output ?? {}) ??
-        "cloudResource";
+        specifiedKind(olds ?? {}) ?? specifiedKind(output ?? {}) ?? "cloudResource";
       const nextKind = specifiedKind(news) ?? previousKind;
       const kindChanged = previousKind !== nextKind;
 
       const previousConnector =
         olds?.configuration?.connectorId ?? output?.configuration?.connectorId;
-      const nextConnector =
-        news.configuration?.connectorId ?? previousConnector;
+      const nextConnector = news.configuration?.connectorId ?? previousConnector;
       const connectorChanged =
         previousConnector !== undefined &&
         nextConnector !== undefined &&
         nextConnector !== previousConnector;
 
-      if (
-        !idChanged &&
-        !locationChanged &&
-        !kmsChanged &&
-        !kindChanged &&
-        !connectorChanged
-      ) {
+      if (!idChanged && !locationChanged && !kmsChanged && !kindChanged && !connectorChanged) {
         return undefined;
       }
       return {
@@ -864,24 +796,13 @@ export const ConnectionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectionId = yield* toId(
-        id,
-        olds?.connectionId,
-        output?.connectionId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectionId);
+      const connectionId = yield* toId(id, olds?.connectionId, output?.connectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseDescription(existing.description).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -889,15 +810,11 @@ export const ConnectionProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const wildcard = yield* listOwnedAt(
-          parentOf(env.project, "-"),
-          env.project,
-        );
+        const wildcard = yield* listOwnedAt(parentOf(env.project, "-"), env.project);
         if (wildcard.length > 0) return wildcard;
         const fallback = yield* Effect.forEach(
           [...new Set(["us-central1", env.region, "US", "EU", "us-east1"])],
-          (location) =>
-            listOwnedAt(parentOf(env.project, location), env.project),
+          (location) => listOwnedAt(parentOf(env.project, location), env.project),
           { concurrency: 4 },
         );
         const seen = new Set<string>();
@@ -910,15 +827,8 @@ export const ConnectionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectionId = yield* toId(
-        id,
-        news.connectionId,
-        output?.connectionId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const connectionId = yield* toId(id, news.connectionId, output?.connectionId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectionId);
       const parent = parentOf(env.project, location);
       const ownership = yield* createInternalLabels(id);
@@ -983,10 +893,7 @@ export const ConnectionProvider = () =>
       }
       if (
         kind === "spark" &&
-        !jsonEqual(
-          writableSpark(toSpark(current.spark)),
-          writableSpark(news.spark ?? {}),
-        )
+        !jsonEqual(writableSpark(toSpark(current.spark)), writableSpark(news.spark ?? {}))
       ) {
         updateMask.push("spark");
         body.spark = news.spark ?? {};
@@ -1002,10 +909,7 @@ export const ConnectionProvider = () =>
       if (
         kind === "azure" &&
         news.azure !== undefined &&
-        !jsonEqual(
-          writableAzure(toAzure(current.azure)),
-          writableAzure(news.azure),
-        )
+        !jsonEqual(writableAzure(toAzure(current.azure)), writableAzure(news.azure))
       ) {
         updateMask.push("azure");
         body.azure = news.azure;

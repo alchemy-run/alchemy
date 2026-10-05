@@ -29,10 +29,7 @@ export interface CheckAccessNotGranted extends Binding.Service<
   () => Effect.Effect<
     (
       request: aa.CheckAccessNotGrantedRequest,
-    ) => Effect.Effect<
-      aa.CheckAccessNotGrantedResponse,
-      aa.CheckAccessNotGrantedError
-    >
+    ) => Effect.Effect<aa.CheckAccessNotGrantedResponse, aa.CheckAccessNotGrantedError>
   >
 > {}
 

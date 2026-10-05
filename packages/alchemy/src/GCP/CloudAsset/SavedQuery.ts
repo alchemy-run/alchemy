@@ -162,10 +162,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const desiredContent = (
-  project: string,
-  content: QueryContent | undefined,
-): QueryContent => ({
+const desiredContent = (project: string, content: QueryContent | undefined): QueryContent => ({
   iamPolicyAnalysisQuery: {
     ...content?.iamPolicyAnalysisQuery,
     scope: content?.iamPolicyAnalysisQuery?.scope ?? projectParent(project),
@@ -207,9 +204,7 @@ const observe = (project: string, savedQueryId: string, outputName?: string) =>
       if (found !== undefined) return found;
     }
     const queries = yield* listSavedQueries(parent);
-    return queries.find(
-      (query) => lastSegment(query.name ?? "") === savedQueryId,
-    );
+    return queries.find((query) => lastSegment(query.name ?? "") === savedQueryId);
   });
 
 export const SavedQueryProvider = () =>
@@ -219,26 +214,18 @@ export const SavedQueryProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return (
-        replaceOn(
-          olds?.savedQueryId ?? output?.savedQueryId,
-          news.savedQueryId,
-        ) ?? replaceOn(olds?.parent, news.parent)
+        replaceOn(olds?.savedQueryId ?? output?.savedQueryId, news.savedQueryId) ??
+        replaceOn(olds?.parent, news.parent)
       );
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        olds?.savedQueryId,
-        output?.savedQueryId,
-      );
+      const savedQueryId = yield* toPhysicalId(id, olds?.savedQueryId, output?.savedQueryId);
       const existing = yield* observe(env.project, savedQueryId, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -248,30 +235,21 @@ export const SavedQueryProvider = () =>
         const queries = yield* listSavedQueries(parent);
         return queries
           .filter((query) =>
-            Object.keys(query.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            ),
+            Object.keys(query.labels ?? {}).some((key) => key.startsWith("alchemy-")),
           )
           .map((query) => toAttrs(query, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        news.savedQueryId,
-        output?.savedQueryId,
-      );
+      const savedQueryId = yield* toPhysicalId(id, news.savedQueryId, output?.savedQueryId);
       const parent = yield* scopeParent(env.project, news.parent);
       const name = resourceName(parent, savedQueryId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const description = news.description?.slice(
-        0,
-        MAX_SAVED_QUERY_DESCRIPTION,
-      );
+      const description = news.description?.slice(0, MAX_SAVED_QUERY_DESCRIPTION);
       const content = desiredContent(env.project, news.content);
       const body: cloudasset.SavedQuery = {
         description,
@@ -289,9 +267,7 @@ export const SavedQueryProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              observe(env.project, savedQueryId, output?.name),
-            ),
+            Effect.catchTag("Conflict", () => observe(env.project, savedQueryId, output?.name)),
           );
         current = created ?? undefined;
       }

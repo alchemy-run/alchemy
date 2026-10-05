@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import CloudBuildBindingsHost, { Source } from "./fixtures/bindings-host.ts";
 
@@ -14,8 +14,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CloudBuildBindings");
 
 // Needs a GitHub connection that has completed the OAuth handshake.
-const runLifecycle =
-  !!process.env.GCP_TEST_CLOUDBUILD_REPO && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_CLOUDBUILD_REPO && !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;
@@ -30,9 +29,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -54,12 +51,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "CloudBuild Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:cloudbuild",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:cloudbuild", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -130,14 +122,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "lists the repository's branches as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ refNames?: string[] }>(
-              baseUrl,
-              "fetchGitRefs",
+            const out = yield* expectProbe<{ refNames?: string[] }>(baseUrl, "fetchGitRefs");
+            const expected = yield* cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories(
+              { repository: repositoryName, refType: "BRANCH" },
             );
-            const expected =
-              yield* cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories(
-                { repository: repositoryName, refType: "BRANCH" },
-              );
             // Every repository has at least its default branch.
             expect(out.refNames?.length ?? 0).toBeGreaterThan(0);
             expect(out.refNames).toEqual(expected.refNames);

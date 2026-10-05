@@ -1,20 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import { waitForOperation } from "@/GCP/Operation";
+import * as Test from "@/Test/Alchemy";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // GKE cluster create and delete each take 5-10 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -48,8 +45,7 @@ const waitClusterOp = (project: string, operation: container.Operation) => {
       : `projects/${project}/locations/${HOST_LOCATION}/operations/${raw}`;
   return waitForOperation(
     { ...operation, name },
-    (operationName) =>
-      container.getProjectsLocationsOperations({ name: operationName }),
+    (operationName) => container.getProjectsLocationsOperations({ name: operationName }),
     { budget: "20 minutes", interval: "10 seconds" },
   );
 };
@@ -64,9 +60,9 @@ test.provider(
       const page = yield* container.listProjectsLocationsClusters({
         parent: `projects/${project}/locations/-`,
       });
-      expect(
-        (page.clusters ?? []).map((cluster) => cluster.name),
-      ).not.toContain("alchemy-missing-cluster");
+      expect((page.clusters ?? []).map((cluster) => cluster.name)).not.toContain(
+        "alchemy-missing-cluster",
+      );
 
       const missing = yield* container
         .getProjectsLocationsClustersNodePools({
@@ -91,18 +87,13 @@ test.provider(
  */
 const withHostCluster = <A, E, R>(
   project: string,
-  body: (host: {
-    clusterId: string;
-    location: string;
-  }) => Effect.Effect<A, E, R>,
+  body: (host: { clusterId: string; location: string }) => Effect.Effect<A, E, R>,
 ) => {
   const clusterName = `projects/${project}/locations/${HOST_LOCATION}/clusters/${HOST_CLUSTER_ID}`;
-  const deleteHost = container
-    .deleteProjectsLocationsClusters({ name: clusterName })
-    .pipe(
-      Effect.flatMap((operation) => waitClusterOp(project, operation)),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+  const deleteHost = container.deleteProjectsLocationsClusters({ name: clusterName }).pipe(
+    Effect.flatMap((operation) => waitClusterOp(project, operation)),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
   const ensureHost = Effect.gen(function* () {
     const existing = yield* container
       .getProjectsLocationsClusters({ name: clusterName })
@@ -133,9 +124,7 @@ const withHostCluster = <A, E, R>(
     yield* waitClusterOp(project, created);
   });
   return ensureHost.pipe(
-    Effect.andThen(
-      body({ clusterId: HOST_CLUSTER_ID, location: HOST_LOCATION }),
-    ),
+    Effect.andThen(body({ clusterId: HOST_CLUSTER_ID, location: HOST_LOCATION })),
     Effect.ensuring(Effect.ignore(deleteHost)),
   );
 };
@@ -147,80 +136,74 @@ test.provider.skipIf(!runLifecycle)(
       Effect.gen(function* () {
         yield* stack.destroy();
         const { project } = yield* GcpEnvironment.current;
-        yield* withHostCluster(
-          project,
-          ({ clusterId: hostId, location: hostLocation }) =>
-            Effect.gen(function* () {
-              const created = yield* stack.deploy(
-                Effect.gen(function* () {
-                  return yield* GCP.Container.NodePool("Workers", {
-                    cluster: hostId,
-                    location: hostLocation,
-                    nodeCount: POOL_NODE_COUNT,
-                    machineType: "e2-medium",
-                    diskSizeGb: 20,
-                    spot: true,
-                    management: { autoRepair: false, autoUpgrade: true },
-                    labels: { env: "test" },
-                  });
-                }),
-              );
-
-              expect(created.name).toContain("/nodePools/");
-              expect(created.nodePoolId).toEqual(expect.any(String));
-              expect(created.clusterId).toEqual(hostId);
-              expect(created.location).toEqual(hostLocation);
-              expect(created.labels).toMatchObject({ env: "test" });
-              expect(created.spot).toEqual(true);
-              expect(created.nodeCount).toEqual(POOL_NODE_COUNT);
-              expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(
-                created.status,
-              );
-
-              const fetched =
-                yield* container.getProjectsLocationsClustersNodePools({
-                  name: created.name,
+        yield* withHostCluster(project, ({ clusterId: hostId, location: hostLocation }) =>
+          Effect.gen(function* () {
+            const created = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* GCP.Container.NodePool("Workers", {
+                  cluster: hostId,
+                  location: hostLocation,
+                  nodeCount: POOL_NODE_COUNT,
+                  machineType: "e2-medium",
+                  diskSizeGb: 20,
+                  spot: true,
+                  management: { autoRepair: false, autoUpgrade: true },
+                  labels: { env: "test" },
                 });
-              expect(fetched.name).toEqual(created.nodePoolId);
-              expect(fetched.config?.resourceLabels?.env).toEqual("test");
-              expect(fetched.config?.spot).toEqual(true);
+              }),
+            );
 
-              const updated = yield* stack.deploy(
-                Effect.gen(function* () {
-                  return yield* GCP.Container.NodePool("Workers", {
-                    cluster: hostId,
-                    location: hostLocation,
-                    nodePoolId: created.nodePoolId,
-                    nodeCount: POOL_NODE_COUNT,
-                    machineType: "e2-medium",
-                    diskSizeGb: 20,
-                    spot: true,
-                    management: { autoRepair: true, autoUpgrade: true },
-                    labels: { env: "prod", role: "workers" },
-                  });
-                }),
-              );
+            expect(created.name).toContain("/nodePools/");
+            expect(created.nodePoolId).toEqual(expect.any(String));
+            expect(created.clusterId).toEqual(hostId);
+            expect(created.location).toEqual(hostLocation);
+            expect(created.labels).toMatchObject({ env: "test" });
+            expect(created.spot).toEqual(true);
+            expect(created.nodeCount).toEqual(POOL_NODE_COUNT);
+            expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(created.status);
 
-              expect(updated.name).toEqual(created.name);
-              expect(updated.labels).toMatchObject({
-                env: "prod",
-                role: "workers",
-              });
-              expect(updated.management?.autoRepair).toEqual(true);
+            const fetched = yield* container.getProjectsLocationsClustersNodePools({
+              name: created.name,
+            });
+            expect(fetched.name).toEqual(created.nodePoolId);
+            expect(fetched.config?.resourceLabels?.env).toEqual("test");
+            expect(fetched.config?.spot).toEqual(true);
 
-              const refetched =
-                yield* container.getProjectsLocationsClustersNodePools({
-                  name: created.name,
+            const updated = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* GCP.Container.NodePool("Workers", {
+                  cluster: hostId,
+                  location: hostLocation,
+                  nodePoolId: created.nodePoolId,
+                  nodeCount: POOL_NODE_COUNT,
+                  machineType: "e2-medium",
+                  diskSizeGb: 20,
+                  spot: true,
+                  management: { autoRepair: true, autoUpgrade: true },
+                  labels: { env: "prod", role: "workers" },
                 });
-              expect(refetched.config?.resourceLabels?.env).toEqual("prod");
-              expect(refetched.config?.resourceLabels?.role).toEqual("workers");
-              expect(refetched.management?.autoRepair).toEqual(true);
+              }),
+            );
 
-              yield* stack.destroy();
+            expect(updated.name).toEqual(created.name);
+            expect(updated.labels).toMatchObject({
+              env: "prod",
+              role: "workers",
+            });
+            expect(updated.management?.autoRepair).toEqual(true);
 
-              const gone = yield* waitUntilGone(created.name);
-              expect(gone).toEqual("gone");
-            }),
+            const refetched = yield* container.getProjectsLocationsClustersNodePools({
+              name: created.name,
+            });
+            expect(refetched.config?.resourceLabels?.env).toEqual("prod");
+            expect(refetched.config?.resourceLabels?.role).toEqual("workers");
+            expect(refetched.management?.autoRepair).toEqual(true);
+
+            yield* stack.destroy();
+
+            const gone = yield* waitUntilGone(created.name);
+            expect(gone).toEqual("gone");
+          }),
         );
       }),
     ).pipe(logLevel),

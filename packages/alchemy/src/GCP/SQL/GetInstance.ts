@@ -36,11 +36,7 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      sqladmin.DatabaseInstance,
-      sqladmin.GetInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sqladmin.DatabaseInstance, sqladmin.GetInstancesError, RuntimeContext>
   >
 > {}
 

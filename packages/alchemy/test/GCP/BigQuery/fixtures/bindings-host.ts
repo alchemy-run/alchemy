@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Dataset the Query binding reads (roles/bigquery.dataViewer on it). */
@@ -57,10 +57,9 @@ export default class BigQueryBindingsHost extends GCP.Function<BigQueryBindingsH
         listTabledata: listRows({ maxResults: 10 }),
         readTable: Effect.gen(function* () {
           const page = yield* read.list({ maxResults: 10 });
-          const queried = yield* read.query(
-            "SELECT id FROM read_rows WHERE id = @id",
-            { id: "seed" },
-          );
+          const queried = yield* read.query("SELECT id FROM read_rows WHERE id = @id", {
+            id: "seed",
+          });
           return { listed: page.rows, queried };
         }),
         writeTable: write.insert([{ id: "written" }], {

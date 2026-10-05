@@ -32,10 +32,7 @@ export interface DescribeReplications extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dms.DescribeReplicationsMessage,
-    ) => Effect.Effect<
-      dms.DescribeReplicationsResponse,
-      dms.DescribeReplicationsError
-    >
+    ) => Effect.Effect<dms.DescribeReplicationsResponse, dms.DescribeReplicationsError>
   >
 > {}
 

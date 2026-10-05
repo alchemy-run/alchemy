@@ -161,9 +161,7 @@ export type AgentsEntityType = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsEntityType = Resource<AgentsEntityType>(
-  "GCP.Dialogflow.AgentsEntityType",
-);
+export const AgentsEntityType = Resource<AgentsEntityType>("GCP.Dialogflow.AgentsEntityType");
 
 export class AgentsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEntityTypeNotResolved",
@@ -172,9 +170,7 @@ export class AgentsEntityTypeNotResolved extends Data.TaggedError(
 }> {}
 
 const entitiesOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[] | undefined,
 ): EntityTypeEntity[] =>
   (list ?? [])
     .filter((entity) => (entity.value ?? "").length > 0)
@@ -184,9 +180,7 @@ const entitiesOf = (
     }));
 
 const excludedOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[] | undefined,
 ): Array<{ value: string }> =>
   (list ?? [])
     .filter((phrase) => (phrase.value ?? "").length > 0)
@@ -194,15 +188,10 @@ const excludedOf = (
 
 // Drops the `[alchemy …]` excluded phrase earlier versions stamped.
 const userExcludedOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeExcludedPhrase[] | undefined,
 ) => excludedOf(list).filter((phrase) => !hasOwnershipMarker(phrase.value));
 
-const toAttrs = (
-  entityType: dialogflow.GoogleCloudDialogflowCxV3EntityType,
-  project: string,
-) => {
+const toAttrs = (entityType: dialogflow.GoogleCloudDialogflowCxV3EntityType, project: string) => {
   const name = entityType.name ?? "";
   const parsed = parseResourceName(name, "entityTypes");
   return {
@@ -267,19 +256,12 @@ export const AgentsEntityTypeProvider = () =>
       const env = yield* GcpEnvironment.current;
       if (output?.name !== undefined) {
         const existing = yield* getByName(output.name);
-        return existing === undefined
-          ? undefined
-          : toAttrs(existing, env.project);
+        return existing === undefined ? undefined : toAttrs(existing, env.project);
       }
       if (olds === undefined) return undefined;
       const generated = yield* displayNameOf(id, undefined);
       const displayName = olds.displayName ?? generated;
-      const agent = expandName(
-        olds.agent,
-        env.project,
-        normalizeLocation(olds.location),
-        "agents",
-      );
+      const agent = expandName(olds.agent, env.project, normalizeLocation(olds.location), "agents");
       const found = yield* findByDisplayName(agent, displayName);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
@@ -309,9 +291,8 @@ export const AgentsEntityTypeProvider = () =>
       };
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findByDisplayName(agent, displayName));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findByDisplayName(agent, displayName));
 
       if (current === undefined) {
         const created = yield* dialogflow
@@ -320,40 +301,26 @@ export const AgentsEntityTypeProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         const name =
-          output?.name ??
-          (news.entityTypeId
-            ? `${agent}/entityTypes/${news.entityTypeId}`
-            : agent);
+          output?.name ?? (news.entityTypeId ? `${agent}/entityTypes/${news.entityTypeId}` : agent);
         return yield* new AgentsEntityTypeNotResolved({ name });
       }
 
       const currentName = current.name ?? output?.name ?? "";
       const displayChanged = !sameText(current.displayName, displayName);
       const kindChanged = !sameText(current.kind, kind);
-      const entitiesChanged = !sameJson(
-        entitiesOf(current.entities),
-        entitiesOf(entities),
-      );
+      const entitiesChanged = !sameJson(entitiesOf(current.entities), entitiesOf(entities));
       const excludedChanged = !sameJson(
         excludedOf(current.excludedPhrases),
         excludedOf(excludedPhrases),
       );
-      const expansionChanged = !sameText(
-        current.autoExpansionMode,
-        autoExpansionMode,
-      );
-      const fuzzyChanged =
-        (current.enableFuzzyExtraction === true) !== enableFuzzyExtraction;
+      const expansionChanged = !sameText(current.autoExpansionMode, autoExpansionMode);
+      const fuzzyChanged = (current.enableFuzzyExtraction === true) !== enableFuzzyExtraction;
       const redactChanged = (current.redact === true) !== redact;
 
       if (

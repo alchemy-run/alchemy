@@ -9,11 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
 import {
@@ -128,41 +124,28 @@ export type BackupRun = Resource<
  */
 export const BackupRun = Resource<BackupRun>("GCP.SQL.BackupRun");
 
-export class BackupRunNotResolved extends Data.TaggedError(
-  "GCP.SQL.BackupRunNotResolved",
-)<{
+export class BackupRunNotResolved extends Data.TaggedError("GCP.SQL.BackupRunNotResolved")<{
   instance: string;
   backupRunId: string;
 }> {}
 
-export class BackupRunNotReady extends Data.TaggedError(
-  "GCP.SQL.BackupRunNotReady",
-)<{
+export class BackupRunNotReady extends Data.TaggedError("GCP.SQL.BackupRunNotReady")<{
   instance: string;
   backupRunId: string;
   status: string | undefined;
 }> {}
 
-export class BackupRunStillExists extends Data.TaggedError(
-  "GCP.SQL.BackupRunStillExists",
-)<{
+export class BackupRunStillExists extends Data.TaggedError("GCP.SQL.BackupRunStillExists")<{
   instance: string;
   backupRunId: string;
 }> {}
 
 const normalizeLocation = (value: string | undefined) =>
-  value === undefined || value.length === 0
-    ? undefined
-    : lastSegment(value).toLowerCase();
+  value === undefined || value.length === 0 ? undefined : lastSegment(value).toLowerCase();
 
-const idOf = (value: string | number | undefined) =>
-  value === undefined ? "" : String(value);
+const idOf = (value: string | number | undefined) => (value === undefined ? "" : String(value));
 
-const toUserDescription = (
-  id: string,
-  description: string | undefined,
-  existing?: string,
-) =>
+const toUserDescription = (id: string, description: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (description !== undefined) return description;
     if (existing !== undefined) return existing;
@@ -173,11 +156,7 @@ const toUserDescription = (
     });
   });
 
-const toAttrs = (
-  run: sqladmin.BackupRun,
-  project: string,
-  instance: string,
-) => ({
+const toAttrs = (run: sqladmin.BackupRun, project: string, instance: string) => ({
   backupRunId: idOf(run.id),
   instance: instanceIdOf(run.instance ?? instance),
   project,
@@ -220,25 +199,13 @@ const listRuns = (project: string, instance: string) =>
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as sqladmin.BackupRun[]),
-      ),
-      recoverIfInstanceMissing(
-        project,
-        instance,
-        () => [] as sqladmin.BackupRun[],
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as sqladmin.BackupRun[])),
+      recoverIfInstanceMissing(project, instance, () => [] as sqladmin.BackupRun[]),
     );
 
-const findByOwnership = (
-  project: string,
-  instance: string,
-  labels: Record<string, string>,
-) =>
+const findByOwnership = (project: string, instance: string, labels: Record<string, string>) =>
   listRuns(project, instance).pipe(
-    Effect.map((runs) =>
-      runs.find((run) => matchesOwnership(run.description, labels)),
-    ),
+    Effect.map((runs) => runs.find((run) => matchesOwnership(run.description, labels))),
   );
 
 const observe = (
@@ -265,16 +232,10 @@ const waitForOperation = (
     notFoundOk: options?.notFoundOk,
   });
 
-const waitUntilExists = (
-  project: string,
-  instance: string,
-  backupRunId: string,
-) =>
+const waitUntilExists = (project: string, instance: string, backupRunId: string) =>
   getById(project, instance, backupRunId).pipe(
     Effect.flatMap((run) =>
-      run
-        ? Effect.succeed(run)
-        : Effect.fail(new BackupRunNotResolved({ instance, backupRunId })),
+      run ? Effect.succeed(run) : Effect.fail(new BackupRunNotResolved({ instance, backupRunId })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.BackupRunNotResolved",
@@ -290,11 +251,7 @@ const isBusy = (status: string | undefined) =>
   status === "SQL_BACKUP_RUN_STATUS_UNSPECIFIED" ||
   status === undefined;
 
-const waitUntilReady = (
-  project: string,
-  instance: string,
-  backupRunId: string,
-) =>
+const waitUntilReady = (project: string, instance: string, backupRunId: string) =>
   getById(project, instance, backupRunId).pipe(
     Effect.filterOrFail(
       (run): run is sqladmin.BackupRun => run !== undefined,
@@ -311,18 +268,13 @@ const waitUntilReady = (
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.SQL.BackupRunNotReady" ||
-        error._tag === "GCP.SQL.BackupRunNotResolved",
+        error._tag === "GCP.SQL.BackupRunNotReady" || error._tag === "GCP.SQL.BackupRunNotResolved",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  instance: string,
-  backupRunId: string,
-) =>
+const waitUntilGone = (project: string, instance: string, backupRunId: string) =>
   getById(project, instance, backupRunId).pipe(
     Effect.flatMap((run) =>
       run === undefined || run.status === "DELETED"
@@ -336,8 +288,7 @@ const waitUntilGone = (
     }),
   );
 
-const idFromOperation = (operation: sqladmin.Operation) =>
-  idOf(operation.backupContext?.backupId);
+const idFromOperation = (operation: sqladmin.Operation) => idOf(operation.backupContext?.backupId);
 
 export const BackupRunProvider = () =>
   Provider.succeed(BackupRun, {
@@ -347,9 +298,7 @@ export const BackupRunProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousInstance = olds?.instance ?? output?.instance;
       const nextInstance = news.instance;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
       const instanceChanged =
         previousInstance !== undefined &&
@@ -389,20 +338,14 @@ export const BackupRunProvider = () =>
         const runs = yield* listRuns(env.project, "-");
         return runs
           .filter((run) => hasOwnershipMarker(run.description))
-          .map((run) =>
-            toAttrs(run, env.project, instanceIdOf(run.instance ?? "")),
-          );
+          .map((run) => toAttrs(run, env.project, instanceIdOf(run.instance ?? "")));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(news.instance);
       const ownership = yield* createInternalLabels(id);
-      const userDescription = yield* toUserDescription(
-        id,
-        news.description,
-        output?.description,
-      );
+      const userDescription = yield* toUserDescription(id, news.description, output?.description);
       const desiredDescription = encodeDescription(ownership, userDescription);
 
       let current = yield* observe(
@@ -442,29 +385,18 @@ export const BackupRunProvider = () =>
           const done = yield* waitForOperation(env.project, created);
           const backupRunId = idFromOperation(done) || idFromOperation(created);
           if (backupRunId.length > 0) {
-            current = yield* waitUntilExists(
-              env.project,
-              instance,
-              backupRunId,
-            );
+            current = yield* waitUntilExists(env.project, instance, backupRunId);
           }
         }
         if (current === undefined) {
-          current = yield* findByOwnership(
-            env.project,
-            instance,
-            ownership,
-          ).pipe(
+          current = yield* findByOwnership(env.project, instance, ownership).pipe(
             Effect.flatMap((existing) =>
               existing
                 ? Effect.succeed(existing)
                 : Effect.fail(
                     new BackupRunNotResolved({
                       instance,
-                      backupRunId:
-                        output?.backupRunId ??
-                        ownership[alchemyLabelKeys.id] ??
-                        "",
+                      backupRunId: output?.backupRunId ?? ownership[alchemyLabelKeys.id] ?? "",
                     }),
                   ),
             ),
@@ -504,9 +436,7 @@ export const BackupRunProvider = () =>
           id: backupRunId,
         })
         .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(project, operation, { notFoundOk: true }),
-          ),
+          Effect.flatMap((operation) => waitForOperation(project, operation, { notFoundOk: true })),
           Effect.catchTag("NotFound", () => Effect.void),
           recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({

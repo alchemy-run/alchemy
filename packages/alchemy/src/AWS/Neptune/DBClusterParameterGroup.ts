@@ -128,11 +128,7 @@ export const DBClusterParameterGroupProvider = () =>
           .describeDBClusterParameterGroups({
             DBClusterParameterGroupName: groupName,
           })
-          .pipe(
-            Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusterParameterGroups?.[0];
       });
 
@@ -143,9 +139,7 @@ export const DBClusterParameterGroupProvider = () =>
           .pages({ DBClusterParameterGroupName: groupName })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
           );
       });
 
@@ -156,9 +150,7 @@ export const DBClusterParameterGroupProvider = () =>
           .pages({ DBClusterParameterGroupName: groupName, Source: "user" })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
           );
       });
 
@@ -170,9 +162,7 @@ export const DBClusterParameterGroupProvider = () =>
         return toTagRecord(response?.TagList);
       });
 
-      const toUserParameterRecord = (
-        parameters: neptune.Parameter[],
-      ): Record<string, string> =>
+      const toUserParameterRecord = (parameters: neptune.Parameter[]): Record<string, string> =>
         Object.fromEntries(
           parameters.flatMap((p) =>
             p.ParameterName !== undefined && p.ParameterValue !== undefined
@@ -182,17 +172,10 @@ export const DBClusterParameterGroupProvider = () =>
         );
 
       return {
-        stables: [
-          "dbClusterParameterGroupArn",
-          "dbClusterParameterGroupName",
-          "family",
-        ],
+        stables: ["dbClusterParameterGroupArn", "dbClusterParameterGroupName", "family"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? { family: "" })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { family: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           // Family is immutable — any change forces a fresh group.
@@ -203,10 +186,7 @@ export const DBClusterParameterGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbClusterParameterGroupName ??
-            (yield* toName(
-              id,
-              olds ?? ({ family: "" } as DBClusterParameterGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ family: "" } as DBClusterParameterGroupProps)));
           const group = yield* readGroup(name);
           if (!group?.DBClusterParameterGroupName) {
             return undefined;
@@ -223,8 +203,7 @@ export const DBClusterParameterGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.dbClusterParameterGroupName ?? (yield* toName(id, news));
+          const name = output?.dbClusterParameterGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -245,18 +224,11 @@ export const DBClusterParameterGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBClusterParameterGroupName) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create DB cluster parameter group '${name}'`,
-                ),
+                new Error(`Failed to create DB cluster parameter group '${name}'`),
               );
             }
           }
@@ -264,26 +236,21 @@ export const DBClusterParameterGroupProvider = () =>
           // Sync parameters — diff observed cloud values against desired.
           const desiredParameters = news.parameters ?? {};
           const allParameters = yield* readParameters(name);
-          const byName = new Map(
-            allParameters.map((p) => [p.ParameterName, p]),
-          );
+          const byName = new Map(allParameters.map((p) => [p.ParameterName, p]));
 
-          const toModify: neptune.Parameter[] = Object.entries(
-            desiredParameters,
-          ).flatMap(([ParameterName, ParameterValue]) => {
-            const current = byName.get(ParameterName);
-            if (current?.ParameterValue === ParameterValue) return [];
-            return [
-              {
-                ParameterName,
-                ParameterValue,
-                ApplyMethod:
-                  current?.ApplyType === "static"
-                    ? "pending-reboot"
-                    : "immediate",
-              },
-            ];
-          });
+          const toModify: neptune.Parameter[] = Object.entries(desiredParameters).flatMap(
+            ([ParameterName, ParameterValue]) => {
+              const current = byName.get(ParameterName);
+              if (current?.ParameterValue === ParameterValue) return [];
+              return [
+                {
+                  ParameterName,
+                  ParameterValue,
+                  ApplyMethod: current?.ApplyType === "static" ? "pending-reboot" : "immediate",
+                },
+              ];
+            },
+          );
           if (toModify.length > 0) {
             // The API caps a single call at 20 parameters.
             for (let i = 0; i < toModify.length; i += 20) {
@@ -299,8 +266,7 @@ export const DBClusterParameterGroupProvider = () =>
           // Reset user-overridden parameters that were removed from props.
           const userParameters = yield* readUserParameters(name);
           const toReset = userParameters.flatMap((p) =>
-            p.ParameterName !== undefined &&
-            !(p.ParameterName in desiredParameters)
+            p.ParameterName !== undefined && !(p.ParameterName in desiredParameters)
               ? [
                   {
                     ParameterName: p.ParameterName,
@@ -367,10 +333,8 @@ export const DBClusterParameterGroupProvider = () =>
                   group.DBParameterGroupFamily?.startsWith("neptune")
                     ? [
                         {
-                          dbClusterParameterGroupName:
-                            group.DBClusterParameterGroupName,
-                          dbClusterParameterGroupArn:
-                            group.DBClusterParameterGroupArn,
+                          dbClusterParameterGroupName: group.DBClusterParameterGroupName,
+                          dbClusterParameterGroupArn: group.DBClusterParameterGroupArn,
                           family: group.DBParameterGroupFamily,
                           description: group.Description,
                           parameters: {} as Record<string, string>,
@@ -387,12 +351,7 @@ export const DBClusterParameterGroupProvider = () =>
             .deleteDBClusterParameterGroup({
               DBClusterParameterGroupName: output.dbClusterParameterGroupName,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBParameterGroupNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.void));
         }),
       };
     }),

@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Note } from "./Note.ts";
 
-export interface GetNoteRequest extends Omit<
-  containeranalysis.GetProjectsNotesRequest,
-  "name"
-> {}
+export interface GetNoteRequest extends Omit<containeranalysis.GetProjectsNotesRequest, "name"> {}
 
 /**
  * Runtime binding for Container Analysis `notes.get`.
@@ -41,6 +38,4 @@ export interface GetNote extends Binding.Service<
   >
 > {}
 
-export const GetNote = Binding.Service<GetNote>(
-  "GCP.ContainerAnalysis.GetNote",
-);
+export const GetNote = Binding.Service<GetNote>("GCP.ContainerAnalysis.GetNote");

@@ -15,11 +15,8 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { type LongRunningOperation, waitForOperation as waitForLongRunning } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  type LongRunningOperation,
-  waitForOperation as waitForLongRunning,
-} from "../Operation.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_VISIBILITY = "public";
@@ -150,9 +147,7 @@ export type ManagedZone = Resource<
  */
 export const ManagedZone = Resource<ManagedZone>("GCP.DNS.ManagedZone");
 
-export class ManagedZoneNotResolved extends Data.TaggedError(
-  "GCP.DNS.ManagedZoneNotResolved",
-)<{
+export class ManagedZoneNotResolved extends Data.TaggedError("GCP.DNS.ManagedZoneNotResolved")<{
   zoneName: string;
 }> {}
 
@@ -166,11 +161,9 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const isDone = (status: string | undefined) =>
-  (status ?? "").toLowerCase() === "done";
+const isDone = (status: string | undefined) => (status ?? "").toLowerCase() === "done";
 
-const normalizeDnsName = (value: string) =>
-  value.endsWith(".") ? value : `${value}.`;
+const normalizeDnsName = (value: string) => (value.endsWith(".") ? value : `${value}.`);
 
 const normalizeVisibility = (value: string | undefined) =>
   (value ?? DEFAULT_VISIBILITY).toLowerCase();
@@ -184,16 +177,10 @@ const toZoneName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `a${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `a${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const toDnsName = (
-  zoneName: string,
-  dnsName: string | undefined,
-  existing?: string,
-) =>
+const toDnsName = (zoneName: string, dnsName: string | undefined, existing?: string) =>
   dnsName !== undefined
     ? normalizeDnsName(dnsName)
     : existing !== undefined
@@ -214,11 +201,9 @@ const toNetworkUrl = (project: string, network: string) => {
 };
 
 const desiredNetworks = (project: string, networks: string[] | undefined) =>
-  [
-    ...new Set(
-      (networks ?? []).map((network) => toNetworkUrl(project, network)),
-    ),
-  ].sort((left, right) => lastSegment(left).localeCompare(lastSegment(right)));
+  [...new Set((networks ?? []).map((network) => toNetworkUrl(project, network)))].sort(
+    (left, right) => lastSegment(left).localeCompare(lastSegment(right)),
+  );
 
 const observedNetworks = (zone: dns.ManagedZone) =>
   (zone.privateVisibilityConfig?.networks ?? [])
@@ -228,9 +213,7 @@ const observedNetworks = (zone: dns.ManagedZone) =>
 
 const sameNetworks = (left: string[], right: string[]) =>
   left.length === right.length &&
-  left.every(
-    (url, index) => lastSegment(url) === lastSegment(right[index] ?? ""),
-  );
+  left.every((url, index) => lastSegment(url) === lastSegment(right[index] ?? ""));
 
 const toAttrs = (zone: dns.ManagedZone, project: string) => ({
   zoneName: zone.name ?? "",
@@ -238,10 +221,7 @@ const toAttrs = (zone: dns.ManagedZone, project: string) => ({
   project,
   id: zone.id,
   visibility: zone.visibility ?? DEFAULT_VISIBILITY,
-  description:
-    zone.description && zone.description.length > 0
-      ? zone.description
-      : undefined,
+  description: zone.description && zone.description.length > 0 ? zone.description : undefined,
   labels: userLabels(zone.labels),
   enableLogging: zone.cloudLoggingConfig?.enableLogging === true,
   networks: observedNetworks(zone),
@@ -255,19 +235,15 @@ const getByName = (project: string, zoneName: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 /** Cloud DNS operations and changes report `status: "pending" | "done"`. */
-const asLongRunning = (value: {
-  id?: string;
-  status?: string;
-}): LongRunningOperation => ({ name: value.id, done: isDone(value.status) });
+const asLongRunning = (value: { id?: string; status?: string }): LongRunningOperation => ({
+  name: value.id,
+  done: isDone(value.status),
+});
 
 /** Zone updates and record changes propagate within a few minutes. */
 const DNS_BUDGET = "5 minutes";
 
-const waitForOperation = (
-  project: string,
-  zoneName: string,
-  operation: dns.Operation,
-) =>
+const waitForOperation = (project: string, zoneName: string, operation: dns.Operation) =>
   waitForLongRunning(
     asLongRunning(operation),
     (operationId) =>
@@ -285,9 +261,7 @@ const waitForChange = (project: string, zoneName: string, change: dns.Change) =>
   waitForLongRunning(
     asLongRunning(change),
     (changeId) =>
-      dns
-        .getChanges({ project, managedZone: zoneName, changeId })
-        .pipe(Effect.map(asLongRunning)),
+      dns.getChanges({ project, managedZone: zoneName, changeId }).pipe(Effect.map(asLongRunning)),
     { budget: DNS_BUDGET, interval: "1 second" },
   );
 
@@ -307,27 +281,15 @@ const listRrsets = (project: string, zoneName: string) =>
       if (pageToken === undefined || pageToken === "") break;
     }
     return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as dns.ResourceRecordSet[]),
-    ),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as dns.ResourceRecordSet[])));
 
-const emptyZone = (
-  project: string,
-  zoneName: string,
-  dnsName: string | undefined,
-) =>
+const emptyZone = (project: string, zoneName: string, dnsName: string | undefined) =>
   Effect.gen(function* () {
     const apex = dnsName ? normalizeDnsName(dnsName) : undefined;
     const extra = (yield* listRrsets(project, zoneName)).filter((rrset) => {
       const type = rrset.type ?? "";
       const name = rrset.name ?? "";
-      if (
-        apex !== undefined &&
-        name === apex &&
-        (type === "NS" || type === "SOA")
-      ) {
+      if (apex !== undefined && name === apex && (type === "NS" || type === "SOA")) {
         return false;
       }
       return true;
@@ -350,15 +312,7 @@ const privateVisibilityConfig = (networks: string[]) =>
 
 export const ManagedZoneProvider = () =>
   Provider.succeed(ManagedZone, {
-    stables: [
-      "zoneName",
-      "dnsName",
-      "project",
-      "id",
-      "visibility",
-      "nameServers",
-      "creationTime",
-    ],
+    stables: ["zoneName", "dnsName", "project", "id", "visibility", "nameServers", "creationTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -366,9 +320,7 @@ export const ManagedZoneProvider = () =>
       const previousName = olds?.zoneName ?? output?.zoneName;
       const nextName = news.zoneName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
       const previousDns = olds?.dnsName ?? output?.dnsName;
       const nextDns =
@@ -382,12 +334,8 @@ export const ManagedZoneProvider = () =>
         nextDns !== undefined &&
         normalizeDnsName(previousDns) !== nextDns;
 
-      const previousVisibility = normalizeVisibility(
-        olds?.visibility ?? output?.visibility,
-      );
-      const nextVisibility = normalizeVisibility(
-        news.visibility ?? previousVisibility,
-      );
+      const previousVisibility = normalizeVisibility(olds?.visibility ?? output?.visibility);
+      const nextVisibility = normalizeVisibility(news.visibility ?? previousVisibility);
       const visibilityChanged = previousVisibility !== nextVisibility;
 
       if (!nameChanged && !dnsChanged && !visibilityChanged) {
@@ -396,9 +344,7 @@ export const ManagedZoneProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          nextName === previousName,
+          previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
 
@@ -408,9 +354,7 @@ export const ManagedZoneProvider = () =>
       const existing = yield* getByName(env.project, zoneName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -425,11 +369,7 @@ export const ManagedZoneProvider = () =>
             pageToken,
           });
           for (const zone of response.managedZones ?? []) {
-            if (
-              Object.keys(zone.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              )
-            ) {
+            if (Object.keys(zone.labels ?? {}).some((key) => key.startsWith("alchemy-"))) {
               found.push(toAttrs(zone, env.project));
             }
           }
@@ -443,15 +383,10 @@ export const ManagedZoneProvider = () =>
       const env = yield* GcpEnvironment.current;
       const zoneName = yield* toZoneName(id, news.zoneName, output?.zoneName);
       const dnsName = toDnsName(zoneName, news.dnsName, output?.dnsName);
-      const visibility = normalizeVisibility(
-        news.visibility ?? output?.visibility,
-      );
+      const visibility = normalizeVisibility(news.visibility ?? output?.visibility);
       const description = news.description ?? "";
       const enableLogging = news.enableLogging === true;
-      const networks =
-        visibility === "private"
-          ? desiredNetworks(env.project, news.networks)
-          : [];
+      const networks = visibility === "private" ? desiredNetworks(env.project, news.networks) : [];
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -473,9 +408,7 @@ export const ManagedZoneProvider = () =>
               privateVisibilityConfig: privateVisibilityConfig(networks),
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getByName(env.project, zoneName)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(env.project, zoneName)));
         current = created ?? undefined;
       }
 
@@ -487,18 +420,11 @@ export const ManagedZoneProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const descriptionChanged = (current.description ?? "") !== description;
-      const loggingChanged =
-        (current.cloudLoggingConfig?.enableLogging === true) !== enableLogging;
+      const loggingChanged = (current.cloudLoggingConfig?.enableLogging === true) !== enableLogging;
       const networksChanged =
-        visibility === "private" &&
-        !sameNetworks(observedNetworks(current), networks);
+        visibility === "private" && !sameNetworks(observedNetworks(current), networks);
 
-      if (
-        labelsChanged ||
-        descriptionChanged ||
-        loggingChanged ||
-        networksChanged
-      ) {
+      if (labelsChanged || descriptionChanged || loggingChanged || networksChanged) {
         const body: dns.ManagedZone = {};
         if (labelsChanged) body.labels = desiredLabels;
         if (descriptionChanged) body.description = description;
@@ -532,13 +458,8 @@ export const ManagedZoneProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* attempt.pipe(
         Effect.catchIf(
-          (error) =>
-            mayEmpty &&
-            (error._tag === "Conflict" || error._tag === "BadRequest"),
-          () =>
-            emptyZone(project, zoneName, output.dnsName).pipe(
-              Effect.andThen(attempt),
-            ),
+          (error) => mayEmpty && (error._tag === "Conflict" || error._tag === "BadRequest"),
+          () => emptyZone(project, zoneName, output.dnsName).pipe(Effect.andThen(attempt)),
         ),
       );
     }),

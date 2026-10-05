@@ -22,9 +22,7 @@ export const upgrade = (options?: {
 > =>
   Effect.gen(function* () {
     const request = yield* FunctionRequest;
-    const { socket, response } = yield* Effect.sync(() =>
-      upgradeWebSocket(request, options),
-    );
+    const { socket, response } = yield* Effect.sync(() => upgradeWebSocket(request, options));
     yield* Effect.sync(() => FunctionUpgradeSockets.set(response, socket));
     return { socket, response: HttpServerResponse.raw(response) };
   });

@@ -1,6 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
-import { OperationFailed } from "../Operation.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,7 +17,9 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { OperationFailed } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 
@@ -124,9 +124,7 @@ export type InstantSnapshot = Resource<
  * @resource
  * @category Compute
  */
-export const InstantSnapshot = Resource<InstantSnapshot>(
-  "GCP.Compute.InstantSnapshot",
-);
+export const InstantSnapshot = Resource<InstantSnapshot>("GCP.Compute.InstantSnapshot");
 
 export class InstantSnapshotNotResolved extends Data.TaggedError(
   "GCP.Compute.InstantSnapshotNotResolved",
@@ -142,9 +140,7 @@ export class InstantSnapshotNotReady extends Data.TaggedError(
   status: string;
 }> {}
 
-export class InstantSnapshotFailed extends Data.TaggedError(
-  "GCP.Compute.InstantSnapshotFailed",
-)<{
+export class InstantSnapshotFailed extends Data.TaggedError("GCP.Compute.InstantSnapshotFailed")<{
   instantSnapshotName: string;
   status: string;
 }> {}
@@ -290,29 +286,19 @@ export const InstantSnapshotProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds?.instantSnapshotName ?? output?.instantSnapshotName;
+      const previousName = olds?.instantSnapshotName ?? output?.instantSnapshotName;
       const nextName = news.instantSnapshotName ?? previousName;
-      const previousZone =
-        lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
-      const nextZone =
-        lastSegment(news.zone) ?? zoneFromDisk(news.sourceDisk) ?? previousZone;
-      const previousDisk = canonicalizeSource(
-        olds?.sourceDisk ?? output?.sourceDisk,
-      );
+      const previousZone = lastSegment(olds?.zone) ?? lastSegment(output?.zone) ?? DEFAULT_ZONE;
+      const nextZone = lastSegment(news.zone) ?? zoneFromDisk(news.sourceDisk) ?? previousZone;
+      const previousDisk = canonicalizeSource(olds?.sourceDisk ?? output?.sourceDisk);
       const nextDisk = canonicalizeSource(news.sourceDisk);
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousZone !== nextZone ||
-        (nextDisk.length > 0 &&
-          previousDisk.length > 0 &&
-          previousDisk !== nextDisk) ||
+        (nextDisk.length > 0 && previousDisk.length > 0 && previousDisk !== nextDisk) ||
         previousDescription !== nextDescription;
 
       if (!replace) return undefined;
@@ -341,9 +327,7 @@ export const InstantSnapshotProvider = () =>
       const existing = yield* getByName(env.project, zone, instantSnapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -361,9 +345,7 @@ export const InstantSnapshotProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.instantSnapshots ?? [])
               .filter((item) =>
-                Object.keys(item.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -397,8 +379,7 @@ export const InstantSnapshotProvider = () =>
         // "The previous instant snapshot is too recent" — one instant snapshot
         // per disk every 30 seconds.
         const tooRecent = (error: { readonly _tag: string }) =>
-          error instanceof OperationFailed &&
-          error.reason === "UNSUPPORTED_OPERATION";
+          error instanceof OperationFailed && error.reason === "UNSUPPORTED_OPERATION";
         yield* compute
           .insertInstantSnapshots({
             project: env.project,

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zone = "us-central1-a";
 const vmName = "alchemy-mi-src";
@@ -88,11 +85,7 @@ const waitVmRunning = () =>
     Effect.flatMap((instance) =>
       instance?.status === "RUNNING"
         ? Effect.succeed(instance)
-        : Effect.fail(
-            new Error(
-              `source vm ${vmName} is ${instance?.status ?? "MISSING"}`,
-            ),
-          ),
+        : Effect.fail(new Error(`source vm ${vmName} is ${instance?.status ?? "MISSING"}`)),
     ),
   );
 
@@ -129,8 +122,7 @@ const ensureVm = () =>
                 autoDelete: true,
                 type: "PERSISTENT",
                 initializeParams: {
-                  sourceImage:
-                    "projects/debian-cloud/global/images/family/debian-12",
+                  sourceImage: "projects/debian-cloud/global/images/family/debian-12",
                   diskSizeGb: "10",
                 },
               },
@@ -166,8 +158,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
 
       const vm = yield* ensureVm();
-      const sourceInstance =
-        vm.selfLink ?? `projects/${project}/zones/${zone}/instances/${vmName}`;
+      const sourceInstance = vm.selfLink ?? `projects/${project}/zones/${zone}/instances/${vmName}`;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

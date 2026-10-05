@@ -1,18 +1,14 @@
 import * as Effect from "effect/Effect";
-import type { Model } from "./Model.ts";
-import type { ModelsVersion } from "./ModelsVersion.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import type { Model } from "./Model.ts";
+import type { ModelsVersion } from "./ModelsVersion.ts";
 
 /**
  * Shared HTTP scaffolding for AI Platform (legacy ML Engine) bindings.
  * NOT exported from index.ts.
  */
-export const makeModelHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeModelHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -26,9 +22,7 @@ export const makeModelHttpBinding = <
         iam: [grantFor(options.iam, model.name)],
       });
       const name = yield* model.name;
-      return Effect.fn(`${options.tag}(${model.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${model.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
           ...(request as I),
           name: yield* name,
@@ -41,11 +35,7 @@ export const makeModelHttpBinding = <
  * Versions have no IAM policy of their own; `iam.on` (`ml.model`) is
  * granted on the version's parent model.
  */
-export const makeVersionHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeVersionHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

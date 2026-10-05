@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   migrationcenter.getProjectsLocationsPreferenceSets({ name }).pipe(
@@ -74,9 +71,9 @@ test.provider(
         "COMPUTE_MIGRATION_TARGET_PRODUCT_COMPUTE_ENGINE",
       );
 
-      const fetched = yield* migrationcenter.getProjectsLocationsPreferenceSets(
-        { name: created.name },
-      );
+      const fetched = yield* migrationcenter.getProjectsLocationsPreferenceSets({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toEqual("prod-gce");
       expect(fetched.description).toContain("alchemy-id=");
@@ -92,8 +89,7 @@ test.provider(
             virtualMachinePreferences: {
               targetProduct: "COMPUTE_MIGRATION_TARGET_PRODUCT_COMPUTE_ENGINE",
               regionPreferences: { preferredRegions: ["us-central1"] },
-              sizingOptimizationStrategy:
-                "SIZING_OPTIMIZATION_STRATEGY_MODERATE",
+              sizingOptimizationStrategy: "SIZING_OPTIMIZATION_STRATEGY_MODERATE",
               commitmentPlan: "COMMITMENT_PLAN_ONE_YEAR",
             },
           });
@@ -103,9 +99,7 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.displayName).toEqual("prod-gce-v2");
       expect(updated.description).toEqual("gce moderate");
-      expect(updated.virtualMachinePreferences?.commitmentPlan).toEqual(
-        "COMMITMENT_PLAN_ONE_YEAR",
-      );
+      expect(updated.virtualMachinePreferences?.commitmentPlan).toEqual("COMMITMENT_PLAN_ONE_YEAR");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);

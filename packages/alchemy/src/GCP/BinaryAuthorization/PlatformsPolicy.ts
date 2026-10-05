@@ -136,9 +136,7 @@ export type PlatformsPolicy = Resource<
  * @resource
  * @category BinaryAuthorization
  */
-export const PlatformsPolicy = Resource<PlatformsPolicy>(
-  "GCP.BinaryAuthorization.PlatformsPolicy",
-);
+export const PlatformsPolicy = Resource<PlatformsPolicy>("GCP.BinaryAuthorization.PlatformsPolicy");
 
 const getByName = missingGet(binaryauthorization.getProjectsPlatformsPolicies);
 
@@ -187,12 +185,7 @@ export const PlatformsPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyId = yield* toPhysicalId(
-        id,
-        olds?.policyId,
-        output?.policyId,
-        "policy",
-      );
+      const policyId = yield* toPhysicalId(id, olds?.policyId, output?.policyId, "policy");
       const platform = olds?.platform ?? output?.platform ?? DEFAULT_PLATFORM;
       const name = output?.name ?? policyName(env.project, platform, policyId);
       const existing = yield* getByName(name);
@@ -213,12 +206,7 @@ export const PlatformsPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyId = yield* toPhysicalId(
-        id,
-        news.policyId,
-        output?.policyId,
-        "policy",
-      );
+      const policyId = yield* toPhysicalId(id, news.policyId, output?.policyId, "policy");
       const platform = news.platform ?? output?.platform ?? DEFAULT_PLATFORM;
       const name = policyName(env.project, platform, policyId);
       const ownership = yield* createOwnership(id);
@@ -242,10 +230,7 @@ export const PlatformsPolicyProvider = () =>
         return yield* new ResourceNotResolved({ name });
       }
 
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
       const gkeChanged = !sameJson(gkePolicyOf(current.gkePolicy), desiredGke);
 
       if (descriptionChanged || gkeChanged) {

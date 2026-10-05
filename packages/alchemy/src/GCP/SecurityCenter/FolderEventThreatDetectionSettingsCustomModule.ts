@@ -52,16 +52,12 @@ export type FolderEventThreatDetectionSettingsCustomModuleProps = {
    * Enablement state.
    * @default "ENABLED"
    */
-  enablementState?:
-    | scc.EventThreatDetectionCustomModuleEnablementStateEnum
-    | (string & {});
+  enablementState?: scc.EventThreatDetectionCustomModuleEnablementStateEnum | (string & {});
   /**
    * Cloud provider this module applies to.
    * @default "GOOGLE_CLOUD_PLATFORM"
    */
-  cloudProvider?:
-    | scc.EventThreatDetectionCustomModuleCloudProviderEnum
-    | (string & {});
+  cloudProvider?: scc.EventThreatDetectionCustomModuleCloudProviderEnum | (string & {});
   /**
    * Human-readable display name.
    */
@@ -143,11 +139,7 @@ export const FolderEventThreatDetectionSettingsCustomModule =
     "GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule",
   );
 
-const toAttrs = (
-  module: scc.EventThreatDetectionCustomModule,
-  folder: string,
-  project: string,
-) => {
+const toAttrs = (module: scc.EventThreatDetectionCustomModule, folder: string, project: string) => {
   const name = module.name ?? "";
   const parsed = parseName(name, "customModules");
   const ownership = parseOwnership(module.description);
@@ -177,16 +169,12 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string) =>
-  scc.listFoldersEventThreatDetectionSettingsCustomModules
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.eventThreatDetectionCustomModules ?? []),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  scc.listFoldersEventThreatDetectionSettingsCustomModules.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.eventThreatDetectionCustomModules ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
   Effect.gen(function* () {
@@ -213,19 +201,14 @@ export const FolderEventThreatDetectionSettingsCustomModuleProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const folder = yield* resolveFolder(
-        olds?.folder ?? output?.folder,
-        output?.folder,
-      );
+      const folder = yield* resolveFolder(olds?.folder ?? output?.folder, output?.folder);
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findOwned(etdSettingsParent(folder), id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, folder, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -281,23 +264,18 @@ export const FolderEventThreatDetectionSettingsCustomModuleProvider = () =>
 
       const currentName = current.name ?? "";
       const updateMask = updateMaskOf(
-        fingerprint(current.config) !== fingerprint(config)
-          ? "config"
-          : undefined,
-        !sameText(current.enablementState, enablementState)
-          ? "enablementState"
-          : undefined,
+        fingerprint(current.config) !== fingerprint(config) ? "config" : undefined,
+        !sameText(current.enablementState, enablementState) ? "enablementState" : undefined,
         !sameText(current.displayName, displayName) ? "displayName" : undefined,
         !sameText(current.description, description) ? "description" : undefined,
       );
 
       if (updateMask.length > 0) {
-        current =
-          yield* scc.patchFoldersEventThreatDetectionSettingsCustomModules({
-            name: currentName,
-            updateMask,
-            body: { config, enablementState, displayName, description },
-          });
+        current = yield* scc.patchFoldersEventThreatDetectionSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: { config, enablementState, displayName, description },
+        });
       }
 
       return toAttrs(current, folder, env.project);

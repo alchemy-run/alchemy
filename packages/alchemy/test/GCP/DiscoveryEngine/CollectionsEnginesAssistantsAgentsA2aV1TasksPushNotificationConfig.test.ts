@@ -1,32 +1,29 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // createAssistants is rejected on a plain search engine with BadRequest "Only
 // default_assistant is allowed." even for assistantId default_assistant; it
 // needs a Gemini Enterprise (Agentspace) engine. Set
 // GCP_TEST_DISCOVERYENGINE_ASSISTANT=1 on a project with one.
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_ASSISTANT;
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_ASSISTANT;
 
 const waitUntilGone = (tenant: string, name: string) =>
   discoveryengine
-    .getProjectsLocationsCollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigs(
-      { tenant, name },
-    )
+    .getProjectsLocationsCollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigs({
+      tenant,
+      name,
+    })
     .pipe(
       Effect.as("found" as const),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -71,28 +68,21 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              location: "global",
-              displayName: "a2a-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "a2a engine",
-            },
-          );
-          const assistant =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesAssistant("Help", {
-              engine: engine.name,
-              // Engines accept only their default assistant.
-              assistantId: "default_assistant",
-              displayName: "a2a helper",
-            });
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            location: "global",
+            displayName: "a2a-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "a2a engine",
+          });
+          const assistant = yield* GCP.DiscoveryEngine.CollectionsEnginesAssistant("Help", {
+            engine: engine.name,
+            // Engines accept only their default assistant.
+            assistantId: "default_assistant",
+            displayName: "a2a helper",
+          });
           const config =
             yield* GCP.DiscoveryEngine.CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig(
               "Notify",
@@ -118,29 +108,22 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              dataStoreId: created.store.dataStoreId,
-              location: "global",
-              displayName: "a2a-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              engineId: created.engine.engineId,
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "a2a engine",
-            },
-          );
-          const assistant =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesAssistant("Help", {
-              engine: engine.name,
-              assistantId: created.assistant.assistantId,
-              displayName: "a2a helper",
-            });
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            dataStoreId: created.store.dataStoreId,
+            location: "global",
+            displayName: "a2a-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            engineId: created.engine.engineId,
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "a2a engine",
+          });
+          const assistant = yield* GCP.DiscoveryEngine.CollectionsEnginesAssistant("Help", {
+            engine: engine.name,
+            assistantId: created.assistant.assistantId,
+            displayName: "a2a helper",
+          });
           const config =
             yield* GCP.DiscoveryEngine.CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig(
               "Notify",
@@ -159,10 +142,7 @@ test.provider.skipIf(!runLifecycle)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.config.tenant,
-        created.config.name,
-      );
+      const gone = yield* waitUntilGone(created.config.tenant, created.config.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel, quotaTolerant),
   {

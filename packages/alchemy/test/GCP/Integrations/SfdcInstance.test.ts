@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const location = "us-central1";
 
@@ -32,9 +29,7 @@ const sfdcCredential = {
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsSfdcInstances({ name }).pipe(
     Effect.map((row) =>
-      (row.deleteTime ?? "").length > 0
-        ? ("gone" as const)
-        : ("found" as const),
+      (row.deleteTime ?? "").length > 0 ? ("gone" as const) : ("found" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -103,9 +98,7 @@ test.provider.skipIf(!runSfdcLifecycle)(
         name: created.name,
       });
       // The API echoes names keyed by project number.
-      expect(fetched.name?.split("/").slice(2)).toEqual(
-        created.name.split("/").slice(2),
-      );
+      expect(fetched.name?.split("/").slice(2)).toEqual(created.name.split("/").slice(2));
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.sfdcOrgId).toEqual("00Dxx0000000001");
 
