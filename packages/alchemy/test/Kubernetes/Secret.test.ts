@@ -3,7 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Kubernetes from "@/Kubernetes";
-import { encodeSecretData, ensureNotControlled } from "@/Kubernetes/internal/secret.ts";
+import { KubernetesApiError } from "@/Kubernetes/internal/client.ts";
+import {
+  encodeSecretData,
+  ensureNotControlled,
+  scrubApiError,
+  scrubSecretValues,
+} from "@/Kubernetes/internal/secret.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
@@ -80,6 +86,64 @@ it.effect(
         expect(result.failure._tag).toBe("Kubernetes.SecretDataNotBase64");
         expect(result.failure.keys).toEqual(["raw", "unpadded"]);
         expect(result.failure.message).not.toContain("not base64!");
+      }
+    }),
+  { tags: ["unit", ...tags] },
+);
+
+const scrubData = {
+  // `"` and `&` come back JSON-escaped (`\"`, Go's `&`) in a raw body.
+  stringData: { password: Redacted.make('pa"ss&word') },
+  binaryData: { "keystore.jks": Redacted.make(Buffer.from([0x00, 0xff, 0x10]).toString("base64")) },
+};
+const scrubNeedles = [
+  'pa"ss&word',
+  Buffer.from('pa"ss&word', "utf8").toString("base64"),
+  Buffer.from([0x00, 0xff, 0x10]).toString("base64"),
+];
+
+it.effect(
+  "scrubs Secret values from a JSON Status body",
+  () =>
+    Effect.gen(function* () {
+      const body = JSON.stringify({
+        kind: "Status",
+        message: `admission webhook "policy.example.com" denied the request: password=pa"ss&word data=${scrubNeedles[1]} keystore=${scrubNeedles[2]}`,
+        code: 403,
+      }).replaceAll("&", "\\u0026");
+      expect(body).not.toContain('pa"ss&word');
+      const scrubbed = scrubSecretValues(body, scrubData);
+      for (const needle of scrubNeedles) expect(scrubbed).not.toContain(needle);
+      const status = JSON.parse(scrubbed) as { message: string; code: number };
+      expect(status.code).toBe(403);
+      expect(status.message).toBe(
+        'admission webhook "policy.example.com" denied the request: password=<redacted> data=<redacted> keystore=<redacted>',
+      );
+    }),
+  { tags: ["unit", ...tags] },
+);
+
+it.effect(
+  "scrubs Secret values from a non-JSON body and keeps the error's fields",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        scrubApiError(
+          new KubernetesApiError({
+            method: "PATCH",
+            path: "/api/v1/namespaces/apps/secrets/db",
+            statusCode: 500,
+            body: `upstream rejected pa"ss&word / ${scrubNeedles[2]}`,
+          }),
+          scrubData,
+        ),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.statusCode).toBe(500);
+        expect(result.failure.path).toBe("/api/v1/namespaces/apps/secrets/db");
+        expect(result.failure.body).toBe("upstream rejected <redacted> / <redacted>");
+        for (const needle of scrubNeedles) expect(result.failure.message).not.toContain(needle);
       }
     }),
   { tags: ["unit", ...tags] },

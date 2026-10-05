@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { KubernetesApiError } from "./client.ts";
 
 /**
  * A key was supplied in both `stringData` and `binaryData`. Kubernetes
@@ -102,6 +103,75 @@ export const encodeSecretData = ({
       ),
     }));
   });
+
+const mapStrings = (value: unknown, f: (text: string) => string): unknown => {
+  if (typeof value === "string") return f(value);
+  if (Array.isArray(value)) return value.map((item) => mapStrings(item, f));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, mapStrings(child, f)]),
+    );
+  }
+  return value;
+};
+
+/**
+ * Replace every Secret value in `text`, as plaintext or base64, with
+ * `<redacted>`. Over-redacting a very short value garbles the message but
+ * never leaks it.
+ */
+export const scrubSecretValues = (
+  text: string,
+  { stringData = {}, binaryData = {} }: SecretData,
+): string => {
+  const needles = [
+    ...new Set([
+      ...Object.values(stringData).flatMap((value) => {
+        const plain = Redacted.value(value);
+        return [plain, Buffer.from(plain, "utf8").toString("base64")];
+      }),
+      ...Object.values(binaryData).flatMap((value) => {
+        const encoded = Redacted.value(value);
+        return [encoded, encoded.replace(/[\r\n]/g, "")];
+      }),
+    ]),
+  ]
+    .filter((needle) => needle.length > 0)
+    // Longest first, so a value that contains another is replaced whole.
+    .sort((left, right) => right.length - left.length);
+  if (needles.length === 0) return text;
+  const scrub = (value: string) =>
+    needles.reduce((out, needle) => out.replaceAll(needle, "<redacted>"), value);
+  // Status bodies are JSON, whose escaping (`\"`, `\\`, Go's `&` for
+  // `&`) can split a value, so scrub the decoded strings when it parses.
+  try {
+    return JSON.stringify(mapStrings(JSON.parse(text), scrub));
+  } catch {
+    return scrub(text);
+  }
+};
+
+/**
+ * Re-fail an API error with the Secret's values scrubbed from its body. The
+ * body can quote the request (an admission webhook denial, for one), and
+ * the error message carries the body.
+ */
+export const scrubApiError = (
+  error: KubernetesApiError,
+  data: SecretData,
+): Effect.Effect<never, KubernetesApiError> =>
+  Effect.sync(() => scrubSecretValues(error.body, data)).pipe(
+    Effect.flatMap((body) =>
+      Effect.fail(
+        new KubernetesApiError({
+          method: error.method,
+          path: error.path,
+          statusCode: error.statusCode,
+          body,
+        }),
+      ),
+    ),
+  );
 
 /**
  * Fail when the observed Secret (`undefined` if it does not exist yet) has a

@@ -10,10 +10,11 @@ import {
   deleteObject,
   readObject,
   isNotFound,
+  KubernetesApiError,
   retryWhileClusterWarms,
 } from "./internal/client.ts";
 import type { KubernetesObjectRef } from "./internal/objects.ts";
-import { encodeSecretData, ensureNotControlled } from "./internal/secret.ts";
+import { encodeSecretData, ensureNotControlled, scrubApiError } from "./internal/secret.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -223,7 +224,12 @@ export const SecretProvider = () =>
               type,
               data: yield* encodeSecretData(news),
             },
-          });
+          }).pipe(
+            Effect.catchIf(
+              (error): error is KubernetesApiError => error instanceof KubernetesApiError,
+              (error) => scrubApiError(error, news),
+            ),
+          );
           yield* session.note(`Applied v1/Secret ${namespace}/${news.name}`);
           const uid = (applied as { metadata?: { uid?: string } })?.metadata?.uid ?? output?.uid;
           return { connection, name: news.name, namespace, type, ref, uid };
@@ -236,11 +242,11 @@ export const SecretProvider = () =>
             Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return;
-          yield* deleteObject({ transport, object: output.ref }).pipe(
-            // Tolerate any residual API failure so delete stays idempotent
-            // (e.g. the namespace is already terminating).
-            Effect.catch(() => Effect.void),
-          );
+          // deleteObject already treats a 404 (Secret or namespace gone) as
+          // done. Any other failure means the Secret and its values may still
+          // be in the cluster, so the destroy fails instead of dropping it
+          // from state.
+          yield* deleteObject({ transport, object: output.ref }).pipe(retryWhileClusterWarms);
         }),
       };
     }),
