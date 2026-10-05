@@ -1645,11 +1645,11 @@ const testStack: Omit<StackSpec, "output"> = {
   actions: {},
 };
 
-// Built with distilled's own helper: the signer reads credentials through
-// distilled's copy of `effect`, whose `Redacted` values a `Redacted.make`
-// from this package's copy cannot unwrap.
 const testCredentials = fromCredentials(
-  { accessKeyId: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "test-secret-key" },
+  {
+    accessKeyId: Redacted.make("AKIAIOSFODNN7EXAMPLE"),
+    secretAccessKey: Redacted.make("test-secret-key"),
+  },
   TEST_REGION,
 );
 
