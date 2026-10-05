@@ -905,6 +905,55 @@ describe.concurrent(
       { tags: ["live"], timeout: 360_000 },
     );
 
+    test.provider(
+      "Issues survive code redeploys and can be disabled or removed",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+
+          const observability = {
+            enabled: true,
+            headSamplingRate: 0.5,
+            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0.25, persist: true },
+            traces: { enabled: true, headSamplingRate: 0.1, persist: true },
+          };
+          let scriptName = "";
+          for (const [issues, version] of [
+            [true, "v1"],
+            [true, "v2"],
+            [false, "v2"],
+            [true, "v2"],
+            [undefined, "v2"],
+          ] as const) {
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("IssuesWorker", {
+                script: `export default { fetch() { return new Response("${version}"); } };`,
+                bundle: false,
+                observability: {
+                  ...observability,
+                  issues: issues === undefined ? undefined : { enabled: issues },
+                },
+              }),
+            );
+            if (scriptName) expect(worker.workerName).toBe(scriptName);
+            scriptName = worker.workerName;
+
+            const settings = yield* workers.getScriptSetting({ accountId, scriptName });
+            expect(settings.observability?.issues?.enabled ?? false).toBe(issues ?? false);
+            expect(settings.observability?.enabled).toBe(true);
+            expect(settings.observability?.headSamplingRate).toBe(0.5);
+            expect(settings.observability?.logs).toMatchObject(observability.logs);
+            expect(settings.observability?.traces).toMatchObject(observability.traces);
+            yield* expectUrlContains(worker.url!, version, { timeout: "30 seconds" });
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(scriptName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     // #874 regression: binding a tagged Worker identity (an Effect class) in
     // another Worker's `env` — the circular-bindings pattern — must converge.
     // The tag stays in the desired props (`news.env.TARGET` is an Effect) while

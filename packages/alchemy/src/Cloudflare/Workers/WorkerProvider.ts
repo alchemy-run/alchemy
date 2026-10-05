@@ -3690,7 +3690,6 @@ export const LiveWorkerProvider = () =>
         let worker: {
           id?: string | null;
           logpush?: boolean | null;
-          observability?: workers.PutScriptResponse["observability"];
           /** The immutable script id (Cloudflare's script "tag"). */
           tag?: string | null;
         };
@@ -3788,40 +3787,6 @@ export const LiveWorkerProvider = () =>
             );
           }
           worker = yield* putWorkerScriptWithMigrationRecovery();
-          const issuesEnabled = observability.issues?.enabled ?? false;
-          if (!dispatchNamespace && worker.observability?.issues?.enabled !== issuesEnabled) {
-            // Uploads can reset Issues. Reuse their response and preserve the
-            // resolved logs/traces when replacing observability settings.
-            yield* workers
-              .patchScriptSetting({
-                accountId,
-                scriptName: name,
-                observability: {
-                  ...observability,
-                  headSamplingRate: observability.headSamplingRate ?? undefined,
-                  logs: observability.logs
-                    ? {
-                        ...observability.logs,
-                        headSamplingRate: observability.logs.headSamplingRate ?? undefined,
-                      }
-                    : undefined,
-                  traces: observability.traces
-                    ? {
-                        ...observability.traces,
-                        headSamplingRate: observability.traces.headSamplingRate ?? undefined,
-                      }
-                    : undefined,
-                  issues: { enabled: issuesEnabled },
-                },
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) => error._tag === "WorkerNotFound",
-                  schedule: Schedule.exponential("100 millis"),
-                  times: 6,
-                }),
-              );
-          }
         }
 
         function putWorkerScriptWithMigrationRecovery() {
@@ -3901,6 +3866,43 @@ export const LiveWorkerProvider = () =>
             streamingTailConsumers,
             hash,
           } satisfies Worker["Attributes"];
+        }
+        const issuesEnabled = observability.issues?.enabled ?? false;
+        if (
+          versionId === undefined &&
+          (settings.observability?.issues?.enabled ?? false) !== issuesEnabled
+        ) {
+          // Full uploads can reset Issues. Compare the observed settings and
+          // preserve resolved logs/traces when replacing observability.
+          yield* workers
+            .patchScriptSetting({
+              accountId,
+              scriptName: name,
+              observability: {
+                ...observability,
+                headSamplingRate: observability.headSamplingRate ?? undefined,
+                logs: observability.logs
+                  ? {
+                      ...observability.logs,
+                      headSamplingRate: observability.logs.headSamplingRate ?? undefined,
+                    }
+                  : undefined,
+                traces: observability.traces
+                  ? {
+                      ...observability.traces,
+                      headSamplingRate: observability.traces.headSamplingRate ?? undefined,
+                    }
+                  : undefined,
+                issues: { enabled: issuesEnabled },
+              },
+            })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.exponential("100 millis"),
+                times: 6,
+              }),
+            );
         }
         // Reconcile the workers.dev settings against observed cloud state.
         // We can't diff `news.workersDev` against `olds.workersDev` here
