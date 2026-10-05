@@ -31,9 +31,8 @@ const ogImage = new URL(`/og/${ogSlug}.webp`, Astro.site);
 
 <FontPreloads />
 
-{/* Brand mark. Starlight already emits the SVG from its own `favicon`
-    config, so skip it here and add only the raster/apple-touch candidates. */}
-<BrandIcons svg={false} />
+{/* Brand mark. `src/favicon.ts` strips Starlight's own favicon link. */}
+<BrandIcons />
 
 {/* Open Graph image (Starlight's default Head emits og:title/description). */}
 <meta property="og:image" content={ogImage.href} />
