@@ -1,9 +1,9 @@
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import {
   type Click,
   type EnrichedClick,
@@ -29,7 +29,8 @@ export class QueueSinkRecorder extends Cloudflare.DurableObject<QueueSinkRecorde
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       const seen = new Set((yield* state.storage.get<number[]>("seen")) ?? []);
-      let transformed = (yield* state.storage.get<boolean>("transformed")) ?? true;
+      let transformed =
+        (yield* state.storage.get<boolean>("transformed")) ?? true;
       return {
         record: Effect.fn(function* (clicks: EnrichedClick[]) {
           for (const click of clicks) {
@@ -99,14 +100,17 @@ export default class QueueSinkWorker extends Cloudflare.Worker<QueueSinkWorker>(
     const clicks = yield* Cloudflare.Queues.QueueSink(source);
     const enriched = yield* Cloudflare.Queues.QueueSink(results);
 
-    yield* Cloudflare.Queues.consumeQueueMessages<Click>(source, consumerSettings, (messages) =>
-      messages.pipe(
-        Stream.map((message): EnrichedClick => ({
-          ...message.body,
-          doubled: message.body.index * 2,
-        })),
-        Stream.run(enriched),
-      ),
+    yield* Cloudflare.Queues.consumeQueueMessages<Click>(
+      source,
+      consumerSettings,
+      (messages) =>
+        messages.pipe(
+          Stream.map((message): EnrichedClick => ({
+            ...message.body,
+            doubled: message.body.index * 2,
+          })),
+          Stream.run(enriched),
+        ),
     );
 
     yield* Cloudflare.Queues.consumeQueueMessages<EnrichedClick>(
@@ -150,7 +154,10 @@ export default class QueueSinkWorker extends Cloudflare.Worker<QueueSinkWorker>(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Cloudflare.Queues.EventSourceLive, Cloudflare.Queues.QueueSinkBinding),
+      Layer.mergeAll(
+        Cloudflare.Queues.EventSourceLive,
+        Cloudflare.Queues.QueueSinkBinding,
+      ),
     ),
   ),
 ) {}
