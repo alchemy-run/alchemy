@@ -14,8 +14,7 @@ export const parseOperationName = (name: string) => {
   const operationsAt = parts.lastIndexOf("operations");
   return {
     appsId: appsAt >= 0 ? parts[appsAt + 1] : undefined,
-    operationsId:
-      operationsAt >= 0 ? parts[operationsAt + 1] : lastSegment(name),
+    operationsId: operationsAt >= 0 ? parts[operationsAt + 1] : lastSegment(name),
   };
 };
 
@@ -49,9 +48,7 @@ export const waitForOperation = (
   ).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "GCP.OperationFailed" &&
-        options.notFoundOk === true &&
-        error.code === 5,
+        error._tag === "GCP.OperationFailed" && options.notFoundOk === true && error.code === 5,
       () => Effect.void,
     ),
     Effect.asVoid,

@@ -1,27 +1,21 @@
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import {
-  activeReplicaRegions,
-  serviceRegionPlacement,
-} from "@/Railway/ServiceRegion.ts";
-import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { activeReplicaRegions, serviceRegionPlacement } from "@/Railway/ServiceRegion.ts";
+import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const readServiceDeletedAt = Query.fn((id: string) => ({
   deletedAt: RailwayApi.service({ id }).deletedAt,
@@ -37,22 +31,20 @@ const readService = Query.fn((id: string) => {
   };
 });
 
-const readServiceInstance = Query.fn(
-  (environmentId: string, serviceId: string) => {
-    const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
-    return {
-      serviceId: instance.serviceId,
-      environmentId: instance.environmentId,
-      source: instance.source.pipe(
-        Query.map((source) => ({ image: source.image, repo: source.repo })),
-      ),
-      healthcheckPath: instance.healthcheckPath,
-      preDeployCommand: instance.preDeployCommand,
-      numReplicas: instance.numReplicas,
-      dockerfilePath: instance.dockerfilePath,
-    };
-  },
-);
+const readServiceInstance = Query.fn((environmentId: string, serviceId: string) => {
+  const instance = RailwayApi.serviceInstance({ environmentId, serviceId });
+  return {
+    serviceId: instance.serviceId,
+    environmentId: instance.environmentId,
+    source: instance.source.pipe(
+      Query.map((source) => ({ image: source.image, repo: source.repo })),
+    ),
+    healthcheckPath: instance.healthcheckPath,
+    preDeployCommand: instance.preDeployCommand,
+    numReplicas: instance.numReplicas,
+    dockerfilePath: instance.dockerfilePath,
+  };
+});
 
 const readServiceDomains = Query.fn(
   (input: { projectId: string; environmentId: string; serviceId: string }) => ({
@@ -75,10 +67,7 @@ const environmentPatchCommit = Query.fn(
 
 const readGithubRepos = Query.fn(() =>
   RailwayApi.githubRepos().pipe(
-    Query.map((repo) => ({
-      fullName: repo.fullName,
-      defaultBranch: repo.defaultBranch,
-    })),
+    Query.map((repo) => ({ fullName: repo.fullName, defaultBranch: repo.defaultBranch })),
   ),
 );
 
@@ -88,9 +77,7 @@ const readEnvironmentConfig = Query.fn((id: string, projectId: string) => ({
 
 const waitUntilGone = (serviceId: string) =>
   readServiceDeletedAt(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -146,9 +133,7 @@ test.provider(
       expect(created.api.serviceId).toEqual(expect.any(String));
       expect(created.api.serviceId.length).toBeGreaterThan(0);
       expect(created.api.projectId).toEqual(created.project.projectId);
-      expect(created.api.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.api.environmentId).toEqual(created.environment.environmentId);
       expect(created.api.name).toEqual(expect.any(String));
       expect(created.api.name.length).toBeGreaterThan(0);
       expect(created.api.name.length).toBeLessThanOrEqual(32);
@@ -166,15 +151,10 @@ test.provider(
       expect(fetched.projectId).toEqual(created.api.projectId);
       expect(fetched.deletedAt).toBeNull();
 
-      const instance = yield* readServiceInstance(
-        created.api.environmentId,
-        created.api.serviceId,
-      );
+      const instance = yield* readServiceInstance(created.api.environmentId, created.api.serviceId);
       expect(instance.serviceId).toEqual(created.api.serviceId);
       expect(instance.environmentId).toEqual(created.api.environmentId);
-      expect(instance.source?.image).toEqual(
-        expect.stringContaining("nginx:alpine"),
-      );
+      expect(instance.source?.image).toEqual(expect.stringContaining("nginx:alpine"));
       expect(instance.healthcheckPath).toEqual("/");
       expect(
         instance.preDeployCommand === "echo predeploy" ||
@@ -183,13 +163,9 @@ test.provider(
             instance.preDeployCommand[0] === "echo predeploy"),
       ).toEqual(true);
       // Railway omits numReplicas until you scale; default is one replica.
-      expect(
-        instance.numReplicas === null || instance.numReplicas === 1,
-      ).toEqual(true);
+      expect(instance.numReplicas === null || instance.numReplicas === 1).toEqual(true);
       expect(created.api.healthcheckPath).toEqual("/");
-      expect(
-        created.api.replicas === undefined || created.api.replicas === 1,
-      ).toEqual(true);
+      expect(created.api.replicas === undefined || created.api.replicas === 1).toEqual(true);
 
       const domains = yield* readServiceDomains({
         environmentId: created.api.environmentId,
@@ -205,9 +181,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Service);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (service) => service.serviceId === created.api.serviceId,
-      );
+      const found = listed.find((service) => service.serviceId === created.api.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.api.name);
       expect(found?.projectId).toEqual(created.api.projectId);
@@ -215,21 +189,14 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
+        Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
       );
       expect(typeof body).toEqual("string");
       expect(body.length).toBeGreaterThan(0);
 
-      const nextName =
-        created.api.name.slice(0, -1) +
-        (created.api.name.endsWith("z") ? "y" : "z");
+      const nextName = created.api.name.slice(0, -1) + (created.api.name.endsWith("z") ? "y" : "z");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -314,20 +281,14 @@ test.provider(
 
       expect(publicUpdate.api.serviceId).toEqual(created.api.serviceId);
       expect(publicUpdate.api.domainId).toEqual(expect.any(String));
-      expect(publicUpdate.api.url).toEqual(
-        `https://${publicUpdate.api.domain}`,
-      );
+      expect(publicUpdate.api.url).toEqual(`https://${publicUpdate.api.domain}`);
       expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
 
       // Add a foreign generated domain. The config map key may not equal
       // the GraphQL id, and list order is not ownership — wait for a new
       // live row rather than assuming `[0] === patch UUID`.
       const liveDomainIds = (domains: {
-        serviceDomains: ReadonlyArray<{
-          id: string;
-          deletedAt: string | null;
-          syncStatus: string;
-        }>;
+        serviceDomains: ReadonlyArray<{ id: string; deletedAt: string | null; syncStatus: string }>;
       }) =>
         domains.serviceDomains
           .filter(
@@ -356,10 +317,7 @@ test.provider(
             services: {
               [publicUpdate.api.serviceId]: {
                 networking: {
-                  serviceDomains: {
-                    [foreignPatchId]: {},
-                    [publicUpdate.api.domainId!]: {},
-                  },
+                  serviceDomains: { [foreignPatchId]: {}, [publicUpdate.api.domainId!]: {} },
                 },
               },
             },
@@ -376,8 +334,7 @@ test.provider(
           schedule: Schedule.spaced("1 second"),
           until: (ids) =>
             ids.includes(publicUpdate.api.domainId!) &&
-            (ids.includes(foreignPatchId) ||
-              ids.some((id) => !beforeForeign.has(id))),
+            (ids.includes(foreignPatchId) || ids.some((id) => !beforeForeign.has(id))),
           times: 10,
         }),
       );
@@ -406,9 +363,7 @@ test.provider(
           return { api };
         }),
       );
-      expect(publicWithForeignDomain.api.domainId).toEqual(
-        publicUpdate.api.domainId,
-      );
+      expect(publicWithForeignDomain.api.domainId).toEqual(publicUpdate.api.domainId);
 
       const privateWithForeignDomain = yield* stack.deploy(
         Effect.gen(function* () {
@@ -432,10 +387,7 @@ test.provider(
         serviceId: publicUpdate.api.serviceId,
       });
       const remainingIds = remainingDomains.serviceDomains
-        .filter(
-          (domain) =>
-            domain.deletedAt == null && domain.syncStatus !== "DELETED",
-        )
+        .filter((domain) => domain.deletedAt == null && domain.syncStatus !== "DELETED")
         .map((domain) => domain.id);
       expect(remainingIds).toContain(foreignDomainId);
       expect(remainingIds).not.toContain(publicUpdate.api.domainId);
@@ -480,9 +432,7 @@ test.provider(
       );
 
       expect(created.worker.serviceId).toEqual(expect.any(String));
-      expect(created.worker.dnsName).toEqual(
-        `${created.worker.name}.railway.internal`,
-      );
+      expect(created.worker.dnsName).toEqual(`${created.worker.name}.railway.internal`);
       expect(created.worker.url).toBeUndefined();
       expect(created.worker.domain).toBeUndefined();
       expect(created.worker.domainId).toBeUndefined();
@@ -565,14 +515,9 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
+        Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
       );
       expect(typeof body).toEqual("string");
       expect(body.length).toBeGreaterThan(0);
@@ -596,20 +541,13 @@ test.provider(
         updated.api.environmentId,
         updated.api.serviceId,
       );
-      expect(fromImage.source?.image).toEqual(
-        expect.stringContaining("nginx:alpine"),
-      );
+      expect(fromImage.source?.image).toEqual(expect.stringContaining("nginx:alpine"));
 
       const afterImage = yield* client.get(updated.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.spaced("4 seconds"),
-          times: 10,
-        }),
+        Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
       );
       expect(typeof afterImage).toEqual("string");
       expect(afterImage.length).toBeGreaterThan(0);
@@ -655,10 +593,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: ["provider:railway", "provider:railway:service", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:railway", "provider:railway:service", "live"], timeout: 120_000 },
 );
 
 test.provider.skipIf(!githubEntitled)(
@@ -688,10 +623,7 @@ test.provider.skipIf(!githubEntitled)(
       expect(created.api.serviceId).toEqual(expect.any(String));
       expect(created.api.repo).toEqual(repo!.fullName);
 
-      const instance = yield* readServiceInstance(
-        created.api.environmentId,
-        created.api.serviceId,
-      );
+      const instance = yield* readServiceInstance(created.api.environmentId, created.api.serviceId);
       expect(instance.source?.repo).toEqual(repo!.fullName);
 
       yield* stack.destroy();
@@ -712,9 +644,7 @@ test.provider.skipIf(!githubEntitled)(
 );
 
 const placedRegions = (config: unknown, serviceId: string) =>
-  activeReplicaRegions(serviceRegionPlacement(config, serviceId)).map(
-    (row) => row.region,
-  );
+  activeReplicaRegions(serviceRegionPlacement(config, serviceId)).map((row) => row.region);
 
 test.provider(
   "pin a service to a region and move it",
@@ -743,9 +673,7 @@ test.provider(
         created.api.environmentId,
         created.api.projectId,
       );
-      expect(
-        placedRegions(createdConfig.config, created.api.serviceId),
-      ).toEqual([region]);
+      expect(placedRegions(createdConfig.config, created.api.serviceId)).toEqual([region]);
 
       const moved = "us-west2";
       const updated = yield* stack.deploy(
@@ -769,9 +697,7 @@ test.provider(
         updated.api.environmentId,
         updated.api.projectId,
       );
-      expect(
-        placedRegions(updatedConfig.config, updated.api.serviceId),
-      ).toEqual([moved]);
+      expect(placedRegions(updatedConfig.config, updated.api.serviceId)).toEqual([moved]);
 
       yield* stack.destroy();
 

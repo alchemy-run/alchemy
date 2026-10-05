@@ -131,9 +131,7 @@ export type BucketsView = Resource<
  */
 export const BucketsView = Resource<BucketsView>("GCP.Logging.BucketsView");
 
-export class BucketsViewNotResolved extends Data.TaggedError(
-  "GCP.Logging.BucketsViewNotResolved",
-)<{
+export class BucketsViewNotResolved extends Data.TaggedError("GCP.Logging.BucketsViewNotResolved")<{
   name: string;
 }> {}
 
@@ -151,9 +149,7 @@ const parseViewName = (name: string) => {
 };
 
 const parseBucket = (bucket: string, project: string, location: string) => {
-  const match = bucket.match(
-    /^(projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+))$/,
-  );
+  const match = bucket.match(/^(projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+))$/);
   if (match) {
     return {
       name: match[1]!,
@@ -170,12 +166,7 @@ const parseBucket = (bucket: string, project: string, location: string) => {
   };
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  bucketId: string,
-  viewId: string,
-) =>
+const resourceName = (project: string, location: string, bucketId: string, viewId: string) =>
   `projects/${project}/locations/${location}/buckets/${bucketId}/views/${viewId}`;
 
 const viewIdOf = (view: logging.LogView, fallback?: string) => {
@@ -192,17 +183,10 @@ const toId = (id: string, viewId: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `v${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `v${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const toAttrs = (
-  view: logging.LogView,
-  project: string,
-  location: string,
-  bucketId: string,
-) => {
+const toAttrs = (view: logging.LogView, project: string, location: string, bucketId: string) => {
   const viewId = viewIdOf(view);
   const parsed = parseDescription(view.description);
   const parsedName = parseViewName(view.name ?? "");
@@ -212,14 +196,7 @@ const toAttrs = (
   return {
     name:
       view.name ??
-      (viewId
-        ? resourceName(
-            resolvedProject,
-            resolvedLocation,
-            resolvedBucketId,
-            viewId,
-          )
-        : ""),
+      (viewId ? resourceName(resolvedProject, resolvedLocation, resolvedBucketId, viewId) : ""),
     viewId,
     bucket: `projects/${resolvedProject}/locations/${resolvedLocation}/buckets/${resolvedBucketId}`,
     bucketId: resolvedBucketId,
@@ -245,9 +222,7 @@ export const BucketsViewProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.viewId ?? output?.viewId;
       const idChanged =
-        previousId !== undefined &&
-        news.viewId !== undefined &&
-        news.viewId !== previousId;
+        previousId !== undefined && news.viewId !== undefined && news.viewId !== previousId;
       const previousBucket = olds?.bucket ?? output?.bucket;
       const bucketChanged =
         previousBucket !== undefined &&
@@ -260,23 +235,13 @@ export const BucketsViewProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const parent = parseBucket(
-        olds?.bucket ?? output?.bucket ?? "",
-        env.project,
-        location,
-      );
+      const parent = parseBucket(olds?.bucket ?? output?.bucket ?? "", env.project, location);
       const viewId = yield* toId(id, olds?.viewId, output?.viewId);
       const name =
-        output?.name ??
-        resourceName(parent.project, parent.location, parent.bucketId, viewId);
+        output?.name ?? resourceName(parent.project, parent.location, parent.bucketId, viewId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        parent.project,
-        parent.location,
-        parent.bucketId,
-      );
+      const attrs = toAttrs(existing, parent.project, parent.location, parent.bucketId);
       const { labels } = parseDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
@@ -321,12 +286,7 @@ export const BucketsViewProvider = () =>
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
       const parent = parseBucket(news.bucket, env.project, location);
       const viewId = yield* toId(id, news.viewId, output?.viewId);
-      const name = resourceName(
-        parent.project,
-        parent.location,
-        parent.bucketId,
-        viewId,
-      );
+      const name = resourceName(parent.project, parent.location, parent.bucketId, viewId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -351,8 +311,7 @@ export const BucketsViewProvider = () =>
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = [
         filterChanged ? "filter" : undefined,
         descriptionChanged ? "description" : undefined,

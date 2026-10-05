@@ -144,17 +144,10 @@ export type AppGateway = Resource<
  */
 export const AppGateway = Resource<AppGateway>("GCP.BeyondCorp.AppGateway");
 
-const resourceName = (
-  project: string,
-  location: string,
-  appGatewayId: string,
-) => `projects/${project}/locations/${location}/appGateways/${appGatewayId}`;
+const resourceName = (project: string, location: string, appGatewayId: string) =>
+  `projects/${project}/locations/${location}/appGateways/${appGatewayId}`;
 
-const toAttrs = (
-  item: beyondcorp.AppGateway,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: beyondcorp.AppGateway, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -168,12 +161,10 @@ const toAttrs = (
     labels: userLabels(item.labels),
     state: item.state === undefined ? undefined : `${item.state}`,
     uri: item.uri,
-    allocatedConnections: (item.allocatedConnections ?? []).map(
-      (connection) => ({
-        pscUri: connection.pscUri,
-        ingressPort: connection.ingressPort,
-      }),
-    ),
+    allocatedConnections: (item.allocatedConnections ?? []).map((connection) => ({
+      pscUri: connection.pscUri,
+      ingressPort: connection.ingressPort,
+    })),
     uid: item.uid,
     createTime: item.createTime,
     updateTime: item.updateTime,
@@ -194,40 +185,25 @@ const listOwned = (project: string) =>
       }),
       (page): readonly beyondcorp.AppGateway[] | undefined => page.appGateways,
     ),
-  ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelMap(item.labels)),
-    ),
-  );
+  ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
 
 export const AppGatewayProvider = () =>
   Provider.succeed(AppGateway, {
-    stables: [
-      "name",
-      "appGatewayId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "appGatewayId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousType = olds?.type ?? output?.type ?? DEFAULT_GATEWAY_TYPE;
       const nextType = news.type ?? previousType;
-      const previousHost =
-        olds?.hostType ?? output?.hostType ?? DEFAULT_HOST_TYPE;
+      const previousHost = olds?.hostType ?? output?.hostType ?? DEFAULT_HOST_TYPE;
       const nextHost = news.hostType ?? previousHost;
       return replaceOnIdentity({
         previousId: olds?.appGatewayId ?? output?.appGatewayId,
         nextId: news.appGatewayId
           ? rfc1035(news.appGatewayId, "appgateway")
           : (olds?.appGatewayId ?? output?.appGatewayId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -244,18 +220,12 @@ export const AppGatewayProvider = () =>
         output?.appGatewayId,
         "appgateway",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, appGatewayId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, appGatewayId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -273,10 +243,7 @@ export const AppGatewayProvider = () =>
         output?.appGatewayId,
         "appgateway",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, appGatewayId);
       const desiredLabels = {
         ...toLabels(news.labels),

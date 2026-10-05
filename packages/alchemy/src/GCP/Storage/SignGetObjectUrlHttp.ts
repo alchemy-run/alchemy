@@ -1,10 +1,10 @@
+import { createHash } from "node:crypto";
 import * as iamcredentials from "@distilled.cloud/gcp/iamcredentials_v1";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { createHash } from "node:crypto";
+import * as Layer from "effect/Layer";
 import { bindGcpHost, HOST_SERVICE_ACCOUNT } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
 import type { Bucket } from "./Bucket.ts";
@@ -27,8 +27,7 @@ const encode = (value: string) =>
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 
-const sha256Hex = (value: string) =>
-  createHash("sha256").update(value, "utf8").digest("hex");
+const sha256Hex = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 
 /** `20260102T030405Z` and `20260102` for a Unix time in millis. */
 const timestamps = (millis: number) => {
@@ -85,10 +84,7 @@ export const SignGetObjectUrlHttp = Layer.effect(
         resource: bucket,
         iam: [
           // A signed URL carries the signer's own object permissions.
-          grantFor(
-            { role: "roles/storage.objectViewer", on: "storage.bucket" },
-            bucket.bucketName,
-          ),
+          grantFor({ role: "roles/storage.objectViewer", on: "storage.bucket" }, bucket.bucketName),
           // signBlob as itself, and on no other account.
           {
             role: "roles/iam.serviceAccountTokenCreator",
@@ -100,72 +96,65 @@ export const SignGetObjectUrlHttp = Layer.effect(
         ],
       });
       const bucketName = yield* bucket.bucketName;
-      return Effect.fn(`GCP.Storage.SignGetObjectUrl(${bucket.LogicalId})`)(
-        function* (request: SignGetObjectUrlRequest) {
-          const email = yield* serviceAccountEmail;
-          const name = yield* bucketName;
-          const now = yield* Clock.currentTimeMillis;
-          const { datetime, date } = timestamps(now);
-          const scope = `${date}/auto/storage/goog4_request`;
-          const expiresIn = Math.min(
-            Math.max(Math.floor(request.expiresIn ?? DEFAULT_EXPIRES_IN), 1),
-            MAX_EXPIRES_IN,
-          );
-          const params: Record<string, string> = {
-            "X-Goog-Algorithm": "GOOG4-RSA-SHA256",
-            "X-Goog-Credential": `${email}/${scope}`,
-            "X-Goog-Date": datetime,
-            "X-Goog-Expires": String(expiresIn),
-            "X-Goog-SignedHeaders": "host",
-            ...(request.generation !== undefined
-              ? { generation: request.generation }
-              : {}),
-            ...(request.contentType !== undefined
-              ? { "response-content-type": request.contentType }
-              : {}),
-          };
-          const query = Object.keys(params)
-            .sort()
-            .map((key) => `${encode(key)}=${encode(params[key]!)}`)
-            .join("&");
-          const path = `/${name}/${request.object
-            .split("/")
-            .map(encode)
-            .join("/")}`;
-          const canonicalRequest = [
-            "GET",
-            path,
-            query,
-            `host:${STORAGE_HOST}`,
-            "",
-            "host",
-            "UNSIGNED-PAYLOAD",
-          ].join("\n");
-          const stringToSign = [
-            "GOOG4-RSA-SHA256",
-            datetime,
-            scope,
-            yield* Effect.sync(() => sha256Hex(canonicalRequest)),
-          ].join("\n");
-          const signed = yield* signBlob({
-            name: `projects/-/serviceAccounts/${email}`,
-            body: {
-              payload: yield* Effect.sync(() =>
-                Buffer.from(stringToSign, "utf8").toString("base64"),
-              ),
-            },
+      return Effect.fn(`GCP.Storage.SignGetObjectUrl(${bucket.LogicalId})`)(function* (
+        request: SignGetObjectUrlRequest,
+      ) {
+        const email = yield* serviceAccountEmail;
+        const name = yield* bucketName;
+        const now = yield* Clock.currentTimeMillis;
+        const { datetime, date } = timestamps(now);
+        const scope = `${date}/auto/storage/goog4_request`;
+        const expiresIn = Math.min(
+          Math.max(Math.floor(request.expiresIn ?? DEFAULT_EXPIRES_IN), 1),
+          MAX_EXPIRES_IN,
+        );
+        const params: Record<string, string> = {
+          "X-Goog-Algorithm": "GOOG4-RSA-SHA256",
+          "X-Goog-Credential": `${email}/${scope}`,
+          "X-Goog-Date": datetime,
+          "X-Goog-Expires": String(expiresIn),
+          "X-Goog-SignedHeaders": "host",
+          ...(request.generation !== undefined ? { generation: request.generation } : {}),
+          ...(request.contentType !== undefined
+            ? { "response-content-type": request.contentType }
+            : {}),
+        };
+        const query = Object.keys(params)
+          .sort()
+          .map((key) => `${encode(key)}=${encode(params[key]!)}`)
+          .join("&");
+        const path = `/${name}/${request.object.split("/").map(encode).join("/")}`;
+        const canonicalRequest = [
+          "GET",
+          path,
+          query,
+          `host:${STORAGE_HOST}`,
+          "",
+          "host",
+          "UNSIGNED-PAYLOAD",
+        ].join("\n");
+        const stringToSign = [
+          "GOOG4-RSA-SHA256",
+          datetime,
+          scope,
+          yield* Effect.sync(() => sha256Hex(canonicalRequest)),
+        ].join("\n");
+        const signed = yield* signBlob({
+          name: `projects/-/serviceAccounts/${email}`,
+          body: {
+            payload: yield* Effect.sync(() => Buffer.from(stringToSign, "utf8").toString("base64")),
+          },
+        });
+        if (signed.signedBlob === undefined) {
+          return yield* new SignedUrlFailed({
+            message: "IAM Credentials signBlob returned no signature",
           });
-          if (signed.signedBlob === undefined) {
-            return yield* new SignedUrlFailed({
-              message: "IAM Credentials signBlob returned no signature",
-            });
-          }
-          const signature = yield* Effect.sync(() =>
-            Buffer.from(signed.signedBlob!, "base64").toString("hex"),
-          );
-          return `https://${STORAGE_HOST}${path}?${query}&X-Goog-Signature=${signature}`;
-        },
-      );
+        }
+        const signature = yield* Effect.sync(() =>
+          Buffer.from(signed.signedBlob!, "base64").toString("hex"),
+        );
+        return `https://${STORAGE_HOST}${path}?${query}&X-Goog-Signature=${signature}`;
+      });
     });
   }),
 );

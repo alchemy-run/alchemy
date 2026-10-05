@@ -1,27 +1,23 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigateway from "@distilled.cloud/gcp/apigateway_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import { waitForOperation } from "@/GCP/Operation";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // API create LRO ~2m14s and delete ~2m51s; config create is similarly
 // slow, so the lifecycle runs past 5 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 const parentOf = (project: string) => `projects/${project}/locations/global`;
 const parentApiId = "alch-apigw-cfg";
-const parentApiNameOf = (project: string) =>
-  `${parentOf(project)}/apis/${parentApiId}`;
+const parentApiNameOf = (project: string) => `${parentOf(project)}/apis/${parentApiId}`;
 
 const openApi = `swagger: "2.0"
 info:
@@ -64,18 +60,15 @@ const waitApiActive = (name: string) =>
   getApi(name).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (api) =>
-        api !== undefined && (api.state === "ACTIVE" || api.state === "FAILED"),
+      until: (api) => api !== undefined && (api.state === "ACTIVE" || api.state === "FAILED"),
       times: 10,
     }),
   );
 
 const waitOperation = (operation: apigateway.ApigatewayOperation) =>
-  waitForOperation(
-    operation,
-    (name) => apigateway.getProjectsLocationsOperations({ name }),
-    { budget: "10 minutes" },
-  );
+  waitForOperation(operation, (name) => apigateway.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  });
 
 const ensureParentApi = Effect.gen(function* () {
   const { project } = yield* GcpEnvironment.current;
@@ -105,16 +98,14 @@ const ensureParentApi = Effect.gen(function* () {
 const deleteParentApi = Effect.gen(function* () {
   const { project } = yield* GcpEnvironment.current;
   const parentApiName = parentApiNameOf(project);
-  const operation = yield* apigateway
-    .deleteProjectsLocationsApis({ name: parentApiName })
-    .pipe(
-      Effect.retry({
-        while: (error) => error._tag === "Conflict",
-        times: 8,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  const operation = yield* apigateway.deleteProjectsLocationsApis({ name: parentApiName }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Conflict",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
   if (operation !== undefined) {
     yield* waitOperation(operation);
   }
@@ -183,9 +174,7 @@ test.provider.skipIf(!runLifecycle)(
       // The API reports the project number in names; the resource keeps the
       // project-id form it was addressed by.
       expect(fetched.name).toEqual(
-        expect.stringMatching(
-          new RegExp(`/apis/[^/]+/configs/${created.apiConfigId}$`),
-        ),
+        expect.stringMatching(new RegExp(`/apis/[^/]+/configs/${created.apiConfigId}$`)),
       );
       expect(fetched.displayName).toEqual("v1");
       expect(fetched.labels?.env).toEqual("test");
@@ -225,9 +214,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(gone).toEqual("gone");
     }).pipe(
       logLevel,
-      Effect.ensuring(
-        stack.destroy().pipe(Effect.andThen(deleteParentApi), Effect.ignore),
-      ),
+      Effect.ensuring(stack.destroy().pipe(Effect.andThen(deleteParentApi), Effect.ignore)),
     ),
   {
     tags: ["provider:gcp", "provider:gcp:apigateway", "live"],

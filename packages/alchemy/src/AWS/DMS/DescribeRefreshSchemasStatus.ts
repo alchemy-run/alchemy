@@ -38,7 +38,6 @@ export interface DescribeRefreshSchemasStatus extends Binding.Service<
   >
 > {}
 
-export const DescribeRefreshSchemasStatus =
-  Binding.Service<DescribeRefreshSchemasStatus>(
-    "AWS.DMS.DescribeRefreshSchemasStatus",
-  );
+export const DescribeRefreshSchemasStatus = Binding.Service<DescribeRefreshSchemasStatus>(
+  "AWS.DMS.DescribeRefreshSchemasStatus",
+);

@@ -37,12 +37,8 @@ export type ListingRestrictedExportConfig = analyticshub.RestrictedExportConfig;
 export type ListingStoredProcedureConfig = analyticshub.StoredProcedureConfig;
 export type ListingBigQueryDatasetSource = analyticshub.BigQueryDatasetSource;
 export type ListingPubSubTopicSource = analyticshub.PubSubTopicSource;
-export type ListingDiscoveryType =
-  | analyticshub.ListingDiscoveryTypeEnum
-  | (string & {});
-export type ListingCategory =
-  | analyticshub.ListingCategoriesItemEnum
-  | (string & {});
+export type ListingDiscoveryType = analyticshub.ListingDiscoveryTypeEnum | (string & {});
+export type ListingCategory = analyticshub.ListingCategoriesItemEnum | (string & {});
 
 export type DataExchangesListingProps = {
   /**
@@ -249,11 +245,8 @@ export const DataExchangesListing = Resource<DataExchangesListing>(
   "GCP.AnalyticsHub.DataExchangesListing",
 );
 
-const parentExchange = (
-  dataExchange: string,
-  project: string,
-  location: string,
-) => expandParent(dataExchange, project, location, "dataExchanges");
+const parentExchange = (dataExchange: string, project: string, location: string) =>
+  expandParent(dataExchange, project, location, "dataExchanges");
 
 const resourceName = (dataExchange: string, listingId: string) =>
   `${dataExchange}/listings/${listingId}`;
@@ -321,8 +314,7 @@ const toAttrs = (listing: analyticshub.Listing, project: string) => {
     discoveryType: listing.discoveryType,
     restrictedExportConfig: listing.restrictedExportConfig,
     storedProcedureConfig: listing.storedProcedureConfig,
-    logLinkedDatasetQueryUserEmail:
-      listing.logLinkedDatasetQueryUserEmail === true,
+    logLinkedDatasetQueryUserEmail: listing.logLinkedDatasetQueryUserEmail === true,
     allowOnlyMetadataSharing: listing.allowOnlyMetadataSharing === true,
     resourceType: listing.resourceType,
     state: listing.state,
@@ -362,57 +354,34 @@ export const DataExchangesListingProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.listingId ?? output?.listingId,
         nextId: news.listingId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.dataExchange ?? output?.dataExchange,
         nextParent: parentExchange(news.dataExchange, env.project, location),
-        extra:
-          previousSource.length > 1 &&
-          nextSource.length > 1 &&
-          previousSource !== nextSource,
+        extra: previousSource.length > 1 && nextSource.length > 1 && previousSource !== nextSource,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const listingId = yield* toPhysicalId(
-        id,
-        olds?.listingId,
-        output?.listingId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const listingId = yield* toPhysicalId(id, olds?.listingId, output?.listingId);
       const dataExchange =
         olds?.dataExchange !== undefined
           ? parentExchange(olds.dataExchange, env.project, location)
           : (output?.dataExchange ?? "");
-      const name =
-        output?.name ??
-        (dataExchange ? resourceName(dataExchange, listingId) : "");
+      const name = output?.name ?? (dataExchange ? resourceName(dataExchange, listingId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedById(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedById(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const exchanges = yield* listExchangesInProject(
-          env.project,
-          env.region,
-        );
-        const listings = yield* listChildResources(
-          namedOf(exchanges),
-          listListings,
-        );
+        const exchanges = yield* listExchangesInProject(env.project, env.region);
+        const listings = yield* listChildResources(namedOf(exchanges), listListings);
         return listings
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project));
@@ -420,28 +389,14 @@ export const DataExchangesListingProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const dataExchange = parentExchange(
-        news.dataExchange,
-        env.project,
-        location,
-      );
-      const listingId = yield* toPhysicalId(
-        id,
-        news.listingId,
-        output?.listingId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const dataExchange = parentExchange(news.dataExchange, env.project, location);
+      const listingId = yield* toPhysicalId(id, news.listingId, output?.listingId);
       const name = output?.name ?? resourceName(dataExchange, listingId);
       const ownership = yield* ownershipLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const displayName = displayNameOf(news.displayName, listingId);
-      const bigqueryDataset = desiredBigQuery(
-        news.bigqueryDataset,
-        env.project,
-      );
+      const bigqueryDataset = desiredBigQuery(news.bigqueryDataset, env.project);
       const pubsubTopic = desiredPubSub(news.pubsubTopic, env.project);
       const body: analyticshub.Listing = {
         displayName,
@@ -509,79 +464,46 @@ export const DataExchangesListingProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
-      const documentationChanged = !sameText(
-        current.documentation,
-        news.documentation,
-      );
-      const contactChanged = !sameText(
-        current.primaryContact,
-        news.primaryContact,
-      );
-      const requestChanged = !sameText(
-        current.requestAccess,
-        news.requestAccess,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
+      const documentationChanged = !sameText(current.documentation, news.documentation);
+      const contactChanged = !sameText(current.primaryContact, news.primaryContact);
+      const requestChanged = !sameText(current.requestAccess, news.requestAccess);
       const iconChanged = !sameText(current.icon, news.icon);
       const dataProviderChanged =
-        news.dataProvider !== undefined &&
-        !sameJson(current.dataProvider, news.dataProvider);
+        news.dataProvider !== undefined && !sameJson(current.dataProvider, news.dataProvider);
       const publisherChanged =
-        news.publisher !== undefined &&
-        !sameJson(current.publisher, news.publisher);
+        news.publisher !== undefined && !sameJson(current.publisher, news.publisher);
       const categoriesChanged =
-        news.categories !== undefined &&
-        !sameJson(current.categories, news.categories);
+        news.categories !== undefined && !sameJson(current.categories, news.categories);
       const discoveryChanged =
-        news.discoveryType !== undefined &&
-        !sameText(current.discoveryType, news.discoveryType);
+        news.discoveryType !== undefined && !sameText(current.discoveryType, news.discoveryType);
       const restrictedChanged =
         news.restrictedExportConfig !== undefined &&
         !sameJson(
           {
             enabled: current.restrictedExportConfig?.enabled,
-            restrictQueryResult:
-              current.restrictedExportConfig?.restrictQueryResult,
+            restrictQueryResult: current.restrictedExportConfig?.restrictQueryResult,
           },
           {
             enabled: news.restrictedExportConfig.enabled,
-            restrictQueryResult:
-              news.restrictedExportConfig.restrictQueryResult,
+            restrictQueryResult: news.restrictedExportConfig.restrictQueryResult,
           },
         );
       const storedChanged =
         news.storedProcedureConfig !== undefined &&
-        !sameBool(
-          current.storedProcedureConfig?.enabled,
-          news.storedProcedureConfig.enabled,
-        );
+        !sameBool(current.storedProcedureConfig?.enabled, news.storedProcedureConfig.enabled);
       const emailChanged =
         news.logLinkedDatasetQueryUserEmail !== undefined &&
-        !sameBool(
-          current.logLinkedDatasetQueryUserEmail,
-          news.logLinkedDatasetQueryUserEmail,
-        );
+        !sameBool(current.logLinkedDatasetQueryUserEmail, news.logLinkedDatasetQueryUserEmail);
       const metadataChanged =
         news.allowOnlyMetadataSharing !== undefined &&
-        !sameBool(
-          current.allowOnlyMetadataSharing,
-          news.allowOnlyMetadataSharing,
-        );
+        !sameBool(current.allowOnlyMetadataSharing, news.allowOnlyMetadataSharing);
       const selectedChanged =
         bigqueryDataset?.selectedResources !== undefined &&
-        !sameJson(
-          current.bigqueryDataset?.selectedResources,
-          bigqueryDataset.selectedResources,
-        );
+        !sameJson(current.bigqueryDataset?.selectedResources, bigqueryDataset.selectedResources);
       const replicaChanged =
         bigqueryDataset?.replicaLocations !== undefined &&
-        !sameJson(
-          current.bigqueryDataset?.replicaLocations,
-          bigqueryDataset.replicaLocations,
-        );
+        !sameJson(current.bigqueryDataset?.replicaLocations, bigqueryDataset.replicaLocations);
       const restrictedPolicyChanged =
         bigqueryDataset?.restrictedExportPolicy !== undefined &&
         !sameJson(
@@ -590,10 +512,7 @@ export const DataExchangesListingProvider = () =>
         );
       const affinityChanged =
         pubsubTopic?.dataAffinityRegions !== undefined &&
-        !sameJson(
-          current.pubsubTopic?.dataAffinityRegions,
-          pubsubTopic.dataAffinityRegions,
-        );
+        !sameJson(current.pubsubTopic?.dataAffinityRegions, pubsubTopic.dataAffinityRegions);
 
       if (
         displayChanged ||
@@ -635,9 +554,7 @@ export const DataExchangesListingProvider = () =>
               metadataChanged ? "allowOnlyMetadataSharing" : undefined,
               selectedChanged ? "bigqueryDataset.selectedResources" : undefined,
               replicaChanged ? "bigqueryDataset.replicaLocations" : undefined,
-              restrictedPolicyChanged
-                ? "bigqueryDataset.restrictedExportPolicy"
-                : undefined,
+              restrictedPolicyChanged ? "bigqueryDataset.restrictedExportPolicy" : undefined,
               affinityChanged ? "pubsubTopic.dataAffinityRegions" : undefined,
             ),
             body: { name: currentName, ...body },

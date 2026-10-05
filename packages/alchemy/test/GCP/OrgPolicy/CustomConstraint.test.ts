@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   orgpolicy.getOrganizationsCustomConstraints({ name }).pipe(
@@ -31,9 +28,7 @@ const organizationOf = () =>
     const { project } = yield* GcpEnvironment.current;
     const fromEnv = process.env.GOOGLE_ORGANIZATION_ID;
     if (fromEnv && fromEnv.length > 0) {
-      return fromEnv.startsWith("organizations/")
-        ? fromEnv
-        : `organizations/${fromEnv}`;
+      return fromEnv.startsWith("organizations/") ? fromEnv : `organizations/${fromEnv}`;
     }
     let current: string | undefined = `projects/${project}`;
     for (let i = 0; i < 8; i++) {
@@ -129,13 +124,9 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.constraintId.startsWith("custom.")).toEqual(true);
       expect(created.organization).toEqual(organization);
-      expect(created.name).toEqual(
-        `${organization}/customConstraints/${created.constraintId}`,
-      );
+      expect(created.name).toEqual(`${organization}/customConstraints/${created.constraintId}`);
       expect(created.project).toEqual(project);
-      expect(created.resourceTypes).toEqual([
-        "compute.googleapis.com/Instance",
-      ]);
+      expect(created.resourceTypes).toEqual(["compute.googleapis.com/Instance"]);
       expect(created.methodTypes).toEqual(["CREATE"]);
       expect(created.condition).toEqual("resource.name.startsWith('test-')");
       expect(created.actionType).toEqual("DENY");
@@ -148,9 +139,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.condition).toEqual(created.condition);
       expect(fetched.actionType).toEqual("DENY");
-      expect(fetched.description ?? "").toContain(
-        "blocks test-prefixed instances",
-      );
+      expect(fetched.description ?? "").toContain("blocks test-prefixed instances");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -196,15 +185,11 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(replaced.constraintId).toEqual(`${created.constraintId}.b`);
       expect(replaced.name).not.toEqual(created.name);
-      expect(replaced.name).toContain(
-        `/customConstraints/${replaced.constraintId}`,
-      );
+      expect(replaced.name).toContain(`/customConstraints/${replaced.constraintId}`);
 
-      const fetchedReplace = yield* orgpolicy.getOrganizationsCustomConstraints(
-        {
-          name: replaced.name,
-        },
-      );
+      const fetchedReplace = yield* orgpolicy.getOrganizationsCustomConstraints({
+        name: replaced.name,
+      });
       expect(fetchedReplace.name).toEqual(replaced.name);
 
       const oldGone = yield* waitUntilGone(created.name);

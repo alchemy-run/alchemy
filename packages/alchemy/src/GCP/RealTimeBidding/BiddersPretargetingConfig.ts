@@ -287,9 +287,7 @@ const lookupName = (
   return "";
 };
 
-const specFromProps = (
-  props: BiddersPretargetingConfigProps,
-): ReturnType<typeof specOf> =>
+const specFromProps = (props: BiddersPretargetingConfigProps): ReturnType<typeof specOf> =>
   specOf({
     allowedUserTargetingModes: props.allowedUserTargetingModes,
     excludedContentLabelIds: props.excludedContentLabelIds,
@@ -344,10 +342,7 @@ const toAttrs = (row: rtb.PretargetingConfig, project: string) => {
   };
 };
 
-const syncState = (
-  current: rtb.PretargetingConfig,
-  desired: string | undefined,
-) =>
+const syncState = (current: rtb.PretargetingConfig, desired: string | undefined) =>
   Effect.gen(function* () {
     if (!desired || !current.name) return current;
     const observed = current.state ?? "";
@@ -382,20 +377,14 @@ export const BiddersPretargetingConfigProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = expandParent(olds?.parent ?? output?.parent ?? "");
-      const name = lookupName(
-        parent,
-        olds?.configId ?? output?.configId,
-        output?.name,
-      );
+      const name = lookupName(parent, olds?.configId ?? output?.configId, output?.name);
       let existing = yield* getConfig(name);
       if (existing === undefined) {
         existing = yield* findOwnedConfig(id, parent, name);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -412,22 +401,13 @@ export const BiddersPretargetingConfigProvider = () =>
       const parent = expandParent(news.parent);
       if (parent.length === 0) {
         return yield* new BiddersPretargetingConfigParentRequired({
-          message:
-            "BiddersPretargetingConfig requires parent (bidders/{bidder})",
+          message: "BiddersPretargetingConfig requires parent (bidders/{bidder})",
         });
       }
       const ownership = yield* ownershipLabels(id);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const stamped = encodeDisplayName(ownership, displayName);
-      const name = lookupName(
-        parent,
-        news.configId ?? output?.configId,
-        output?.name,
-      );
+      const name = lookupName(parent, news.configId ?? output?.configId, output?.name);
 
       let current = yield* getConfig(name);
       if (current === undefined) {
@@ -445,11 +425,7 @@ export const BiddersPretargetingConfigProvider = () =>
             parent,
             body: toConfigBody(stamped, desired),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwnedConfig(id, parent, name, stamped),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedConfig(id, parent, name, stamped)));
         current = created ?? undefined;
       }
 
@@ -477,8 +453,6 @@ export const BiddersPretargetingConfigProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreMissing(
-        rtb.deleteBiddersPretargetingConfigs({ name: output.name }),
-      );
+      yield* ignoreMissing(rtb.deleteBiddersPretargetingConfigs({ name: output.name }));
     }),
   });

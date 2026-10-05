@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -144,9 +139,7 @@ export type DatasetsFhirStore = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsFhirStore = Resource<DatasetsFhirStore>(
-  "GCP.Healthcare.DatasetsFhirStore",
-);
+export const DatasetsFhirStore = Resource<DatasetsFhirStore>("GCP.Healthcare.DatasetsFhirStore");
 
 export class DatasetsFhirStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsFhirStoreNotResolved",
@@ -160,11 +153,7 @@ const datasetOf = (dataset: string, project: string, location: string) =>
 const resourceName = (dataset: string, fhirStoreId: string) =>
   `${dataset}/fhirStores/${fhirStoreId}`;
 
-const toAttrs = (
-  store: healthcare.FhirStore,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (store: healthcare.FhirStore, project: string, region: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "fhirStores", region);
   return {
@@ -209,13 +198,9 @@ export const DatasetsFhirStoreProvider = () =>
       const nextVersion = news.version ?? DEFAULT_VERSION;
       const extra =
         (previousVersion !== undefined && previousVersion !== nextVersion) ||
-        ((olds?.disableReferentialIntegrity ??
-          output?.disableReferentialIntegrity) ===
-          true) !==
+        ((olds?.disableReferentialIntegrity ?? output?.disableReferentialIntegrity) === true) !==
           (news.disableReferentialIntegrity === true) ||
-        ((olds?.disableResourceVersioning ??
-          output?.disableResourceVersioning) ===
-          true) !==
+        ((olds?.disableResourceVersioning ?? output?.disableResourceVersioning) === true) !==
           (news.disableResourceVersioning === true);
       return replaceOnIdentity({
         previousId: olds?.fhirStoreId ?? output?.fhirStoreId,
@@ -232,44 +217,30 @@ export const DatasetsFhirStoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const fhirStoreId = yield* toPhysicalId(
-        id,
-        olds?.fhirStoreId,
-        output?.fhirStoreId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const fhirStoreId = yield* toPhysicalId(id, olds?.fhirStoreId, output?.fhirStoreId);
       const dataset =
         olds?.dataset !== undefined
           ? datasetOf(olds.dataset, env.project, location)
           : (output?.dataset ?? "");
-      const name =
-        output?.name ??
-        (dataset.length > 0 ? resourceName(dataset, fhirStoreId) : "");
+      const name = output?.name ?? (dataset.length > 0 ? resourceName(dataset, fhirStoreId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* forEachDataset(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              healthcare.listProjectsLocationsDatasetsFhirStores.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.fhirStores,
-            ),
+        const stores = yield* forEachDataset(env.project, env.region, (parent) =>
+          collectPages(
+            healthcare.listProjectsLocationsDatasetsFhirStores.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.fhirStores,
+          ),
         );
         return stores
           .filter((store) => hasAlchemyLabelMap(store.labels))
@@ -278,16 +249,9 @@ export const DatasetsFhirStoreProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const dataset = datasetOf(news.dataset, env.project, location);
-      const fhirStoreId = yield* toPhysicalId(
-        id,
-        news.fhirStoreId,
-        output?.fhirStoreId,
-      );
+      const fhirStoreId = yield* toPhysicalId(id, news.fhirStoreId, output?.fhirStoreId);
       const name = output?.name ?? resourceName(dataset, fhirStoreId);
       const version = news.version ?? DEFAULT_VERSION;
       const desiredLabels = {
@@ -324,8 +288,7 @@ export const DatasetsFhirStoreProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const updateCreateChanged =
-        (current.enableUpdateCreate === true) !==
-        (news.enableUpdateCreate === true);
+        (current.enableUpdateCreate === true) !== (news.enableUpdateCreate === true);
       const searchChanged =
         (current.defaultSearchHandlingStrict === true) !==
         (news.defaultSearchHandlingStrict === true);

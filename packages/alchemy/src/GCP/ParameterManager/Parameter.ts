@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ParameterNotResolved,
@@ -30,9 +25,7 @@ import {
   waitUntilParameterGone,
 } from "./internal.ts";
 
-export type ParameterFormat =
-  | parametermanager.ParameterFormatEnum
-  | (string & {});
+export type ParameterFormat = parametermanager.ParameterFormatEnum | (string & {});
 
 export type ParameterProps = {
   /**
@@ -164,33 +157,17 @@ const toAttrs = (parameter: parametermanager.Parameter, project: string) => {
 
 export const ParameterProvider = () =>
   Provider.succeed(Parameter, {
-    stables: [
-      "name",
-      "parameterId",
-      "project",
-      "location",
-      "format",
-      "createTime",
-    ],
+    stables: ["name", "parameterId", "project", "location", "format", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.parameterId ?? output?.parameterId;
       const nextId = news.parameterId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousFormat = normalizeFormat(olds?.format ?? output?.format);
-      const nextFormat = normalizeFormat(
-        news.format ?? olds?.format ?? output?.format,
-      );
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
+      const nextFormat = normalizeFormat(news.format ?? olds?.format ?? output?.format);
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
       const locationChanged = previousLocation !== nextLocation;
       const formatChanged = previousFormat !== nextFormat;
       if (!idChanged && !locationChanged && !formatChanged) return undefined;
@@ -214,15 +191,11 @@ export const ParameterProvider = () =>
         "parameter",
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        parameterResourceName(env.project, location, parameterId);
+      const name = output?.name ?? parameterResourceName(env.project, location, parameterId);
       const existing = yield* getParameter(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -287,10 +260,7 @@ export const ParameterProvider = () =>
       if (labelsChanged || kmsChanged) {
         yield* parametermanager.patchProjectsLocationsParameters({
           name,
-          updateMask: [
-            labelsChanged ? "labels" : undefined,
-            kmsChanged ? "kmsKey" : undefined,
-          ]
+          updateMask: [labelsChanged ? "labels" : undefined, kmsChanged ? "kmsKey" : undefined]
             .filter((field): field is string => field !== undefined)
             .join(","),
           body: {

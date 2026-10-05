@@ -1,25 +1,20 @@
-import * as AWS from "@/AWS";
-import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
-import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/aws/iot";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@/AWS/IoT";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertThingGone = (thingName: string) =>
   iot.describeThing({ thingName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`thing ${thingName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`thing ${thingName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -36,9 +31,7 @@ describe.sequential(
     test.provider("typed not-found probe", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
-          iot.describeThingType({
-            thingTypeName: "alchemy-nonexistent-thing-type-probe",
-          }),
+          iot.describeThingType({ thingTypeName: "alchemy-nonexistent-thing-type-probe" }),
         );
         expect(error._tag).toBe("ResourceNotFoundException");
       }),
@@ -89,21 +82,15 @@ describe.sequential(
           // Verify out-of-band: the type exists, is active (a previous run's
           // destroy leaves it deprecated — reconcile must un-deprecate), and the
           // thing is associated with it.
-          const observed = yield* iot.describeThingType({
-            thingTypeName: created.thingTypeName,
-          });
+          const observed = yield* iot.describeThingType({ thingTypeName: created.thingTypeName });
           expect(observed.thingTypeArn).toEqual(created.thingTypeArn);
           expect(observed.thingTypeProperties?.thingTypeDescription).toEqual(
             "Alchemy IoT test sensors",
           );
-          expect(observed.thingTypeProperties?.searchableAttributes).toEqual([
-            "location",
-          ]);
+          expect(observed.thingTypeProperties?.searchableAttributes).toEqual(["location"]);
           expect(observed.thingTypeMetadata?.deprecated ?? false).toBe(false);
 
-          const thing = yield* iot.describeThing({
-            thingName: created.thingName,
-          });
+          const thing = yield* iot.describeThing({ thingName: created.thingName });
           expect(thing.thingTypeName).toEqual(created.thingTypeName);
 
           // First destroy removes the Thing and deprecates its type, then exits
@@ -113,9 +100,7 @@ describe.sequential(
           expect(pending).toBeInstanceOf(ThingTypeDeletionTimedOut);
           yield* assertThingGone(created.thingName);
 
-          const deprecated = yield* iot.describeThingType({
-            thingTypeName: created.thingTypeName,
-          });
+          const deprecated = yield* iot.describeThingType({ thingTypeName: created.thingTypeName });
           expect(deprecated.thingTypeMetadata?.deprecated).toBe(true);
 
           // The first bounded delete already consumed ~45s. Wait out the rest

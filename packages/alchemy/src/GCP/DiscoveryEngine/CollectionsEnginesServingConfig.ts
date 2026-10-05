@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  parentBefore,
-  parseResourceName,
-  sameStringList,
-  servingConfigId,
-} from "./internal.ts";
+import { parentBefore, parseResourceName, sameStringList, servingConfigId } from "./internal.ts";
 
 export type CollectionsEnginesServingConfigProps = {
   /**
@@ -133,10 +128,9 @@ export type CollectionsEnginesServingConfig = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsEnginesServingConfig =
-  Resource<CollectionsEnginesServingConfig>(
-    "GCP.DiscoveryEngine.CollectionsEnginesServingConfig",
-  );
+export const CollectionsEnginesServingConfig = Resource<CollectionsEnginesServingConfig>(
+  "GCP.DiscoveryEngine.CollectionsEnginesServingConfig",
+);
 
 export class CollectionsEnginesServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesServingConfigNotResolved",
@@ -148,16 +142,10 @@ const resourceName = (engine: string, servingConfigId: string) =>
   `${engine}/servingConfigs/${servingConfigId}`;
 
 const solutionOf = (
-  value:
-    | discoveryengine.GoogleCloudDiscoveryengineV1ServingConfigSolutionTypeEnum
-    | undefined,
+  value: discoveryengine.GoogleCloudDiscoveryengineV1ServingConfigSolutionTypeEnum | undefined,
 ) => value ?? "SOLUTION_TYPE_SEARCH";
 
-const toId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return servingConfigId(explicit);
     if (existing !== undefined) return existing;
@@ -225,9 +213,7 @@ export const CollectionsEnginesServingConfigProvider = () =>
       );
       if (
         (previousEngine !== undefined && news.engine !== previousEngine) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousSolution !== nextSolution
       ) {
         return { action: "replace" as const, deleteFirst: false };
@@ -238,14 +224,9 @@ export const CollectionsEnginesServingConfigProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const engine = olds?.engine ?? output?.engine;
-      const idValue = yield* toId(
-        id,
-        olds?.servingConfigId,
-        output?.servingConfigId,
-      );
+      const idValue = yield* toId(id, olds?.servingConfigId, output?.servingConfigId);
       const name =
-        output?.name ??
-        (engine !== undefined ? resourceName(engine, idValue) : undefined);
+        output?.name ?? (engine !== undefined ? resourceName(engine, idValue) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -256,11 +237,7 @@ export const CollectionsEnginesServingConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const idValue = yield* toId(
-        id,
-        news.servingConfigId,
-        output?.servingConfigId,
-      );
+      const idValue = yield* toId(id, news.servingConfigId, output?.servingConfigId);
       const displayName = news.displayName ?? idValue;
       const solutionType = solutionOf(news.solutionType);
       const fallbackName = output?.name ?? resourceName(news.engine, idValue);
@@ -296,27 +273,13 @@ export const CollectionsEnginesServingConfigProvider = () =>
 
       const name = current.name ?? fallbackName;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const rankingChanged =
-        (current.rankingExpression ?? "") !== (news.rankingExpression ?? "");
+      const rankingChanged = (current.rankingExpression ?? "") !== (news.rankingExpression ?? "");
       const modelChanged = (current.modelId ?? "") !== (news.modelId ?? "");
-      const diversityChanged =
-        (current.diversityLevel ?? "") !== (news.diversityLevel ?? "");
-      const boostChanged = !sameStringList(
-        current.boostControlIds,
-        news.boostControlIds,
-      );
-      const filterChanged = !sameStringList(
-        current.filterControlIds,
-        news.filterControlIds,
-      );
-      const synonymsChanged = !sameStringList(
-        current.synonymsControlIds,
-        news.synonymsControlIds,
-      );
-      const redirectChanged = !sameStringList(
-        current.redirectControlIds,
-        news.redirectControlIds,
-      );
+      const diversityChanged = (current.diversityLevel ?? "") !== (news.diversityLevel ?? "");
+      const boostChanged = !sameStringList(current.boostControlIds, news.boostControlIds);
+      const filterChanged = !sameStringList(current.filterControlIds, news.filterControlIds);
+      const synonymsChanged = !sameStringList(current.synonymsControlIds, news.synonymsControlIds);
+      const redirectChanged = !sameStringList(current.redirectControlIds, news.redirectControlIds);
 
       if (
         displayNameChanged ||
@@ -328,35 +291,32 @@ export const CollectionsEnginesServingConfigProvider = () =>
         synonymsChanged ||
         redirectChanged
       ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEnginesServingConfigs(
-            {
-              name,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                rankingChanged ? "ranking_expression" : undefined,
-                modelChanged ? "model_id" : undefined,
-                diversityChanged ? "diversity_level" : undefined,
-                boostChanged ? "boost_control_ids" : undefined,
-                filterChanged ? "filter_control_ids" : undefined,
-                synonymsChanged ? "synonyms_control_ids" : undefined,
-                redirectChanged ? "redirect_control_ids" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                displayName,
-                rankingExpression: news.rankingExpression,
-                modelId: news.modelId,
-                diversityLevel: news.diversityLevel,
-                boostControlIds: news.boostControlIds,
-                filterControlIds: news.filterControlIds,
-                synonymsControlIds: news.synonymsControlIds,
-                redirectControlIds: news.redirectControlIds,
-              },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesServingConfigs({
+          name,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            rankingChanged ? "ranking_expression" : undefined,
+            modelChanged ? "model_id" : undefined,
+            diversityChanged ? "diversity_level" : undefined,
+            boostChanged ? "boost_control_ids" : undefined,
+            filterChanged ? "filter_control_ids" : undefined,
+            synonymsChanged ? "synonyms_control_ids" : undefined,
+            redirectChanged ? "redirect_control_ids" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            displayName,
+            rankingExpression: news.rankingExpression,
+            modelId: news.modelId,
+            diversityLevel: news.diversityLevel,
+            boostControlIds: news.boostControlIds,
+            filterControlIds: news.filterControlIds,
+            synonymsControlIds: news.synonymsControlIds,
+            redirectControlIds: news.redirectControlIds,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

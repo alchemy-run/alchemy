@@ -22,8 +22,6 @@ export const isTransientGcpError = (error: { readonly _tag: string }) =>
  * A delete call succeeded but the resource was still readable after the
  * bounded wait-until-gone poll.
  */
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.DeleteNotConfirmed",
-)<{
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.DeleteNotConfirmed")<{
   resource: string;
 }> {}

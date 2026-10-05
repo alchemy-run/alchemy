@@ -22,15 +22,9 @@ import { waitForOperation } from "./internal.ts";
 
 const MAX_NAME_LENGTH = 63;
 
-export type TransportBandwidth =
-  | networkconnectivity.TransportBandwidthEnum
-  | (string & {});
-export type TransportStackType =
-  | networkconnectivity.TransportStackTypeEnum
-  | (string & {});
-export type TransportState =
-  | networkconnectivity.TransportStateEnum
-  | (string & {});
+export type TransportBandwidth = networkconnectivity.TransportBandwidthEnum | (string & {});
+export type TransportStackType = networkconnectivity.TransportStackTypeEnum | (string & {});
+export type TransportState = networkconnectivity.TransportStateEnum | (string & {});
 
 export type TransportProps = {
   /**
@@ -223,9 +217,7 @@ export type Transport = Resource<
  * @resource
  * @category NetworkConnectivity
  */
-export const Transport = Resource<Transport>(
-  "GCP.NetworkConnectivity.Transport",
-);
+export const Transport = Resource<Transport>("GCP.NetworkConnectivity.Transport");
 
 export class TransportNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.TransportNotResolved",
@@ -233,9 +225,7 @@ export class TransportNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class TransportFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.TransportFailed",
-)<{
+export class TransportFailed extends Data.TaggedError("GCP.NetworkConnectivity.TransportFailed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -266,20 +256,14 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "transport";
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const networkNameOf = (network: string | undefined) =>
-  network === undefined || network.length === 0
-    ? undefined
-    : lastSegment(network);
+  network === undefined || network.length === 0 ? undefined : lastSegment(network);
 
 const profileIdOf = (profile: string | undefined) =>
-  profile === undefined || profile.length === 0
-    ? undefined
-    : lastSegment(profile);
+  profile === undefined || profile.length === 0 ? undefined : lastSegment(profile);
 
 const toNetworkResource = (project: string, network: string) => {
   const trimmed = network.trim();
@@ -301,8 +285,7 @@ const toRemoteProfileResource = (
 const resourceName = (project: string, location: string, transportId: string) =>
   `projects/${project}/locations/${location}/transports/${transportId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -310,16 +293,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     transportId:
-      transportsAt >= 0 && parts[transportsAt + 1]
-        ? parts[transportsAt + 1]!
-        : lastSegment(name),
+      transportsAt >= 0 && parts[transportsAt + 1] ? parts[transportsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -344,22 +322,12 @@ const sameList = (left?: readonly string[], right?: readonly string[]) =>
   [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
 
 const normalizeBandwidth = (value: string | undefined) =>
-  value === undefined || value.length === 0 || value === "BANDWIDTH_UNSPECIFIED"
-    ? ""
-    : value;
+  value === undefined || value.length === 0 || value === "BANDWIDTH_UNSPECIFIED" ? "" : value;
 
 const normalizeStackType = (value: string | undefined) =>
-  value === undefined ||
-  value.length === 0 ||
-  value === "STACK_TYPE_UNSPECIFIED"
-    ? ""
-    : value;
+  value === undefined || value.length === 0 || value === "STACK_TYPE_UNSPECIFIED" ? "" : value;
 
-const toAttrs = (
-  transport: networkconnectivity.Transport,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (transport: networkconnectivity.Transport, project: string, region: string) => {
   const name = transport.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -400,8 +368,7 @@ const isPendingState = (state: string | undefined) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (transport): transport is networkconnectivity.Transport =>
-        transport !== undefined,
+      (transport): transport is networkconnectivity.Transport => transport !== undefined,
       () => new TransportNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -413,8 +380,7 @@ const waitUntilReady = (name: string) =>
       () => new TransportNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.TransportNotResolved",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.TransportNotResolved",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -423,13 +389,10 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((transport) =>
-      transport === undefined
-        ? Effect.void
-        : Effect.fail(new TransportStillExists({ name })),
+      transport === undefined ? Effect.void : Effect.fail(new TransportStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkConnectivity.TransportStillExists",
+      while: (error) => error._tag === "GCP.NetworkConnectivity.TransportStillExists",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -444,9 +407,7 @@ const listOwnedTransports = (parent: string, project: string, region: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.transports ?? [])),
       Stream.filter((transport) =>
-        Object.keys(transport.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(transport.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((transport) => toAttrs(transport, project, region)),
       Stream.runCollect,
@@ -490,15 +451,9 @@ export const TransportProvider = () =>
 
       const previousId = olds?.transportId ?? output?.transportId;
       const nextId = news.transportId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -523,15 +478,13 @@ export const TransportProvider = () =>
         nextProfile !== undefined &&
         previousProfile !== nextProfile;
 
-      const previousAccount =
-        olds?.remoteAccountId ?? output?.remoteAccountId ?? "";
+      const previousAccount = olds?.remoteAccountId ?? output?.remoteAccountId ?? "";
       const nextAccount = news.remoteAccountId ?? previousAccount;
       const accountChanged = previousAccount !== nextAccount;
 
       const previousKey = olds?.providedActivationKey ?? "";
       const nextKey = news.providedActivationKey ?? previousKey;
-      const keyChanged =
-        previousKey.length > 0 && nextKey.length > 0 && previousKey !== nextKey;
+      const keyChanged = previousKey.length > 0 && nextKey.length > 0 && previousKey !== nextKey;
 
       if (
         !idChanged &&
@@ -547,32 +500,19 @@ export const TransportProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          !idChanged &&
-          !locationChanged &&
-          previousId !== undefined &&
-          nextId === previousId,
+          !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const transportId = yield* toId(
-        id,
-        olds?.transportId,
-        output?.transportId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, transportId);
+      const transportId = yield* toId(id, olds?.transportId, output?.transportId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, transportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -593,15 +533,8 @@ export const TransportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const transportId = yield* toId(
-        id,
-        news.transportId,
-        output?.transportId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const transportId = yield* toId(id, news.transportId, output?.transportId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, transportId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -642,16 +575,13 @@ export const TransportProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const bandwidthChanged =
         news.bandwidth !== undefined &&
-        normalizeBandwidth(current.bandwidth) !==
-          normalizeBandwidth(news.bandwidth);
+        normalizeBandwidth(current.bandwidth) !== normalizeBandwidth(news.bandwidth);
       const stackTypeChanged =
         news.stackType !== undefined &&
-        normalizeStackType(current.stackType) !==
-          normalizeStackType(news.stackType);
+        normalizeStackType(current.stackType) !== normalizeStackType(news.stackType);
       const routesChanged =
         news.advertisedRoutes !== undefined &&
         !sameList(news.advertisedRoutes, current.advertisedRoutes);
@@ -671,19 +601,18 @@ export const TransportProvider = () =>
           routesChanged ? "advertisedRoutes" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networkconnectivity.patchProjectsLocationsTransports({
+        const operation = yield* networkconnectivity.patchProjectsLocationsTransports({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              bandwidth: news.bandwidth,
-              stackType: news.stackType,
-              advertisedRoutes: news.advertisedRoutes,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            bandwidth: news.bandwidth,
+            stackType: news.stackType,
+            advertisedRoutes: news.advertisedRoutes,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

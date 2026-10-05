@@ -7,12 +7,7 @@ import { CLOUD_SQL_MOUNT_PATH } from "../HostRuntime.ts";
 import { grantFor } from "../HttpBinding.ts";
 import { ReadSecret } from "../SecretManager/ReadSecret.ts";
 import { ReadSecretHttp } from "../SecretManager/ReadSecretHttp.ts";
-import {
-  Connect,
-  PasswordMissing,
-  type ConnectionInfo,
-  type ConnectOptions,
-} from "./Connect.ts";
+import { Connect, PasswordMissing, type ConnectionInfo, type ConnectOptions } from "./Connect.ts";
 import type { Instance } from "./Instance.ts";
 
 const socketUrl = (options: {
@@ -22,9 +17,7 @@ const socketUrl = (options: {
   username: string;
   password: string;
 }) => {
-  const mysql = (options.databaseVersion ?? "")
-    .toUpperCase()
-    .startsWith("MYSQL_");
+  const mysql = (options.databaseVersion ?? "").toUpperCase().startsWith("MYSQL_");
   // The socket travels as a query parameter; `localhost` only satisfies
   // URL parsers that reject credentials with an empty host.
   const url = new URL(

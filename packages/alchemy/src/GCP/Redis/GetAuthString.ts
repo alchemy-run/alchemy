@@ -44,6 +44,4 @@ export interface GetAuthString extends Binding.Service<
   >
 > {}
 
-export const GetAuthString = Binding.Service<GetAuthString>(
-  "GCP.Redis.GetAuthString",
-);
+export const GetAuthString = Binding.Service<GetAuthString>("GCP.Redis.GetAuthString");

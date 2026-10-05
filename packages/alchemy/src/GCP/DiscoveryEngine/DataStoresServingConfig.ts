@@ -212,14 +212,7 @@ const getByName = (name: string) =>
 
 export const DataStoresServingConfigProvider = () =>
   Provider.succeed(DataStoresServingConfig, {
-    stables: [
-      "name",
-      "servingConfigId",
-      "dataStore",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "servingConfigId", "dataStore", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -235,8 +228,7 @@ export const DataStoresServingConfigProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousSolution =
-        olds?.solutionType ?? output?.solutionType ?? DEFAULT_SOLUTION;
+      const previousSolution = olds?.solutionType ?? output?.solutionType ?? DEFAULT_SOLUTION;
       const nextSolution = news.solutionType ?? previousSolution;
       if (previousSolution !== nextSolution) {
         return { action: "replace" as const, deleteFirst: true };
@@ -253,14 +245,9 @@ export const DataStoresServingConfigProvider = () =>
         servingConfigIdOf,
       );
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
-      const name =
-        output?.name ?? (parent ? resourceName(parent, servingConfigId) : "");
+      const name = output?.name ?? (parent ? resourceName(parent, servingConfigId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -270,11 +257,7 @@ export const DataStoresServingConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
       const servingConfigId = yield* toPhysical(
         id,
         news.servingConfigId,
@@ -318,27 +301,13 @@ export const DataStoresServingConfigProvider = () =>
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const filterChanged = !sameStringList(
-        current.filterControlIds,
-        news.filterControlIds,
-      );
-      const boostChanged = !sameStringList(
-        current.boostControlIds,
-        news.boostControlIds,
-      );
-      const rankingChanged =
-        (current.rankingExpression ?? "") !== (news.rankingExpression ?? "");
+      const filterChanged = !sameStringList(current.filterControlIds, news.filterControlIds);
+      const boostChanged = !sameStringList(current.boostControlIds, news.boostControlIds);
+      const rankingChanged = (current.rankingExpression ?? "") !== (news.rankingExpression ?? "");
       const modelChanged = (current.modelId ?? "") !== (news.modelId ?? "");
-      const diversityChanged =
-        (current.diversityLevel ?? "") !== (news.diversityLevel ?? "");
-      const redirectChanged = !sameStringList(
-        current.redirectControlIds,
-        news.redirectControlIds,
-      );
-      const synonymsChanged = !sameStringList(
-        current.synonymsControlIds,
-        news.synonymsControlIds,
-      );
+      const diversityChanged = (current.diversityLevel ?? "") !== (news.diversityLevel ?? "");
+      const redirectChanged = !sameStringList(current.redirectControlIds, news.redirectControlIds);
+      const synonymsChanged = !sameStringList(current.synonymsControlIds, news.synonymsControlIds);
 
       if (
         displayChanged ||
@@ -350,35 +319,32 @@ export const DataStoresServingConfigProvider = () =>
         redirectChanged ||
         synonymsChanged
       ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsDataStoresServingConfigs(
-            {
-              name: current.name ?? name,
-              updateMask: [
-                displayChanged ? "display_name" : undefined,
-                filterChanged ? "filter_control_ids" : undefined,
-                boostChanged ? "boost_control_ids" : undefined,
-                rankingChanged ? "ranking_expression" : undefined,
-                modelChanged ? "model_id" : undefined,
-                diversityChanged ? "diversity_level" : undefined,
-                redirectChanged ? "redirect_control_ids" : undefined,
-                synonymsChanged ? "synonyms_control_ids" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name: current.name ?? name,
-                displayName,
-                filterControlIds: news.filterControlIds,
-                boostControlIds: news.boostControlIds,
-                redirectControlIds: news.redirectControlIds,
-                synonymsControlIds: news.synonymsControlIds,
-                rankingExpression: news.rankingExpression,
-                modelId: news.modelId,
-                diversityLevel: news.diversityLevel,
-              },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsDataStoresServingConfigs({
+          name: current.name ?? name,
+          updateMask: [
+            displayChanged ? "display_name" : undefined,
+            filterChanged ? "filter_control_ids" : undefined,
+            boostChanged ? "boost_control_ids" : undefined,
+            rankingChanged ? "ranking_expression" : undefined,
+            modelChanged ? "model_id" : undefined,
+            diversityChanged ? "diversity_level" : undefined,
+            redirectChanged ? "redirect_control_ids" : undefined,
+            synonymsChanged ? "synonyms_control_ids" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name: current.name ?? name,
+            displayName,
+            filterControlIds: news.filterControlIds,
+            boostControlIds: news.boostControlIds,
+            redirectControlIds: news.redirectControlIds,
+            synonymsControlIds: news.synonymsControlIds,
+            rankingExpression: news.rankingExpression,
+            modelId: news.modelId,
+            diversityLevel: news.diversityLevel,
+          },
+        });
       }
 
       return toAttrs(current, env.project, parent);

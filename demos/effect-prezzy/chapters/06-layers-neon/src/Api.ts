@@ -1,12 +1,12 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { Clicks, type ClickEvent } from "./Clicks.ts";
 import LinkRoom from "./LinkRoom.ts";
 import { Links, LinksSql } from "./Links.ts";
@@ -61,7 +61,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const [, first, code, action] = new URL(request.url, "http://localhost").pathname.split("/");
+        const [, first, code, action] = new URL(request.url, "http://localhost").pathname.split(
+          "/",
+        );
 
         // GET /links/:code/live → a WebSocket to the link's room
         if (first === "links" && code && action === "live") {
@@ -71,7 +73,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // GET /:code → queue the click, redirect straight away
         if (request.method === "GET" && first && first !== "links" && code === undefined) {
           const link = yield* links.get(first);
-          yield* clicks.send({ code: link.code, at: new Date().toISOString() } satisfies ClickEvent);
+          yield* clicks.send({
+            code: link.code,
+            at: new Date().toISOString(),
+          } satisfies ClickEvent);
           return HttpServerResponse.redirect(link.url, { status: 302 });
         }
 
@@ -80,7 +85,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Effect.catchTags({
           LinkNotFound: ({ code }) =>
             HttpServerResponse.json({ _tag: "LinkNotFound", code }, { status: 404 }),
-          LinkStoreError: () => HttpServerResponse.json({ error: "storage unavailable" }, { status: 503 }),
+          LinkStoreError: () =>
+            HttpServerResponse.json({ error: "storage unavailable" }, { status: 503 }),
           SendError: () => HttpServerResponse.json({ error: "queue unavailable" }, { status: 503 }),
         }),
       ),

@@ -1,7 +1,7 @@
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
+import * as Schema from "effect/Schema";
 
 /**
  * Procedures served on each {@link RpcDurableObject} instance.

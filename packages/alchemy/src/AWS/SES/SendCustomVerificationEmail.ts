@@ -73,17 +73,13 @@ export interface SendCustomVerificationEmail extends Binding.Service<
     configurationSet?: ConfigurationSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        sesv2.SendCustomVerificationEmailRequest,
-        "ConfigurationSetName"
-      >,
+      request: Omit<sesv2.SendCustomVerificationEmailRequest, "ConfigurationSetName">,
     ) => Effect.Effect<
       sesv2.SendCustomVerificationEmailResponse,
       sesv2.SendCustomVerificationEmailError
     >
   >
 > {}
-export const SendCustomVerificationEmail =
-  Binding.Service<SendCustomVerificationEmail>(
-    "AWS.SES.SendCustomVerificationEmail",
-  );
+export const SendCustomVerificationEmail = Binding.Service<SendCustomVerificationEmail>(
+  "AWS.SES.SendCustomVerificationEmail",
+);

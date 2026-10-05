@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import WorkflowsBindingsHost, { Greet } from "./fixtures/bindings-host.ts";
 
@@ -21,12 +21,7 @@ let workflowName: string;
 describe.skipIf(!dockerAvailable)(
   "Workflows Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:workflows",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:workflows", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -64,12 +59,8 @@ describe.skipIf(!dockerAvailable)(
               "createExecution",
             );
             // Execution names carry the project number, not its id.
-            const workflowPath = workflowName.slice(
-              workflowName.indexOf("/locations/"),
-            );
-            expect(started.name).toEqual(
-              expect.stringContaining(`${workflowPath}/executions/`),
-            );
+            const workflowPath = workflowName.slice(workflowName.indexOf("/locations/"));
+            expect(started.name).toEqual(expect.stringContaining(`${workflowPath}/executions/`));
 
             const finished = yield* workflowexecutions
               .getProjectsLocationsWorkflowsExecutions({
@@ -93,17 +84,13 @@ describe.skipIf(!dockerAvailable)(
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => ({
                 role: binding.role,
                 condition: binding.condition,
               }));
-            expect(roles).toEqual([
-              { role: "roles/workflows.invoker", condition: undefined },
-            ]);
+            expect(roles).toEqual([{ role: "roles/workflows.invoker", condition: undefined }]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workflows", "live"],

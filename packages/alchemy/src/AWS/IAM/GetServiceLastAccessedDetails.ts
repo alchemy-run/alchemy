@@ -43,7 +43,6 @@ export interface GetServiceLastAccessedDetails extends Binding.Service<
     >
   >
 > {}
-export const GetServiceLastAccessedDetails =
-  Binding.Service<GetServiceLastAccessedDetails>(
-    "AWS.IAM.GetServiceLastAccessedDetails",
-  );
+export const GetServiceLastAccessedDetails = Binding.Service<GetServiceLastAccessedDetails>(
+  "AWS.IAM.GetServiceLastAccessedDetails",
+);

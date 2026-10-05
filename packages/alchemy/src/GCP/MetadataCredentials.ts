@@ -1,18 +1,15 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  type Config as CredentialsConfig,
-} from "@distilled.cloud/gcp/Credentials";
+import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
  * Credentials sourced from the GCE / Cloud Run metadata server — the
@@ -37,20 +34,16 @@ const REFRESH_WINDOW_MS = 5 * 60 * 1000;
  * reuse the cached token until it nears expiry, and N concurrent callers
  * observing a stale token trigger exactly one refresh.
  */
-export const cacheCredentials = <E, R>(
-  resolve: Effect.Effect<ExpiringCredentials, E, R>,
-) =>
+export const cacheCredentials = <E, R>(resolve: Effect.Effect<ExpiringCredentials, E, R>) =>
   Effect.gen(function* () {
     const cache = yield* Ref.make<ExpiringCredentials | undefined>(undefined);
     const lock = yield* Semaphore.make(1);
     const fresh = (current: ExpiringCredentials | undefined, now: number) =>
       current !== undefined &&
-      (current.expiresAt === undefined ||
-        current.expiresAt - REFRESH_WINDOW_MS > now);
+      (current.expiresAt === undefined || current.expiresAt - REFRESH_WINDOW_MS > now);
     return Effect.gen(function* () {
       const current = yield* Ref.get(cache);
-      if (fresh(current, yield* Clock.currentTimeMillis))
-        return current!.config;
+      if (fresh(current, yield* Clock.currentTimeMillis)) return current!.config;
       return yield* lock.withPermits(1)(
         Effect.gen(function* () {
           const latest = yield* Ref.get(cache);
@@ -94,10 +87,7 @@ const metadataGet = (http: HttpClient.HttpClient, path: string) =>
 /** Mint an access token for the instance's attached service account. */
 export const fetchMetadataToken = (http: HttpClient.HttpClient) =>
   Effect.gen(function* () {
-    const response = yield* metadataGet(
-      http,
-      "/instance/service-accounts/default/token",
-    );
+    const response = yield* metadataGet(http, "/instance/service-accounts/default/token");
     const body = yield* response.json.pipe(
       Effect.mapError(
         () =>
@@ -115,8 +105,7 @@ export const fetchMetadataToken = (http: HttpClient.HttpClient) =>
         message: "GCE metadata token endpoint returned no access_token",
       });
     }
-    const expiresIn =
-      typeof record.expires_in === "number" ? record.expires_in : 300;
+    const expiresIn = typeof record.expires_in === "number" ? record.expires_in : 300;
     const now = yield* Clock.currentTimeMillis;
     return {
       accessToken: Redacted.make(record.access_token),
@@ -154,11 +143,7 @@ export const fetchMetadataRegion = (http: HttpClient.HttpClient) =>
  * until shortly before expiry. The project comes from
  * `GOOGLE_CLOUD_PROJECT` when set, else from the metadata server once.
  */
-export const fromMetadataServer = (): Layer.Layer<
-  Credentials,
-  never,
-  HttpClient.HttpClient
-> =>
+export const fromMetadataServer = (): Layer.Layer<Credentials, never, HttpClient.HttpClient> =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
@@ -167,12 +152,8 @@ export const fromMetadataServer = (): Layer.Layer<
       const project = Effect.gen(function* () {
         const cached = yield* Ref.get(projectCache);
         if (cached !== undefined) return cached;
-        const fromEnv = yield* Config.option(
-          Config.String("GOOGLE_CLOUD_PROJECT"),
-        );
-        const resolved = Option.isSome(fromEnv)
-          ? fromEnv.value
-          : yield* fetchMetadataProject(http);
+        const fromEnv = yield* Config.option(Config.String("GOOGLE_CLOUD_PROJECT"));
+        const resolved = Option.isSome(fromEnv) ? fromEnv.value : yield* fetchMetadataProject(http);
         yield* Ref.set(projectCache, resolved);
         return resolved;
       });

@@ -2,20 +2,14 @@ import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_DISPLAY_NAME = 32;
 export const MAX_PACKAGE_SUFFIX = 40;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Firebase.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Firebase.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -32,8 +26,7 @@ export const encodeDisplayName = (
   displayName: string | undefined,
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  const combined =
-    displayName && displayName.length > 0 ? `${marker} ${displayName}` : marker;
+  const combined = displayName && displayName.length > 0 ? `${marker} ${displayName}` : marker;
   return combined.slice(0, 1024);
 };
 
@@ -60,9 +53,7 @@ export const parseDisplayName = (
 };
 
 export const hasOwnershipMarker = (displayName: string | undefined) =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, displayName: string | undefined) =>
   Effect.gen(function* () {
@@ -70,11 +61,7 @@ export const ownedByAlchemy = (id: string, displayName: string | undefined) =>
     return yield* hasAlchemyLabels(id, labels);
   });
 
-export const toDisplayName = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toDisplayName = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -96,11 +83,7 @@ export const ownedDisplayName = (
     return encodeDisplayName(labels, user);
   });
 
-export const packageNameOf = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const packageNameOf = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (requested !== undefined) return requested;
     if (existing !== undefined) return existing;
@@ -155,7 +138,5 @@ export const listAndroidApps = (project: string, showDeleted = false) =>
       Stream.flatMap((page) => Stream.fromIterable(page.apps ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as firebase.AndroidApp[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as firebase.AndroidApp[])),
     );

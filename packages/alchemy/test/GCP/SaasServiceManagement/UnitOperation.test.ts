@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -68,15 +68,12 @@ test.provider.skipIf(!runBlueprintLifecycle)(
             tenant: tenant.name,
             managementMode: "MANAGEMENT_MODE_USER",
           });
-          const operation = yield* GCP.SaasServiceManagement.UnitOperation(
-            "Provision",
-            {
-              location,
-              unit: unit.name,
-              provision: { release: release.name },
-              labels: { env: "test" },
-            },
-          );
+          const operation = yield* GCP.SaasServiceManagement.UnitOperation("Provision", {
+            location,
+            unit: unit.name,
+            provision: { release: release.name },
+            labels: { env: "test" },
+          });
           return { product, tenant, kind, release, unit, operation };
         }),
       );
@@ -85,17 +82,13 @@ test.provider.skipIf(!runBlueprintLifecycle)(
       expect(created.operation.unitId).toEqual(created.unit.unitId);
       expect(created.operation.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* saasservicemgmt.getProjectsLocationsUnitOperations(
-        {
-          name: created.operation.name,
-        },
-      );
+      const fetched = yield* saasservicemgmt.getProjectsLocationsUnitOperations({
+        name: created.operation.name,
+      });
       expect(fetched.name).toEqual(created.operation.name);
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -127,16 +120,13 @@ test.provider.skipIf(!runBlueprintLifecycle)(
             tenant: tenant.name,
             managementMode: "MANAGEMENT_MODE_USER",
           });
-          const operation = yield* GCP.SaasServiceManagement.UnitOperation(
-            "Provision",
-            {
-              unitOperationId: created.operation.unitOperationId,
-              location,
-              unit: unit.name,
-              provision: { release: release.name },
-              labels: { env: "prod" },
-            },
-          );
+          const operation = yield* GCP.SaasServiceManagement.UnitOperation("Provision", {
+            unitOperationId: created.operation.unitOperationId,
+            location,
+            unit: unit.name,
+            provision: { release: release.name },
+            labels: { env: "prod" },
+          });
           return { product, tenant, kind, release, unit, operation };
         }),
       );

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type LoggingConfig,
@@ -192,34 +187,20 @@ const getByName = (name: string) =>
 
 export const MessageBusProvider = () =>
   Provider.succeed(MessageBus, {
-    stables: [
-      "name",
-      "messageBusId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "messageBusId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.messageBusId ?? output?.messageBusId;
-      const nextId = news.messageBusId
-        ? rfc1035(news.messageBusId, "message-bus")
-        : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const nextId = news.messageBusId ? rfc1035(news.messageBusId, "message-bus") : previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -235,19 +216,12 @@ export const MessageBusProvider = () =>
         output?.messageBusId,
         "message-bus",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, messageBusId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, messageBusId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -273,28 +247,16 @@ export const MessageBusProvider = () =>
         output?.messageBusId,
         "message-bus",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        messageBusId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, messageBusId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const desiredLogging = toLoggingConfig(news.loggingConfig);
       const desiredCrypto =
-        news.cryptoKeyName && news.cryptoKeyName.length > 0
-          ? news.cryptoKeyName
-          : undefined;
-      const desiredAnnotations = news.annotations
-        ? tagRecord(news.annotations)
-        : undefined;
+        news.cryptoKeyName && news.cryptoKeyName.length > 0 ? news.cryptoKeyName : undefined;
+      const desiredAnnotations = news.annotations ? tagRecord(news.annotations) : undefined;
 
       let current = yield* getByName(name);
 
@@ -330,22 +292,10 @@ export const MessageBusProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const updateMask = changedFields([
         ["labels", upsert.length > 0 || removed.length > 0],
-        [
-          "displayName",
-          textKey(current.displayName) !== textKey(news.displayName),
-        ],
-        [
-          "cryptoKeyName",
-          cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto),
-        ],
-        [
-          "loggingConfig",
-          loggingKey(current.loggingConfig) !== loggingKey(desiredLogging),
-        ],
-        [
-          "annotations",
-          !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {}),
-        ],
+        ["displayName", textKey(current.displayName) !== textKey(news.displayName)],
+        ["cryptoKeyName", cryptoKeyKey(current.cryptoKeyName) !== cryptoKeyKey(desiredCrypto)],
+        ["loggingConfig", loggingKey(current.loggingConfig) !== loggingKey(desiredLogging)],
+        ["annotations", !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {})],
       ]);
 
       if (updateMask.length > 0) {
@@ -362,10 +312,7 @@ export const MessageBusProvider = () =>
           },
         });
         yield* waitForOperation(patched);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -389,9 +336,7 @@ export const MessageBusProvider = () =>
       ).pipe(
         Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
-            Effect.flatMap((current) =>
-              current === undefined ? Effect.void : Effect.fail(error),
-            ),
+            Effect.flatMap((current) => (current === undefined ? Effect.void : Effect.fail(error))),
           ),
         ),
       );

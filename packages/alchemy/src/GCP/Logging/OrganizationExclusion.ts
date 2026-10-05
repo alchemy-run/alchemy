@@ -143,11 +143,7 @@ const exclusionIdOf = (exclusion: logging.LogExclusion) => {
   return raw.includes("/") ? lastSegment(raw) : raw;
 };
 
-const toAttrs = (
-  exclusion: logging.LogExclusion,
-  organization: string,
-  project: string,
-) => {
+const toAttrs = (exclusion: logging.LogExclusion, organization: string, project: string) => {
   const exclusionId = exclusionIdOf(exclusion);
   const parsed = parseDescription(exclusion.description);
   const name = exclusion.name?.includes("/")
@@ -174,22 +170,13 @@ const getByName = (name: string) =>
 
 export const OrganizationExclusionProvider = () =>
   Provider.succeed(OrganizationExclusion, {
-    stables: [
-      "name",
-      "exclusionId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "exclusionId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.exclusionId ?? output?.exclusionId;
       const idChanged =
-        previous !== undefined &&
-        news.exclusionId !== undefined &&
-        news.exclusionId !== previous;
+        previous !== undefined && news.exclusionId !== undefined && news.exclusionId !== previous;
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
         previousOrg !== undefined &&
@@ -205,12 +192,7 @@ export const OrganizationExclusionProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const exclusionId = yield* toPhysicalId(
-        id,
-        olds?.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const exclusionId = yield* toPhysicalId(id, olds?.exclusionId, output?.exclusionId, "e");
       const name = output?.name ?? resourceName(organization, exclusionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -230,15 +212,9 @@ export const OrganizationExclusionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.exclusions ?? []),
-            ),
-            Stream.filter((exclusion) =>
-              hasOwnershipMarker(exclusion.description),
-            ),
-            Stream.map((exclusion) =>
-              toAttrs(exclusion, organization, env.project),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.exclusions ?? [])),
+            Stream.filter((exclusion) => hasOwnershipMarker(exclusion.description)),
+            Stream.map((exclusion) => toAttrs(exclusion, organization, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -247,16 +223,8 @@ export const OrganizationExclusionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const exclusionId = yield* toPhysicalId(
-        id,
-        news.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const exclusionId = yield* toPhysicalId(id, news.exclusionId, output?.exclusionId, "e");
       const name = resourceName(organization, exclusionId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -284,8 +252,7 @@ export const OrganizationExclusionProvider = () =>
 
       const desiredDisabled = news.disabled === true;
       const filterChanged = (current.filter ?? "") !== news.filter;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
       const updateMask = [
         filterChanged ? "filter" : undefined,

@@ -1,3 +1,5 @@
+import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 /**
  * Node-side query path into the local workerd D1 simulator, built on the
  * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
@@ -20,8 +22,6 @@
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
-import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -73,9 +73,7 @@ const rawD1Binding = (databaseId: string): BindingHook =>
 export const withLocalD1Query = <A, E, R>(
   databaseId: string,
   use: (
-    query: (
-      body: D1QueryBody,
-    ) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
+    query: (body: D1QueryBody) => Effect.Effect<D1QueryResult, LocalD1QueryError>,
   ) => Effect.Effect<A, E, R>,
 ) =>
   Effect.scoped(

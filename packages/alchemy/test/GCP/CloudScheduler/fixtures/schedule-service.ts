@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 
 export const SCHEDULE_ID = "Heartbeat";
 export const SCHEDULE_BODY = "hello-scheduler";
@@ -42,8 +42,5 @@ export default class ScheduleService extends GCP.Function<ScheduleService>()(
     return {
       fetch: Effect.succeed(HttpServerResponse.text("ok")),
     };
-  }).pipe(
-    Effect.provide(GCP.Run.ScheduleEventSource),
-    Effect.provide(GCP.Storage.PutObjectHttp),
-  ),
+  }).pipe(Effect.provide(GCP.Run.ScheduleEventSource), Effect.provide(GCP.Storage.PutObjectHttp)),
 ) {}

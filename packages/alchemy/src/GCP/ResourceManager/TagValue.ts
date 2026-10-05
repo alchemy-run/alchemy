@@ -1,8 +1,8 @@
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -138,11 +138,7 @@ const normalizeParent = (parent: string): string => {
   return trimmed;
 };
 
-const toShortName = (
-  id: string,
-  shortName: string | undefined,
-  existing?: string,
-) =>
+const toShortName = (id: string, shortName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (shortName !== undefined) return shortName;
     if (existing !== undefined) return existing;
@@ -155,10 +151,7 @@ const toShortName = (
     return named.replace(/-+$/g, "").slice(0, MAX_NAME_LENGTH);
   });
 
-const toAttrs = (
-  value: crm.TagValue,
-  project: string,
-): TagValue["Attributes"] => {
+const toAttrs = (value: crm.TagValue, project: string): TagValue["Attributes"] => {
   return {
     name: value.name ?? "",
     parent: value.parent ?? "",
@@ -175,11 +168,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   crm
     .getTagValues({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)));
 
 const listTagValuesUnder = (parent: string) =>
   crm.listTagValues.pages({ parent, pageSize: 300 }).pipe(
@@ -187,23 +176,15 @@ const listTagValuesUnder = (parent: string) =>
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     // The parent TagKey is gone: it has no values.
-    Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
-      Effect.succeed([] as crm.TagValue[]),
-    ),
+    Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed([] as crm.TagValue[])),
   );
 
 const findByParentAndShortName = (parent: string, shortName: string) =>
   listTagValuesUnder(parent).pipe(
-    Effect.map((values) =>
-      values.find((value) => value.shortName === shortName),
-    ),
+    Effect.map((values) => values.find((value) => value.shortName === shortName)),
   );
 
-const observe = (
-  name: string | undefined,
-  parent: string | undefined,
-  shortName: string,
-) =>
+const observe = (name: string | undefined, parent: string | undefined, shortName: string) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const existing = yield* getByName(name);
@@ -217,21 +198,16 @@ const observe = (
 
 const nameFromOperation = (operation: crm.Operation): string | undefined => {
   const name = operation.response?.name;
-  return typeof name === "string" && name.startsWith("tagValues/")
-    ? name
-    : undefined;
+  return typeof name === "string" && name.startsWith("tagValues/") ? name : undefined;
 };
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new TagValueNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new TagValueNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ResourceManager.TagValueNotResolved",
+      while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -242,13 +218,10 @@ const waitUntilFound = (parent: string, shortName: string) =>
     Effect.flatMap((value) =>
       value !== undefined
         ? Effect.succeed(value)
-        : Effect.fail(
-            new TagValueNotResolved({ name: `${parent}/${shortName}` }),
-          ),
+        : Effect.fail(new TagValueNotResolved({ name: `${parent}/${shortName}` })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ResourceManager.TagValueNotResolved",
+      while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -257,20 +230,14 @@ const waitUntilFound = (parent: string, shortName: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new TagValueStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new TagValueStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ResourceManager.TagValueStillExists",
+      while: (error) => error._tag === "GCP.ResourceManager.TagValueStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.ResourceManager.TagValueStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.ResourceManager.TagValueStillExists", () => Effect.void),
   );
 
 const requireParent = (parent: string) => {
@@ -283,14 +250,7 @@ const requireParent = (parent: string) => {
 
 export const TagValueProvider = () =>
   Provider.succeed(TagValue, {
-    stables: [
-      "name",
-      "parent",
-      "shortName",
-      "namespacedName",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "parent", "shortName", "namespacedName", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -304,9 +264,7 @@ export const TagValueProvider = () =>
       const previousShort = olds?.shortName ?? output?.shortName;
       const nextShort = news.shortName ?? previousShort;
       const shortChanged =
-        previousShort !== undefined &&
-        nextShort !== undefined &&
-        nextShort !== previousShort;
+        previousShort !== undefined && nextShort !== undefined && nextShort !== previousShort;
 
       if (parentChanged || shortChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -316,15 +274,8 @@ export const TagValueProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent =
-        olds?.parent !== undefined
-          ? normalizeParent(olds.parent)
-          : output?.parent;
-      const shortName = yield* toShortName(
-        id,
-        olds?.shortName,
-        output?.shortName,
-      );
+      const parent = olds?.parent !== undefined ? normalizeParent(olds.parent) : output?.parent;
+      const shortName = yield* toShortName(id, olds?.shortName, output?.shortName);
       const existing = yield* observe(output?.name, parent, shortName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -335,11 +286,7 @@ export const TagValueProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = yield* requireParent(news.parent);
-      const shortName = yield* toShortName(
-        id,
-        news.shortName,
-        output?.shortName,
-      );
+      const shortName = yield* toShortName(id, news.shortName, output?.shortName);
       const desiredDescription = news.description;
 
       let current = yield* observe(output?.name, parent, shortName);
@@ -394,18 +341,14 @@ export const TagValueProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* crm
-        .deleteTagValues({ name: output.name, etag: output.etag })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag(["NotFound", "TagValueNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const operation = yield* crm.deleteTagValues({ name: output.name, etag: output.etag }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

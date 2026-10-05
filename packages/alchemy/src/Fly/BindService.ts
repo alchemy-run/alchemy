@@ -1,27 +1,21 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
 import type { Resource } from "../Resource.ts";
 import { makeFetchRpcStub, RPC_PATH_PREFIX, type Rpc } from "../Rpc.ts";
-import {
-  CurrentRuntimeContext,
-  type RuntimeContext,
-  sanitizeKey,
-} from "../RuntimeContext.ts";
+import { CurrentRuntimeContext, type RuntimeContext, sanitizeKey } from "../RuntimeContext.ts";
 import { isYieldableEffectLike } from "../Util/effect.ts";
 import type { BoundTarget, ServiceBinding } from "./MountVolume.ts";
 import { RPC_TOKEN_HEADER } from "./rpc.ts";
 import type { Service } from "./Service.ts";
 
 /** The deployed caller has no address for the bound Service. */
-export class BoundServiceUnavailable extends Data.TaggedError(
-  "Fly.BoundServiceUnavailable",
-)<{
+export class BoundServiceUnavailable extends Data.TaggedError("Fly.BoundServiceUnavailable")<{
   service: string;
 }> {
   get message() {
@@ -57,16 +51,12 @@ export interface EndpointClient {
   /** `http://{appName}.flycast:{port}`, for a port that serves plain HTTP. */
   url: Effect.Effect<string, BoundServiceUnavailable, RuntimeContext>;
   /** An `HttpClient` whose relative requests go to {@link url}. */
-  client: HttpClient.HttpClient.With<
-    HttpClientError.HttpClientError | BoundServiceUnavailable
-  >;
+  client: HttpClient.HttpClient.With<HttpClientError.HttpClientError | BoundServiceUnavailable>;
 }
 
 type Target<Shape> = Service & Rpc<Shape>;
 
-const isFlyHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isFlyHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||
@@ -75,8 +65,7 @@ const isFlyHost = (
 /** Logical id without yielding the Service (the runtime has no engine). */
 const logicalIdOf = (target: unknown): string => {
   const id =
-    target !== null &&
-    (typeof target === "object" || typeof target === "function")
+    target !== null && (typeof target === "object" || typeof target === "function")
       ? (target as { LogicalId?: unknown }).LogicalId
       : undefined;
   return typeof id === "string" ? id : "";
@@ -262,22 +251,12 @@ export const bindService = <Shape, Req = never>(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindTarget(target, undefined);
-    const send = (
-      request: HttpClientRequest.HttpClientRequest,
-      isRpc: boolean,
-    ) =>
+    const send = (request: HttpClientRequest.HttpClientRequest, isRpc: boolean) =>
       Effect.gen(function* () {
         const base = yield* bound.url;
-        let next = HttpClientRequest.setUrl(
-          request,
-          withBase(base, request.url),
-        );
+        let next = HttpClientRequest.setUrl(request, withBase(base, request.url));
         if (isRpc) {
-          next = HttpClientRequest.setHeader(
-            next,
-            RPC_TOKEN_HEADER,
-            yield* bound.token,
-          );
+          next = HttpClientRequest.setHeader(next, RPC_TOKEN_HEADER, yield* bound.token);
         }
         return yield* http.execute(next);
       });
@@ -288,8 +267,7 @@ export const bindService = <Shape, Req = never>(
           unknown
         >,
       base: {
-        fetch: (request: HttpClientRequest.HttpClientRequest) =>
-          send(request, false),
+        fetch: (request: HttpClientRequest.HttpClientRequest) => send(request, false),
       },
     });
   });
@@ -310,9 +288,7 @@ export const bindEndpoint = <Shape, Req = never>(
     const host = bound.appName.pipe(Effect.map((app) => `${app}.flycast`));
     const url = host.pipe(
       Effect.map((name) =>
-        options.port === 80
-          ? `http://${name}`
-          : `http://${name}:${options.port}`,
+        options.port === 80 ? `http://${name}` : `http://${name}:${options.port}`,
       ),
     );
     return {
@@ -321,9 +297,7 @@ export const bindEndpoint = <Shape, Req = never>(
       url,
       client: HttpClient.mapRequestEffect(http, (request) =>
         url.pipe(
-          Effect.map((base) =>
-            HttpClientRequest.setUrl(request, withBase(base, request.url)),
-          ),
+          Effect.map((base) => HttpClientRequest.setUrl(request, withBase(base, request.url))),
         ),
       ),
     } satisfies EndpointClient;

@@ -145,9 +145,7 @@ export type DiscoveryConfig = Resource<
  * @resource
  * @category DLP
  */
-export const DiscoveryConfig = Resource<DiscoveryConfig>(
-  "GCP.DLP.DiscoveryConfig",
-);
+export const DiscoveryConfig = Resource<DiscoveryConfig>("GCP.DLP.DiscoveryConfig");
 
 export class DiscoveryConfigNotResolved extends Data.TaggedError(
   "GCP.DLP.DiscoveryConfigNotResolved",
@@ -160,10 +158,7 @@ const DEFAULT_STATUS: DiscoveryConfigStatus = "PAUSED";
 const resourceName = (project: string, location: string, configId: string) =>
   `${locationParent(project, location)}/discoveryConfigs/${configId}`;
 
-const toAttrs = (
-  config: dlp.GooglePrivacyDlpV2DiscoveryConfig,
-  project: string,
-) => {
+const toAttrs = (config: dlp.GooglePrivacyDlpV2DiscoveryConfig, project: string) => {
   const name = config.name ?? "";
   const parsed = parseOwnership(config.displayName);
   return {
@@ -198,9 +193,7 @@ export const DiscoveryConfigProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.configId ?? output?.configId;
       const idChanged =
-        previousId !== undefined &&
-        news.configId !== undefined &&
-        news.configId !== previousId;
+        previousId !== undefined && news.configId !== undefined && news.configId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -212,23 +205,16 @@ export const DiscoveryConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const configId = yield* toResourceId(
-        id,
-        olds?.configId,
-        output?.configId,
-      );
+      const configId = yield* toResourceId(id, olds?.configId, output?.configId);
       const location = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_REGIONAL_LOCATION,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, configId);
+      const name = output?.name ?? resourceName(env.project, location, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -259,11 +245,7 @@ export const DiscoveryConfigProvider = () =>
       const configId = yield* toResourceId(id, news.configId, output?.configId);
       const name = resourceName(env.project, location, configId);
       const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = encodeOwnershipLine(ownership, news.displayName, MAX_DISPLAY_NAME_LENGTH);
       const status = news.status ?? DEFAULT_STATUS;
       const body: dlp.GooglePrivacyDlpV2DiscoveryConfig = {
         displayName,
@@ -296,15 +278,9 @@ export const DiscoveryConfigProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const statusChanged = (current.status ?? "") !== status;
       const targetsChanged = !jsonEqual(current.targets, news.targets);
-      const templatesChanged = !jsonEqual(
-        current.inspectTemplates,
-        news.inspectTemplates,
-      );
+      const templatesChanged = !jsonEqual(current.inspectTemplates, news.inspectTemplates);
       const actionsChanged = !jsonEqual(current.actions, news.actions);
-      const processingChanged = !jsonEqual(
-        current.processingLocation,
-        news.processingLocation,
-      );
+      const processingChanged = !jsonEqual(current.processingLocation, news.processingLocation);
 
       if (
         displayChanged ||

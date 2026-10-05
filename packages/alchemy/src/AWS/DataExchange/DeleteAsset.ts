@@ -28,16 +28,8 @@ export interface DeleteAsset extends Binding.Service<
     revision: Revision,
   ) => Effect.Effect<
     (
-      request: Omit<
-        dataexchange.DeleteAssetRequest,
-        "DataSetId" | "RevisionId"
-      >,
-    ) => Effect.Effect<
-      dataexchange.DeleteAssetResponse,
-      dataexchange.DeleteAssetError
-    >
+      request: Omit<dataexchange.DeleteAssetRequest, "DataSetId" | "RevisionId">,
+    ) => Effect.Effect<dataexchange.DeleteAssetResponse, dataexchange.DeleteAssetError>
   >
 > {}
-export const DeleteAsset = Binding.Service<DeleteAsset>(
-  "AWS.DataExchange.DeleteAsset",
-);
+export const DeleteAsset = Binding.Service<DeleteAsset>("AWS.DataExchange.DeleteAsset");

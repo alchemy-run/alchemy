@@ -34,7 +34,10 @@ export const DrillView = ({
 }) => {
   const color = TONE.construct;
   const fade = (from: number, frames = 6) =>
-    interpolate(local, [from, from + frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    interpolate(local, [from, from + frames], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    });
   const last = drill.lines.length - 1;
   // Where the value sits on each line, for the underline and the thread.
   const spots = drill.lines.map((line, i) => {
@@ -89,10 +92,19 @@ export const DrillView = ({
           </div>
         );
       })}
-      <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+      <svg
+        width={1920}
+        height={1080}
+        style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+      >
         {spots.map((s, i) => (
           <g key={i}>
-            {stroke(underlinePath(s.x, s.top + TEXT_H * 0.95, s.w, i * 5 + 3), color, drawProgress(local, underlineAt(i), 6), 3)}
+            {stroke(
+              underlinePath(s.x, s.top + TEXT_H * 0.95, s.w, i * 5 + 3),
+              color,
+              drawProgress(local, underlineAt(i), 6),
+              3,
+            )}
             {i < last
               ? (() => {
                   const next = spots[i + 1]!;
@@ -104,7 +116,12 @@ export const DrillView = ({
                   const head = 9;
                   return (
                     <g opacity={0.8}>
-                      {stroke(`M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`, color, p, 2.5)}
+                      {stroke(
+                        `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`,
+                        color,
+                        p,
+                        2.5,
+                      )}
                       {p > 0.95
                         ? stroke(
                             `M ${x2 - head * 0.7} ${y2 - head} L ${x2} ${y2} L ${x2 + head * 0.7} ${y2 - head}`,

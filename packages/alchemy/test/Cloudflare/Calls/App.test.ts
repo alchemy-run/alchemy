@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as calls from "@distilled.cloud/cloudflare/calls";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -37,10 +34,7 @@ const expectGone = (accountId: string, appId: string) =>
     Effect.catchTag("CallsAppNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "AppNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -79,9 +73,7 @@ test.provider(
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
-        Cloudflare.Calls.App("UpdateApp", {
-          name: "alchemy-calls-app-update",
-        }),
+        Cloudflare.Calls.App("UpdateApp", { name: "alchemy-calls-app-update" }),
       );
 
       expect(initial.name).toEqual("alchemy-calls-app-update");
@@ -89,9 +81,7 @@ test.provider(
       expect(initialSecret).toBeTruthy();
 
       const updated = yield* stack.deploy(
-        Cloudflare.Calls.App("UpdateApp", {
-          name: "alchemy-calls-app-update-v2",
-        }),
+        Cloudflare.Calls.App("UpdateApp", { name: "alchemy-calls-app-update-v2" }),
       );
 
       // Same app mutated in place — not a replacement — and the
@@ -105,9 +95,7 @@ test.provider(
 
       // Redeploying identical props is a no-op (still the same app).
       const noop = yield* stack.deploy(
-        Cloudflare.Calls.App("UpdateApp", {
-          name: "alchemy-calls-app-update-v2",
-        }),
+        Cloudflare.Calls.App("UpdateApp", { name: "alchemy-calls-app-update-v2" }),
       );
       expect(noop.appId).toEqual(initial.appId);
       expect(Redacted.value(noop.secret)).toEqual(initialSecret);
@@ -128,9 +116,7 @@ test.provider(
       yield* stack.destroy();
 
       const app = yield* stack.deploy(
-        Cloudflare.Calls.App("ListApp", {
-          name: "alchemy-calls-app-list",
-        }),
+        Cloudflare.Calls.App("ListApp", { name: "alchemy-calls-app-list" }),
       );
 
       const provider = yield* Provider.findProvider(Cloudflare.Calls.App);
@@ -158,9 +144,7 @@ test.provider(
       yield* stack.destroy();
 
       const app = yield* stack.deploy(
-        Cloudflare.Calls.App("HealApp", {
-          name: "alchemy-calls-app-heal",
-        }),
+        Cloudflare.Calls.App("HealApp", { name: "alchemy-calls-app-heal" }),
       );
 
       // Delete the app out-of-band. A redeploy with identical props is a
@@ -175,16 +159,12 @@ test.provider(
       );
 
       const healed = yield* stack.deploy(
-        Cloudflare.Calls.App("HealApp", {
-          name: "alchemy-calls-app-heal-v2",
-        }),
+        Cloudflare.Calls.App("HealApp", { name: "alchemy-calls-app-heal-v2" }),
       );
 
       expect(healed.appId).not.toEqual(app.appId);
       expect(Redacted.value(healed.secret)).toBeTruthy();
-      expect(Redacted.value(healed.secret)).not.toEqual(
-        Redacted.value(app.secret),
-      );
+      expect(Redacted.value(healed.secret)).not.toEqual(Redacted.value(app.secret));
       const live = yield* getApp(accountId, healed.appId);
       expect(live.name).toEqual("alchemy-calls-app-heal-v2");
 

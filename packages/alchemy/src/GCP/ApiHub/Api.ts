@@ -238,10 +238,7 @@ export const ApiProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.apiId ?? output?.apiId,
         nextId: news.apiId ?? olds?.apiId ?? output?.apiId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -251,18 +248,13 @@ export const ApiProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const apiId = yield* toPhysicalId(id, olds?.apiId, output?.apiId);
       const name = output?.name ?? resourceName(env.project, location, apiId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -276,10 +268,7 @@ export const ApiProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const apiId = yield* toPhysicalId(id, news.apiId, output?.apiId);
       const name = output?.name ?? resourceName(env.project, location, apiId);
@@ -308,29 +297,17 @@ export const ApiProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const fingerprintChanged = !sameText(
-        current.fingerprint,
-        news.fingerprint,
-      );
+      const fingerprintChanged = !sameText(current.fingerprint, news.fingerprint);
       const ownerChanged = !sameJson(current.owner, news.owner);
       const docsChanged = !sameJson(current.documentation, news.documentation);
-      const selectedChanged = !sameText(
-        current.selectedVersion,
-        news.selectedVersion,
-      );
+      const selectedChanged = !sameText(current.selectedVersion, news.selectedVersion);
       const attributesChanged = !sameJson(current.attributes, news.attributes);
       const targetChanged = !sameJson(current.targetUser, news.targetUser);
       const unitChanged = !sameJson(current.businessUnit, news.businessUnit);
-      const maturityChanged = !sameJson(
-        current.maturityLevel,
-        news.maturityLevel,
-      );
+      const maturityChanged = !sameJson(current.maturityLevel, news.maturityLevel);
       const teamChanged = !sameJson(current.team, news.team);
       const styleChanged = !sameJson(current.apiStyle, news.apiStyle);
-      const requirementsChanged = !sameJson(
-        current.apiRequirements,
-        news.apiRequirements,
-      );
+      const requirementsChanged = !sameJson(current.apiRequirements, news.apiRequirements);
       const functionalChanged = !sameJson(
         current.apiFunctionalRequirements,
         news.apiFunctionalRequirements,

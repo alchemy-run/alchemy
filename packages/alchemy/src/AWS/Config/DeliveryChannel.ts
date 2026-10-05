@@ -88,9 +88,7 @@ export interface DeliveryChannel extends Resource<
  *
  * @resource
  */
-export const DeliveryChannel = Resource<DeliveryChannel>(
-  "AWS.Config.DeliveryChannel",
-);
+export const DeliveryChannel = Resource<DeliveryChannel>("AWS.Config.DeliveryChannel");
 
 /**
  * `PutDeliveryChannel` validates the recorder's existence and the bucket
@@ -140,9 +138,7 @@ export const DeliveryChannelProvider = () =>
         id: string,
         props: Pick<DeliveryChannelProps, "name">,
       ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const toWireChannel = (
@@ -192,9 +188,7 @@ export const DeliveryChannelProvider = () =>
         // marker to check — an existing channel with our derived name is
         // treated as ours.
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.deliveryChannelName ??
-            (yield* createChannelName(id, olds ?? {}));
+          const name = output?.deliveryChannelName ?? (yield* createChannelName(id, olds ?? {}));
           const channel = yield* observeChannel(name);
           if (channel?.name === undefined) return undefined;
           return {
@@ -212,8 +206,7 @@ export const DeliveryChannelProvider = () =>
           // fall through: engine default update logic for mutable fields
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.deliveryChannelName ?? (yield* createChannelName(id, news));
+          const name = output?.deliveryChannelName ?? (yield* createChannelName(id, news));
           const desired = toWireChannel(name, news);
 
           // 1. OBSERVE — cloud state is authoritative.
@@ -229,13 +222,10 @@ export const DeliveryChannelProvider = () =>
             (observed.s3KeyPrefix ?? undefined) === desired.s3KeyPrefix &&
             (observed.s3KmsKeyArn ?? undefined) === desired.s3KmsKeyArn &&
             (observed.snsTopicARN ?? undefined) === desired.snsTopicARN &&
-            (observed.configSnapshotDeliveryProperties?.deliveryFrequency ??
-              undefined) ===
+            (observed.configSnapshotDeliveryProperties?.deliveryFrequency ?? undefined) ===
               desired.configSnapshotDeliveryProperties?.deliveryFrequency;
           if (!inSync) {
-            yield* retryChannelPut(
-              config.putDeliveryChannel({ DeliveryChannel: desired }),
-            );
+            yield* retryChannelPut(config.putDeliveryChannel({ DeliveryChannel: desired }));
           }
 
           yield* session.note(name);
@@ -249,12 +239,7 @@ export const DeliveryChannelProvider = () =>
             config.deleteDeliveryChannel({
               DeliveryChannelName: output.deliveryChannelName,
             }),
-          ).pipe(
-            Effect.catchTag(
-              "NoSuchDeliveryChannelException",
-              () => Effect.void,
-            ),
-          );
+          ).pipe(Effect.catchTag("NoSuchDeliveryChannelException", () => Effect.void));
         }),
       });
     }),

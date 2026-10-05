@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -38,15 +33,9 @@ const DEFAULT_TYPE = "OPEN_MESH";
 const DEFAULT_PORTS = [443];
 
 export type GatewayType = networkservices.GatewayTypeEnum | (string & {});
-export type GatewayIpVersion =
-  | networkservices.GatewayIpVersionEnum
-  | (string & {});
-export type GatewayEnvoyHeaders =
-  | networkservices.GatewayEnvoyHeadersEnum
-  | (string & {});
-export type GatewayRoutingMode =
-  | networkservices.GatewayRoutingModeEnum
-  | (string & {});
+export type GatewayIpVersion = networkservices.GatewayIpVersionEnum | (string & {});
+export type GatewayEnvoyHeaders = networkservices.GatewayEnvoyHeadersEnum | (string & {});
+export type GatewayRoutingMode = networkservices.GatewayRoutingModeEnum | (string & {});
 
 export type GatewayProps = {
   /**
@@ -274,21 +263,12 @@ const getByName = (name: string) =>
 
 export const GatewayProvider = () =>
   Provider.succeed(Gateway, {
-    stables: [
-      "name",
-      "gatewayId",
-      "project",
-      "location",
-      "selfLink",
-      "createTime",
-    ],
+    stables: ["name", "gatewayId", "project", "location", "selfLink", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.gatewayId ?? output?.gatewayId;
-      const nextId = news.gatewayId
-        ? rfc1035(news.gatewayId, "gateway")
-        : previousId;
+      const nextId = news.gatewayId ? rfc1035(news.gatewayId, "gateway") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -306,9 +286,7 @@ export const GatewayProvider = () =>
       const previousScope = olds?.scope ?? output?.scope ?? previousId ?? "";
       const nextScope = news.scope ?? previousScope;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         previousNetwork !== nextNetwork ||
@@ -322,25 +300,13 @@ export const GatewayProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const gatewayId = yield* toPhysicalId(
-        id,
-        olds?.gatewayId,
-        output?.gatewayId,
-        "gateway",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, gatewayId);
+      const gatewayId = yield* toPhysicalId(id, olds?.gatewayId, output?.gatewayId, "gateway");
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, gatewayId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -360,16 +326,8 @@ export const GatewayProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const gatewayId = yield* toPhysicalId(
-        id,
-        news.gatewayId,
-        output?.gatewayId,
-        "gateway",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const gatewayId = yield* toPhysicalId(id, news.gatewayId, output?.gatewayId, "gateway");
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, gatewayId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -424,32 +382,19 @@ export const GatewayProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const portsChanged = !sameNumberList(current.ports, ports ?? []);
       const allPortsChanged = (current.allPorts === true) !== allPorts;
-      const addressesChanged = !sameStringList(
-        current.addresses,
-        news.addresses,
-      );
+      const addressesChanged = !sameStringList(current.addresses, news.addresses);
       const scopeChanged = (current.scope ?? "") !== scope;
-      const serverTlsChanged =
-        (current.serverTlsPolicy ?? "") !== (news.serverTlsPolicy ?? "");
-      const certsChanged = !sameStringList(
-        current.certificateUrls,
-        news.certificateUrls,
-      );
+      const serverTlsChanged = (current.serverTlsPolicy ?? "") !== (news.serverTlsPolicy ?? "");
+      const certsChanged = !sameStringList(current.certificateUrls, news.certificateUrls);
       const securityChanged =
-        (current.gatewaySecurityPolicy ?? "") !==
-        (news.gatewaySecurityPolicy ?? "");
-      const ipVersionChanged =
-        (current.ipVersion ?? "") !== (news.ipVersion ?? "");
-      const envoyChanged =
-        (current.envoyHeaders ?? "") !== (news.envoyHeaders ?? "");
-      const routingChanged =
-        (current.routingMode ?? "") !== (news.routingMode ?? "");
-      const globalAccessChanged =
-        (current.allowGlobalAccess === true) !== allowGlobalAccess;
+        (current.gatewaySecurityPolicy ?? "") !== (news.gatewaySecurityPolicy ?? "");
+      const ipVersionChanged = (current.ipVersion ?? "") !== (news.ipVersion ?? "");
+      const envoyChanged = (current.envoyHeaders ?? "") !== (news.envoyHeaders ?? "");
+      const routingChanged = (current.routingMode ?? "") !== (news.routingMode ?? "");
+      const globalAccessChanged = (current.allowGlobalAccess === true) !== allowGlobalAccess;
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -468,34 +413,29 @@ export const GatewayProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation = yield* networkservices.patchProjectsLocationsGateways(
-          {
+        const operation = yield* networkservices.patchProjectsLocationsGateways({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              type,
-              labels: desiredLabels,
-              description: news.description,
-              ports,
-              allPorts: allPorts ? true : false,
-              addresses: news.addresses ?? [],
-              scope,
-              serverTlsPolicy: news.serverTlsPolicy,
-              certificateUrls: news.certificateUrls ?? [],
-              gatewaySecurityPolicy: news.gatewaySecurityPolicy,
-              ipVersion: news.ipVersion,
-              envoyHeaders: news.envoyHeaders,
-              routingMode: news.routingMode,
-              allowGlobalAccess,
-            },
+            type,
+            labels: desiredLabels,
+            description: news.description,
+            ports,
+            allPorts: allPorts ? true : false,
+            addresses: news.addresses ?? [],
+            scope,
+            serverTlsPolicy: news.serverTlsPolicy,
+            certificateUrls: news.certificateUrls ?? [],
+            gatewaySecurityPolicy: news.gatewaySecurityPolicy,
+            ipVersion: news.ipVersion,
+            envoyHeaders: news.envoyHeaders,
+            routingMode: news.routingMode,
+            allowGlobalAccess,
           },
-        );
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
-import type { Link } from "./Link.ts";
 import { API_URL, call } from "./client.ts";
+import type { Link } from "./Link.ts";
 import "./styles.css";
 
 function LinkRow({ link }: { link: Link }) {

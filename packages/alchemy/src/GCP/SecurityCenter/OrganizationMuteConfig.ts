@@ -173,27 +173,15 @@ const getByName = (name: string) =>
 
 export const OrganizationMuteConfigProvider = () =>
   Provider.succeed(OrganizationMuteConfig, {
-    stables: [
-      "name",
-      "muteConfigId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "muteConfigId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return (
-        replaceOn(
-          olds?.muteConfigId ?? output?.muteConfigId,
-          news.muteConfigId,
-        ) ??
+        replaceOn(olds?.muteConfigId ?? output?.muteConfigId, news.muteConfigId) ??
         replaceOn(
           olds?.organization ?? output?.organization,
-          news.organization !== undefined
-            ? organizationParent(news.organization)
-            : undefined,
+          news.organization !== undefined ? organizationParent(news.organization) : undefined,
         ) ??
         replaceOn(olds?.type ?? output?.type, news.type)
       );
@@ -205,18 +193,12 @@ export const OrganizationMuteConfigProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const muteConfigId = yield* toPhysicalId(
-        id,
-        olds?.muteConfigId,
-        output?.muteConfigId,
-      );
+      const muteConfigId = yield* toPhysicalId(id, olds?.muteConfigId, output?.muteConfigId);
       const name = output?.name ?? resourceName(organization, muteConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -227,9 +209,7 @@ export const OrganizationMuteConfigProvider = () =>
         return yield* scc.listOrganizationsMuteConfigs
           .pages({ parent: organization, pageSize: 100 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.muteConfigs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.muteConfigs ?? [])),
             Stream.filter((config) => hasOwnershipMarker(config.description)),
             Stream.map((config) => toAttrs(config, organization, env.project)),
             Stream.runCollect,
@@ -240,15 +220,8 @@ export const OrganizationMuteConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const muteConfigId = yield* toPhysicalId(
-        id,
-        news.muteConfigId,
-        output?.muteConfigId,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const muteConfigId = yield* toPhysicalId(id, news.muteConfigId, output?.muteConfigId);
       const name = resourceName(organization, muteConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);

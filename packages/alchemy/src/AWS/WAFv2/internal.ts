@@ -34,9 +34,7 @@ export const withWafScope = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   scope === "CLOUDFRONT"
-    ? effect.pipe(
-        Effect.provideService(AwsRegion, Effect.succeed(CLOUDFRONT_REGION)),
-      )
+    ? effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(CLOUDFRONT_REGION)))
     : effect;
 
 /**
@@ -105,8 +103,7 @@ export const retryAssociatedItem = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "WAFAssociatedItemException" ||
-      e._tag === "WAFUnavailableEntityException",
+      e._tag === "WAFAssociatedItemException" || e._tag === "WAFUnavailableEntityException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
   });
 
@@ -115,10 +112,7 @@ export const retryAssociatedItem = <A, E extends { _tag: string }, R>(
  *
  * @internal
  */
-export const fetchWafTags = Effect.fn(function* (
-  scope: WafScope,
-  resourceArn: string,
-) {
+export const fetchWafTags = Effect.fn(function* (scope: WafScope, resourceArn: string) {
   const tags: Record<string, string> = {};
   let marker: string | undefined;
   // WAF tag sets are small; bound pagination defensively.
@@ -158,16 +152,10 @@ export const syncWafTags = Effect.fn(function* (
   const observed = yield* fetchWafTags(scope, resourceArn);
   const { removed, upsert } = diffTags(observed, desiredTags);
   if (upsert.length > 0) {
-    yield* withWafScope(
-      scope,
-      wafv2.tagResource({ ResourceARN: resourceArn, Tags: upsert }),
-    );
+    yield* withWafScope(scope, wafv2.tagResource({ ResourceARN: resourceArn, Tags: upsert }));
   }
   if (removed.length > 0) {
-    yield* withWafScope(
-      scope,
-      wafv2.untagResource({ ResourceARN: resourceArn, TagKeys: removed }),
-    );
+    yield* withWafScope(scope, wafv2.untagResource({ ResourceARN: resourceArn, TagKeys: removed }));
   }
 });
 
@@ -182,9 +170,7 @@ export const syncWafTags = Effect.fn(function* (
  *
  * @internal
  */
-export const normalizeWafRules = (
-  rules: WAFV2.Rule[] | undefined,
-): WAFV2.Rule[] =>
+export const normalizeWafRules = (rules: WAFV2.Rule[] | undefined): WAFV2.Rule[] =>
   (rules ?? []).map((rule) => normalizeRuleValue(rule) as WAFV2.Rule);
 
 const normalizeRuleValue = (value: unknown): unknown => {
@@ -198,9 +184,7 @@ const normalizeRuleValue = (value: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(value).map(([key, nested]) => [
         key,
-        key === "SearchString"
-          ? toSearchString(nested)
-          : normalizeRuleValue(nested),
+        key === "SearchString" ? toSearchString(nested) : normalizeRuleValue(nested),
       ]),
     );
   }

@@ -17,8 +17,7 @@ export const lastSegment = (value: string) => {
 
 export const projectParent = (project: string) => `projects/${project}`;
 
-export const keyNameOf = (project: string, keyId: string) =>
-  `projects/${project}/keys/${keyId}`;
+export const keyNameOf = (project: string, keyId: string) => `projects/${project}/keys/${keyId}`;
 
 export const firewallNameOf = (project: string, firewallpolicyId: string) =>
   `projects/${project}/firewallpolicies/${firewallpolicyId}`;
@@ -32,9 +31,7 @@ export const sameJson = (left: unknown, right: unknown) =>
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])].slice().sort();
 
-export const stringList = (
-  values: readonly (string | undefined)[] | null | undefined,
-): string[] =>
+export const stringList = (values: readonly (string | undefined)[] | null | undefined): string[] =>
   (values ?? []).filter((value): value is string => typeof value === "string");
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
@@ -101,9 +98,7 @@ export const listFirewallPolicies = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.firewallPolicies ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.firewallPolicies ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
     );

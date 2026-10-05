@@ -151,22 +151,14 @@ export class ReasoningEnginesMemoryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const engineNameOf = (
-  project: string,
-  location: string,
-  reasoningEngine: string,
-) =>
+const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
   reasoningEngine.includes("/")
     ? reasoningEngine
     : `${locationParent(project, location)}/reasoningEngines/${reasoningEngine}`;
 
-const resourceName = (parent: string, memoryId: string) =>
-  `${parent}/${COLLECTION}/${memoryId}`;
+const resourceName = (parent: string, memoryId: string) => `${parent}/${COLLECTION}/${memoryId}`;
 
-const toAttrs = (
-  memory: aiplatform.GoogleCloudAiplatformV1Memory,
-  project: string,
-) => {
+const toAttrs = (memory: aiplatform.GoogleCloudAiplatformV1Memory, project: string) => {
   const name = memory.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const description = parseDescription(memory.description);
@@ -194,8 +186,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (memory): memory is aiplatform.GoogleCloudAiplatformV1Memory =>
-        memory !== undefined,
+      (memory): memory is aiplatform.GoogleCloudAiplatformV1Memory => memory !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
     Effect.retry({
@@ -234,38 +225,20 @@ const listMemories = (parent: string) =>
 
 export const ReasoningEnginesMemoryProvider = () =>
   Provider.succeed(ReasoningEnginesMemory, {
-    stables: [
-      "name",
-      "memoryId",
-      "reasoningEngine",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "memoryId", "reasoningEngine", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.memoryId ?? output?.memoryId;
       const nextId = news.memoryId ?? previousId;
-      const previousParent = lastSegment(
-        olds?.reasoningEngine ?? output?.reasoningEngine ?? "",
-      );
+      const previousParent = lastSegment(olds?.reasoningEngine ?? output?.reasoningEngine ?? "");
       const nextParent = lastSegment(news.reasoningEngine);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const scopeChanged =
-        olds !== undefined && !jsonEqual(news.scope, olds.scope);
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const scopeChanged = olds !== undefined && !jsonEqual(news.scope, olds.scope);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousParent.length > 0 && previousParent !== nextParent) ||
         previousLocation !== nextLocation ||
         scopeChanged;
@@ -282,37 +255,27 @@ export const ReasoningEnginesMemoryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const engine = olds?.reasoningEngine ?? output?.reasoningEngine;
       // A create interrupted before its engine resolved has nothing to find.
       if (output?.name === undefined && typeof engine !== "string") {
         return undefined;
       }
       const parent = engineNameOf(env.project, location, engine ?? "");
-      const memoryId = yield* toPhysicalId(
-        id,
-        olds?.memoryId,
-        output?.memoryId,
-      );
+      const memoryId = yield* toPhysicalId(id, olds?.memoryId, output?.memoryId);
       const name = output?.name ?? resourceName(parent, memoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listAlchemyReasoningEngines(env.project, location),
+        const engines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listAlchemyReasoningEngines(env.project, location),
         )).flat();
         const memories = yield* Effect.forEach(
           engines,
@@ -330,10 +293,7 @@ export const ReasoningEnginesMemoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = engineNameOf(env.project, location, news.reasoningEngine);
       const memoryId = yield* toPhysicalId(id, news.memoryId, output?.memoryId);
       const name = resourceName(parent, memoryId);
@@ -361,8 +321,7 @@ export const ReasoningEnginesMemoryProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
-        const createdName =
-          resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
+        const createdName = resourceNameFromOperation(created ?? {}) ?? output?.name ?? name;
         current = yield* waitUntilExists(createdName);
       }
 
@@ -373,36 +332,28 @@ export const ReasoningEnginesMemoryProvider = () =>
       const observedName = current.name;
       const observed = parseDescription(current.description);
       const factChanged = (current.fact ?? "") !== (news.fact ?? "");
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (observed.description ?? "") !== (news.description ?? "");
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (observed.description ?? "") !== (news.description ?? "");
       const metadataChanged = !jsonEqual(current.metadata, news.metadata);
 
-      if (
-        factChanged ||
-        displayChanged ||
-        descriptionChanged ||
-        metadataChanged
-      ) {
+      if (factChanged || displayChanged || descriptionChanged || metadataChanged) {
         const updateMask = [
           factChanged ? "fact" : undefined,
           displayChanged ? "display_name" : undefined,
           descriptionChanged ? "description" : undefined,
           metadataChanged ? "metadata" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const patched =
-          yield* aiplatform.patchProjectsLocationsReasoningEnginesMemories({
+        const patched = yield* aiplatform.patchProjectsLocationsReasoningEnginesMemories({
+          name: observedName,
+          updateMask: updateMask.join(","),
+          body: {
             name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              fact: news.fact,
-              displayName: news.displayName,
-              description: stampedDescription,
-              metadata: news.metadata,
-            },
-          });
+            fact: news.fact,
+            displayName: news.displayName,
+            description: stampedDescription,
+            metadata: news.metadata,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
       }

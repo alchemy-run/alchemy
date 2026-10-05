@@ -50,7 +50,10 @@ export default defineScene({
       await t.sleep(1000);
     });
 
-    s.step("One resource, running locally", "The architecture so far: a single website, running in alchemy dev's local simulator.");
+    s.step(
+      "One resource, running locally",
+      "The architecture so far: a single website, running in alchemy dev's local simulator.",
+    );
     await s.diagram({ stage: `dev_${process.env.USER}`, nodes: ["Web"] });
     s.pause(1);
 

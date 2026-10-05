@@ -143,9 +143,7 @@ export interface EmailIdentityPolicy extends Resource<
  *
  * @resource
  */
-export const EmailIdentityPolicy = Resource<EmailIdentityPolicy>(
-  "AWS.SES.EmailIdentityPolicy",
-);
+export const EmailIdentityPolicy = Resource<EmailIdentityPolicy>("AWS.SES.EmailIdentityPolicy");
 
 export const EmailIdentityPolicyProvider = () =>
   Provider.effect(
@@ -155,22 +153,16 @@ export const EmailIdentityPolicyProvider = () =>
         id: string,
         props: Pick<EmailIdentityPolicyProps, "policyName">,
       ) {
-        return (
-          props.policyName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.policyName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // Returns the policy-name -> document map for the identity, or undefined
       // when the identity itself no longer exists.
       const getPolicies = Effect.fn(function* (emailIdentity: string) {
-        return yield* sesv2
-          .getEmailIdentityPolicies({ EmailIdentity: emailIdentity })
-          .pipe(
-            Effect.map((response) => response.Policies ?? {}),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* sesv2.getEmailIdentityPolicies({ EmailIdentity: emailIdentity }).pipe(
+          Effect.map((response) => response.Policies ?? {}),
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return EmailIdentityPolicy.Provider.of({
@@ -183,9 +175,7 @@ export const EmailIdentityPolicyProvider = () =>
         // every identity and reads its policy map. getPolicies already treats
         // a vanished identity as "no policies".
         list: Effect.fn(function* () {
-          const pages = yield* sesv2.listEmailIdentities
-            .pages({})
-            .pipe(Stream.runCollect);
+          const pages = yield* sesv2.listEmailIdentities.pages({}).pipe(Stream.runCollect);
           const identities = Array.from(pages)
             .flatMap((page) => page.EmailIdentities ?? [])
             .flatMap((info) => (info.IdentityName ? [info.IdentityName] : []));
@@ -208,8 +198,7 @@ export const EmailIdentityPolicyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const emailIdentity = output?.emailIdentity ?? olds?.emailIdentity;
           if (emailIdentity === undefined) return undefined;
-          const policyName =
-            output?.policyName ?? (yield* createName(id, olds ?? {}));
+          const policyName = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const policies = yield* getPolicies(emailIdentity);
           if (policies === undefined || policies[policyName] === undefined) {
             return undefined;
@@ -223,18 +212,14 @@ export const EmailIdentityPolicyProvider = () =>
           if (!isResolved(news)) return undefined;
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
-          if (
-            oldName !== newName ||
-            olds.emailIdentity !== news.emailIdentity
-          ) {
+          if (oldName !== newName || olds.emailIdentity !== news.emailIdentity) {
             return { action: "replace" } as const;
           }
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const emailIdentity = output?.emailIdentity ?? news.emailIdentity;
-          const policyName =
-            output?.policyName ?? (yield* createName(id, news));
+          const policyName = output?.policyName ?? (yield* createName(id, news));
 
           // 1. OBSERVE — cloud state is authoritative.
           const policies = yield* getPolicies(emailIdentity);
@@ -261,9 +246,7 @@ export const EmailIdentityPolicyProvider = () =>
           } else {
             // 3. SYNC — update only when the stored document differs.
             const changed = yield* Effect.sync(
-              () =>
-                normalizePolicyDocument(existing) !==
-                normalizePolicyDocument(news.policy),
+              () => normalizePolicyDocument(existing) !== normalizePolicyDocument(news.policy),
             );
             if (changed) {
               yield* sesv2.updateEmailIdentityPolicy({

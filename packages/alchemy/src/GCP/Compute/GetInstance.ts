@@ -33,14 +33,8 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      compute.Instance,
-      compute.GetInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<compute.Instance, compute.GetInstancesError, RuntimeContext>
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Compute.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Compute.GetInstance");

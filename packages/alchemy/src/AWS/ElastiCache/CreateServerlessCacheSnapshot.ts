@@ -32,17 +32,13 @@ export interface CreateServerlessCacheSnapshot extends Binding.Service<
     cache: ServerlessCache,
   ) => Effect.Effect<
     (
-      request: Omit<
-        elasticache.CreateServerlessCacheSnapshotRequest,
-        "ServerlessCacheName"
-      >,
+      request: Omit<elasticache.CreateServerlessCacheSnapshotRequest, "ServerlessCacheName">,
     ) => Effect.Effect<
       elasticache.CreateServerlessCacheSnapshotResponse,
       elasticache.CreateServerlessCacheSnapshotError
     >
   >
 > {}
-export const CreateServerlessCacheSnapshot =
-  Binding.Service<CreateServerlessCacheSnapshot>(
-    "AWS.ElastiCache.CreateServerlessCacheSnapshot",
-  );
+export const CreateServerlessCacheSnapshot = Binding.Service<CreateServerlessCacheSnapshot>(
+  "AWS.ElastiCache.CreateServerlessCacheSnapshot",
+);

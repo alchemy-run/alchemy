@@ -25,15 +25,13 @@
  * The stored bytes are `zlib(content)` without the loose header — byte-equal
  * to what an `objects.location = 'row'` row would hold in `zdata`.
  */
-export const objectKey = (repoId: string, oid: string): string =>
-  `${repoId}/objects/${oid}`;
+export const objectKey = (repoId: string, oid: string): string => `${repoId}/objects/${oid}`;
 
 /**
  * R2 key for a compacted pack (v1.1): `{repoId}/packs/pack-{sha1}.pack`.
  * The `sha1` is the pack's trailer checksum, making the key content-addressed.
  */
-export const packKey = (repoId: string, sha: string): string =>
-  `${repoId}/packs/pack-${sha}.pack`;
+export const packKey = (repoId: string, sha: string): string => `${repoId}/packs/pack-${sha}.pack`;
 
 /**
  * R2 key of a clone bundle for a ref snapshot (DESIGN.md §12.2):
@@ -73,10 +71,8 @@ export const incomingKey = (repoId: string, pushId: string): string =>
  * is `wire-<receiveId>`; the object stays at its `incomingKey`.
  */
 export const WIRE_PACK_PREFIX = "wire-";
-export const wirePackId = (receiveId: string): string =>
-  `${WIRE_PACK_PREFIX}${receiveId}`;
-export const isWirePackId = (packId: string): boolean =>
-  packId.startsWith(WIRE_PACK_PREFIX);
+export const wirePackId = (receiveId: string): string => `${WIRE_PACK_PREFIX}${receiveId}`;
+export const isWirePackId = (packId: string): boolean => packId.startsWith(WIRE_PACK_PREFIX);
 
 /** R2 key of any pack by id — compacted (`packKey`) or promoted wire pack. */
 export const packKeyOf = (repoId: string, packId: string): string =>
@@ -88,8 +84,7 @@ export const packKeyOf = (repoId: string, packId: string): string =>
  * R2 key reserved for a future LFS object (DESIGN.md §10):
  * `{repoId}/lfs/{sha256}`.
  */
-export const lfsKey = (repoId: string, sha256: string): string =>
-  `${repoId}/lfs/${sha256}`;
+export const lfsKey = (repoId: string, sha256: string): string => `${repoId}/lfs/${sha256}`;
 
 /**
  * The whole-repo R2 prefix (`{repoId}/`) — the unit the delete-purge alarm

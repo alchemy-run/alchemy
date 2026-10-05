@@ -27,10 +27,7 @@ export interface AcceptHandshake extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.AcceptHandshakeRequest,
-    ) => Effect.Effect<
-      organizations.AcceptHandshakeResponse,
-      organizations.AcceptHandshakeError
-    >
+    ) => Effect.Effect<organizations.AcceptHandshakeResponse, organizations.AcceptHandshakeError>
   >
 > {}
 export const AcceptHandshake = Binding.Service<AcceptHandshake>(

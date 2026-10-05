@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
-export const catalogParentOf = (project: string) =>
-  `projects/${project}/locations/global`;
+export const catalogParentOf = (project: string) => `projects/${project}/locations/global`;
 
 export const defaultCatalogOf = (project: string) =>
   `${catalogParentOf(project)}/catalogs/default_catalog`;

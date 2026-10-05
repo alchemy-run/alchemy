@@ -23,10 +23,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => {
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) => {
   const value = lastSegment(location ?? defaultLocation);
   const upper = value.toUpperCase();
   if (upper === "US" || upper === "EU") return upper;
@@ -36,41 +33,25 @@ export const normalizeLocation = (
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceNameOf = (
-  project: string,
-  location: string,
-  dataPolicyId: string,
-) => `${parentOf(project, location)}/dataPolicies/${dataPolicyId}`;
+export const resourceNameOf = (project: string, location: string, dataPolicyId: string) =>
+  `${parentOf(project, location)}/dataPolicies/${dataPolicyId}`;
 
-export const parseName = (
-  name: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, fallbackProject: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf("dataPolicies");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject,
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject,
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     dataPolicyId:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
 export const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 const sanitizeIdPart = (value: string) => {
   const cleaned = sanitizeLabelValue(value)
@@ -88,15 +69,10 @@ const ensureId = (value: string) => {
     .slice(0, MAX_NAME_LENGTH)
     .replace(/_+$/g, "");
   if (cleaned.length === 0) return "alchx";
-  return /^[a-z]/.test(cleaned)
-    ? cleaned
-    : `a${cleaned}`.slice(0, MAX_NAME_LENGTH);
+  return /^[a-z]/.test(cleaned) ? cleaned : `a${cleaned}`.slice(0, MAX_NAME_LENGTH);
 };
 
-export const encodeOwnershipId = (
-  labels: Record<string, string>,
-  extra?: string,
-): string => {
+export const encodeOwnershipId = (labels: Record<string, string>, extra?: string): string => {
   let stack = sanitizeIdPart(labels[alchemyLabelKeys.stack] ?? "x");
   let stage = sanitizeIdPart(labels[alchemyLabelKeys.stage] ?? "x");
   let id = sanitizeIdPart(labels[alchemyLabelKeys.id] ?? "x");
@@ -135,14 +111,10 @@ export const parseOwnershipId = (
 
 export const hasOwnershipMarker = (resourceId: string | undefined) =>
   (resourceId ?? "").startsWith("alch_") &&
-  Object.keys(parseOwnershipId(resourceId).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnershipId(resourceId).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, resourceId: string | undefined) =>
   Effect.gen(function* () {
@@ -167,11 +139,7 @@ export const ownedByAlchemy = (id: string, resourceId: string | undefined) =>
     );
   });
 
-export const toDataPolicyId = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const toDataPolicyId = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const labels = yield* createInternalLabels(id);
     if (requested !== undefined && requested.length > 0) {
@@ -211,8 +179,7 @@ const canonical = (value: unknown): unknown => {
 };
 
 export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left) ?? null) ===
-  JSON.stringify(canonical(right) ?? null);
+  JSON.stringify(canonical(left) ?? null) === JSON.stringify(canonical(right) ?? null);
 
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])]
@@ -223,15 +190,12 @@ export const sortedStrings = (values: readonly string[] | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const normalizePolicyType = (value: string | undefined) => {
   const next = (value ?? DEFAULT_DATA_POLICY_TYPE).toUpperCase();
-  return next === "DATA_POLICY_TYPE_UNSPECIFIED"
-    ? DEFAULT_DATA_POLICY_TYPE
-    : next;
+  return next === "DATA_POLICY_TYPE_UNSPECIFIED" ? DEFAULT_DATA_POLICY_TYPE : next;
 };

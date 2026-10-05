@@ -88,10 +88,9 @@ export type CollectionsEnginesConversation = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsEnginesConversation =
-  Resource<CollectionsEnginesConversation>(
-    "GCP.DiscoveryEngine.CollectionsEnginesConversation",
-  );
+export const CollectionsEnginesConversation = Resource<CollectionsEnginesConversation>(
+  "GCP.DiscoveryEngine.CollectionsEnginesConversation",
+);
 
 export class CollectionsEnginesConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesConversationNotResolved",
@@ -159,8 +158,7 @@ export const CollectionsEnginesConversationProvider = () =>
       const userPseudoId = news.userPseudoId;
       const fallbackName = output?.name ?? `${news.engine}/conversations/-`;
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const created = yield* discoveryengine
@@ -183,31 +181,27 @@ export const CollectionsEnginesConversationProvider = () =>
       }
 
       const name = current.name ?? fallbackName;
-      const userChanged =
-        userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
+      const userChanged = userPseudoId !== undefined && current.userPseudoId !== userPseudoId;
       const stateChanged = (current.state ?? "") !== (news.state ?? "");
       const messagesChanged = !sameJson(current.messages, news.messages);
 
       if (userChanged || stateChanged || messagesChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsEnginesConversations(
-            {
-              name,
-              updateMask: [
-                userChanged ? "user_pseudo_id" : undefined,
-                stateChanged ? "state" : undefined,
-                messagesChanged ? "messages" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                userPseudoId,
-                state: news.state,
-                messages: news.messages,
-              },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesConversations({
+          name,
+          updateMask: [
+            userChanged ? "user_pseudo_id" : undefined,
+            stateChanged ? "state" : undefined,
+            messagesChanged ? "messages" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            userPseudoId,
+            state: news.state,
+            messages: news.messages,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

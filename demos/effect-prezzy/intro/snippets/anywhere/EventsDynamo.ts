@@ -12,10 +12,8 @@ export default AWS.Lambda.Function(
       attributes: { room: "S" },
     });
 
-    yield* AWS.DynamoDB.consumeTableChanges(
-      source,
-      { streamViewType: "NEW_IMAGE" },
-      (records) => records.pipe(Stream.runForEach(Effect.log)),
+    yield* AWS.DynamoDB.consumeTableChanges(source, { streamViewType: "NEW_IMAGE" }, (records) =>
+      records.pipe(Stream.runForEach(Effect.log)),
     );
 
     return {};

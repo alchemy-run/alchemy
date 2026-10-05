@@ -8,17 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  parseDescription,
-} from "./ownership.ts";
-import {
-  lastSegment,
-  orgName,
-  sameJson,
-  waitForOperation,
-} from "./operations.ts";
+import { lastSegment, orgName, sameJson, waitForOperation } from "./operations.ts";
+import { encodeDescription, hasOwnershipMarker, parseDescription } from "./ownership.ts";
 
 const DEFAULT_RUNTIME_TYPE = "CLOUD";
 const DEFAULT_BILLING_TYPE = "EVALUATION";
@@ -58,16 +49,12 @@ export type OrganizationProps = {
    * Immutable.
    * @default "CLOUD"
    */
-  runtimeType?:
-    | apigee.GoogleCloudApigeeV1OrganizationRuntimeTypeEnum
-    | (string & {});
+  runtimeType?: apigee.GoogleCloudApigeeV1OrganizationRuntimeTypeEnum | (string & {});
   /**
    * Billing type. See Apigee pricing. Immutable after create.
    * @default "EVALUATION"
    */
-  billingType?:
-    | apigee.GoogleCloudApigeeV1OrganizationBillingTypeEnum
-    | (string & {});
+  billingType?: apigee.GoogleCloudApigeeV1OrganizationBillingTypeEnum | (string & {});
   /**
    * Human-readable description. Apigee organizations have no labels, so
    * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
@@ -217,16 +204,10 @@ export class OrganizationNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toOrgId = (
-  project: string,
-  organizationId: string | undefined,
-  existing?: string,
-) => organizationId ?? existing ?? project;
+const toOrgId = (project: string, organizationId: string | undefined, existing?: string) =>
+  organizationId ?? existing ?? project;
 
-const toAttrs = (
-  organization: apigee.GoogleCloudApigeeV1Organization,
-  project: string,
-) => {
+const toAttrs = (organization: apigee.GoogleCloudApigeeV1Organization, project: string) => {
   const organizationId = lastSegment(organization.name ?? project);
   const parsed = parseDescription(organization.description);
   const addons = organization.addonsConfig;
@@ -242,11 +223,9 @@ const toAttrs = (
     disableVpcPeering: organization.disableVpcPeering === true,
     authorizedNetwork: organization.authorizedNetwork,
     networkEgressRestricted: organization.networkEgressRestricted === true,
-    runtimeDatabaseEncryptionKeyName:
-      organization.runtimeDatabaseEncryptionKeyName,
+    runtimeDatabaseEncryptionKeyName: organization.runtimeDatabaseEncryptionKeyName,
     controlPlaneEncryptionKeyName: organization.controlPlaneEncryptionKeyName,
-    apiConsumerDataEncryptionKeyName:
-      organization.apiConsumerDataEncryptionKeyName,
+    apiConsumerDataEncryptionKeyName: organization.apiConsumerDataEncryptionKeyName,
     apiConsumerDataLocation: organization.apiConsumerDataLocation,
     portalDisabled: organization.portalDisabled === true,
     addonsConfig: addons,
@@ -263,11 +242,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizations({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   props: OrganizationProps,
@@ -292,13 +267,7 @@ const toBody = (
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
-    stables: [
-      "name",
-      "organizationId",
-      "project",
-      "createdAt",
-      "apigeeProjectId",
-    ],
+    stables: ["name", "organizationId", "project", "createdAt", "apigeeProjectId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -325,11 +294,7 @@ export const OrganizationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organizationId = toOrgId(
-        env.project,
-        olds?.organizationId,
-        output?.organizationId,
-      );
+      const organizationId = toOrgId(env.project, olds?.organizationId, output?.organizationId);
       const name = output?.name ?? orgName(organizationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -349,20 +314,13 @@ export const OrganizationProvider = () =>
             ),
           );
         const mapped = (page.organizations ?? []).filter(
-          (item) =>
-            item.projectId === env.project ||
-            (item.projectIds ?? []).includes(env.project),
+          (item) => item.projectId === env.project || (item.projectIds ?? []).includes(env.project),
         );
         const attrs = [];
         for (const mapping of mapped) {
-          const organizationId = lastSegment(
-            mapping.organization ?? env.project,
-          );
+          const organizationId = lastSegment(mapping.organization ?? env.project);
           const existing = yield* getByName(orgName(organizationId));
-          if (
-            existing !== undefined &&
-            hasOwnershipMarker(existing.description)
-          ) {
+          if (existing !== undefined && hasOwnershipMarker(existing.description)) {
             attrs.push(toAttrs(existing, env.project));
           }
         }
@@ -371,16 +329,11 @@ export const OrganizationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organizationId = toOrgId(
-        env.project,
-        news.organizationId,
-        output?.organizationId,
-      );
+      const organizationId = toOrgId(env.project, news.organizationId, output?.organizationId);
       const name = orgName(organizationId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
-      const analyticsRegion =
-        news.analyticsRegion ?? output?.analyticsRegion ?? env.region;
+      const analyticsRegion = news.analyticsRegion ?? output?.analyticsRegion ?? env.region;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -408,14 +361,11 @@ export const OrganizationProvider = () =>
       const needsUpdate =
         (current.description ?? "") !== desiredDescription ||
         (current.displayName ?? "") !== (news.displayName ?? "") ||
-        (current.disableVpcPeering === true) !==
-          (desired.disableVpcPeering === true) ||
+        (current.disableVpcPeering === true) !== (desired.disableVpcPeering === true) ||
         (current.authorizedNetwork ?? "") !== (news.authorizedNetwork ?? "") ||
-        (current.networkEgressRestricted === true) !==
-          (news.networkEgressRestricted === true) ||
+        (current.networkEgressRestricted === true) !== (news.networkEgressRestricted === true) ||
         (current.portalDisabled === true) !== (news.portalDisabled === true) ||
-        (current.apiConsumerDataLocation ?? "") !==
-          (news.apiConsumerDataLocation ?? "") ||
+        (current.apiConsumerDataLocation ?? "") !== (news.apiConsumerDataLocation ?? "") ||
         !sameJson(current.addonsConfig ?? {}, news.addonsConfig ?? {});
 
       if (needsUpdate) {
@@ -439,9 +389,7 @@ export const OrganizationProvider = () =>
           retention: "MINIMUM",
         })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, {

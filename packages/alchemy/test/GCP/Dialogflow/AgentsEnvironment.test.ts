@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -67,15 +64,12 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "v1",
               description: "env snapshot",
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
-              {
-                agent: agent.name ?? "",
-                displayName: "prod",
-                description: "production",
-                versionConfigs: [{ version: version.name }],
-              },
-            );
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              displayName: "prod",
+              description: "production",
+              versionConfigs: [{ version: version.name }],
+            });
             return { version, environment };
           }),
         );
@@ -84,15 +78,12 @@ test.provider.skipIf(!runLifecycle)(
         expect(created.environment.displayName).toEqual("prod");
         expect(created.environment.description).toEqual("production");
         expect(created.environment.versionConfigs).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ version: created.version.name }),
-          ]),
+          expect.arrayContaining([expect.objectContaining({ version: created.version.name })]),
         );
 
-        const fetched =
-          yield* dialogflow.getProjectsLocationsAgentsEnvironments({
-            name: created.environment.name,
-          });
+        const fetched = yield* dialogflow.getProjectsLocationsAgentsEnvironments({
+          name: created.environment.name,
+        });
         expect(fetched.name).toEqual(created.environment.name);
         expect(fetched.description).toContain("[alchemy ");
 
@@ -104,16 +95,13 @@ test.provider.skipIf(!runLifecycle)(
               displayName: "v1",
               description: "env snapshot",
             });
-            const environment = yield* GCP.Dialogflow.AgentsEnvironment(
-              "Prod",
-              {
-                agent: agent.name ?? "",
-                environmentId: created.environment.environmentId,
-                displayName: "staging",
-                description: "staging env",
-                versionConfigs: [{ version: version.name }],
-              },
-            );
+            const environment = yield* GCP.Dialogflow.AgentsEnvironment("Prod", {
+              agent: agent.name ?? "",
+              environmentId: created.environment.environmentId,
+              displayName: "staging",
+              description: "staging env",
+              versionConfigs: [{ version: version.name }],
+            });
             return { version, environment };
           }),
         );

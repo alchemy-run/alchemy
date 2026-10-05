@@ -1,11 +1,11 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import Stack from "../alchemy.run.ts";
 import { ShortyApi } from "../src/ShortyApi.ts";
 
@@ -56,9 +56,9 @@ test(
     const link = yield* shorty.links.create({ payload: { url: "https://alchemy.run/" } });
 
     // Retries cold-start 404/5xx responses while a fresh deploy rolls out.
-    const response = yield* Test.executeWhenReady(HttpClientRequest.get(`${api}/${link.code}`)).pipe(
-      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-    );
+    const response = yield* Test.executeWhenReady(
+      HttpClientRequest.get(`${api}/${link.code}`),
+    ).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("https://alchemy.run/");
   }),

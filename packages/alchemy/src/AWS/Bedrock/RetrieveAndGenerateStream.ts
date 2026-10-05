@@ -65,7 +65,6 @@ export interface RetrieveAndGenerateStream extends Binding.Service<
     >
   >
 > {}
-export const RetrieveAndGenerateStream =
-  Binding.Service<RetrieveAndGenerateStream>(
-    "AWS.Bedrock.RetrieveAndGenerateStream",
-  );
+export const RetrieveAndGenerateStream = Binding.Service<RetrieveAndGenerateStream>(
+  "AWS.Bedrock.RetrieveAndGenerateStream",
+);

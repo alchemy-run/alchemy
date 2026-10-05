@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Schema } from "./Schema.ts";
 
-export interface GetSchemaRequest extends Omit<
-  pubsub.GetProjectsSchemasRequest,
-  "name"
-> {}
+export interface GetSchemaRequest extends Omit<pubsub.GetProjectsSchemasRequest, "name"> {}
 
 /**
  * Runtime binding for Pub/Sub `schemas.get`.
@@ -33,11 +30,7 @@ export interface GetSchema extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetSchemaRequest,
-    ) => Effect.Effect<
-      pubsub.Pubsub_Schema,
-      pubsub.GetProjectsSchemasError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<pubsub.Pubsub_Schema, pubsub.GetProjectsSchemasError, RuntimeContext>
   >
 > {}
 

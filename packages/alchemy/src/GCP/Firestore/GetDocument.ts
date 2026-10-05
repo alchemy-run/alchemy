@@ -46,6 +46,4 @@ export interface GetDocument extends Binding.Service<
   >
 > {}
 
-export const GetDocument = Binding.Service<GetDocument>(
-  "GCP.Firestore.GetDocument",
-);
+export const GetDocument = Binding.Service<GetDocument>("GCP.Firestore.GetDocument");

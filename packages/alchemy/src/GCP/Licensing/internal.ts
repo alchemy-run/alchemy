@@ -41,17 +41,13 @@ export const normalizeCustomerId = (value: string | undefined) => {
   if (trimmed === undefined || trimmed.length === 0) {
     return undefined;
   }
-  return trimmed.startsWith("customers/")
-    ? trimmed.slice("customers/".length)
-    : trimmed;
+  return trimmed.startsWith("customers/") ? trimmed.slice("customers/".length) : trimmed;
 };
 
 /** Optional setting from the ConfigProvider (env by default). */
 const optionalSetting = (key: string) =>
   Effect.gen(function* () {
-    const value = Option.getOrUndefined(
-      yield* Config.option(Config.String(key)),
-    )?.trim();
+    const value = Option.getOrUndefined(yield* Config.option(Config.String(key)))?.trim();
     return value !== undefined && value.length > 0 ? value : undefined;
   });
 
@@ -75,11 +71,7 @@ export const listUserId = () => optionalSetting("GOOGLE_LICENSE_USER_ID");
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
-export const getAssignment = (
-  productId: string,
-  skuId: string,
-  userId: string,
-) =>
+export const getAssignment = (productId: string, skuId: string, userId: string) =>
   productId.length === 0 || skuId.length === 0 || userId.length === 0
     ? Effect.succeed(undefined)
     : licensing
@@ -90,11 +82,7 @@ export const getAssignment = (
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-export const listAssignments = (
-  productId: string,
-  customerId: string,
-  skuId?: string,
-) => {
+export const listAssignments = (productId: string, customerId: string, skuId?: string) => {
   if (productId.length === 0 || customerId.length === 0) {
     return emptyList<licensing.LicenseAssignment>();
   }
@@ -133,11 +121,7 @@ export const findAssignment = (
     return items.find((item) => sameUser(item.userId, userId));
   });
 
-export const deleteAssignment = (
-  productId: string,
-  skuId: string,
-  userId: string,
-) =>
+export const deleteAssignment = (productId: string, skuId: string, userId: string) =>
   productId.length === 0 || skuId.length === 0 || userId.length === 0
     ? Effect.void
     : licensing

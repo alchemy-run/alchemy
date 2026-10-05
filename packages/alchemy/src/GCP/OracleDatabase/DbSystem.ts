@@ -45,9 +45,7 @@ export type DbHome = {
 
 export type DbSystemOptions = {
   /** Storage management (`ASM`, `LVM`). */
-  storageManagement?:
-    | oracle.DbSystemOptionsStorageManagementEnum
-    | (string & {});
+  storageManagement?: oracle.DbSystemOptionsStorageManagementEnum | (string & {});
 };
 
 export type DataCollectionOptionsDbSystem = {
@@ -69,9 +67,7 @@ export type DbSystemPropertiesInput = {
   /** License model. Required on create. */
   licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {});
   /** Database edition. Required on create. */
-  databaseEdition?:
-    | oracle.DbSystemPropertiesDatabaseEditionEnum
-    | (string & {});
+  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {});
   /** Hostname prefix. */
   hostnamePrefix?: string;
   /** Time zone. */
@@ -140,9 +136,7 @@ export type DbSystemProps = {
   /** License model. Convenience alias for `properties.licenseModel`. */
   licenseModel?: oracle.DbSystemPropertiesLicenseModelEnum | (string & {});
   /** Database edition. Convenience alias for `properties.databaseEdition`. */
-  databaseEdition?:
-    | oracle.DbSystemPropertiesDatabaseEditionEnum
-    | (string & {});
+  databaseEdition?: oracle.DbSystemPropertiesDatabaseEditionEnum | (string & {});
   /** Initial data storage in GB. Convenience alias. */
   initialDataStorageSizeGb?: number;
 };
@@ -315,11 +309,7 @@ const listSystems = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.dbSystems,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -327,29 +317,19 @@ const listSystems = (project: string, region: string) => {
 
 export const DbSystemProvider = () =>
   Provider.succeed(DbSystem, {
-    stables: [
-      "name",
-      "dbSystemId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "dbSystemId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousOdb = olds?.odbSubnet ?? output?.odbSubnet ?? "";
       const nextOdb = news.odbSubnet ?? previousOdb;
-      const previousShape =
-        olds?.shape ?? olds?.properties?.shape ?? output?.shape ?? "";
+      const previousShape = olds?.shape ?? olds?.properties?.shape ?? output?.shape ?? "";
       const nextShape = news.shape ?? news.properties?.shape ?? previousShape;
       return replaceOnIdentity({
         previousId: olds?.dbSystemId ?? output?.dbSystemId,
         nextId: news.dbSystemId ?? olds?.dbSystemId ?? output?.dbSystemId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -359,24 +339,13 @@ export const DbSystemProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dbSystemId = yield* toPhysicalId(
-        id,
-        olds?.dbSystemId,
-        output?.dbSystemId,
-        FALLBACK_ID,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceNameOf(env.project, location, COLLECTION, dbSystemId);
+      const dbSystemId = yield* toPhysicalId(id, olds?.dbSystemId, output?.dbSystemId, FALLBACK_ID);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceNameOf(env.project, location, COLLECTION, dbSystemId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -388,21 +357,9 @@ export const DbSystemProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const dbSystemId = yield* toPhysicalId(
-        id,
-        news.dbSystemId,
-        output?.dbSystemId,
-        FALLBACK_ID,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        dbSystemId,
-      );
+      const dbSystemId = yield* toPhysicalId(id, news.dbSystemId, output?.dbSystemId, FALLBACK_ID);
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, dbSystemId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

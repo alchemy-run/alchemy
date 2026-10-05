@@ -1,7 +1,6 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -129,9 +128,7 @@ export const AccountSettingProvider = () =>
         output !== undefined
           ? output.initialDefaultUsageModel
           : (observed.defaultUsageModel ?? undefined),
-        output !== undefined
-          ? output.initialGreenCompute
-          : (observed.greenCompute ?? undefined),
+        output !== undefined ? output.initialGreenCompute : (observed.greenCompute ?? undefined),
       );
     }),
 
@@ -167,30 +164,21 @@ export const AccountSettingProvider = () =>
           ? output.initialDefaultUsageModel
           : (observed.defaultUsageModel ?? undefined);
       const initialGreenCompute =
-        output !== undefined
-          ? output.initialGreenCompute
-          : (observed.greenCompute ?? undefined);
+        output !== undefined ? output.initialGreenCompute : (observed.greenCompute ?? undefined);
 
       // 3. Sync — desired = news merged over observed (unspecified props
       //    keep the account's current value); PUT only when dirty.
       const desired = {
-        defaultUsageModel:
-          news.defaultUsageModel ?? observed.defaultUsageModel ?? undefined,
+        defaultUsageModel: news.defaultUsageModel ?? observed.defaultUsageModel ?? undefined,
         greenCompute: news.greenCompute ?? observed.greenCompute ?? undefined,
       };
       const dirty =
         (news.defaultUsageModel !== undefined &&
-          (observed.defaultUsageModel ?? undefined) !==
-            news.defaultUsageModel) ||
+          (observed.defaultUsageModel ?? undefined) !== news.defaultUsageModel) ||
         (news.greenCompute !== undefined &&
           (observed.greenCompute ?? undefined) !== news.greenCompute);
       if (!dirty) {
-        return toAttributes(
-          accountId,
-          observed,
-          initialDefaultUsageModel,
-          initialGreenCompute,
-        );
+        return toAttributes(accountId, observed, initialDefaultUsageModel, initialGreenCompute);
       }
 
       yield* workers.putAccountSetting({ accountId, ...desired });
@@ -209,23 +197,20 @@ export const AccountSettingProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const { accountId, initialDefaultUsageModel, initialGreenCompute } =
-        output;
+      const { accountId, initialDefaultUsageModel, initialGreenCompute } = output;
       // There is no DELETE API — destroy restores the pre-management
       // values. Skip the call when the live values already match
       // (idempotent re-delete after a crashed run).
       const observed = yield* workers.getAccountSetting({ accountId });
       const dirty =
         (initialDefaultUsageModel !== undefined &&
-          (observed.defaultUsageModel ?? undefined) !==
-            initialDefaultUsageModel) ||
+          (observed.defaultUsageModel ?? undefined) !== initialDefaultUsageModel) ||
         (initialGreenCompute !== undefined &&
           (observed.greenCompute ?? undefined) !== initialGreenCompute);
       if (!dirty) return;
       yield* workers.putAccountSetting({
         accountId,
-        defaultUsageModel:
-          initialDefaultUsageModel ?? observed.defaultUsageModel ?? undefined,
+        defaultUsageModel: initialDefaultUsageModel ?? observed.defaultUsageModel ?? undefined,
         greenCompute: initialGreenCompute ?? observed.greenCompute ?? undefined,
       });
     }),

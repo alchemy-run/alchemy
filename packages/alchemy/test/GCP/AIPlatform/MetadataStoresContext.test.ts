@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsMetadataStoresContexts({ name }).pipe(
@@ -59,15 +56,12 @@ test.provider(
             location: "us-central1",
             description: "pipeline metadata",
           });
-          const context = yield* GCP.AIPlatform.MetadataStoresContext(
-            "Experiment",
-            {
-              metadataStore: store.name,
-              displayName: "training-run",
-              description: "first",
-              labels: { env: "test" },
-            },
-          );
+          const context = yield* GCP.AIPlatform.MetadataStoresContext("Experiment", {
+            metadataStore: store.name,
+            displayName: "training-run",
+            description: "first",
+            labels: { env: "test" },
+          });
           return { store, context };
         }),
       );
@@ -77,10 +71,9 @@ test.provider(
       expect(created.context.displayName).toEqual("training-run");
       expect(created.context.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsMetadataStoresContexts({
-          name: created.context.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsMetadataStoresContexts({
+        name: created.context.name,
+      });
       expect(fetched.name).toEqual(created.context.name);
 
       const updated = yield* stack.deploy(
@@ -90,16 +83,13 @@ test.provider(
             location: "us-central1",
             description: "pipeline metadata",
           });
-          const context = yield* GCP.AIPlatform.MetadataStoresContext(
-            "Experiment",
-            {
-              metadataStore: store.name,
-              contextId: created.context.contextId,
-              displayName: "training-run-v2",
-              description: "second",
-              labels: { env: "prod" },
-            },
-          );
+          const context = yield* GCP.AIPlatform.MetadataStoresContext("Experiment", {
+            metadataStore: store.name,
+            contextId: created.context.contextId,
+            displayName: "training-run-v2",
+            description: "second",
+            labels: { env: "prod" },
+          });
           return { store, context };
         }),
       );

@@ -52,16 +52,12 @@ export type OrganizationEventThreatDetectionSettingsCustomModuleProps = {
    * Enablement state.
    * @default "ENABLED"
    */
-  enablementState?:
-    | scc.EventThreatDetectionCustomModuleEnablementStateEnum
-    | (string & {});
+  enablementState?: scc.EventThreatDetectionCustomModuleEnablementStateEnum | (string & {});
   /**
    * Cloud provider this module applies to.
    * @default "GOOGLE_CLOUD_PLATFORM"
    */
-  cloudProvider?:
-    | scc.EventThreatDetectionCustomModuleCloudProviderEnum
-    | (string & {});
+  cloudProvider?: scc.EventThreatDetectionCustomModuleCloudProviderEnum | (string & {});
   /**
    * Human-readable display name.
    */
@@ -180,9 +176,7 @@ const listAt = (parent: string) =>
   scc.listOrganizationsEventThreatDetectionSettingsCustomModules
     .pages({ parent, pageSize: 100 })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.eventThreatDetectionCustomModules ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.eventThreatDetectionCustomModules ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -197,136 +191,110 @@ const findOwned = (parent: string, id: string) =>
     return undefined;
   });
 
-export const OrganizationEventThreatDetectionSettingsCustomModuleProvider =
-  () =>
-    Provider.succeed(OrganizationEventThreatDetectionSettingsCustomModule, {
-      stables: [
-        "name",
-        "moduleId",
-        "organization",
-        "organizationId",
-        "project",
-        "type",
-      ],
+export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =>
+  Provider.succeed(OrganizationEventThreatDetectionSettingsCustomModule, {
+    stables: ["name", "moduleId", "organization", "organizationId", "project", "type"],
 
-      diff: Effect.fn(function* ({ news, olds, output }) {
-        if (!isResolved(news)) return undefined;
-        return (
-          replaceOn(
-            olds?.organization ?? output?.organization,
-            news.organization !== undefined
-              ? organizationParent(news.organization)
-              : undefined,
-          ) ?? replaceOn(olds?.type ?? output?.type, news.type)
-        );
-      }),
-
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const env = yield* GcpEnvironment.current;
-        const organization = yield* resolveOrganization(
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      return (
+        replaceOn(
           olds?.organization ?? output?.organization,
-          output?.organization,
-        );
-        let existing = yield* getByName(output?.name ?? "");
-        if (existing === undefined) {
-          existing = yield* findOwned(etdSettingsParent(organization), id);
-        }
-        if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, organization, env.project);
-        return (yield* ownedByAlchemy(id, existing.description))
-          ? attrs
-          : Unowned(attrs);
-      }),
+          news.organization !== undefined ? organizationParent(news.organization) : undefined,
+        ) ?? replaceOn(olds?.type ?? output?.type, news.type)
+      );
+    }),
 
-      list: () =>
-        Effect.gen(function* () {
-          const env = yield* GcpEnvironment.current;
-          const organization = yield* tryResolveOrganization();
-          if (organization === undefined) return [];
-          const modules = yield* listAt(etdSettingsParent(organization));
-          return modules
-            .filter((module) => hasOwnershipMarker(module.description))
-            .map((module) => toAttrs(module, organization, env.project));
-        }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(
+        olds?.organization ?? output?.organization,
+        output?.organization,
+      );
+      let existing = yield* getByName(output?.name ?? "");
+      if (existing === undefined) {
+        existing = yield* findOwned(etdSettingsParent(organization), id);
+      }
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.project);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+    }),
 
-      reconcile: Effect.fn(function* ({ id, news, output }) {
+    list: () =>
+      Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const organization = yield* resolveOrganization(
-          news.organization,
-          output?.organization,
-        );
-        const parent = etdSettingsParent(organization);
-        const ownership = yield* createInternalLabels(id);
-        const description = encodeDescription(ownership, news.description);
-        const type = news.type ?? DEFAULT_ETD_TYPE;
-        const config = news.config ?? defaultEtdConfig;
-        const enablementState = news.enablementState ?? DEFAULT_ENABLEMENT;
-        const cloudProvider = news.cloudProvider ?? DEFAULT_CLOUD_PROVIDER;
-        const displayName = news.displayName;
-
-        let current = yield* getByName(output?.name ?? "");
-        if (current === undefined) {
-          current = yield* findOwned(parent, id);
-        }
-
-        if (current === undefined) {
-          const created = yield* scc
-            .createOrganizationsEventThreatDetectionSettingsCustomModules({
-              parent,
-              body: {
-                type,
-                config,
-                enablementState,
-                cloudProvider,
-                displayName,
-                description,
-              },
-            })
-            .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
-          current = created ?? undefined;
-        }
-
-        if (current === undefined) {
-          return yield* new SecuritycenterNotResolved({
-            name: `${parent}/customModules`,
-          });
-        }
-
-        const currentName = current.name ?? "";
-        const updateMask = updateMaskOf(
-          fingerprint(current.config) !== fingerprint(config)
-            ? "config"
-            : undefined,
-          !sameText(current.enablementState, enablementState)
-            ? "enablementState"
-            : undefined,
-          !sameText(current.displayName, displayName)
-            ? "displayName"
-            : undefined,
-          !sameText(current.description, description)
-            ? "description"
-            : undefined,
-        );
-
-        if (updateMask.length > 0) {
-          current =
-            yield* scc.patchOrganizationsEventThreatDetectionSettingsCustomModules(
-              {
-                name: currentName,
-                updateMask,
-                body: { config, enablementState, displayName, description },
-              },
-            );
-        }
-
-        return toAttrs(current, organization, env.project);
+        const organization = yield* tryResolveOrganization();
+        if (organization === undefined) return [];
+        const modules = yield* listAt(etdSettingsParent(organization));
+        return modules
+          .filter((module) => hasOwnershipMarker(module.description))
+          .map((module) => toAttrs(module, organization, env.project));
       }),
 
-      delete: Effect.fn(function* ({ output }) {
-        yield* scc
-          .deleteOrganizationsEventThreatDetectionSettingsCustomModules({
-            name: output.name,
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const parent = etdSettingsParent(organization);
+      const ownership = yield* createInternalLabels(id);
+      const description = encodeDescription(ownership, news.description);
+      const type = news.type ?? DEFAULT_ETD_TYPE;
+      const config = news.config ?? defaultEtdConfig;
+      const enablementState = news.enablementState ?? DEFAULT_ENABLEMENT;
+      const cloudProvider = news.cloudProvider ?? DEFAULT_CLOUD_PROVIDER;
+      const displayName = news.displayName;
+
+      let current = yield* getByName(output?.name ?? "");
+      if (current === undefined) {
+        current = yield* findOwned(parent, id);
+      }
+
+      if (current === undefined) {
+        const created = yield* scc
+          .createOrganizationsEventThreatDetectionSettingsCustomModules({
+            parent,
+            body: {
+              type,
+              config,
+              enablementState,
+              cloudProvider,
+              displayName,
+              description,
+            },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }),
-    });
+          .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
+        current = created ?? undefined;
+      }
+
+      if (current === undefined) {
+        return yield* new SecuritycenterNotResolved({
+          name: `${parent}/customModules`,
+        });
+      }
+
+      const currentName = current.name ?? "";
+      const updateMask = updateMaskOf(
+        fingerprint(current.config) !== fingerprint(config) ? "config" : undefined,
+        !sameText(current.enablementState, enablementState) ? "enablementState" : undefined,
+        !sameText(current.displayName, displayName) ? "displayName" : undefined,
+        !sameText(current.description, description) ? "description" : undefined,
+      );
+
+      if (updateMask.length > 0) {
+        current = yield* scc.patchOrganizationsEventThreatDetectionSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: { config, enablementState, displayName, description },
+        });
+      }
+
+      return toAttrs(current, organization, env.project);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* scc
+        .deleteOrganizationsEventThreatDetectionSettingsCustomModules({
+          name: output.name,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+  });

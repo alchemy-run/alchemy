@@ -1,7 +1,7 @@
+import { expect } from "bun:test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Stack from "./alchemy.run.ts";

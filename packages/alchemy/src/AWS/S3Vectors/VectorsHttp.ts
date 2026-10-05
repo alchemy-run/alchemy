@@ -23,10 +23,7 @@ export const VectorsHttp = Layer.effect(
     makeClient: Effect.gen(function* () {
       const makeRead = yield* makeReadVectorsClient;
       const makeWrite = yield* makeWriteVectorsClient;
-      return (
-        indexArn: Effect.Effect<string>,
-        label: string,
-      ): VectorsClient => ({
+      return (indexArn: Effect.Effect<string>, label: string): VectorsClient => ({
         ...makeRead(indexArn, label),
         ...makeWrite(indexArn, label),
       });

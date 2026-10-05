@@ -97,9 +97,7 @@ export type EndpointAttachment = Resource<
  * @resource
  * @category Apigee
  */
-export const EndpointAttachment = Resource<EndpointAttachment>(
-  "GCP.Apigee.EndpointAttachment",
-);
+export const EndpointAttachment = Resource<EndpointAttachment>("GCP.Apigee.EndpointAttachment");
 
 export class EndpointAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EndpointAttachmentNotResolved",
@@ -107,10 +105,8 @@ export class EndpointAttachmentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => (location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  (location ?? defaultLocation).toLowerCase();
 
 const toId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -150,30 +146,18 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEndpointAttachments({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
-const isAlchemyId = (endpointAttachmentId: string) =>
-  endpointAttachmentId.startsWith("alc");
+const isAlchemyId = (endpointAttachmentId: string) => endpointAttachmentId.startsWith("alc");
 
 export const EndpointAttachmentProvider = () =>
   Provider.succeed(EndpointAttachment, {
-    stables: [
-      "name",
-      "endpointAttachmentId",
-      "organization",
-      "location",
-      "serviceAttachment",
-    ],
+    stables: ["name", "endpointAttachmentId", "organization", "location", "serviceAttachment"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.endpointAttachmentId ?? output?.endpointAttachmentId;
+      const previousId = olds?.endpointAttachmentId ?? output?.endpointAttachmentId;
       const previousOrg = olds?.organization ?? output?.organization;
       const previousLocation = olds?.location ?? output?.location;
       const previousSa = olds?.serviceAttachment ?? output?.serviceAttachment;
@@ -189,8 +173,7 @@ export const EndpointAttachmentProvider = () =>
         previousLocation !== undefined &&
         normalizeLocation(news.location ?? previousLocation, env.region) !==
           normalizeLocation(previousLocation, env.region);
-      const saChanged =
-        previousSa !== undefined && news.serviceAttachment !== previousSa;
+      const saChanged = previousSa !== undefined && news.serviceAttachment !== previousSa;
       if (idChanged || orgChanged || locationChanged || saChanged) {
         return {
           action: "replace" as const,
@@ -202,17 +185,13 @@ export const EndpointAttachmentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const endpointAttachmentId = yield* toId(
         id,
         olds?.endpointAttachmentId,
         output?.endpointAttachmentId,
       );
-      const name =
-        output?.name ?? resourceName(organization, endpointAttachmentId);
+      const name = output?.name ?? resourceName(organization, endpointAttachmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.region);
@@ -233,9 +212,7 @@ export const EndpointAttachmentProvider = () =>
             (page) => page.endpointAttachments,
           ).pipe(
             Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-              Effect.succeed(
-                [] as apigee.GoogleCloudApigeeV1EndpointAttachment[],
-              ),
+              Effect.succeed([] as apigee.GoogleCloudApigeeV1EndpointAttachment[]),
             ),
           );
           for (const attachment of attachments) {
@@ -257,10 +234,7 @@ export const EndpointAttachmentProvider = () =>
         output?.endpointAttachmentId,
       );
       const name = resourceName(organization, endpointAttachmentId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -292,9 +266,7 @@ export const EndpointAttachmentProvider = () =>
       const operation = yield* apigee
         .deleteOrganizationsEndpointAttachments({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

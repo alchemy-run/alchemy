@@ -3,24 +3,16 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, stripInternalLabels } from "../Labels.ts";
 
 export const MAX_NAME_LENGTH = 63;
 export const MAX_PIPELINE_JOB_ID_LENGTH = 128;
 
-export class AiPlatformNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.NotResolved",
-)<{
+export class AiPlatformNotResolved extends Data.TaggedError("GCP.AIPlatform.NotResolved")<{
   name: string;
 }> {}
 
-export class AiPlatformStillExists extends Data.TaggedError(
-  "GCP.AIPlatform.StillExists",
-)<{
+export class AiPlatformStillExists extends Data.TaggedError("GCP.AIPlatform.StillExists")<{
   name: string;
 }> {}
 
@@ -71,10 +63,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -85,14 +75,9 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -169,9 +154,7 @@ export const parseDescription = (
 };
 
 export const hasDescriptionOwnership = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 /**
  * Compact displayName stamp for APIs that cap display names at 63
@@ -211,17 +194,12 @@ export const parseDisplayName = (
 };
 
 export const hasDisplayNameOwnership = (displayName: string | undefined) =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedById = (id: string, labels: Record<string, string>) =>
   Effect.gen(function* () {
     const expected = yield* createInternalLabels(id);
-    const expectedId = (expected[alchemyLabelKeys.id] ?? "").slice(
-      0,
-      DISPLAY_ID_LENGTH,
-    );
+    const expectedId = (expected[alchemyLabelKeys.id] ?? "").slice(0, DISPLAY_ID_LENGTH);
     return labels[alchemyLabelKeys.id] === expectedId;
   });
 

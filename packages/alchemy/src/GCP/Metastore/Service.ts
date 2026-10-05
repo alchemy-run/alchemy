@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_HIVE_VERSION,
@@ -47,9 +42,7 @@ export type HiveMetastoreConfig = {
   /**
    * Endpoint protocol (`THRIFT` or `GRPC`).
    */
-  endpointProtocol?:
-    | metastore.HiveMetastoreConfigEndpointProtocolEnum
-    | (string & {});
+  endpointProtocol?: metastore.HiveMetastoreConfigEndpointProtocolEnum | (string & {});
   /**
    * Kerberos service-principal configuration.
    */
@@ -342,8 +335,7 @@ export const ServiceProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousVersion =
-        olds?.hiveMetastoreConfig?.version ??
-        output?.hiveMetastoreConfig?.version;
+        olds?.hiveMetastoreConfig?.version ?? output?.hiveMetastoreConfig?.version;
       const nextVersion = news.hiveMetastoreConfig?.version ?? previousVersion;
       const previousNetwork = olds?.network ?? output?.network;
       const previousDatabase = olds?.databaseType ?? output?.databaseType;
@@ -351,10 +343,7 @@ export const ServiceProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.serviceId ?? output?.serviceId,
         nextId: news.serviceId ?? olds?.serviceId ?? output?.serviceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -374,35 +363,22 @@ export const ServiceProvider = () =>
             news.releaseChannel !== previousChannel) ||
           (olds?.encryptionConfig !== undefined &&
             news.encryptionConfig !== undefined &&
-            fingerprint(news.encryptionConfig) !==
-              fingerprint(olds.encryptionConfig)) ||
+            fingerprint(news.encryptionConfig) !== fingerprint(olds.encryptionConfig)) ||
           (olds?.networkConfig !== undefined &&
             news.networkConfig !== undefined &&
-            fingerprint(news.networkConfig) !==
-              fingerprint(olds.networkConfig)),
+            fingerprint(news.networkConfig) !== fingerprint(olds.networkConfig)),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const serviceId = yield* toPhysicalId(
-        id,
-        olds?.serviceId,
-        output?.serviceId,
-        "service",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, serviceId);
+      const serviceId = yield* toPhysicalId(id, olds?.serviceId, output?.serviceId, "service");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, serviceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -414,16 +390,8 @@ export const ServiceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const serviceId = yield* toPhysicalId(
-        id,
-        news.serviceId,
-        output?.serviceId,
-        "service",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const serviceId = yield* toPhysicalId(id, news.serviceId, output?.serviceId, "service");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, serviceId);
       const hive = desiredHiveConfig(news.hiveMetastoreConfig);
       const desiredLabels = {
@@ -499,28 +467,22 @@ export const ServiceProvider = () =>
         news.port !== undefined && news.port !== current.port && "port",
         news.tier !== undefined && !sameText(current.tier, news.tier) && "tier",
         news.deletionProtection !== undefined &&
-          (current.deletionProtection === true) !==
-            (news.deletionProtection === true) &&
+          (current.deletionProtection === true) !== (news.deletionProtection === true) &&
           "deletionProtection",
         news.scalingConfig !== undefined &&
-          fingerprint(current.scalingConfig) !==
-            fingerprint(news.scalingConfig) &&
+          fingerprint(current.scalingConfig) !== fingerprint(news.scalingConfig) &&
           "scalingConfig",
         news.telemetryConfig !== undefined &&
-          fingerprint(current.telemetryConfig) !==
-            fingerprint(news.telemetryConfig) &&
+          fingerprint(current.telemetryConfig) !== fingerprint(news.telemetryConfig) &&
           "telemetryConfig",
         news.scheduledBackup !== undefined &&
-          fingerprint(current.scheduledBackup) !==
-            fingerprint(news.scheduledBackup) &&
+          fingerprint(current.scheduledBackup) !== fingerprint(news.scheduledBackup) &&
           "scheduledBackup",
         news.metadataIntegration !== undefined &&
-          fingerprint(current.metadataIntegration) !==
-            fingerprint(news.metadataIntegration) &&
+          fingerprint(current.metadataIntegration) !== fingerprint(news.metadataIntegration) &&
           "metadataIntegration",
         news.maintenanceWindow !== undefined &&
-          fingerprint(current.maintenanceWindow) !==
-            fingerprint(news.maintenanceWindow) &&
+          fingerprint(current.maintenanceWindow) !== fingerprint(news.maintenanceWindow) &&
           "maintenanceWindow",
         hiveChanged && "hiveMetastoreConfig",
       ]);

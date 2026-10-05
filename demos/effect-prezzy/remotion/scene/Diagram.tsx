@@ -36,14 +36,30 @@ const layout = (graph: Graph): Map<string, Placed> => {
   const tiers = [...new Set(graph.nodes.map((n) => n.tier))].sort((a, b) => a - b);
   // Spread the used columns across the canvas.
   const column =
-    tiers.length > 1 ? Math.min(360, (CANVAS.width - LEFT - RIGHT - NODE.width) / (tiers.length - 1)) : 0;
+    tiers.length > 1
+      ? Math.min(360, (CANVAS.width - LEFT - RIGHT - NODE.width) / (tiers.length - 1))
+      : 0;
   // Centre the columns when they don't fill the canvas.
   const used = NODE.width + column * (tiers.length - 1);
   const offset = (CANVAS.width - used) / 2;
-  const order = ["Web", "Api", "Db", "LinkRoom", "Clicks", "Pool", "Traces", "Logs", "Ingest", "Postgres", "Dashboard"];
+  const order = [
+    "Web",
+    "Api",
+    "Db",
+    "LinkRoom",
+    "Clicks",
+    "Pool",
+    "Traces",
+    "Logs",
+    "Ingest",
+    "Postgres",
+    "Dashboard",
+  ];
   const rank = (id: string) => (order.indexOf(id) < 0 ? 99 : order.indexOf(id));
   tiers.forEach((tier, index) => {
-    const nodes = graph.nodes.filter((n) => n.tier === tier).sort((a, b) => rank(a.id) - rank(b.id));
+    const nodes = graph.nodes
+      .filter((n) => n.tier === tier)
+      .sort((a, b) => rank(a.id) - rank(b.id));
     const gap = nodes.length > 3 ? 40 : 64;
     const total = nodes.length * NODE.height + (nodes.length - 1) * gap;
     const top = (CANVAS.height - total) / 2;
@@ -80,7 +96,15 @@ const diagramState = (capture: SceneCapture, plan: SceneSchedule, frame: number)
   return state;
 };
 
-const Node = ({ node, appear, highlight }: { node: Placed; appear: number; highlight: boolean }) => {
+const Node = ({
+  node,
+  appear,
+  highlight,
+}: {
+  node: Placed;
+  appear: number;
+  highlight: boolean;
+}) => {
   const color = PROVIDER_COLOR[node.provider];
   return (
     <div
@@ -93,7 +117,9 @@ const Node = ({ node, appear, highlight }: { node: Placed; appear: number; highl
         borderRadius: 14,
         background: "#1c1a17",
         border: `1.5px solid ${highlight ? brand.moss : "rgba(255,255,255,0.12)"}`,
-        boxShadow: highlight ? `0 0 0 4px ${brand.moss}33, 0 10px 30px rgba(0,0,0,0.4)` : "0 8px 24px rgba(0,0,0,0.35)",
+        boxShadow: highlight
+          ? `0 0 0 4px ${brand.moss}33, 0 10px 30px rgba(0,0,0,0.4)`
+          : "0 8px 24px rgba(0,0,0,0.35)",
         opacity: appear,
         transform: `scale(${0.85 + 0.15 * appear})`,
         padding: "14px 16px",
@@ -105,10 +131,14 @@ const Node = ({ node, appear, highlight }: { node: Placed; appear: number; highl
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 9, height: 9, borderRadius: 5, background: color, flex: "none" }} />
-        <span style={{ color: brand.fg, fontSize: 23, fontWeight: 600, whiteSpace: "nowrap" }}>{node.id}</span>
+        <span style={{ color: brand.fg, fontSize: 23, fontWeight: 600, whiteSpace: "nowrap" }}>
+          {node.id}
+        </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: brand.fgMuted, fontSize: 15, whiteSpace: "nowrap" }}>{node.kind}</span>
+        <span style={{ color: brand.fgMuted, fontSize: 15, whiteSpace: "nowrap" }}>
+          {node.kind}
+        </span>
         <span
           style={{
             fontFamily: mono,
@@ -179,7 +209,11 @@ export const Diagram = ({
   const nodeAppear = (id: string) => {
     if (!state.added.has(id) || state.local === Infinity) return 1;
     const index = addedNodes.findIndex((n) => n.id === id);
-    return spring({ frame: state.local - 8 - index * 6, fps, config: { damping: 16, stiffness: 140 } });
+    return spring({
+      frame: state.local - 8 - index * 6,
+      fps,
+      config: { damping: 16, stiffness: 140 },
+    });
   };
   const edgesStart = 8 + addedNodes.length * 6 + 8;
   const edgeDraw = (edge: GraphEdge, index: number) =>
@@ -283,20 +317,57 @@ export const Diagram = ({
               </span>
             ))}
             <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
-              <span style={{ fontFamily: mono, fontSize: 11, padding: "2px 7px", borderRadius: 6, background: "rgba(255,255,255,0.1)", color: "#cfcfcf" }}>LOCAL</span>
+              <span
+                style={{
+                  fontFamily: mono,
+                  fontSize: 11,
+                  padding: "2px 7px",
+                  borderRadius: 6,
+                  background: "rgba(255,255,255,0.1)",
+                  color: "#cfcfcf",
+                }}
+              >
+                LOCAL
+              </span>
               alchemy dev simulator
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: mono, fontSize: 11, padding: "2px 7px", borderRadius: 6, background: brand.ember, color: "#1a1206" }}>CLOUD</span>
+              <span
+                style={{
+                  fontFamily: mono,
+                  fontSize: 11,
+                  padding: "2px 7px",
+                  borderRadius: 6,
+                  background: brand.ember,
+                  color: "#1a1206",
+                }}
+              >
+                CLOUD
+              </span>
               really deployed
             </span>
           </div>
           {[...placed.values()].map((node) => (
-            <Node key={node.id} node={node} appear={nodeAppear(node.id)} highlight={state.added.has(node.id) && state.local !== Infinity} />
+            <Node
+              key={node.id}
+              node={node}
+              appear={nodeAppear(node.id)}
+              highlight={state.added.has(node.id) && state.local !== Infinity}
+            />
           ))}
         </>
       ) : (
-        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: brand.fgMuted, fontFamily: sans, fontSize: 22 }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            color: brand.fgMuted,
+            fontFamily: sans,
+            fontSize: 22,
+          }}
+        >
           Nothing deployed yet
         </div>
       )}
@@ -314,7 +385,15 @@ export const Diagram = ({
           overflow: "hidden",
         }}
       >
-        <div style={{ fontFamily: mono, fontSize: 13, letterSpacing: 3, color: brand.moss, textTransform: "uppercase" }}>
+        <div
+          style={{
+            fontFamily: mono,
+            fontSize: 13,
+            letterSpacing: 3,
+            color: brand.moss,
+            textTransform: "uppercase",
+          }}
+        >
           {addedEdges.length > 0 ? "New bindings & grants" : "Bindings & grants"}
         </div>
         {grants.length === 0 ? (
@@ -324,7 +403,20 @@ export const Diagram = ({
         ) : null}
         <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 18 }}>
           {grants.slice(0, 7).map((edge, i) => (
-            <div key={edge.id} style={{ opacity: state.local === Infinity ? 1 : interpolate(state.local, [edgesStart + i * 8, edgesStart + i * 8 + 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
+            <div
+              key={edge.id}
+              style={{
+                opacity:
+                  state.local === Infinity
+                    ? 1
+                    : interpolate(
+                        state.local,
+                        [edgesStart + i * 8, edgesStart + i * 8 + 12],
+                        [0, 1],
+                        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+                      ),
+              }}
+            >
               <div style={{ color: brand.fg, fontSize: 19, fontWeight: 600 }}>
                 {edge.from} <span style={{ color: EDGE_COLOR[edge.kind] }}>→</span> {edge.to}
               </div>

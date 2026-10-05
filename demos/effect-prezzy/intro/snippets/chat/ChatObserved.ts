@@ -1,12 +1,12 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import { DatabaseLive } from "./Db.ts";
 import { Files, FilesR2 } from "./Files.ts";
-import { ObservabilityLive } from "./Observability.ts";
 import { History, HistoryLive } from "./History.ts";
+import { ObservabilityLive } from "./Observability.ts";
 import Room from "./Room.ts";
 
 // #region show
@@ -28,14 +28,11 @@ export default Cloudflare.Worker(
           return HttpServerResponse.empty({ status: 201 });
         }
         return yield* HttpServerResponse.json(yield* history.list(room!));
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
   }).pipe(
-    Effect.provide([
-      HistoryLive.pipe(Layer.provide(DatabaseLive)),
-      FilesR2,
-      ObservabilityLive,
-    ]),
+    Effect.provide([HistoryLive.pipe(Layer.provide(DatabaseLive)), FilesR2, ObservabilityLive]),
   ),
 );
 // #endregion show

@@ -1,9 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  PresignGetObject,
-  type PresignGetObjectRequest,
-} from "./PresignGetObject.ts";
+import { PresignGetObject, type PresignGetObjectRequest } from "./PresignGetObject.ts";
 import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
 
 /**

@@ -28,9 +28,7 @@ export type AppsDomainMappingSslSettings = {
    * certificate. `MANUAL` requires `certificateId`.
    * @default "AUTOMATIC"
    */
-  sslManagementType?:
-    | appengine.SslSettingsSslManagementTypeEnum
-    | (string & {});
+  sslManagementType?: appengine.SslSettingsSslManagementTypeEnum | (string & {});
   /**
    * AuthorizedCertificate id to serve for `MANUAL` SSL. Clearing it
    * removes SSL support.
@@ -69,9 +67,7 @@ export type AppsDomainMappingProps = {
    * Whether creating this mapping should override an existing mapping
    * for the domain. By default overrides are rejected.
    */
-  overrideStrategy?:
-    | appengine.CreateAppsDomainMappingsOverrideStrategyEnum
-    | (string & {});
+  overrideStrategy?: appengine.CreateAppsDomainMappingsOverrideStrategyEnum | (string & {});
 };
 
 export type AppsDomainMapping = Resource<
@@ -142,9 +138,7 @@ export type AppsDomainMapping = Resource<
  * @resource
  * @category AppEngine
  */
-export const AppsDomainMapping = Resource<AppsDomainMapping>(
-  "GCP.AppEngine.AppsDomainMapping",
-);
+export const AppsDomainMapping = Resource<AppsDomainMapping>("GCP.AppEngine.AppsDomainMapping");
 
 export class AppsDomainMappingNotResolved extends Data.TaggedError(
   "GCP.AppEngine.AppsDomainMappingNotResolved",
@@ -152,11 +146,7 @@ export class AppsDomainMappingNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  mapping: appengine.DomainMapping,
-  appsId: string,
-  project: string,
-) => {
+const toAttrs = (mapping: appengine.DomainMapping, appsId: string, project: string) => {
   const parsed = parseDomainMappingName(mapping.name ?? "");
   const domain = mapping.id ?? parsed.domain;
   return {
@@ -166,8 +156,7 @@ const toAttrs = (
     project,
     sslManagementType: mapping.sslSettings?.sslManagementType,
     certificateId: mapping.sslSettings?.certificateId,
-    pendingManagedCertificateId:
-      mapping.sslSettings?.pendingManagedCertificateId,
+    pendingManagedCertificateId: mapping.sslSettings?.pendingManagedCertificateId,
     resourceRecords: (mapping.resourceRecords ?? []).map((record) => ({
       type: record.type,
       name: record.name,
@@ -199,10 +188,8 @@ const desiredSsl = (news: AppsDomainMappingProps) => {
   } satisfies appengine.SslSettings;
 };
 
-const mappingOwned = (
-  mapping: appengine.DomainMapping,
-  ownedIds: ReadonlySet<string>,
-) => domainIsOwned(mapping.id, ownedIds, mapping);
+const mappingOwned = (mapping: appengine.DomainMapping, ownedIds: ReadonlySet<string>) =>
+  domainIsOwned(mapping.id, ownedIds, mapping);
 
 export const AppsDomainMappingProvider = () =>
   Provider.succeed(AppsDomainMapping, {
@@ -212,11 +199,7 @@ export const AppsDomainMappingProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousApp = olds?.appsId ?? output?.appsId;
       const nextApp = news.appsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousDomain = olds?.domain ?? output?.domain;
@@ -233,18 +216,14 @@ export const AppsDomainMappingProvider = () =>
       const existing = yield* getByDomain(appsId, domain);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, appsId, env.project);
-      const ownedIds = ownedCertificateIds(
-        yield* listAuthorizedCertificates(appsId),
-      );
+      const ownedIds = ownedCertificateIds(yield* listAuthorizedCertificates(appsId));
       return mappingOwned(existing, ownedIds) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const ownedIds = ownedCertificateIds(
-          yield* listAuthorizedCertificates(env.project),
-        );
+        const ownedIds = ownedCertificateIds(yield* listAuthorizedCertificates(env.project));
         const mappings = yield* listDomainMappings(env.project);
         return mappings
           .filter((mapping) => mappingOwned(mapping, ownedIds))
@@ -300,17 +279,9 @@ export const AppsDomainMappingProvider = () =>
       }
 
       const observedSsl = current.sslSettings;
-      const typeChanged = !sameText(
-        observedSsl?.sslManagementType,
-        sslSettings.sslManagementType,
-      );
-      const certChanged = !sameText(
-        observedSsl?.certificateId,
-        sslSettings.certificateId,
-      );
-      const updateMask = updateMaskOf(
-        typeChanged || certChanged ? "sslSettings" : undefined,
-      );
+      const typeChanged = !sameText(observedSsl?.sslManagementType, sslSettings.sslManagementType);
+      const certChanged = !sameText(observedSsl?.certificateId, sslSettings.certificateId);
+      const updateMask = updateMaskOf(typeChanged || certChanged ? "sslSettings" : undefined);
       if (updateMask.length > 0 && !jsonEqual(observedSsl, sslSettings)) {
         const operation = yield* appengine.patchAppsDomainMappings({
           appsId,

@@ -42,7 +42,6 @@ export interface ExtendLicenseConsumption extends Binding.Service<
     >
   >
 > {}
-export const ExtendLicenseConsumption =
-  Binding.Service<ExtendLicenseConsumption>(
-    "AWS.LicenseManager.ExtendLicenseConsumption",
-  );
+export const ExtendLicenseConsumption = Binding.Service<ExtendLicenseConsumption>(
+  "AWS.LicenseManager.ExtendLicenseConsumption",
+);

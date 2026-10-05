@@ -62,9 +62,7 @@ export const makeEmrClusterHttpBinding = <I, A, E, R>(options: {
         request?: Omit<I, "ClusterId" | "JobFlowId" | "TargetResourceArn">,
       ) {
         return yield* op(
-          (inject === "none"
-            ? { ...request }
-            : { ...request, [inject]: yield* Injected }) as I,
+          (inject === "none" ? { ...request } : { ...request, [inject]: yield* Injected }) as I,
         );
       });
     });

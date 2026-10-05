@@ -1,8 +1,4 @@
-import type {
-  Contract,
-  ContractField,
-  ContractModel,
-} from "@prisma/orm-postgres/contract/types";
+import type { Contract, ContractField, ContractModel } from "@prisma/orm-postgres/contract/types";
 import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
 import type { DefaultModelRow } from "@prisma/orm-postgres/orm-client";
 import * as Data from "effect/Data";
@@ -29,16 +25,17 @@ export interface SchemaOptions {
 
 export type ModelSchemas<C extends Contract<SqlStorage>> = {
   readonly [Ns in keyof C["domain"]["namespaces"] & string]: {
-    readonly [
-      M in keyof C["domain"]["namespaces"][Ns]["models"] & string
-    ]: Schema.Codec<DefaultModelRow<C, M, Ns>, unknown>;
+    readonly [M in keyof C["domain"]["namespaces"][Ns]["models"] & string]: Schema.Codec<
+      DefaultModelRow<C, M, Ns>,
+      unknown
+    >;
   };
 };
 
-const builtin = (
-  schema: Schema.Codec<unknown, unknown>,
-  expression: string,
-): CodecSchema => ({ schema, expression });
+const builtin = (schema: Schema.Codec<unknown, unknown>, expression: string): CodecSchema => ({
+  schema,
+  expression,
+});
 const text = builtin(Schema.String, "Schema.String");
 const int = builtin(Schema.Int, "Schema.Int");
 const float = builtin(Schema.Number, "Schema.Number");
@@ -98,22 +95,16 @@ function fieldSchema(
     throw new SchemaError({ field: name, message: `${name}: ${message}` });
   };
   if (field.type.kind !== "scalar")
-    return fail(
-      `unsupported ${field.type.kind} field; use an explicit application schema`,
-    );
+    return fail(`unsupported ${field.type.kind} field; use an explicit application schema`);
   const codec = field.type.codecId;
   let value: CodecSchema | undefined =
-    options.codecs && Object.hasOwn(options.codecs, codec)
-      ? options.codecs[codec]
-      : undefined;
+    options.codecs && Object.hasOwn(options.codecs, codec) ? options.codecs[codec] : undefined;
   if (!value && field.valueSet) {
     const ref = field.valueSet;
     if (ref.spaceId || ref.entityKind !== "enum")
       return fail("external value sets require an explicit codec mapping");
-    const enumeration =
-      contract.domain.namespaces[ref.namespaceId]?.enum?.[ref.entityName];
-    if (!enumeration)
-      return fail(`enum ${ref.namespaceId}.${ref.entityName} is missing`);
+    const enumeration = contract.domain.namespaces[ref.namespaceId]?.enum?.[ref.entityName];
+    if (!enumeration) return fail(`enum ${ref.namespaceId}.${ref.entityName} is missing`);
     const literals = enumeration.members.map((member) => member.value);
     if (
       !literals.every(
@@ -123,14 +114,9 @@ function fieldSchema(
           typeof literal === "boolean",
       )
     ) {
-      return fail(
-        "non-primitive enum values require an explicit codec mapping",
-      );
+      return fail("non-primitive enum values require an explicit codec mapping");
     }
-    value = builtin(
-      Schema.Literals(literals),
-      `Schema.Literals(${JSON.stringify(literals)})`,
-    );
+    value = builtin(Schema.Literals(literals), `Schema.Literals(${JSON.stringify(literals)})`);
   }
   value ??= Object.hasOwn(codecs, codec) ? codecs[codec] : undefined;
   if (!value)
@@ -180,17 +166,10 @@ export function makeSchemas<C extends Contract<SqlStorage>>(
           model,
           Schema.Struct(
             Object.fromEntries(
-              Object.entries(rowFields(definition, `${ns}.${model}`)).map(
-                ([name, field]) => [
-                  name,
-                  fieldSchema(
-                    contract,
-                    field,
-                    `${ns}.${model}.${name}`,
-                    options,
-                  ).schema,
-                ],
-              ),
+              Object.entries(rowFields(definition, `${ns}.${model}`)).map(([name, field]) => [
+                name,
+                fieldSchema(contract, field, `${ns}.${model}.${name}`, options).schema,
+              ]),
             ),
           ),
         ]),
@@ -203,10 +182,7 @@ const propertyKey = (name: string) =>
   name === "__proto__" ? '["__proto__"]' : JSON.stringify(name);
 
 /** Emit a standalone module importing only Effect and explicit custom mappings. */
-export function emitSchemas(
-  contract: Contract<SqlStorage>,
-  options: SchemaOptions = {},
-): string {
+export function emitSchemas(contract: Contract<SqlStorage>, options: SchemaOptions = {}): string {
   const imports = new Set<string>();
   const namespaces = Object.entries(contract.domain.namespaces)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -217,14 +193,8 @@ export function emitSchemas(
           const fields = Object.entries(rowFields(definition, `${ns}.${model}`))
             .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
             .map(([name, field]) => {
-              const mapped = fieldSchema(
-                contract,
-                field,
-                `${ns}.${model}.${name}`,
-                options,
-              );
-              for (const statement of mapped.imports ?? [])
-                imports.add(statement);
+              const mapped = fieldSchema(contract, field, `${ns}.${model}.${name}`, options);
+              for (const statement of mapped.imports ?? []) imports.add(statement);
               return `      ${propertyKey(name)}: ${mapped.expression},`;
             });
           return `    ${propertyKey(model)}: Schema.Struct({\n${fields.join("\n")}\n    }),`;

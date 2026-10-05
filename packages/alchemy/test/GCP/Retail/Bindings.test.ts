@@ -1,16 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as retail from "@distilled.cloud/gcp/retail_v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import RetailBindingsHost, {
-  retailEnabled,
-  Serving,
-  Shirt,
-} from "./fixtures/bindings-host.ts";
+import RetailBindingsHost, { retailEnabled, Serving, Shirt } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -27,13 +23,9 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({ role: binding.role, condition: binding.condition }));
-  expect(roles).toEqual([
-    { role: "roles/retail.viewer", condition: undefined },
-  ]);
+  expect(roles).toEqual([{ role: "roles/retail.viewer", condition: undefined }]);
 });
 
 describe.skipIf(!dockerAvailable || !retailEnabled)(
@@ -71,11 +63,10 @@ describe.skipIf(!dockerAvailable || !retailEnabled)(
         "searches the catalog as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const searched =
-              yield* expectProbe<retail.GoogleCloudRetailV2SearchResponse>(
-                baseUrl,
-                "search",
-              );
+            const searched = yield* expectProbe<retail.GoogleCloudRetailV2SearchResponse>(
+              baseUrl,
+              "search",
+            );
             expect(searched.attributionToken).toEqual(expect.any(String));
             yield* expectProjectGrants;
           }),
@@ -91,11 +82,10 @@ describe.skipIf(!dockerAvailable || !retailEnabled)(
         "validates a prediction request as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const predicted =
-              yield* expectProbe<retail.GoogleCloudRetailV2PredictResponse>(
-                baseUrl,
-                "predict",
-              );
+            const predicted = yield* expectProbe<retail.GoogleCloudRetailV2PredictResponse>(
+              baseUrl,
+              "predict",
+            );
             expect(predicted.validateOnly).toEqual(true);
             yield* expectProjectGrants;
           }),

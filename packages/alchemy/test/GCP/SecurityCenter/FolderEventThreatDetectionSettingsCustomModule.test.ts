@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const configV1 = {
   metadata: {
@@ -88,43 +85,34 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule(
-            "BadIp",
-            {
-              folder,
-              type: "CONFIGURABLE_BAD_IP",
-              config: configV1,
-              description: "test bad ip",
-            },
-          );
+          return yield* GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule("BadIp", {
+            folder,
+            type: "CONFIGURABLE_BAD_IP",
+            config: configV1,
+            description: "test bad ip",
+          });
         }),
       );
 
       expect(created.moduleId).toEqual(expect.any(String));
       expect(created.folder).toEqual(folder);
-      expect(created.name).toContain(
-        `${folder}/eventThreatDetectionSettings/customModules/`,
-      );
+      expect(created.name).toContain(`${folder}/eventThreatDetectionSettings/customModules/`);
       expect(created.description).toEqual("test bad ip");
 
-      const fetched =
-        yield* scc.getFoldersEventThreatDetectionSettingsCustomModules({
-          name: created.name,
-        });
+      const fetched = yield* scc.getFoldersEventThreatDetectionSettingsCustomModules({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule(
-            "BadIp",
-            {
-              folder,
-              type: "CONFIGURABLE_BAD_IP",
-              config: configV2,
-              description: "updated bad ip",
-            },
-          );
+          return yield* GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule("BadIp", {
+            folder,
+            type: "CONFIGURABLE_BAD_IP",
+            config: configV2,
+            description: "updated bad ip",
+          });
         }),
       );
 

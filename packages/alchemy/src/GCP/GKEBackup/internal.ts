@@ -6,35 +6,24 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.GKEBackup.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.GKEBackup.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.GKEBackup.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.GKEBackup.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.GKEBackup.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.GKEBackup.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.GKEBackup.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.GKEBackup.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -59,10 +48,8 @@ export const rfc1035 = (name: string, fallback = "gkebackup"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -86,26 +73,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -129,11 +106,7 @@ export const projectName = (value: string | undefined, project: string) => {
   return `projects/${next}`;
 };
 
-export const clusterName = (
-  value: string,
-  project: string,
-  location: string,
-) => {
+export const clusterName = (value: string, project: string, location: string) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${location}/clusters/${value}`;
 };
@@ -142,9 +115,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -167,13 +139,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -329,13 +298,9 @@ const OPERATION_BUDGET = "30 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => gkebackup.getProjectsLocationsOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => gkebackup.getProjectsLocationsOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -350,8 +315,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

@@ -108,10 +108,9 @@ export type DatasetsConsentStoresUserDataMapping = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsConsentStoresUserDataMapping =
-  Resource<DatasetsConsentStoresUserDataMapping>(
-    "GCP.Healthcare.DatasetsConsentStoresUserDataMapping",
-  );
+export const DatasetsConsentStoresUserDataMapping = Resource<DatasetsConsentStoresUserDataMapping>(
+  "GCP.Healthcare.DatasetsConsentStoresUserDataMapping",
+);
 
 export class DatasetsConsentStoresUserDataMappingNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresUserDataMappingNotResolved",
@@ -133,11 +132,7 @@ const storeOf = (
   return `${datasetName}/consentStores/${consentStore}`;
 };
 
-const toAttrs = (
-  mapping: healthcare.UserDataMapping,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (mapping: healthcare.UserDataMapping, project: string, region: string) => {
   const name = mapping.name ?? "";
   const parsed = parseResourceName(name, "userDataMappings", region);
   return {
@@ -163,13 +158,7 @@ const getByName = (name: string) =>
 
 export const DatasetsConsentStoresUserDataMappingProvider = () =>
   Provider.succeed(DatasetsConsentStoresUserDataMapping, {
-    stables: [
-      "name",
-      "userDataMappingId",
-      "consentStore",
-      "project",
-      "location",
-    ],
+    stables: ["name", "userDataMappingId", "consentStore", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -203,12 +192,10 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
           stores,
           (store) =>
             collectPages(
-              healthcare.listProjectsLocationsDatasetsConsentStoresUserDataMappings.pages(
-                {
-                  parent: store.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              healthcare.listProjectsLocationsDatasetsConsentStoresUserDataMappings.pages({
+                parent: store.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.userDataMappings,
             ),
           { concurrency: 4 },
@@ -221,16 +208,8 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const consentStore = storeOf(
-        news.consentStore,
-        env.project,
-        location,
-        news.dataset,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const consentStore = storeOf(news.consentStore, env.project, location, news.dataset);
       const ownership = yield* createInternalLabels(id);
       const dataId = encodeDataId(ownership, news.dataId);
 
@@ -238,16 +217,14 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
 
       if (current === undefined) {
         current = yield* retryTransient(
-          healthcare.createProjectsLocationsDatasetsConsentStoresUserDataMappings(
-            {
-              parent: consentStore,
-              body: {
-                userId: news.userId,
-                dataId,
-                resourceAttributes: news.resourceAttributes,
-              },
+          healthcare.createProjectsLocationsDatasetsConsentStoresUserDataMappings({
+            parent: consentStore,
+            body: {
+              userId: news.userId,
+              dataId,
+              resourceAttributes: news.resourceAttributes,
             },
-          ),
+          }),
         );
       }
 
@@ -260,28 +237,23 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
       const currentName = current.name ?? output?.name ?? "";
       const userChanged = !sameText(current.userId, news.userId);
       const dataChanged = !sameText(current.dataId, dataId);
-      const attrsChanged = !sameJson(
-        current.resourceAttributes,
-        news.resourceAttributes,
-      );
+      const attrsChanged = !sameJson(current.resourceAttributes, news.resourceAttributes);
 
       if (userChanged || dataChanged || attrsChanged) {
         current = yield* retryTransient(
-          healthcare.patchProjectsLocationsDatasetsConsentStoresUserDataMappings(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                userChanged ? "userId" : undefined,
-                dataChanged ? "dataId" : undefined,
-                attrsChanged ? "resourceAttributes" : undefined,
-              ),
-              body: {
-                userId: news.userId,
-                dataId,
-                resourceAttributes: news.resourceAttributes,
-              },
+          healthcare.patchProjectsLocationsDatasetsConsentStoresUserDataMappings({
+            name: currentName,
+            updateMask: updateMaskOf(
+              userChanged ? "userId" : undefined,
+              dataChanged ? "dataId" : undefined,
+              attrsChanged ? "resourceAttributes" : undefined,
+            ),
+            body: {
+              userId: news.userId,
+              dataId,
+              resourceAttributes: news.resourceAttributes,
             },
-          ),
+          }),
         );
       }
 
@@ -291,11 +263,9 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* retryTransient(
-        healthcare.deleteProjectsLocationsDatasetsConsentStoresUserDataMappings(
-          {
-            name: output.name,
-          },
-        ),
+        healthcare.deleteProjectsLocationsDatasetsConsentStoresUserDataMappings({
+          name: output.name,
+        }),
       ).pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

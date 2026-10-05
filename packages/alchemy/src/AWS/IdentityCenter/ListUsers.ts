@@ -31,12 +31,7 @@ export interface ListUsers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<identitystore.ListUsersRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.ListUsersResponse,
-      identitystore.ListUsersError
-    >
+    ) => Effect.Effect<identitystore.ListUsersResponse, identitystore.ListUsersError>
   >
 > {}
-export const ListUsers = Binding.Service<ListUsers>(
-  "AWS.IdentityCenter.ListUsers",
-);
+export const ListUsers = Binding.Service<ListUsers>("AWS.IdentityCenter.ListUsers");

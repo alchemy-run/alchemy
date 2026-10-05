@@ -1,22 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle =
-  !!process.env.GCP_TEST_COMPUTE_INTERCONNECT && !process.env.FAST;
+const runLifecycle = !!process.env.GCP_TEST_COMPUTE_INTERCONNECT && !process.env.FAST;
 
 const region = "us-central1";
 
@@ -107,9 +103,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(created.attachment.interconnectAttachmentName).toEqual(
-        expect.any(String),
-      );
+      expect(created.attachment.interconnectAttachmentName).toEqual(expect.any(String));
       expect(created.attachment.region).toEqual(region);
       expect(created.attachment.description).toEqual("partner vlan");
 
@@ -118,9 +112,7 @@ test.provider.skipIf(!runLifecycle)(
         region,
         interconnectAttachment: created.attachment.interconnectAttachmentName,
       });
-      expect(fetched.name).toEqual(
-        created.attachment.interconnectAttachmentName,
-      );
+      expect(fetched.name).toEqual(created.attachment.interconnectAttachmentName);
       expect(fetched.description).toContain("[alchemy ");
 
       const updated = yield* stack.deploy(
@@ -132,8 +124,7 @@ test.provider.skipIf(!runLifecycle)(
             description: "interconnect router",
           });
           return yield* GCP.Compute.InterconnectAttachment("Vlan", {
-            interconnectAttachmentName:
-              created.attachment.interconnectAttachmentName,
+            interconnectAttachmentName: created.attachment.interconnectAttachmentName,
             region,
             router: router.routerName,
             type: "PARTNER",
@@ -145,9 +136,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("updated partner vlan");
 
       yield* stack.destroy();
-      const gone = yield* waitUntilGone(
-        created.attachment.interconnectAttachmentName,
-      );
+      const gone = yield* waitUntilGone(created.attachment.interconnectAttachmentName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },

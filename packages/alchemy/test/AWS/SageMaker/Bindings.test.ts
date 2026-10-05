@@ -1,23 +1,20 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SageMakerTestFunctionLive, { SageMakerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SageMakerBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -35,33 +32,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const postJson = (path: string, body: unknown) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe(
   "SageMaker FeatureStore Bindings",
@@ -91,16 +79,12 @@ describe(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
         functionArn = attrs.functionArn;
 
-        yield* Effect.logInfo(
-          `SageMaker bindings: probing readiness at ${baseUrl}/health`,
-        );
+        yield* Effect.logInfo(`SageMaker bindings: probing readiness at ${baseUrl}/health`);
         yield* HttpClient.get(`${baseUrl}/health`).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -133,10 +117,9 @@ describe(
         "writes a record to the online store",
         () =>
           Effect.gen(function* () {
-            const body = (yield* postJson("/put-record", {
-              userId: "user-put-1",
-              clicks: 7,
-            })) as { success: boolean };
+            const body = (yield* postJson("/put-record", { userId: "user-put-1", clicks: 7 })) as {
+              success: boolean;
+            };
             expect(body.success).toBe(true);
           }),
         { timeout: 60_000 },
@@ -148,14 +131,9 @@ describe(
         "reads back a written record",
         () =>
           Effect.gen(function* () {
-            yield* postJson("/put-record", {
-              userId: "user-roundtrip-1",
-              clicks: 42,
-            });
+            yield* postJson("/put-record", { userId: "user-roundtrip-1", clicks: 42 });
 
-            const body = (yield* getJson(
-              "/get-record?userId=user-roundtrip-1",
-            )) as {
+            const body = (yield* getJson("/get-record?userId=user-roundtrip-1")) as {
               record: { FeatureName?: string; ValueAsString?: string }[];
             };
             const byName = Object.fromEntries(
@@ -171,9 +149,9 @@ describe(
         "returns an empty record for an unknown identifier",
         () =>
           Effect.gen(function* () {
-            const body = (yield* getJson(
-              "/get-record?userId=user-never-written",
-            )) as { record: unknown[] };
+            const body = (yield* getJson("/get-record?userId=user-never-written")) as {
+              record: unknown[];
+            };
             expect(body.record).toEqual([]);
           }),
         { timeout: 60_000 },
@@ -185,21 +163,15 @@ describe(
         "soft-deletes a written record (GetRecord no longer returns it)",
         () =>
           Effect.gen(function* () {
-            yield* postJson("/put-record", {
-              userId: "user-delete-1",
-              clicks: 1,
-            });
+            yield* postJson("/put-record", { userId: "user-delete-1", clicks: 1 });
             yield* postJson("/delete-record", { userId: "user-delete-1" });
 
             // Online-store deletes are read-after-write consistent in practice;
             // allow a short bounded window regardless.
-            const body = yield* getJson(
-              "/get-record?userId=user-delete-1",
-            ).pipe(
+            const body = yield* getJson("/get-record?userId=user-delete-1").pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                until: (b): boolean =>
-                  (b as { record: unknown[] }).record.length === 0,
+                until: (b): boolean => (b as { record: unknown[] }).record.length === 0,
                 times: 8,
               }),
             );
@@ -236,9 +208,7 @@ describe(
             const byUser = Object.fromEntries(
               read.records.map((r) => [
                 r.userId,
-                Object.fromEntries(
-                  r.record.map((f) => [f.FeatureName, f.ValueAsString]),
-                ),
+                Object.fromEntries(r.record.map((f) => [f.FeatureName, f.ValueAsString])),
               ]),
             );
             expect(byUser["user-batch-1"]?.clicks).toBe("11");
@@ -254,47 +224,34 @@ describe(
         "lists the identifiers of stored records",
         () =>
           Effect.gen(function* () {
-            yield* postJson("/put-record", {
-              userId: "user-list-1",
-              clicks: 3,
-            });
+            yield* postJson("/put-record", { userId: "user-list-1", clicks: 3 });
 
             const body = yield* getJson("/list-records").pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (b): boolean =>
-                  (b as { identifiers: string[] }).identifiers.includes(
-                    "user-list-1",
-                  ),
+                  (b as { identifiers: string[] }).identifiers.includes("user-list-1"),
                 times: 8,
               }),
             );
-            expect((body as { identifiers: string[] }).identifiers).toContain(
-              "user-list-1",
-            );
+            expect((body as { identifiers: string[] }).identifiers).toContain("user-list-1");
           }),
         { timeout: 60_000 },
       );
     });
 
-    describe(
-      "consumeSageMakerEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          () =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeSageMakerEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeSageMakerEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", () =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeSageMakerEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

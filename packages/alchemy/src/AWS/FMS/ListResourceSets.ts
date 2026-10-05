@@ -35,6 +35,4 @@ export interface ListResourceSets extends Binding.Service<
   >
 > {}
 
-export const ListResourceSets = Binding.Service<ListResourceSets>(
-  "AWS.FMS.ListResourceSets",
-);
+export const ListResourceSets = Binding.Service<ListResourceSets>("AWS.FMS.ListResourceSets");

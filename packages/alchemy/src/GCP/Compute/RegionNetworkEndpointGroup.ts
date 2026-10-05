@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,12 +10,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_NETWORK_ENDPOINT_TYPE = "SERVERLESS";
 const MAX_NAME_LENGTH = 63;
@@ -334,9 +330,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const inferType = (props: RegionNetworkEndpointGroupProps): string => {
   if (props.networkEndpointType) return props.networkEndpointType;
@@ -387,11 +381,7 @@ const toCloudRun = (
   value: compute.NetworkEndpointGroupCloudRun | undefined,
 ): RegionNetworkEndpointGroupCloudRun | undefined => {
   if (value === undefined) return undefined;
-  if (
-    value.service === undefined &&
-    value.tag === undefined &&
-    value.urlMask === undefined
-  ) {
+  if (value.service === undefined && value.tag === undefined && value.urlMask === undefined) {
     return undefined;
   }
   return {
@@ -405,11 +395,7 @@ const toAppEngine = (
   value: compute.NetworkEndpointGroupAppEngine | undefined,
 ): RegionNetworkEndpointGroupAppEngine | undefined => {
   if (value === undefined) return undefined;
-  if (
-    value.service === undefined &&
-    value.version === undefined &&
-    value.urlMask === undefined
-  ) {
+  if (value.service === undefined && value.version === undefined && value.urlMask === undefined) {
     return undefined;
   }
   return {
@@ -458,8 +444,7 @@ const toBody = (
     networkEndpointType,
     defaultPort: props.defaultPort,
     annotations:
-      props.annotations !== undefined &&
-      Object.keys(props.annotations).length > 0
+      props.annotations !== undefined && Object.keys(props.annotations).length > 0
         ? props.annotations
         : undefined,
     cloudRun: props.cloudRun,
@@ -507,11 +492,7 @@ const toAttrs = (
   };
 };
 
-const getByName = (
-  project: string,
-  region: string,
-  networkEndpointGroup: string,
-) =>
+const getByName = (project: string, region: string, networkEndpointGroup: string) =>
   compute
     .getRegionNetworkEndpointGroups({
       project,
@@ -520,11 +501,7 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const requireGroup = (
-  project: string,
-  region: string,
-  networkEndpointGroupName: string,
-) =>
+const requireGroup = (project: string, region: string, networkEndpointGroupName: string) =>
   getByName(project, region, networkEndpointGroupName).pipe(
     Effect.flatMap((group) =>
       group
@@ -537,18 +514,13 @@ const requireGroup = (
           ),
     ),
     Effect.retry({
-      while: (e) =>
-        e._tag === "GCP.Compute.RegionNetworkEndpointGroupNotResolved",
+      while: (e) => e._tag === "GCP.Compute.RegionNetworkEndpointGroupNotResolved",
       schedule: Schedule.spaced("1 second"),
       times: 8,
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  networkEndpointGroupName: string,
-) =>
+const waitUntilGone = (project: string, region: string, networkEndpointGroupName: string) =>
   getByName(project, region, networkEndpointGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -590,24 +562,21 @@ const immutableChanged = (
 
   if (
     news.network !== undefined &&
-    resourceRefOf(news.network) !==
-      resourceRefOf(olds?.network ?? output?.network)
+    resourceRefOf(news.network) !== resourceRefOf(olds?.network ?? output?.network)
   ) {
     return true;
   }
 
   if (
     news.subnetwork !== undefined &&
-    resourceRefOf(news.subnetwork) !==
-      resourceRefOf(olds?.subnetwork ?? output?.subnetwork)
+    resourceRefOf(news.subnetwork) !== resourceRefOf(olds?.subnetwork ?? output?.subnetwork)
   ) {
     return true;
   }
 
   if (
     news.pscTargetService !== undefined &&
-    news.pscTargetService !==
-      (olds?.pscTargetService ?? output?.pscTargetService)
+    news.pscTargetService !== (olds?.pscTargetService ?? output?.pscTargetService)
   ) {
     return true;
   }
@@ -633,17 +602,13 @@ const immutableChanged = (
   }
   if (
     news.cloudFunction !== undefined &&
-    !subsetEqual(
-      olds?.cloudFunction ?? output?.cloudFunction,
-      news.cloudFunction,
-    )
+    !subsetEqual(olds?.cloudFunction ?? output?.cloudFunction, news.cloudFunction)
   ) {
     return true;
   }
   if (
     news.pscData?.producerPort !== undefined &&
-    news.pscData.producerPort !==
-      (olds?.pscData?.producerPort ?? output?.pscData?.producerPort)
+    news.pscData.producerPort !== (olds?.pscData?.producerPort ?? output?.pscData?.producerPort)
   ) {
     return true;
   }
@@ -665,22 +630,13 @@ export const RegionNetworkEndpointGroupProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds.networkEndpointGroupName ?? output?.networkEndpointGroupName;
+      const previousName = olds.networkEndpointGroupName ?? output?.networkEndpointGroupName;
       const nextName = news.networkEndpointGroupName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       if (nameChanged || regionChanged) {
@@ -699,15 +655,8 @@ export const RegionNetworkEndpointGroupProvider = () =>
         olds?.networkEndpointGroupName,
         output?.networkEndpointGroupName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        networkEndpointGroupName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, networkEndpointGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -727,9 +676,7 @@ export const RegionNetworkEndpointGroupProvider = () =>
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.networkEndpointGroups ?? [])
-              .filter(
-                (item) => item.region !== undefined && item.zone === undefined,
-              )
+              .filter((item) => item.region !== undefined && item.zone === undefined)
               .filter((item) => hasOwnershipMarker(item.description))
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -745,19 +692,9 @@ export const RegionNetworkEndpointGroupProvider = () =>
       );
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
-      const desired = toBody(
-        env.project,
-        region,
-        networkEndpointGroupName,
-        news,
-        ownership,
-      );
+      const desired = toBody(env.project, region, networkEndpointGroupName, news, ownership);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        networkEndpointGroupName,
-      );
+      let current = yield* getByName(env.project, region, networkEndpointGroupName);
 
       if (current === undefined) {
         const created = yield* compute
@@ -771,9 +708,7 @@ export const RegionNetworkEndpointGroupProvider = () =>
               waitRegionOperation(env.project, region, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }).pipe(
-                Effect.flatMap(() =>
-                  requireGroup(env.project, region, networkEndpointGroupName),
-                ),
+                Effect.flatMap(() => requireGroup(env.project, region, networkEndpointGroupName)),
               ),
             ),
             Effect.catchTag("Conflict", () =>

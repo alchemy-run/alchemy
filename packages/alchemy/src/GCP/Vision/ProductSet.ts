@@ -120,17 +120,11 @@ export type ProductSet = Resource<
  */
 export const ProductSet = Resource<ProductSet>("GCP.Vision.ProductSet");
 
-export class ProductSetNotResolved extends Data.TaggedError(
-  "GCP.Vision.ProductSetNotResolved",
-)<{
+export class ProductSetNotResolved extends Data.TaggedError("GCP.Vision.ProductSetNotResolved")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  set: vision.ProductSet,
-  project: string,
-  products: string[],
-) => {
+const toAttrs = (set: vision.ProductSet, project: string, products: string[]) => {
   const name = set.name ?? "";
   const parsed = parseResourceName(name, project, "productSets");
   return {
@@ -186,11 +180,7 @@ export const ProductSetProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        productSetNameOf(
-          env.project,
-          location,
-          olds?.productSetId ?? output?.productSetId ?? "",
-        );
+        productSetNameOf(env.project, location, olds?.productSetId ?? output?.productSetId ?? "");
       const existing = yield* getProductSet(name);
       if (existing === undefined) return undefined;
       const products = yield* productsOf(existing.name ?? name);
@@ -202,14 +192,9 @@ export const ProductSetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const productSetId = yield* toResourceId(
-        id,
-        news.productSetId,
-        output?.productSetId,
-      );
+      const productSetId = yield* toResourceId(id, news.productSetId, output?.productSetId);
       const displayName = news.displayName ?? productSetId;
-      const name =
-        output?.name ?? productSetNameOf(env.project, location, productSetId);
+      const name = output?.name ?? productSetNameOf(env.project, location, productSetId);
 
       let current = yield* getProductSet(name);
 
@@ -239,12 +224,7 @@ export const ProductSetProvider = () =>
         });
       }
 
-      yield* syncProductSetMembership(
-        currentName,
-        env.project,
-        location,
-        news.products,
-      );
+      yield* syncProductSetMembership(currentName, env.project, location, news.products);
       const products = yield* productsOf(currentName);
       return toAttrs(current, env.project, products);
     }),

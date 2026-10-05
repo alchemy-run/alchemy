@@ -154,9 +154,7 @@ export type Firewallpolicy = Resource<
  * @resource
  * @category RecaptchaEnterprise
  */
-export const Firewallpolicy = Resource<Firewallpolicy>(
-  "GCP.RecaptchaEnterprise.Firewallpolicy",
-);
+export const Firewallpolicy = Resource<Firewallpolicy>("GCP.RecaptchaEnterprise.Firewallpolicy");
 
 export class FirewallpolicyNotResolved extends Data.TaggedError(
   "GCP.RecaptchaEnterprise.FirewallpolicyNotResolved",
@@ -169,9 +167,7 @@ const DEFAULT_ACTIONS: FirewallAction[] = [{ allow: {} }];
 const emptyAction = (value: unknown) => (value === undefined ? undefined : {});
 
 const toAction = (
-  action:
-    | recaptchaenterprise.GoogleCloudRecaptchaenterpriseV1FirewallAction
-    | FirewallAction,
+  action: recaptchaenterprise.GoogleCloudRecaptchaenterpriseV1FirewallAction | FirewallAction,
 ): FirewallAction => ({
   allow: emptyAction(action.allow),
   block: emptyAction(action.block),
@@ -184,10 +180,7 @@ const toAction = (
           key: action.setHeader.key,
           value: action.setHeader.value,
         },
-  substitute:
-    action.substitute === undefined
-      ? undefined
-      : { path: action.substitute.path },
+  substitute: action.substitute === undefined ? undefined : { path: action.substitute.path },
 });
 
 const compactAction = (action: FirewallAction): FirewallAction => {
@@ -299,9 +292,7 @@ export const FirewallpolicyProvider = () =>
             parent: `projects/${env.project}`,
             body: toBody(path, description, condition, actions),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getFirewallPolicy(lookupName)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getFirewallPolicy(lookupName)));
         current = created ?? undefined;
       }
 
@@ -316,8 +307,7 @@ export const FirewallpolicyProvider = () =>
       const descriptionChanged = !sameText(current.description, description);
       const conditionChanged = !sameText(current.condition, condition);
       const actionsChanged =
-        actionsFingerprint(toActions(current.actions)) !==
-        actionsFingerprint(actions);
+        actionsFingerprint(toActions(current.actions)) !== actionsFingerprint(actions);
 
       const updateMask = updateMaskOf(
         pathChanged ? "path" : undefined,

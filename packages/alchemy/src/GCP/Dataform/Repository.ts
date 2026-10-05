@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -193,25 +188,17 @@ export type Repository = Resource<
  */
 export const Repository = Resource<Repository>("GCP.Dataform.Repository");
 
-export class RepositoryNotResolved extends Data.TaggedError(
-  "GCP.Dataform.RepositoryNotResolved",
-)<{
+export class RepositoryNotResolved extends Data.TaggedError("GCP.Dataform.RepositoryNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  repositoryId: string,
-) => `${locationParent(project, location)}/repositories/${repositoryId}`;
+const resourceName = (project: string, location: string, repositoryId: string) =>
+  `${locationParent(project, location)}/repositories/${repositoryId}`;
 
-const gitOf = (
-  settings: GitRemoteSettings | undefined,
-): dataform.GitRemoteSettings | undefined => {
+const gitOf = (settings: GitRemoteSettings | undefined): dataform.GitRemoteSettings | undefined => {
   if (settings === undefined) return undefined;
   const ssh =
-    settings.hostPublicKey !== undefined ||
-    settings.userPrivateKeySecretVersion !== undefined
+    settings.hostPublicKey !== undefined || settings.userPrivateKeySecretVersion !== undefined
       ? {
           hostPublicKey: settings.hostPublicKey,
           userPrivateKeySecretVersion: settings.userPrivateKeySecretVersion,
@@ -226,11 +213,7 @@ const gitOf = (
   };
 };
 
-const toAttrs = (
-  repo: dataform.Repository,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (repo: dataform.Repository, project: string, region: string) => {
   const name = repo.name ?? "";
   const parsed = parseResourceName(name, "repositories", region);
   return {
@@ -244,8 +227,7 @@ const toAttrs = (
     teamFolderName: repo.teamFolderName,
     gitRemoteUrl: repo.gitRemoteSettings?.url,
     gitDefaultBranch:
-      repo.gitRemoteSettings?.effectiveDefaultBranch ??
-      repo.gitRemoteSettings?.defaultBranch,
+      repo.gitRemoteSettings?.effectiveDefaultBranch ?? repo.gitRemoteSettings?.defaultBranch,
     serviceAccount: repo.serviceAccount,
     kmsKeyName: repo.kmsKeyName,
     createTime: repo.createTime,
@@ -261,14 +243,7 @@ const getByName = (name: string) =>
 
 export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
-    stables: [
-      "name",
-      "repositoryId",
-      "project",
-      "location",
-      "kmsKeyName",
-      "createTime",
-    ],
+    stables: ["name", "repositoryId", "project", "location", "kmsKeyName", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -287,23 +262,13 @@ export const RepositoryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const repositoryId = yield* toPhysicalId(
-        id,
-        olds?.repositoryId,
-        output?.repositoryId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, repositoryId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const repositoryId = yield* toPhysicalId(id, olds?.repositoryId, output?.repositoryId);
+      const name = output?.name ?? resourceName(env.project, location, repositoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -317,15 +282,8 @@ export const RepositoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repositoryId = yield* toPhysicalId(
-        id,
-        news.repositoryId,
-        output?.repositoryId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repositoryId = yield* toPhysicalId(id, news.repositoryId, output?.repositoryId);
       const name = resourceName(env.project, location, repositoryId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -337,12 +295,7 @@ export const RepositoryProvider = () =>
         news.containingFolder !== undefined
           ? news.containingFolder.includes("/")
             ? news.containingFolder
-            : expandParent(
-                news.containingFolder,
-                env.project,
-                location,
-                "folders",
-              )
+            : expandParent(news.containingFolder, env.project, location, "folders")
           : undefined;
 
       let current = yield* getByName(output?.name ?? name);
@@ -357,8 +310,7 @@ export const RepositoryProvider = () =>
               labels: desiredLabels,
               containingFolder,
               gitRemoteSettings,
-              npmrcEnvironmentVariablesSecretVersion:
-                news.npmrcEnvironmentVariablesSecretVersion,
+              npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
               serviceAccount: news.serviceAccount,
               workspaceCompilationOverrides: news.workspaceCompilationOverrides,
               kmsKeyName: news.kmsKeyName,
@@ -389,8 +341,7 @@ export const RepositoryProvider = () =>
               authenticationTokenSecretVersion:
                 current.gitRemoteSettings.authenticationTokenSecretVersion,
               gitRepositoryLink: current.gitRemoteSettings.gitRepositoryLink,
-              sshAuthenticationConfig:
-                current.gitRemoteSettings.sshAuthenticationConfig,
+              sshAuthenticationConfig: current.gitRemoteSettings.sshAuthenticationConfig,
             }
           : undefined,
         gitRemoteSettings,
@@ -399,10 +350,7 @@ export const RepositoryProvider = () =>
         current.npmrcEnvironmentVariablesSecretVersion,
         news.npmrcEnvironmentVariablesSecretVersion,
       );
-      const serviceAccountChanged = !sameText(
-        current.serviceAccount,
-        news.serviceAccount,
-      );
+      const serviceAccountChanged = !sameText(current.serviceAccount, news.serviceAccount);
       const overridesChanged = !sameJson(
         current.workspaceCompilationOverrides,
         news.workspaceCompilationOverrides,
@@ -423,9 +371,7 @@ export const RepositoryProvider = () =>
               labelsChanged ? "labels" : undefined,
               displayChanged ? "displayName" : undefined,
               gitChanged ? "gitRemoteSettings" : undefined,
-              npmrcChanged
-                ? "npmrcEnvironmentVariablesSecretVersion"
-                : undefined,
+              npmrcChanged ? "npmrcEnvironmentVariablesSecretVersion" : undefined,
               serviceAccountChanged ? "serviceAccount" : undefined,
               overridesChanged ? "workspaceCompilationOverrides" : undefined,
             ),
@@ -433,8 +379,7 @@ export const RepositoryProvider = () =>
               displayName,
               labels: desiredLabels,
               gitRemoteSettings,
-              npmrcEnvironmentVariablesSecretVersion:
-                news.npmrcEnvironmentVariablesSecretVersion,
+              npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
               serviceAccount: news.serviceAccount,
               workspaceCompilationOverrides: news.workspaceCompilationOverrides,
             },
@@ -474,32 +419,24 @@ export const RepositoryProvider = () =>
           if (name.includes("/workspaces/")) {
             return dataform
               .deleteProjectsLocationsRepositoriesWorkspaces({ name })
-              .pipe(
-                Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-              );
+              .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void));
           }
           if (name.includes("/workflowInvocations/")) {
             return dataform
               .deleteProjectsLocationsRepositoriesWorkflowInvocations({
                 name,
               })
-              .pipe(
-                Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-              );
+              .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void));
           }
           if (name.includes("/workflowConfigs/")) {
             return dataform
               .deleteProjectsLocationsRepositoriesWorkflowConfigs({ name })
-              .pipe(
-                Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-              );
+              .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void));
           }
           if (name.includes("/releaseConfigs/")) {
             return dataform
               .deleteProjectsLocationsRepositoriesReleaseConfigs({ name })
-              .pipe(
-                Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
-              );
+              .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void));
           }
           return Effect.void;
         },

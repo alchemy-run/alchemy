@@ -1,9 +1,9 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
 import { dieOnStore } from "./errors.ts";
 import LinkRoom from "./LinkRoom.ts";
 import { Links, LinksSql } from "./Links.ts";
@@ -57,10 +57,12 @@ export default Cloudflare.Worker(
         // #region fetchEnd
         return yield* api;
         // #endregion fetchEnd
-      }).pipe(Effect.catchTag("LinkNotFound", () => Effect.succeed(HttpServerResponse.empty({ status: 404 })))),
+      }).pipe(
+        Effect.catchTag("LinkNotFound", () =>
+          Effect.succeed(HttpServerResponse.empty({ status: 404 })),
+        ),
+      ),
     };
-  }).pipe(
-    Effect.provide(LinksSql.pipe(Layer.provide(NeonStorage))),
-  ),
+  }).pipe(Effect.provide(LinksSql.pipe(Layer.provide(NeonStorage)))),
 );
 // #endregion show

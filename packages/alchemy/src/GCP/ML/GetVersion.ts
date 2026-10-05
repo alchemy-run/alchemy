@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { ModelsVersion } from "./ModelsVersion.ts";
 
-export interface GetVersionRequest extends Omit<
-  ml.GetProjectsModelsVersionsRequest,
-  "name"
-> {}
+export interface GetVersionRequest extends Omit<ml.GetProjectsModelsVersionsRequest, "name"> {}
 
 /**
  * Runtime binding for AI Platform (legacy ML Engine) `versions.get`.
