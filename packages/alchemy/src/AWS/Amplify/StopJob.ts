@@ -32,9 +32,7 @@ export interface StopJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: StopJobRequest,
-    ) => Effect.Effect<amplify.StopJobResult, amplify.StopJobError>
+    (request: StopJobRequest) => Effect.Effect<amplify.StopJobResult, amplify.StopJobError>
   >
 > {}
 

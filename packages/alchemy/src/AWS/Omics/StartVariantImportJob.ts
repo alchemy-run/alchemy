@@ -38,10 +38,7 @@ export interface StartVariantImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartVariantImportJobRequest,
-    ) => Effect.Effect<
-      omics.StartVariantImportResponse,
-      omics.StartVariantImportJobError
-    >
+    ) => Effect.Effect<omics.StartVariantImportResponse, omics.StartVariantImportJobError>
   >
 > {}
 

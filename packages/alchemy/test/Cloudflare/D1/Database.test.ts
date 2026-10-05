@@ -1,8 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,13 +7,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create and delete database with default props",
@@ -37,10 +34,7 @@ test.provider(
       expect(database.databaseName).toBeDefined();
       expect(database.databaseId).toBeDefined();
 
-      const actualDatabase = yield* d1.getDatabase({
-        accountId,
-        databaseId: database.databaseId,
-      });
+      const actualDatabase = yield* d1.getDatabase({ accountId, databaseId: database.databaseId });
       expect(actualDatabase.uuid).toEqual(database.databaseId);
 
       yield* stack.destroy();
@@ -66,10 +60,7 @@ test.provider(
         }),
       );
 
-      const actualDatabase = yield* d1.getDatabase({
-        accountId,
-        databaseId: database.databaseId,
-      });
+      const actualDatabase = yield* d1.getDatabase({ accountId, databaseId: database.databaseId });
       expect(actualDatabase.uuid).toEqual(database.databaseId);
 
       const updatedDatabase = yield* stack.deploy(
@@ -145,9 +136,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-migrations-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-migrations-" });
 
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
@@ -162,9 +151,7 @@ test.provider(
 
       const database = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("MigrationDatabase", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("MigrationDatabase", { migrations: migrationsDir });
         }),
       );
 
@@ -181,11 +168,7 @@ test.provider(
       expect(tables).toContain("__alchemy_migrations");
 
       // Alchemy's shape: INTEGER ids, name-keyed, hashed.
-      const applied = yield* queryAll<{
-        id: number;
-        name: string;
-        hash: string;
-      }>(
+      const applied = yield* queryAll<{ id: number; name: string; hash: string }>(
         accountId,
         database.databaseId,
         "SELECT id, name, hash FROM __alchemy_migrations ORDER BY id;",
@@ -205,9 +188,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("MigrationDatabase", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("MigrationDatabase", { migrations: migrationsDir });
         }),
       );
       expect(updated.databaseId).toEqual(database.databaseId);
@@ -252,10 +233,7 @@ test.provider(
       const database = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.D1.Database("CustomMigrationsTableDb", {
-            migrations: {
-              dir: migrationsDir,
-              table: "custom_migration_tracking",
-            },
+            migrations: { dir: migrationsDir, table: "custom_migration_tracking" },
           });
         }),
       );
@@ -289,9 +267,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-drizzle-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-drizzle-" });
       const initSql =
         "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);\n--> statement-breakpoint\nCREATE UNIQUE INDEX users_name_unique ON users (name);";
       yield* fs.makeDirectory(path.join(migrationsDir, "20240101000000_init"));
@@ -348,9 +324,7 @@ test.provider(
       );
       const database = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("DrizzleAdoptionDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("DrizzleAdoptionDb", { migrations: migrationsDir });
         }),
       );
       expect(database.databaseId).toEqual(seeded.databaseId);
@@ -363,10 +337,7 @@ test.provider(
         database.databaseId,
         "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
       );
-      expect(applied.map((r) => r.name)).toEqual([
-        "20240101000000_init",
-        "20240102000000_posts",
-      ]);
+      expect(applied.map((r) => r.name)).toEqual(["20240101000000_init", "20240102000000_posts"]);
       expect(applied[0].hash).toBe(initRecord);
       const tables = yield* listTables(accountId, database.databaseId);
       expect(tables).toContain("posts");
@@ -398,9 +369,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-wrangler-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-wrangler-" });
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -441,9 +410,7 @@ test.provider(
       // Phase 2: first Alchemy deploy — converts, applies only 0002.
       const database = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("WranglerAdoptionDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("WranglerAdoptionDb", { migrations: migrationsDir });
         }),
       );
       expect(database.databaseId).toEqual(seeded.databaseId);
@@ -454,10 +421,7 @@ test.provider(
         database.databaseId,
         "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
       );
-      expect(applied.map((r) => r.name)).toEqual([
-        "0001_users.sql",
-        "0002_posts.sql",
-      ]);
+      expect(applied.map((r) => r.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
       expect(applied[0].hash).toMatch(/^[0-9a-f]{64}$/);
       const tables = yield* listTables(accountId, database.databaseId);
       expect(tables).toContain("posts");
@@ -491,9 +455,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-rollforward-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-rollforward-" });
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -508,20 +470,14 @@ test.provider(
       // Phase 1: deploy so the database, tables, and state exist.
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("RollForwardDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("RollForwardDb", { migrations: migrationsDir });
         }),
       );
 
       // Phase 2: rewrite BOTH artifacts to the pre-registry shape.
       // 2a. The physical table: drop the modern one, recreate the old
       // 3-column `id TEXT PK` shape under the old default name.
-      yield* execSql(
-        accountId,
-        deployed.databaseId,
-        "DROP TABLE __alchemy_migrations;",
-      );
+      yield* execSql(accountId, deployed.databaseId, "DROP TABLE __alchemy_migrations;");
       yield* execSql(
         accountId,
         deployed.databaseId,
@@ -547,10 +503,7 @@ test.provider(
           stage: stack.stage,
           fqn: "RollForwardDb",
         });
-        const attr = {
-          ...(row as any).attr,
-          migrationsTable: "d1_migrations",
-        };
+        const attr = { ...(row as any).attr, migrationsTable: "d1_migrations" };
         yield* state.set({
           stack: stack.name,
           stage: stack.stage,
@@ -566,9 +519,7 @@ test.provider(
       );
       const rolled = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("RollForwardDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("RollForwardDb", { migrations: migrationsDir });
         }),
       );
       expect(rolled.databaseId).toEqual(deployed.databaseId);
@@ -741,9 +692,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-legacy-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-legacy-" });
       // History validation is strict (drizzle's own upgrade policy): every
       // recorded row must match a local file, so the two "previously
       // applied" migrations exist in the dir. Their bare CREATE TABLEs
@@ -800,9 +749,7 @@ test.provider(
       // out of order against the frozen history's assumptions).
       const upgraded = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("LegacyMigrationDb", {
-            migrations: migrationsDir,
-          });
+          return yield* Cloudflare.D1.Database("LegacyMigrationDb", { migrations: migrationsDir });
         }),
       );
       expect(upgraded.databaseId).toEqual(seeded.databaseId);
@@ -841,10 +788,7 @@ test.provider(
         seeded.databaseId,
         "SELECT id FROM d1_migrations ORDER BY id;",
       );
-      expect(frozen.map((r) => r.id)).toEqual([
-        "0000_initial_setup.sql",
-        "0001_add_indexes.sql",
-      ]);
+      expect(frozen.map((r) => r.id)).toEqual(["0000_initial_setup.sql", "0001_add_indexes.sql"]);
 
       yield* stack.destroy();
       yield* waitForDatabaseToBeDeleted(seeded.databaseId, accountId);
@@ -859,9 +803,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-imports-",
-      });
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-imports-" });
       const importPath = path.join(dir, "seed.sql");
 
       yield* fs.writeFileString(
@@ -877,9 +819,7 @@ test.provider(
 
       const database = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("ImportDatabase", {
-            importFiles: [importPath],
-          });
+          return yield* Cloudflare.D1.Database("ImportDatabase", { importFiles: [importPath] });
         }),
       );
 
@@ -908,9 +848,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-clone-id-",
-      });
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-clone-id-" });
       const seedPath = path.join(dir, "seed.sql");
 
       yield* fs.writeFileString(
@@ -962,9 +900,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-clone-name-",
-      });
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-clone-name-" });
       const seedPath = path.join(dir, "seed.sql");
 
       yield* fs.writeFileString(
@@ -1015,9 +951,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-d1-clone-direct-",
-      });
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-clone-direct-" });
       const seedPath = path.join(dir, "seed.sql");
 
       yield* fs.writeFileString(
@@ -1035,9 +969,7 @@ test.provider(
           const source = yield* Cloudflare.D1.Database("CloneDirectSource", {
             importFiles: [seedPath],
           });
-          const target = yield* Cloudflare.D1.Database("CloneDirectTarget", {
-            clone: source,
-          });
+          const target = yield* Cloudflare.D1.Database("CloneDirectTarget", { clone: source });
           return { source, target };
         }),
       );
@@ -1061,11 +993,7 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
 );
 
-const queryAll = Effect.fn(function* <T>(
-  accountId: string,
-  databaseId: string,
-  sql: string,
-) {
+const queryAll = Effect.fn(function* <T>(accountId: string, databaseId: string, sql: string) {
   const queryDb = yield* d1.queryDatabase;
   const result = yield* queryDb({ accountId, databaseId, sql });
   return (result.result[0]?.results ?? []) as T[];
@@ -1087,23 +1015,14 @@ const listTables = Effect.fn(function* (accountId: string, databaseId: string) {
  * D1 query results are eventually consistent following an import/clone, so
  * retry until we see at least one row (matches v1's `getResults` helper).
  */
-const getResults = Effect.fn(function* <T>(
-  accountId: string,
-  databaseId: string,
-  sql: string,
-) {
+const getResults = Effect.fn(function* <T>(accountId: string, databaseId: string, sql: string) {
   return yield* queryAll<T>(accountId, databaseId, sql).pipe(
     Effect.flatMap((rows) =>
-      rows.length > 0
-        ? Effect.succeed(rows)
-        : Effect.fail(new EmptyResults({ sql })),
+      rows.length > 0 ? Effect.succeed(rows) : Effect.fail(new EmptyResults({ sql })),
     ),
     Effect.retry({
       while: (e) => e instanceof EmptyResults,
-      schedule: Schedule.max([
-        Schedule.spaced(Duration.seconds(1)),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced(Duration.seconds(1)), Schedule.recurs(10)]),
     }),
     Effect.orDie,
   );
@@ -1136,11 +1055,7 @@ test.provider(
       // Phase 2: wipe local state — the database stays on Cloudflare.
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "AdoptableDatabase",
-        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableDatabase" });
       }).pipe(Effect.provide(stack.state));
 
       // Phase 3: redeploy without `adopt(true)`. The engine calls
@@ -1148,9 +1063,7 @@ test.provider(
       // attrs — silent adoption.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.D1.Database("AdoptableDatabase", {
-            name: databaseName,
-          });
+          return yield* Cloudflare.D1.Database("AdoptableDatabase", { name: databaseName });
         }),
       );
 
@@ -1167,10 +1080,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect((persisted as any)?.attr).toMatchObject({
-        databaseId: initialId,
-        databaseName,
-      });
+      expect((persisted as any)?.attr).toMatchObject({ databaseId: initialId, databaseName });
 
       yield* stack.destroy();
       yield* waitForDatabaseToBeDeleted(initialId, accountId);
@@ -1178,27 +1088,16 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
 );
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  databaseId: string,
-  accountId: string,
-) {
-  yield* d1
-    .getDatabase({
-      accountId,
-      databaseId,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("DatabaseNotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (databaseId: string, accountId: string) {
+  yield* d1.getDatabase({ accountId, databaseId }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("DatabaseNotFound", () => Effect.void),
+  );
 });
 
 class DatabaseStillExists extends Data.TaggedError("DatabaseStillExists") {}
-class EmptyResults extends Data.TaggedError("EmptyResults")<{
-  sql: string;
-}> {}
+class EmptyResults extends Data.TaggedError("EmptyResults")<{ sql: string }> {}

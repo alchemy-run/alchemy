@@ -44,9 +44,7 @@ export const makePollyHttpBinding = <I extends object, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`AWS.Polly.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Polly.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

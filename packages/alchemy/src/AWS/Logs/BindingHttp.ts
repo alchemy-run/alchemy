@@ -71,10 +71,7 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
                     ? ["*"]
                     : options.iamResources === "streams"
                       ? [Output.interpolate`${logGroup.logGroupArn}:*`]
-                      : [
-                          logGroup.logGroupArn,
-                          Output.interpolate`${logGroup.logGroupArn}:*`,
-                        ],
+                      : [logGroup.logGroupArn, Output.interpolate`${logGroup.logGroupArn}:*`],
               },
             ],
           });

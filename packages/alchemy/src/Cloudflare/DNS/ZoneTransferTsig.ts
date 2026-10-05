@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -155,11 +154,7 @@ export const ZoneTransferTsigProvider = () =>
       // Sync — PUT with the full body; skip the call on no delta. The
       // observed secret comes back from the GET, so the comparison is
       // exact (not a guess from `olds`).
-      if (
-        observed.name === name &&
-        observed.algo === news.algo &&
-        observed.secret === secret
-      ) {
+      if (observed.name === name && observed.algo === news.algo && observed.secret === secret) {
         return toAttributes(observed, output?.accountId ?? accountId);
       }
       const updated = yield* dns.updateZoneTransferTsig({

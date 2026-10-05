@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link ListResourceInventory}.
  */
-export interface ListResourceInventoryRequest
-  extends licensemanager.ListResourceInventoryRequest {}
+export interface ListResourceInventoryRequest extends licensemanager.ListResourceInventoryRequest {}
 
 /**
  * Runtime binding for `license-manager:ListResourceInventory` — list the

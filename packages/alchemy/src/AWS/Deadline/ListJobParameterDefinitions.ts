@@ -33,17 +33,13 @@ export interface ListJobParameterDefinitions extends Binding.Service<
     queue: Queue,
   ) => Effect.Effect<
     (
-      request: Omit<
-        deadline.ListJobParameterDefinitionsRequest,
-        "farmId" | "queueId"
-      >,
+      request: Omit<deadline.ListJobParameterDefinitionsRequest, "farmId" | "queueId">,
     ) => Effect.Effect<
       deadline.ListJobParameterDefinitionsResponse,
       deadline.ListJobParameterDefinitionsError
     >
   >
 > {}
-export const ListJobParameterDefinitions =
-  Binding.Service<ListJobParameterDefinitions>(
-    "AWS.Deadline.ListJobParameterDefinitions",
-  );
+export const ListJobParameterDefinitions = Binding.Service<ListJobParameterDefinitions>(
+  "AWS.Deadline.ListJobParameterDefinitions",
+);

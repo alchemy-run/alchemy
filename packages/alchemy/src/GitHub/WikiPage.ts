@@ -2,15 +2,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
 import { exec } from "../Util/exec.ts";
 import { GitHubCredentials } from "./Credentials.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
 import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
@@ -54,15 +54,7 @@ export interface WikiPageProps {
    * an extension (e.g. `markdown` → `Page.md`, `asciidoc` → `Page.asciidoc`).
    * @default "markdown"
    */
-  format?:
-    | "markdown"
-    | "asciidoc"
-    | "mediawiki"
-    | "org"
-    | "pod"
-    | "rdoc"
-    | "rest"
-    | "textile";
+  format?: "markdown" | "asciidoc" | "mediawiki" | "org" | "pod" | "rdoc" | "rest" | "textile";
 
   /**
    * Whether to allow deletion of the page when the resource is destroyed.
@@ -236,9 +228,9 @@ export interface WikiPage extends Resource<
  */
 export const WikiPage = Resource<WikiPage>("GitHub.WikiPage");
 
-export class WikiRepositoryUnavailable extends Data.TaggedError(
-  "WikiRepositoryUnavailable",
-)<{ readonly message: string }> {}
+export class WikiRepositoryUnavailable extends Data.TaggedError("WikiRepositoryUnavailable")<{
+  readonly message: string;
+}> {}
 
 export class WikiGitError extends Data.TaggedError("WikiGitError")<{
   readonly operation: string;
@@ -292,8 +284,7 @@ export const wikiRepository = Effect.fn(function* (props: WikiPageProps) {
     )
   ) {
     return yield* new InvalidWikiPage({
-      message:
-        "Wiki owner and repository must be GitHub names, not paths or URLs.",
+      message: "Wiki owner and repository must be GitHub names, not paths or URLs.",
     });
   }
   const baseUrl = yield* effectiveGitHubBaseUrl(props.baseUrl);
@@ -319,10 +310,7 @@ export const wikiRepository = Effect.fn(function* (props: WikiPageProps) {
 });
 
 // Only the transient process environment contains the authorization header.
-const gitEnvironment = Effect.fn(function* (
-  repository: WikiRepository,
-  directory: string,
-) {
+const gitEnvironment = Effect.fn(function* (repository: WikiRepository, directory: string) {
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const config = path.join(directory, "gitconfig");
@@ -346,11 +334,7 @@ const gitEnvironment = Effect.fn(function* (
 });
 
 const git = Effect.fn(
-  function* (
-    directory: string,
-    env: Record<string, string | undefined>,
-    ...args: string[]
-  ) {
+  function* (directory: string, env: Record<string, string | undefined>, ...args: string[]) {
     const operation = args[0]!;
     const result = yield* exec(
       ChildProcess.make(
@@ -384,9 +368,7 @@ const git = Effect.fn(
         )
           ? "missing"
           : operation === "push" &&
-              /\[rejected\]|cannot lock ref|failed to update ref/i.test(
-                result.stderr,
-              )
+              /\[rejected\]|cannot lock ref|failed to update ref/i.test(result.stderr)
             ? "conflict"
             : "command";
       // Git diagnostics can include server-controlled text or credentials.
@@ -409,15 +391,7 @@ const checkout = Effect.fn(function* (repository: WikiRepository) {
     prefix: "alchemy-wiki-",
   });
   const env = yield* gitEnvironment(repository, directory);
-  yield* git(
-    directory,
-    env,
-    "clone",
-    "--quiet",
-    "--",
-    repository.remote,
-    "wiki",
-  ).pipe(
+  yield* git(directory, env, "clone", "--quiet", "--", repository.remote, "wiki").pipe(
     Effect.catchTag("WikiGitError", (error) =>
       Effect.fail(
         error.reason === "missing"
@@ -438,9 +412,7 @@ type Checkout = Effect.Success<ReturnType<typeof checkout>>;
 
 const pageFiles = (files: string[], pageName: string) =>
   Object.values(extensions)
-    .flatMap((formats) =>
-      formats.map((extension) => `${pageName}.${extension}`),
-    )
+    .flatMap((formats) => formats.map((extension) => `${pageName}.${extension}`))
     .filter((file) => files.includes(file));
 
 const attributes = Effect.fn(function* (
@@ -464,26 +436,17 @@ export const readWikiPage = Effect.fn(
     const files = pageFiles(wiki.files, pageName);
     const desired = `${pageName}.${extensions[props.format ?? "markdown"][0]}`;
     const file = files.includes(desired) ? desired : files[0];
-    return file === undefined
-      ? undefined
-      : yield* attributes(repository, props, wiki, file);
+    return file === undefined ? undefined : yield* attributes(repository, props, wiki, file);
   },
   Effect.scoped,
   (effect) =>
-    effect.pipe(
-      Effect.catchTag("WikiRepositoryUnavailable", () =>
-        Effect.succeed(undefined),
-      ),
-    ),
+    effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.succeed(undefined))),
 );
 
-const retryConcurrentPush = <A, E, R>(
-  effect: Effect.Effect<A, E | WikiGitError, R>,
-) =>
+const retryConcurrentPush = <A, E, R>(effect: Effect.Effect<A, E | WikiGitError, R>) =>
   effect.pipe(
     Effect.retry({
-      while: (error) =>
-        error instanceof WikiGitError && error.reason === "conflict",
+      while: (error) => error instanceof WikiGitError && error.reason === "conflict",
       schedule: Schedule.spaced("200 millis"),
       times: 3,
     }),
@@ -513,12 +476,7 @@ export const syncWikiPage = Effect.fn(
       if (files.length > 0) yield* wiki.run("rm", "--", ...files);
       yield* fs.writeFileString(path.join(wiki.cwd, file), content);
       yield* wiki.run("add", "--", file);
-      yield* wiki.run(
-        "commit",
-        "--quiet",
-        "-m",
-        props.message ?? `Update ${props.title}`,
-      );
+      yield* wiki.run("commit", "--quiet", "-m", props.message ?? `Update ${props.title}`);
       yield* wiki.run("push", "--quiet", "origin", "HEAD");
     }
     return yield* attributes(repository, props, wiki, file);
@@ -540,10 +498,7 @@ export const deleteWikiPage = Effect.fn(
   },
   Effect.scoped,
   retryConcurrentPush,
-  (effect) =>
-    effect.pipe(
-      Effect.catchTag("WikiRepositoryUnavailable", () => Effect.void),
-    ),
+  (effect) => effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.void)),
 );
 
 export const WikiPageProvider = () =>

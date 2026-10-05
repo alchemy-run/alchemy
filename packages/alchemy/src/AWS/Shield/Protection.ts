@@ -6,18 +6,12 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /** Route 53 health check ARNs look like `arn:aws:route53:::healthcheck/{id}`. */
 const healthCheckIdFromArn = (arn: string) => arn.split("/").pop() ?? arn;
-const healthCheckArnFromId = (id: string) =>
-  `arn:aws:route53:::healthcheck/${id}`;
+const healthCheckArnFromId = (id: string) => `arn:aws:route53:::healthcheck/${id}`;
 
 /**
  * How Shield Advanced responds automatically to application-layer (layer 7)
@@ -75,9 +69,7 @@ export interface Protection extends Resource<
      * The automatic application-layer DDoS mitigation action, or `undefined`
      * when the feature is disabled.
      */
-    applicationLayerAutomaticResponse:
-      | ApplicationLayerAutomaticResponseAction
-      | undefined;
+    applicationLayerAutomaticResponse: ApplicationLayerAutomaticResponseAction | undefined;
     /** Tags on the protection (including Alchemy ownership tags). */
     tags: Record<string, string>;
   },
@@ -136,9 +128,7 @@ const observeByResourceArn = (resourceArn: string) =>
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
   tagRecord(
     (tags ?? []).flatMap((t) =>
-      t.Key !== undefined && t.Value !== undefined
-        ? [{ Key: t.Key, Value: t.Value }]
-        : [],
+      t.Key !== undefined && t.Value !== undefined ? [{ Key: t.Key, Value: t.Value }] : [],
     ),
   );
 
@@ -160,10 +150,7 @@ const observedAlarAction = (
   return config.Action.Block !== undefined ? "BLOCK" : "COUNT";
 };
 
-const buildAttrs = (
-  protection: shield.Protection,
-  tags: Record<string, string>,
-) => ({
+const buildAttrs = (protection: shield.Protection, tags: Record<string, string>) => ({
   protectionId: protection.Id!,
   protectionArn: protection.ProtectionArn!,
   name: protection.Name!,
@@ -178,9 +165,7 @@ export const ProtectionProvider = () =>
     Protection,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string }) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 128 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
       const syncTags = Effect.fn(function* (
         protectionArn: string,
@@ -298,18 +283,11 @@ export const ProtectionProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             protection = yield* observeByResourceArn(news.resourceArn);
             if (!protection?.Id || !protection.ProtectionArn) {
               return yield* Effect.fail(
-                new Error(
-                  `Failed to create or read Shield protection for ${news.resourceArn}`,
-                ),
+                new Error(`Failed to create or read Shield protection for ${news.resourceArn}`),
               );
             }
           }
@@ -343,20 +321,14 @@ export const ProtectionProvider = () =>
           Effect.gen(function* () {
             const protections = yield* shield.listProtections.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Protections ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Protections ?? [])),
               Effect.catchTag("SubscriptionNotFound", () => Effect.succeed([])),
             );
             return yield* Effect.forEach(
-              protections.filter(
-                (p) => p.Id != null && p.ProtectionArn != null,
-              ),
+              protections.filter((p) => p.Id != null && p.ProtectionArn != null),
               (protection) =>
                 Effect.gen(function* () {
-                  const tags = yield* readProtectionTags(
-                    protection.ProtectionArn!,
-                  );
+                  const tags = yield* readProtectionTags(protection.ProtectionArn!);
                   return buildAttrs(protection, tags);
                 }),
               { concurrency: 5 },

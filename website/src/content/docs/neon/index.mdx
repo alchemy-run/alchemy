@@ -146,7 +146,7 @@ const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
 );
 ```
 
-Import `LanguageModel` from `effect/unstable/ai` and provide
+Import `LanguageModel` from `effect/ai` and provide
 `Neon.QueryAIGatewayHttp` on the application. It selects injected or managed
 credentials automatically and exposes the model layer backed by Neon's
 OpenAI-compatible Chat Completions API. Model access and prepaid credits are separate account requirements; declaring

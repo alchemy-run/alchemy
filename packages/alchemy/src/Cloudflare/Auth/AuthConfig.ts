@@ -84,9 +84,7 @@ export const validateAccountId = (
 ): Effect.Effect<string, AuthError> =>
   Effect.gen(function* () {
     const trimmed = accountId?.trim() ?? "";
-    const command = yield* profileCommandHint(
-      "alchemy profile edit --reconfigure Cloudflare",
-    );
+    const command = yield* profileCommandHint("alchemy profile edit --reconfigure Cloudflare");
     if (trimmed.length === 0) {
       return yield* Effect.fail(
         new AuthError({

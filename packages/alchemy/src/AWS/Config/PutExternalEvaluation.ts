@@ -44,10 +44,7 @@ export interface PutExternalEvaluation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutExternalEvaluationRequest,
-    ) => Effect.Effect<
-      config.PutExternalEvaluationResponse,
-      config.PutExternalEvaluationError
-    >
+    ) => Effect.Effect<config.PutExternalEvaluationResponse, config.PutExternalEvaluationError>
   >
 > {}
 

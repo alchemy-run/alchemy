@@ -36,7 +36,6 @@ export interface GetManagedThingConnectivityData extends Binding.Service<
     >
   >
 > {}
-export const GetManagedThingConnectivityData =
-  Binding.Service<GetManagedThingConnectivityData>(
-    "AWS.IoTManagedIntegrations.GetManagedThingConnectivityData",
-  );
+export const GetManagedThingConnectivityData = Binding.Service<GetManagedThingConnectivityData>(
+  "AWS.IoTManagedIntegrations.GetManagedThingConnectivityData",
+);

@@ -244,10 +244,7 @@ export const GroupProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: GroupProps) {
         // Group names must not start with 'AWS' (reserved by the service).
-        return (
-          props.groupName ??
-          (yield* createPhysicalName({ id, forbiddenPrefixes: ["aws"] }))
-        );
+        return props.groupName ?? (yield* createPhysicalName({ id, forbiddenPrefixes: ["aws"] }));
       });
 
       const readGroupTags = (groupArn: string) =>
@@ -273,16 +270,11 @@ export const GroupProvider = () =>
             ),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const groupName =
-            output?.groupName ?? (yield* createName(id, olds ?? {}));
-          const found = yield* resourcegroups
-            .getGroup({ Group: groupName })
-            .pipe(
-              Effect.map((r) => r.Group),
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          const groupName = output?.groupName ?? (yield* createName(id, olds ?? {}));
+          const found = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
+            Effect.map((r) => r.Group),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          );
           if (!found) return undefined;
           const attrs = {
             groupName,
@@ -299,10 +291,7 @@ export const GroupProvider = () =>
           if (oldName !== newName) return { action: "replace" } as const;
           // A group is either query-based or configuration-based for its
           // whole life — switching between the two requires replacement.
-          if (
-            (olds.configuration !== undefined) !==
-            (news.configuration !== undefined)
-          ) {
+          if ((olds.configuration !== undefined) !== (news.configuration !== undefined)) {
             return { action: "replace" } as const;
           }
           return undefined;
@@ -315,9 +304,7 @@ export const GroupProvider = () =>
           // OBSERVE — cloud state is authoritative; output is only a name cache.
           let live = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
             Effect.map((r) => r.Group),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
           );
 
           // ENSURE — create if missing; tolerate the already-exists race.
@@ -326,20 +313,14 @@ export const GroupProvider = () =>
               .createGroup({
                 Name: groupName,
                 Description: news.description,
-                ResourceQuery: news.resourceQuery
-                  ? toResourceQuery(news.resourceQuery)
-                  : undefined,
-                Configuration: news.configuration
-                  ? toConfiguration(news.configuration)
-                  : undefined,
+                ResourceQuery: news.resourceQuery ? toResourceQuery(news.resourceQuery) : undefined,
+                Configuration: news.configuration ? toConfiguration(news.configuration) : undefined,
                 Tags: { ...news.tags, ...internalTags },
               })
               .pipe(
                 Effect.map((r) => r.Group),
                 Effect.catchTag("GroupAlreadyExists", () =>
-                  resourcegroups
-                    .getGroup({ Group: groupName })
-                    .pipe(Effect.map((r) => r.Group)),
+                  resourcegroups.getGroup({ Group: groupName }).pipe(Effect.map((r) => r.Group)),
                 ),
               );
           }
@@ -359,14 +340,10 @@ export const GroupProvider = () =>
           // (getGroupQuery rejects configuration-based groups).
           if (news.resourceQuery !== undefined) {
             const desiredQuery = toResourceQuery(news.resourceQuery);
-            const observedQuery = yield* resourcegroups
-              .getGroupQuery({ Group: groupName })
-              .pipe(
-                Effect.map((r) => r.GroupQuery?.ResourceQuery),
-                Effect.catchTag("NotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            const observedQuery = yield* resourcegroups.getGroupQuery({ Group: groupName }).pipe(
+              Effect.map((r) => r.GroupQuery?.ResourceQuery),
+              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+            );
             if (
               observedQuery?.Type !== desiredQuery.Type ||
               observedQuery?.Query !== desiredQuery.Query

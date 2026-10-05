@@ -38,7 +38,6 @@ export interface GetDomainStatisticsReport extends Binding.Service<
     >
   >
 > {}
-export const GetDomainStatisticsReport =
-  Binding.Service<GetDomainStatisticsReport>(
-    "AWS.SES.GetDomainStatisticsReport",
-  );
+export const GetDomainStatisticsReport = Binding.Service<GetDomainStatisticsReport>(
+  "AWS.SES.GetDomainStatisticsReport",
+);

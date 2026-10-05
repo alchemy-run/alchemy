@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { PresignPutObject, type PresignPutObjectRequest } from "./PresignPutObject.ts";
 import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
-import {
-  PresignPutObject,
-  type PresignPutObjectRequest,
-} from "./PresignPutObject.ts";
 
 /**
  * Implementation of {@link PresignPutObject} that signs URLs with S3
@@ -33,9 +30,7 @@ export const PresignPutObjectToken = Layer.effect(
           key: request.key,
           expiresIn: request.expiresIn,
           headers:
-            request.contentType !== undefined
-              ? { "content-type": request.contentType }
-              : undefined,
+            request.contentType !== undefined ? { "content-type": request.contentType } : undefined,
         }),
     }),
   ),

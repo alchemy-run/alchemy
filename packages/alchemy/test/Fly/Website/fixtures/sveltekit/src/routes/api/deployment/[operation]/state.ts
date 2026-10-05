@@ -10,11 +10,7 @@ const exitWhenIdle = () => {
   if (!stopping || active !== 0 || exiting) return;
   exiting = true;
   // Give the generated Node adapter time to flush the closed response streams.
-  Effect.runFork(
-    Effect.sleep("1 second").pipe(
-      Effect.andThen(Effect.sync(() => process.exit(0))),
-    ),
-  );
+  Effect.runFork(Effect.sleep("1 second").pipe(Effect.andThen(Effect.sync(() => process.exit(0)))));
 };
 
 const initialize = Effect.sync(() => {
@@ -115,11 +111,7 @@ export const respond = ({ params }: { params: { operation: string } }) =>
                     complete();
                   } else {
                     // Heartbeats keep the real Fly Proxy connection alive during the next image build.
-                    controller.enqueue(
-                      encoder.encode(
-                        streamed ? '{"event":"waiting"}\n' : " \n",
-                      ),
-                    );
+                    controller.enqueue(encoder.encode(streamed ? '{"event":"waiting"}\n' : " \n"));
                   }
                 });
               }),
@@ -128,9 +120,7 @@ export const respond = ({ params }: { params: { operation: string } }) =>
         });
         return new Response(body, {
           headers: {
-            "content-type": streamed
-              ? "application/x-ndjson"
-              : "application/json",
+            "content-type": streamed ? "application/x-ndjson" : "application/json",
             "cache-control": "no-store",
             "x-website-machine": process.env.FLY_MACHINE_ID!,
             "x-website-version": version,

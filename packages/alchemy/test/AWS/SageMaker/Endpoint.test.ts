@@ -1,10 +1,10 @@
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Endpoint, EndpointConfig, Model } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -35,8 +35,7 @@ const findEndpoint = (name: string) =>
 //   AWS_TEST_SAGEMAKER_IMAGE=<ECR URI of a serving container>
 //   AWS_TEST_SAGEMAKER_MODEL_DATA=<s3://... model.tar.gz> (optional)
 test.provider.skipIf(
-  !process.env.AWS_TEST_SAGEMAKER_ENDPOINT ||
-    !process.env.AWS_TEST_SAGEMAKER_IMAGE,
+  !process.env.AWS_TEST_SAGEMAKER_ENDPOINT || !process.env.AWS_TEST_SAGEMAKER_IMAGE,
 )(
   "create serverless endpoint, wait InService, destroy",
   (stack) =>
@@ -59,16 +58,11 @@ test.provider.skipIf(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"],
           });
           const model = yield* Model("EndpointTestModel", {
             executionRoleArn: role.roleArn,
-            primaryContainer: {
-              Image: image,
-              ...(modelData ? { ModelDataUrl: modelData } : {}),
-            },
+            primaryContainer: { Image: image, ...(modelData ? { ModelDataUrl: modelData } : {}) },
           });
           const config = yield* EndpointConfig("EndpointTestConfig", {
             productionVariants: [
@@ -98,12 +92,7 @@ test.provider.skipIf(
       expect(yield* findEndpoint(endpoint.endpointName)).toBeUndefined();
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:sagemaker",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:sagemaker", "live"],
     timeout: 1_500_000,
   },
 );

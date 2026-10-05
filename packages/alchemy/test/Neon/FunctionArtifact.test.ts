@@ -1,13 +1,10 @@
-import {
-  buildFunctionArtifact,
-  validateFunctionZip,
-} from "@/Neon/FunctionArtifact";
-import { zipFiles } from "@/Util/zip";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { buildFunctionArtifact, validateFunctionZip } from "@/Neon/FunctionArtifact";
+import { zipFiles } from "@/Util/zip";
 
 const scope = { branch: { projectId: "project", branchId: "branch" } };
 
@@ -22,21 +19,12 @@ test.effect(
         path.join(root, "index.mjs"),
         'export default { fetch: () => new Response("ok") };',
       );
-      const first = yield* buildFunctionArtifact({
-        ...scope,
-        artifact: { directory: root },
-      });
-      const second = yield* buildFunctionArtifact({
-        ...scope,
-        artifact: { directory: root },
-      });
+      const first = yield* buildFunctionArtifact({ ...scope, artifact: { directory: root } });
+      const second = yield* buildFunctionArtifact({ ...scope, artifact: { directory: root } });
       expect(second.codeHash).toBe(first.codeHash);
       const zip = path.join(yield* fs.makeTempDirectoryScoped(), "app.zip");
       yield* fs.writeFile(zip, first.archive);
-      const prebuilt = yield* buildFunctionArtifact({
-        ...scope,
-        artifact: { zip },
-      });
+      const prebuilt = yield* buildFunctionArtifact({ ...scope, artifact: { zip } });
       expect(prebuilt.codeHash).toBe(first.codeHash);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
@@ -104,17 +92,12 @@ for (const [name, bytes] of [
       Effect.gen(function* () {
         const zip = yield* zipFiles([
           { path: "index.mjs", content: "export default {};" },
-          {
-            path: name,
-            content: yield* Effect.sync(() => new Uint8Array(bytes)),
-          },
+          { path: name, content: yield* Effect.sync(() => new Uint8Array(bytes)) },
         ]);
         expect(
           yield* validateFunctionZip(zip).pipe(
             Effect.as(false),
-            Effect.catchTag("FunctionArtifactError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
           ),
         ).toBe(true);
       }),
@@ -126,9 +109,7 @@ test.effect(
   "requires index.mjs at the ZIP root",
   () =>
     Effect.gen(function* () {
-      const zip = yield* zipFiles([
-        { path: "dist/index.mjs", content: "export default {};" },
-      ]);
+      const zip = yield* zipFiles([{ path: "dist/index.mjs", content: "export default {};" }]);
       expect(
         yield* validateFunctionZip(zip).pipe(
           Effect.as(false),
@@ -148,22 +129,15 @@ for (const tamper of ["local-header", "inflated-size"] as const)
           { path: "index.mjs", content: "export default {};".repeat(1000) },
         ]);
         yield* Effect.sync(() => {
-          const view = new DataView(
-            archive.buffer,
-            archive.byteOffset,
-            archive.byteLength,
-          );
+          const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
           const directory = view.getUint32(archive.byteLength - 6, true);
           view.setUint32(22, 1, true);
-          if (tamper === "inflated-size")
-            view.setUint32(directory + 24, 1, true);
+          if (tamper === "inflated-size") view.setUint32(directory + 24, 1, true);
         });
         expect(
           yield* validateFunctionZip(archive).pipe(
             Effect.as(false),
-            Effect.catchTag("FunctionArtifactError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
           ),
         ).toBe(true);
       }),
@@ -186,9 +160,7 @@ test.effect(
       });
       expect(second.codeHash).not.toBe(first.codeHash);
       const files = yield* validateFunctionZip(second.archive);
-      const entry = yield* Effect.sync(() =>
-        new TextDecoder().decode(files["index.mjs"]),
-      );
+      const entry = yield* Effect.sync(() => new TextDecoder().decode(files["index.mjs"]));
       expect(entry).toContain("bare-v2");
       expect(entry).not.toContain("native-v1");
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -205,9 +177,7 @@ test.effect(
         isExternal: true,
       });
       const files = yield* validateFunctionZip(artifact.archive);
-      const entry = yield* Effect.sync(() =>
-        new TextDecoder().decode(files["index.mjs"]),
-      );
+      const entry = yield* Effect.sync(() => new TextDecoder().decode(files["index.mjs"]));
       expect(entry).not.toContain("Bun.serve");
       expect(entry).not.toContain("cloudflare:workers");
       expect(entry).not.toContain("workerd");

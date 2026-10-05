@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type ApplicationStatus = qbusiness.ApplicationStatus;
@@ -173,10 +168,7 @@ export interface Application extends Resource<
  */
 export const Application = Resource<Application>("AWS.QBusiness.Application");
 
-const createDisplayName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createDisplayName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -184,14 +176,8 @@ const createDisplayName = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  return Object.fromEntries(
-    (response?.tags ?? []).map((tag) => [tag.key, tag.value]),
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
 interface ApplicationState {
@@ -202,11 +188,7 @@ interface ApplicationState {
 const readApplicationById = Effect.fn(function* (applicationId: string) {
   const described = yield* qbusiness
     .getApplication({ applicationId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.applicationArn;
   if (arn === undefined) return undefined;
@@ -229,13 +211,10 @@ const readApplicationById = Effect.fn(function* (applicationId: string) {
 const findApplicationByName = Effect.fn(function* (displayName: string) {
   const summaries = yield* qbusiness.listApplications.pages({}).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.applications ?? []),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.applications ?? [])),
   );
   const match = summaries.find(
-    (summary) =>
-      summary.displayName === displayName && summary.status !== "DELETING",
+    (summary) => summary.displayName === displayName && summary.status !== "DELETING",
   );
   if (!match?.applicationId) return undefined;
   return yield* readApplicationById(match.applicationId);
@@ -272,10 +251,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     while: (e) => e._tag === "ApplicationNotReady",
     // Application provisioning normally completes within a couple minutes;
     // poll every 5s up to ~10 min.
-    schedule: Schedule.max([
-      Schedule.spaced("5 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
   });
 
 // Deleting an application while dependent resources are still tearing down
@@ -285,25 +261,15 @@ const retryThroughConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([
-      Schedule.spaced("10 seconds"),
-      Schedule.recurs(10),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(10)]),
   });
 
-const waitForApplicationStatus = (
-  applicationId: string,
-  target: "ACTIVE" | "DELETED",
-) =>
+const waitForApplicationStatus = (applicationId: string, target: "ACTIVE" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getApplication({ applicationId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* Effect.fail(
@@ -335,27 +301,19 @@ export const ApplicationProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* qbusiness.listApplications.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.applications ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.applications ?? [])),
             );
             const hydrated = yield* Effect.forEach(
-              summaries.flatMap((s) =>
-                s.applicationId ? [s.applicationId] : [],
-              ),
+              summaries.flatMap((s) => (s.applicationId ? [s.applicationId] : [])),
               (applicationId) => readApplicationById(applicationId),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.applicationId
             ? yield* readApplicationById(output.applicationId)
-            : yield* findApplicationByName(
-                yield* createDisplayName(id, olds ?? {}),
-              );
+            : yield* findApplicationByName(yield* createDisplayName(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -366,11 +324,9 @@ export const ApplicationProvider = () =>
           if (olds === undefined) return;
           // Identity wiring and encryption-at-rest are fixed at creation.
           if (
-            (olds.identityType ?? "AWS_IAM_IDC") !==
-              (news.identityType ?? "AWS_IAM_IDC") ||
+            (olds.identityType ?? "AWS_IAM_IDC") !== (news.identityType ?? "AWS_IAM_IDC") ||
             olds.iamIdentityProviderArn !== news.iamIdentityProviderArn ||
-            olds.encryptionConfiguration?.kmsKeyId !==
-              news.encryptionConfiguration?.kmsKeyId ||
+            olds.encryptionConfiguration?.kmsKeyId !== news.encryptionConfiguration?.kmsKeyId ||
             olds.quickSightConfiguration?.clientNamespace !==
               news.quickSightConfiguration?.clientNamespace ||
             JSON.stringify(olds.clientIdsForOIDC ?? []) !==
@@ -381,9 +337,7 @@ export const ApplicationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("QBusiness Application requires props"),
-            );
+            return yield* Effect.fail(new Error("QBusiness Application requires props"));
           }
           const displayName = yield* createDisplayName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -417,9 +371,7 @@ export const ApplicationProvider = () =>
             });
             if (!created.applicationId) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateApplication for '${displayName}' returned no applicationId`,
-                ),
+                new Error(`CreateApplication for '${displayName}' returned no applicationId`),
               );
             }
             yield* session.note(
@@ -439,8 +391,7 @@ export const ApplicationProvider = () =>
           const needsUpdate =
             displayName !== described.displayName ||
             (news.description ?? "") !== (described.description ?? "") ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.roleArn) ||
+            (news.roleArn !== undefined && news.roleArn !== described.roleArn) ||
             (news.attachmentsConfiguration !== undefined &&
               news.attachmentsConfiguration.attachmentsControlMode !==
                 described.attachmentsConfiguration?.attachmentsControlMode) ||
@@ -449,14 +400,12 @@ export const ApplicationProvider = () =>
                 described.qAppsConfiguration?.qAppsControlMode) ||
             (news.personalizationConfiguration !== undefined &&
               news.personalizationConfiguration.personalizationControlMode !==
-                described.personalizationConfiguration
-                  ?.personalizationControlMode) ||
+                described.personalizationConfiguration?.personalizationControlMode) ||
             (news.autoSubscriptionConfiguration !== undefined &&
               (news.autoSubscriptionConfiguration.autoSubscribe !==
                 described.autoSubscriptionConfiguration?.autoSubscribe ||
                 news.autoSubscriptionConfiguration.defaultSubscriptionType !==
-                  described.autoSubscriptionConfiguration
-                    ?.defaultSubscriptionType));
+                  described.autoSubscriptionConfiguration?.defaultSubscriptionType));
           if (needsUpdate) {
             yield* qbusiness.updateApplication({
               applicationId: state.attrs.applicationId,
@@ -469,10 +418,7 @@ export const ApplicationProvider = () =>
               personalizationConfiguration: news.personalizationConfiguration,
               autoSubscriptionConfiguration: news.autoSubscriptionConfiguration,
             });
-            yield* waitForApplicationStatus(
-              state.attrs.applicationId,
-              "ACTIVE",
-            );
+            yield* waitForApplicationStatus(state.attrs.applicationId, "ACTIVE");
             yield* session.note(`Updated application ${displayName}`);
           }
 
@@ -508,9 +454,7 @@ export const ApplicationProvider = () =>
           yield* retryThroughConflict(
             qbusiness
               .deleteApplication({ applicationId: output.applicationId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForApplicationStatus(output.applicationId, "DELETED");
         }),

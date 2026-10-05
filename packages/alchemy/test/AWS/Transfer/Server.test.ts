@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM";
-import { Server, User } from "@/AWS/Transfer";
-import * as Test from "@/Test/Alchemy";
 import * as transfer from "@distilled.cloud/aws/transfer";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM";
+import { Server, User } from "@/AWS/Transfer";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,9 +26,7 @@ test.provider(
 const describeServer = (serverId: string) =>
   transfer.describeServer({ ServerId: serverId }).pipe(
     Effect.map((r) => r.Server),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertServerGone = (serverId: string) =>
@@ -38,12 +36,7 @@ const assertServerGone = (serverId: string) =>
         ? Effect.void
         : Effect.fail(new Error(`server '${serverId}' still exists`)),
     ),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
 // A running Transfer server is billed hourly. Provisioning to ONLINE takes a
@@ -121,8 +114,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertServerGone(server.serverId);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:iam", "provider:aws:transfer", "live"],
-    timeout: 900_000,
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:transfer", "live"], timeout: 900_000 },
 );

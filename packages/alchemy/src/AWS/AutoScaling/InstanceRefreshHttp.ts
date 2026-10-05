@@ -28,60 +28,58 @@ export const InstanceRefreshHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.AutoScaling.InstanceRefresh(${group}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "autoscaling:StartInstanceRefresh",
-                    "autoscaling:CancelInstanceRefresh",
-                    "autoscaling:RollbackInstanceRefresh",
-                  ],
-                  Resource: [group.autoScalingGroupArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: ["autoscaling:DescribeInstanceRefreshes"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AutoScaling.InstanceRefresh(${group}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "autoscaling:StartInstanceRefresh",
+                  "autoscaling:CancelInstanceRefresh",
+                  "autoscaling:RollbackInstanceRefresh",
+                ],
+                Resource: [group.autoScalingGroupArn],
+              },
+              {
+                Effect: "Allow",
+                Action: ["autoscaling:DescribeInstanceRefreshes"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
       return {
-        start: Effect.fn(
-          `AWS.AutoScaling.StartInstanceRefresh(${group.LogicalId})`,
-        )(function* (request?: StartInstanceRefreshRequest) {
+        start: Effect.fn(`AWS.AutoScaling.StartInstanceRefresh(${group.LogicalId})`)(function* (
+          request?: StartInstanceRefreshRequest,
+        ) {
           return yield* start({
             ...request,
             AutoScalingGroupName: yield* AutoScalingGroupName,
           });
         }),
-        cancel: Effect.fn(
-          `AWS.AutoScaling.CancelInstanceRefresh(${group.LogicalId})`,
-        )(function* (request?: CancelInstanceRefreshRequest) {
+        cancel: Effect.fn(`AWS.AutoScaling.CancelInstanceRefresh(${group.LogicalId})`)(function* (
+          request?: CancelInstanceRefreshRequest,
+        ) {
           return yield* cancel({
             ...request,
             AutoScalingGroupName: yield* AutoScalingGroupName,
           });
         }),
-        rollback: Effect.fn(
-          `AWS.AutoScaling.RollbackInstanceRefresh(${group.LogicalId})`,
-        )(function* () {
-          return yield* rollback({
-            AutoScalingGroupName: yield* AutoScalingGroupName,
-          });
-        }),
-        describe: Effect.fn(
-          `AWS.AutoScaling.DescribeInstanceRefreshes(${group.LogicalId})`,
-        )(function* (request?: DescribeInstanceRefreshesRequest) {
-          return yield* describe({
-            ...request,
-            AutoScalingGroupName: yield* AutoScalingGroupName,
-          });
-        }),
+        rollback: Effect.fn(`AWS.AutoScaling.RollbackInstanceRefresh(${group.LogicalId})`)(
+          function* () {
+            return yield* rollback({
+              AutoScalingGroupName: yield* AutoScalingGroupName,
+            });
+          },
+        ),
+        describe: Effect.fn(`AWS.AutoScaling.DescribeInstanceRefreshes(${group.LogicalId})`)(
+          function* (request?: DescribeInstanceRefreshesRequest) {
+            return yield* describe({
+              ...request,
+              AutoScalingGroupName: yield* AutoScalingGroupName,
+            });
+          },
+        ),
       };
     });
   }),

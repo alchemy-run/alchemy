@@ -37,10 +37,7 @@ export interface DeleteUsagePlanKey extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteUsagePlanKeyRequest,
-    ) => Effect.Effect<
-      ag.DeleteUsagePlanKeyResponse,
-      ag.DeleteUsagePlanKeyError
-    >
+    ) => Effect.Effect<ag.DeleteUsagePlanKeyResponse, ag.DeleteUsagePlanKeyError>
   >
 > {}
 export const DeleteUsagePlanKey = Binding.Service<DeleteUsagePlanKey>(

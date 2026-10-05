@@ -2,7 +2,6 @@ import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import * as Namespace from "../../Namespace.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import {
@@ -41,21 +40,15 @@ export const QueueEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "sqs:ReceiveMessage",
-                      "sqs:DeleteMessage",
-                      "sqs:GetQueueAttributes",
-                    ],
-                    Resource: [queue.queueArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                  Resource: [queue.queueArn],
+                },
+              ],
+            });
 
             yield* Mapping(`${queue.LogicalId}-EventSource`, {
               functionName: host.functionName,
@@ -72,9 +65,7 @@ export const QueueEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
-              return process(Stream.fromArray(event.Records)).pipe(
-                Effect.orDie,
-              );
+              return process(Stream.fromArray(event.Records)).pipe(Effect.orDie);
             }
           };
         }),

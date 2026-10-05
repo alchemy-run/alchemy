@@ -10,10 +10,7 @@ import {
   retryWhileConcurrentModification,
   retryWhileInvalidPrincipal,
 } from "./internal.ts";
-import {
-  type LakeFormationResourceSpec,
-  toWireResource,
-} from "./ResourceSpec.ts";
+import { type LakeFormationResourceSpec, toWireResource } from "./ResourceSpec.ts";
 
 export interface PermissionsProps {
   /**
@@ -102,12 +99,9 @@ export interface Permissions extends Resource<
  *
  * @resource
  */
-export const Permissions = Resource<Permissions>(
-  "AWS.LakeFormation.Permissions",
-);
+export const Permissions = Resource<Permissions>("AWS.LakeFormation.Permissions");
 
-const dedupeSort = (values: lf.Permission[]): lf.Permission[] =>
-  [...new Set(values)].sort();
+const dedupeSort = (values: lf.Permission[]): lf.Permission[] => [...new Set(values)].sort();
 
 export const PermissionsProvider = () =>
   Provider.effect(
@@ -118,9 +112,7 @@ export const PermissionsProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* lf.listPermissions
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listPermissions.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.PrincipalResourcePermissions ?? [])
               .filter(
@@ -132,9 +124,7 @@ export const PermissionsProvider = () =>
                 principal: e.Principal!.DataLakePrincipalIdentifier!,
                 resource: e.Resource!,
                 permissions: dedupeSort([...(e.Permissions ?? [])]),
-                permissionsWithGrantOption: dedupeSort([
-                  ...(e.PermissionsWithGrantOption ?? []),
-                ]),
+                permissionsWithGrantOption: dedupeSort([...(e.PermissionsWithGrantOption ?? [])]),
                 catalogId: undefined,
               }));
           }),
@@ -142,17 +132,12 @@ export const PermissionsProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           const principal = output?.principal ?? olds?.principal;
           const resource =
-            output?.resource ??
-            (olds !== undefined ? toWireResource(olds.resource) : undefined);
+            output?.resource ?? (olds !== undefined ? toWireResource(olds.resource) : undefined);
           if (principal === undefined || resource === undefined) {
             return undefined;
           }
           const catalogId = output?.catalogId ?? olds?.catalogId;
-          const current = yield* observePrincipalPermissions(
-            principal,
-            resource,
-            catalogId,
-          ).pipe(
+          const current = yield* observePrincipalPermissions(principal, resource, catalogId).pipe(
             // a deleted IAM principal surfaces as "Invalid principal" — the
             // grant is effectively gone.
             Effect.catchTag("InvalidLakeFormationPrincipal", () =>
@@ -195,9 +180,7 @@ export const PermissionsProvider = () =>
             DataLakePrincipalIdentifier: news.principal,
           };
           const desired = dedupeSort(news.permissions);
-          const desiredGrant = dedupeSort(
-            news.permissionsWithGrantOption ?? [],
-          );
+          const desiredGrant = dedupeSort(news.permissionsWithGrantOption ?? []);
 
           // 1. OBSERVE — retry through IAM propagation of a fresh principal.
           let current = yield* observePrincipalPermissions(
@@ -219,9 +202,7 @@ export const PermissionsProvider = () =>
                 PermissionsWithGrantOption: stale.some((p) =>
                   current.permissionsWithGrantOption.includes(p),
                 )
-                  ? stale.filter((p) =>
-                      current.permissionsWithGrantOption.includes(p),
-                    )
+                  ? stale.filter((p) => current.permissionsWithGrantOption.includes(p))
                   : undefined,
               })
               .pipe(retryWhileConcurrentModification);
@@ -244,41 +225,25 @@ export const PermissionsProvider = () =>
               .pipe(retryWhileConcurrentModification);
           }
 
-          const missing = desired.filter(
-            (p) => !current.permissions.includes(p),
-          );
+          const missing = desired.filter((p) => !current.permissions.includes(p));
           const missingGrant = desiredGrant.filter(
             (p) => !current.permissionsWithGrantOption.includes(p),
           );
-          if (
-            missing.length > 0 ||
-            missingGrant.length > 0 ||
-            staleOptionOnly.length > 0
-          ) {
+          if (missing.length > 0 || missingGrant.length > 0 || staleOptionOnly.length > 0) {
             yield* lf
               .grantPermissions({
                 CatalogId: news.catalogId,
                 Principal: principal,
                 Resource: resource,
                 Permissions: desired,
-                PermissionsWithGrantOption:
-                  desiredGrant.length > 0 ? desiredGrant : undefined,
+                PermissionsWithGrantOption: desiredGrant.length > 0 ? desiredGrant : undefined,
               })
-              .pipe(
-                retryWhileInvalidPrincipal,
-                retryWhileConcurrentModification,
-              );
+              .pipe(retryWhileInvalidPrincipal, retryWhileConcurrentModification);
           }
 
           // 3. RETURN fresh state
-          current = yield* observePrincipalPermissions(
-            news.principal,
-            resource,
-            news.catalogId,
-          );
-          yield* session.note(
-            `${news.principal} ← [${current.permissions.join(", ")}]`,
-          );
+          current = yield* observePrincipalPermissions(news.principal, resource, news.catalogId);
+          yield* session.note(`${news.principal} ← [${current.permissions.join(", ")}]`);
           return {
             principal: news.principal,
             resource,

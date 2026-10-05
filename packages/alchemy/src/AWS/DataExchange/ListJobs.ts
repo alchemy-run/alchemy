@@ -26,10 +26,7 @@ export interface ListJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dataexchange.ListJobsRequest,
-    ) => Effect.Effect<
-      dataexchange.ListJobsResponse,
-      dataexchange.ListJobsError
-    >
+    ) => Effect.Effect<dataexchange.ListJobsResponse, dataexchange.ListJobsError>
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.DataExchange.ListJobs");

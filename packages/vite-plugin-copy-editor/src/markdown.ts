@@ -7,13 +7,7 @@
  * markdown can live inside another file (a JSDoc comment, a string) — the
  * `linePrefix` option describes text that starts each continuation line.
  */
-import {
-  CopyEditError,
-  decodeEntities,
-  type Dialect,
-  type Run,
-  type TextToken,
-} from "./text.ts";
+import { CopyEditError, decodeEntities, type Dialect, type Run, type TextToken } from "./text.ts";
 
 /** A syntax whose rendered text isn't literal source text (e.g. `{@link X}`). */
 export interface Atomic {
@@ -47,8 +41,7 @@ const canon = (text: string) =>
     .replace(/…/g, "...")
     .replace(/\u00a0/g, " ");
 
-const decodeMarkdown = (raw: string) =>
-  decodeEntities(raw.replace(/\\([!-/:-@[-`{-~])/g, "$1"));
+const decodeMarkdown = (raw: string) => decodeEntities(raw.replace(/\\([!-/:-@[-`{-~])/g, "$1"));
 
 export const markdownDialect = (options: MarkdownOptions = {}): Dialect => {
   const ws = new RegExp(
@@ -96,9 +89,7 @@ export const markdownDialect = (options: MarkdownOptions = {}): Dialect => {
         .replace(/~~/g, "\\~\\~")
         .replace(/\{@/g, "{\\@");
       if (lineStart) {
-        out = out
-          .replace(/^[#>+\-=|:@]/, "\\$&")
-          .replace(/^(\d+)([.)])/, "$1\\$2");
+        out = out.replace(/^[#>+\-=|:@]/, "\\$&").replace(/^(\d+)([.)])/, "$1\\$2");
       }
       // Never let prose close a surrounding block comment.
       return out.replace(/\*\//g, "*\\/");
@@ -116,15 +107,10 @@ export const markdownRuns = (
   end: number,
   options: MarkdownOptions = {},
 ): Run[] => {
-  const prefix = options.linePrefix
-    ? new RegExp(`\\n(?:${options.linePrefix})`, "g")
-    : undefined;
+  const prefix = options.linePrefix ? new RegExp(`\\n(?:${options.linePrefix})`, "g") : undefined;
   const clean = (raw: string) => (prefix ? raw.replace(prefix, "\n") : raw);
   const atomics = (options.atomics ?? []).map(({ pattern, text }) => ({
-    pattern: new RegExp(
-      pattern.source,
-      `${pattern.flags.replace(/[gy]/g, "")}y`,
-    ),
+    pattern: new RegExp(pattern.source, `${pattern.flags.replace(/[gy]/g, "")}y`),
     text,
   }));
 
@@ -193,9 +179,7 @@ export const markdownRuns = (
         i += autolink[0].length;
         continue;
       }
-      const tag = /^<\/?[A-Za-z][^<>]*>|^<!--[\s\S]*?-->/.exec(
-        code.slice(i, end),
-      );
+      const tag = /^<\/?[A-Za-z][^<>]*>|^<!--[\s\S]*?-->/.exec(code.slice(i, end));
       if (tag) {
         boundary(i, i + tag[0].length);
         i += tag[0].length;
@@ -207,9 +191,7 @@ export const markdownRuns = (
       ((ch === "h" || ch === "w") && isWs(code[i - 1])) ||
       (i === start && (ch === "h" || ch === "w"))
     ) {
-      const url = /^(?:https?:\/\/|www\.)[^\s<]*[^\s<.,:;"')\]!?*_~]/.exec(
-        code.slice(i, end),
-      );
+      const url = /^(?:https?:\/\/|www\.)[^\s<]*[^\s<.,:;"')\]!?*_~]/.exec(code.slice(i, end));
       if (url) {
         locked(i, i + url[0].length, url[0]);
         i += url[0].length;
@@ -247,17 +229,14 @@ export const markdownRuns = (
       while (code[i + n] === ch) n++;
       const prev = code[i - 1];
       const next = code[i + n];
-      const left =
-        !isWs(next) && (!isPunct(next) || isWs(prev) || isPunct(prev));
-      const right =
-        !isWs(prev) && (!isPunct(prev) || isWs(next) || isPunct(next));
+      const left = !isWs(next) && (!isPunct(next) || isWs(prev) || isPunct(prev));
+      const right = !isWs(prev) && (!isPunct(prev) || isWs(next) || isPunct(next));
       const delimiter =
         ch === "~"
           ? n === 2 && (left || right)
           : ch === "*"
             ? left || right
-            : (left && (!right || isPunct(prev))) ||
-              (right && (!left || isPunct(next)));
+            : (left && (!right || isPunct(prev))) || (right && (!left || isPunct(next)));
       if (delimiter) {
         boundary(i, i + n);
         i += n;

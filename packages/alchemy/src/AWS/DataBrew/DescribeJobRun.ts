@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Job } from "./Job.ts";
 
-export interface DescribeJobRunRequest extends Omit<
-  SVC.DescribeJobRunRequest,
-  "Name"
-> {}
+export interface DescribeJobRunRequest extends Omit<SVC.DescribeJobRunRequest, "Name"> {}
 
 /**
  * Runtime binding for `databrew:DescribeJobRun` — reads the state,
@@ -33,6 +30,4 @@ export interface DescribeJobRun extends Binding.Service<
     ) => Effect.Effect<SVC.DescribeJobRunResponse, SVC.DescribeJobRunError>
   >
 > {}
-export const DescribeJobRun = Binding.Service<DescribeJobRun>(
-  "AWS.DataBrew.DescribeJobRun",
-);
+export const DescribeJobRun = Binding.Service<DescribeJobRun>("AWS.DataBrew.DescribeJobRun");
