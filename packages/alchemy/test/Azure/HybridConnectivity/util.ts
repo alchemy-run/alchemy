@@ -1,0 +1,60 @@
+import * as Azure from "@/Azure";
+import type { AzureOpError } from "@distilled.cloud/azure";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+
+export const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+export const tags = [
+  "provider:azure",
+  "provider:azure:hybridconnectivity",
+  "live",
+];
+
+/** Poll an out-of-band GET until it reports a typed not-found. */
+export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
+  get.pipe(
+    Effect.as("found" as const),
+    Effect.catchTag(
+      ["ResourceNotFound", "ResourceGroupNotFound", "NotFound"],
+      () => Effect.succeed("gone" as const),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (status) => status === "gone",
+      times: 24,
+    }),
+  );
+
+/**
+ * Fixture identity for pre-registering Arc machines without an agent: fixed
+ * host IDs and a PKCS#1 RSA public key (generated once, no private key kept).
+ */
+export const fixtureVmIdA = "6a1d3c5e-7f92-4b8a-a1c3-5e7f9b2d4c6a";
+export const fixtureVmIdB = "9c2e4a6b-8d1f-4c3e-b5a7-1d3f5b7e9a2c";
+export const fixturePublicKey =
+  "MIIBCgKCAQEAqB72SMX+EJZIkpTSteGm7YVERSZMz/iBOpd0xkv3OBzHlJA1E4WbK5+gxu7Xr0boJ9nLvWacOWsxSeBaHggJnjnRGSV/AWt+VY6M8K1FGCqms7W8t3MrjuMuTr3UgLiqRXOY2QpnqPlIX6YDq5/+nsqi7btGHXvsmJ+0qKAv84NyFlS3f6lpgmNUgpAV+NMR95BBdYTGFqwVpIj1fnjXY/LVKYPCnN/6JMGUvSn4BdCbWUCam8Wi2kHVNl0jkdoGFL+Lq72uPydoHs+7N6bheshpPwdX0drvykvdEx3UaZYOApy8l20tZ69yJqPTSqfms+KUStMj30ZhgI2CBVke3wIDAQAB";
+
+/** Two pre-registered (unconnected) Arc machines in one resource group. */
+export const machines = Effect.gen(function* () {
+  const group = yield* Azure.Resources.ResourceGroup("Group", {
+    location: "eastus",
+  });
+  const machineA = yield* Azure.HybridCompute.Machine("MachineA", {
+    resourceGroup: group.resourceGroupName,
+    vmId: fixtureVmIdA,
+    clientPublicKey: fixturePublicKey,
+    osType: "linux",
+  });
+  const machineB = yield* Azure.HybridCompute.Machine("MachineB", {
+    resourceGroup: group.resourceGroupName,
+    vmId: fixtureVmIdB,
+    clientPublicKey: fixturePublicKey,
+    osType: "linux",
+  });
+  return { group, machineA, machineB };
+});

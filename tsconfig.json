@@ -21,6 +21,9 @@
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/azure/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/neon/tsconfig.json"
     },
     {
@@ -324,6 +327,9 @@
     },
     {
       "path": "./examples/hetzner-server/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-storage/tsconfig.json"
     },
     {
       "path": "./examples/fly-app/tsconfig.json"

@@ -61,7 +61,7 @@ bun alchemy unsafe nuke --config ./stacks/nuke.ts  \
   --exclude 'AWS.NotificationsContacts.*' \
   --exclude 'AWS.ApiGateway.Account' \
   --concurrency 32 \
-  --timeout 300 \
+  --timeout 1800 \
   --filter 'resource.Type === "Cloudflare.Worker" && (resource.workerName?.startsWith("alchemy-state") || resource.workerName === "Api" || ["alchemy-website-preview","alchemy-website-main","alchemy-website-prod"].includes(resource.workerName))' \
   --filter 'resource.Type === "AWS.IAM.Role" && (["alchemy-github-actions", "distilled-github-oidc-role"].includes(resource.roleName) || resource.roleName?.startsWith("AWSReservedSSO"))' \
   --filter 'resource.Type === "AWS.S3.Bucket" && (String(resource.bucketName).startsWith("alchemy-state") || String(resource.bucketName).startsWith("alchemy-assets"))' \

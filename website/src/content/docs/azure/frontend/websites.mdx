@@ -1,0 +1,44 @@
+---
+title: Websites
+description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Azure Container Apps with first-class Website resources.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+Alchemy deploys frontends to Azure with a family of `Azure.Website`
+resources. Each one builds your project programmatically through
+`@alchemy.run/frontend-frameworks/<framework>/node`, packages the Node
+server into a container image with your local Docker daemon, pushes it to
+an Azure Container Registry, and runs it as a Container App with external
+ingress on port 3000. Your framework's own config file (`vite.config.ts`,
+`astro.config.*`, `nuxt.config.ts`, ...) loads natively.
+
+Omit `resourceGroup`, `registry`, and `environment` and Alchemy creates a
+resource group, a `Basic` registry (admin user enabled), and an `Express`
+Container Apps environment under the site's namespace. Pass them to share
+infrastructure between sites.
+
+The live URL is the Container App's **`https://{app}.{env}.{region}.azurecontainerapps.io`**.
+`domain` binds a hostname to the ingress (the CNAME and `asuid` TXT records
+must already exist); no certificate is issued.
+
+```typescript
+import * as Azure from "alchemy/Azure";
+
+const site = yield* Azure.Website.Vite("Web", { location: "eastus" });
+```
+
+- [`Vite`](/azure/frontend/vite) — client-only Vite apps.
+- `Astro`, `Nextjs`, `Vinext`, `Nuxt`, `ReactRouter`, `SolidStart`,
+  `SvelteKit`, `TanStackStart`, `Waku`, `Octane`, `Foldkit`, `Vocs` — same
+  props and behavior as their [Hetzner](/hetzner/frontend/websites) and
+  [Fly](/fly/frontend/websites) siblings, hosted on Container Apps.
+- `StaticSite` — any build command's output directory (Hugo, Zola,
+  Eleventy).
+
+During `alchemy dev` every site runs its framework's own dev server and no
+Azure resources are created. `Alchemy.remote()` opts back into the live
+deployment.
+
+A running Docker daemon is required to deploy.

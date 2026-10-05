@@ -1,0 +1,53 @@
+import * as Azure from "@/Azure";
+import { NOT_FOUND_TAGS } from "@/Azure/Arm";
+import type { AzureOpError } from "@distilled.cloud/azure";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+
+export const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+export const tags = ["provider:azure", "provider:azure:apicenter", "live"];
+
+export const subscription = Effect.map(
+  Azure.AzureEnvironment.current,
+  (env) => env.subscriptionId,
+);
+
+/** Poll an out-of-band GET until it reports a typed not-found. */
+export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
+  get.pipe(
+    Effect.as("found" as const),
+    Effect.catchTag(NOT_FOUND_TAGS, () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (status) => status === "gone",
+      times: 24,
+    }),
+  );
+
+/** Resource group + Free-plan API Center service shared by every test. */
+export const apiCenter = Effect.gen(function* () {
+  const group = yield* Azure.Resources.ResourceGroup("Group", {
+    location: "eastus",
+  });
+  const center = yield* Azure.ApiCenter.Service("Center", {
+    resourceGroup: group.resourceGroupName,
+  });
+  return { group, center };
+});
+
+/** A minimal OpenAPI document with the given title. */
+export const openApi = (title: string) =>
+  JSON.stringify({
+    openapi: "3.0.1",
+    info: { title, version: "1.0.0" },
+    paths: {
+      "/orders": {
+        get: { responses: { "200": { description: "OK" } } },
+      },
+    },
+  });
