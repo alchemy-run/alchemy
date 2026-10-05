@@ -27,12 +27,7 @@ export interface ListComponents extends Binding.Service<
   () => Effect.Effect<
     (
       request?: greengrassv2.ListComponentsRequest,
-    ) => Effect.Effect<
-      greengrassv2.ListComponentsResponse,
-      greengrassv2.ListComponentsError
-    >
+    ) => Effect.Effect<greengrassv2.ListComponentsResponse, greengrassv2.ListComponentsError>
   >
 > {}
-export const ListComponents = Binding.Service<ListComponents>(
-  "AWS.GreengrassV2.ListComponents",
-);
+export const ListComponents = Binding.Service<ListComponents>("AWS.GreengrassV2.ListComponents");

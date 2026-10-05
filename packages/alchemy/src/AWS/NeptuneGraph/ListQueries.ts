@@ -27,12 +27,7 @@ export interface ListQueries extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<neptunegraph.ListQueriesInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ListQueriesOutput,
-      neptunegraph.ListQueriesError
-    >
+    ) => Effect.Effect<neptunegraph.ListQueriesOutput, neptunegraph.ListQueriesError>
   >
 > {}
-export const ListQueries = Binding.Service<ListQueries>(
-  "AWS.NeptuneGraph.ListQueries",
-);
+export const ListQueries = Binding.Service<ListQueries>("AWS.NeptuneGraph.ListQueries");

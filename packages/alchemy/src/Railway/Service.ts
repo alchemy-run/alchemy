@@ -1,23 +1,19 @@
 import type { Builder, RestartPolicyType } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import {
-  Platform,
-  type Main,
-  type MainRpc,
-  type PlatformProps,
-} from "../Platform.ts";
 import type { HttpEffect } from "../Http.ts";
+import { Platform, type Main, type MainRpc, type PlatformProps } from "../Platform.ts";
 import type { Resource } from "../Resource.ts";
 import type { ServerHost } from "../Server/Process.ts";
-import type { ServiceBinding } from "./MountVolume.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
 import {
   createRailwayHostRuntimeContext,
+  type ExtraFile,
   type RailwayBuildOptions,
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
+import type { ServiceBinding } from "./MountVolume.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
 
@@ -27,7 +23,7 @@ import { mintRpcToken } from "./rpc-token.ts";
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type { RailwayBuildOptions };
+export type { ExtraFile, RailwayBuildOptions };
 
 /**
  * Environment identity a Service is deployed into. Accepts a
@@ -52,23 +48,32 @@ export interface ServiceProps extends PlatformProps {
    */
   environment?: Ref<ServiceEnvironment>;
   /**
-   * Module entrypoint bundled with rolldown and baked into a Docker
-   * image pushed to {@link registry}. Typically `import.meta.url`.
-   * Mutually exclusive with the public-image path (`image` without
-   * `main`). A content-hash change updates the Service in place.
+   * Module entrypoint bundled with rolldown and packed into a generated
+   * Dockerfile. Railway builds that Dockerfile (`railway up`). Typically
+   * `import.meta.url`. Mutually exclusive with the public-image path
+   * (`image` without `main`). A content-hash change updates in place.
    */
   main?: string;
+  /**
+   * Local Docker context uploaded with Railway `up`. Paths are relative to the
+   * initial working directory. Limited to a 32 MiB archive, 10,000 entries,
+   * ASCII paths, and no symlinks; Docker ignore files apply.
+   */
+  context?: string;
   /**
    * Docker image Railway should run.
    *
    * When `main` is omitted this is `source.image` (e.g.
    * `hashicorp/http-echo`). When `main` is set this is the generated
-   * Dockerfile's `FROM` (default `oven/bun:1`).
+   * Dockerfile's `FROM` (default `node:26-slim`).
    */
   image?: string;
   /**
-   * Region for the service instance (`us-west2`, `us-east4`, …). If
-   * omitted, Railway picks the default. Updates in place.
+   * Region the service runs in (`us-west2`, `europe-west4-drams3a`, …).
+   * Railway places replicas with `deploy.multiRegionConfig`. Omit this
+   * and the current placement is left alone (the workspace default on
+   * first create). Updating it moves the replicas in place and keeps
+   * the current replica count.
    */
   region?: string;
   /**
@@ -78,6 +83,12 @@ export interface ServiceProps extends PlatformProps {
    * `hashicorp/http-echo`.
    */
   port?: number;
+  /**
+   * Whether to create and manage a generated `*.up.railway.app` domain.
+   * Existing unowned generated or custom domains are not removed.
+   * @default true
+   */
+  publicDomain?: boolean;
   /**
    * Additional environment variables. Merged after binding-injected
    * `env`. Upserted as service-scoped Railway variables with
@@ -96,11 +107,12 @@ export interface ServiceProps extends PlatformProps {
    */
   build?: RailwayBuildOptions;
   /**
-   * Registry prefix to push Effect-native images to (`ghcr.io/org`,
-   * `docker.io/user`). Required when `main` is set. Railway pulls
-   * `source.image` from this registry.
+   * Extra files/directories copied into `/app` in the generated
+   * Dockerfile (`COPY dest /app/dest`). Website composites use this to
+   * bake the framework `clientDirectory` (or Next.js `.next`) so asset
+   * changes rebuild on Railway.
    */
-  registry?: string;
+  extraFiles?: ReadonlyArray<ExtraFile>;
   /**
    * Named export to load from `main`.
    *
@@ -134,6 +146,21 @@ export interface ServiceProps extends PlatformProps {
    * {@link RailwayBuildOptions} (`build.install`).
    */
   buildCommand?: string;
+  /**
+   * Pre-deploy step Railway runs after the image build and before
+   * start (migrations, seed). Omit to leave the current Railway setting
+   * unchanged. Pass `{ command: null }` to clear it.
+   *
+   * @see https://docs.railway.com/deployments/pre-deploy-command
+   */
+  preDeploy?: {
+    /**
+     * Shell command Railway executes in a separate container after
+     * build and before start. Must exit 0 or the deployment fails.
+     * Pass `null` to clear it.
+     */
+    command: string | null;
+  };
   /**
    * Start command (`pnpm start`).
    */
@@ -184,7 +211,9 @@ export interface ServiceProps extends PlatformProps {
    */
   autoUpdates?: boolean;
   /**
-   * Dockerfile path relative to {@link rootDirectory}.
+   * Dockerfile path relative to {@link rootDirectory}, or to {@link context}
+   * for a local context.
+   * @default "Dockerfile"
    */
   dockerfilePath?: string;
   /**
@@ -230,7 +259,10 @@ export type Service = Resource<
     cronSchedule: string | undefined;
     /** Observed root directory. */
     rootDirectory: string | undefined;
-    /** Observed region, if Railway reported one. */
+    /**
+     * Region the service is placed in. Set when
+     * `deploy.multiRegionConfig` has replicas in exactly one region.
+     */
     region: string | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
@@ -256,7 +288,7 @@ export type Service = Resource<
     deploymentId: string | undefined;
     /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
     deploymentStatus: string | undefined;
-    /** Content hash of the bundled program's image (empty for public images). */
+    /** Content hash of the bundled program (empty for public images). */
     code: {
       hash: string;
     };
@@ -284,10 +316,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
       inner(
         (options?.shape === undefined
           ? handler
-          : serveRailwayRpc(
-              options.shape,
-              handler as HttpEffect,
-            )) as typeof handler,
+          : serveRailwayRpc(options.shape, handler as HttpEffect)) as typeof handler,
         options,
       )) as ServiceRuntimeContext["serve"],
   });
@@ -295,10 +324,9 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
 
 /**
  * A Railway.Service is a container in a Project. Point it at a public
- * image (`hashicorp/http-echo`) or an Effect program (`main` +
- * `registry`). Alchemy stamps the name, creates a `*.up.railway.app`
- * domain via `serviceDomainCreate`, and deploys with
- * `serviceInstanceDeployV2`.
+ * image (`hashicorp/http-echo`) or an Effect program (`main`). Alchemy
+ * stamps the name, creates a `*.up.railway.app` domain via
+ * `serviceDomainCreate`, and deploys.
  *
  * @see https://docs.railway.com/guides/services
  *
@@ -322,9 +350,9 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *
  * ### Effect-native Service
  * A Service is a class. `main: import.meta.url` is the bundle
- * entrypoint. Alchemy bundles this file with Rolldown, builds a Docker
- * image (default `oven/bun:1`), pushes it to `registry`, and sets
- * `source.image`. `build.install: ["pg"]` ships `pg` unbundled.
+ * entrypoint. Alchemy bundles this file with Rolldown, generates a
+ * Dockerfile (`FROM node:26-slim`), and uploads the context. Railway
+ * builds the image. `build.install: ["pg"]` ships `pg` unbundled.
  *
  * **Example:** Class + Project + main
  * ```typescript
@@ -333,7 +361,6 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   {
  *     project: Site,
  *     main: import.meta.url,
- *     registry: "ghcr.io/acme",
  *     build: { install: ["pg"] },
  *   },
  *   Effect.gen(function* () {
@@ -342,6 +369,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Local Docker context
+ * `context` is a directory Railway builds with `up`. Mutually exclusive
+ * with `image` (without `main`) and `repo`. Docker ignore files apply.
+ *
+ * **Example:** Upload a local Dockerfile
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   context: "./api",
+ *   port: 80,
+ * });
  * ```
  *
  * ### The public URL
@@ -360,8 +400,25 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * );
  * ```
  *
+ * ### Private service
+ * `publicDomain: false` skips the generated `*.up.railway.app` hostname.
+ * `url` / `domain` stay unset. Reach it on the private mesh at
+ * `{name}.railway.internal`. Unowned generated or custom domains are
+ * left alone.
+ *
+ * **Example:** Private-only service
+ * ```typescript
+ * const worker = yield* Railway.Service("Worker", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   publicDomain: false,
+ * });
+ * ```
+ *
  * ### Pin a region
- * Omit `region` to use Railway's default. Updating it is in place.
+ * Omit `region` to leave placement alone. On first create that is the
+ * workspace default. Updating `region` moves the replicas in place.
  *
  * **Example:** Region
  * ```typescript
@@ -409,6 +466,19 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * });
  * ```
  *
+ * ### Pre-deploy
+ * Railway runs `preDeploy.command` after the image build and before
+ * start — the same setting as the dashboard Pre-deploy Command.
+ *
+ * **Example:** Run migrations before traffic
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   preDeploy: { command: "bun --cwd apps/api migrate" },
+ * });
+ * ```
+ *
  * ### Cron
  * `cronSchedule` runs the service on a cron expression.
  *
@@ -448,7 +518,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ```typescript
  * export default class Query extends Railway.Service<Query>()(
  *   "Query",
- *   { project: Site, main: import.meta.url, registry: "ghcr.io/acme" },
+ *   { project: Site, main: import.meta.url },
  *   Effect.gen(function* () {
  *     return {
  *       greet: (name: string) => Effect.succeed(`hello ${name}`),
@@ -488,31 +558,24 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * ```
  *
  * @resource
+ * @product Service
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Railway.Service", {
-  createRuntimeContext: createServiceRuntimeContext,
-  transformProps: (id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const project = Effect.isEffect(props.project)
-        ? yield* props.project as Effect.Effect<Project, never, Providers>
-        : props.project;
-      const environment =
-        props.environment === undefined
-          ? undefined
-          : Effect.isEffect(props.environment)
-            ? yield* props.environment as Effect.Effect<
-                ServiceEnvironment,
-                never,
-                Providers
-              >
-            : props.environment;
-      const rpcToken = yield* mintRpcToken(id);
-      return { ...props, project, environment, rpcToken };
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Railway.Service", {
+    createRuntimeContext: createServiceRuntimeContext,
+    transformProps: (id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const project = Effect.isEffect(props.project)
+          ? yield* props.project as Effect.Effect<Project, never, Providers>
+          : props.project;
+        const environment =
+          props.environment === undefined
+            ? undefined
+            : Effect.isEffect(props.environment)
+              ? yield* props.environment as Effect.Effect<ServiceEnvironment, never, Providers>
+              : props.environment;
+        const rpcToken = yield* mintRpcToken(id);
+        return { ...props, project, environment, rpcToken };
+      }),
+  });

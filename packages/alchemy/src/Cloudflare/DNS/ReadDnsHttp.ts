@@ -16,25 +16,14 @@ export const ReadDnsHttp = Layer.effect(
 );
 
 /** Build the read-only client over an injectable auth and zone id. */
-export const dnsReadClient = (
-  auth: DnsAuth,
-  zoneId: Effect.Effect<string>,
-): ReadDnsClient => {
+export const dnsReadClient = (auth: DnsAuth, zoneId: Effect.Effect<string>): ReadDnsClient => {
   const authorize = auth.authorize;
   return {
-    getDnsRecord: Effect.fn("Cloudflare.DNS.getDnsRecord")(
-      function* (dnsRecordId) {
-        return yield* authorize(
-          dns.getRecord({ zoneId: yield* zoneId, dnsRecordId }),
-        );
-      },
-    ),
-    listDnsRecords: Effect.fn("Cloudflare.DNS.listDnsRecords")(
-      function* (request) {
-        return yield* authorize(
-          dns.listRecords({ zoneId: yield* zoneId, ...request }),
-        );
-      },
-    ),
+    getDnsRecord: Effect.fn("Cloudflare.DNS.getDnsRecord")(function* (dnsRecordId) {
+      return yield* authorize(dns.getRecord({ zoneId: yield* zoneId, dnsRecordId }));
+    }),
+    listDnsRecords: Effect.fn("Cloudflare.DNS.listDnsRecords")(function* (request) {
+      return yield* authorize(dns.listRecords({ zoneId: yield* zoneId, ...request }));
+    }),
   };
 };

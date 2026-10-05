@@ -31,10 +31,7 @@ import {
  */
 export function installPrerenderErrorPropagation(app: BaseApp): void {
   const originalRenderError = app.renderError.bind(app);
-  app.renderError = async (
-    request: Request,
-    options: RenderErrorOptions,
-  ): Promise<Response> => {
+  app.renderError = async (request: Request, options: RenderErrorOptions): Promise<Response> => {
     if (options.status === 500) {
       if (options.response) {
         return options.response;
@@ -64,9 +61,7 @@ export function isPrerenderRequest(request: Request): boolean {
 /**
  * Handles the static paths request, returning all paths that need prerendering.
  */
-export async function handleStaticPathsRequest(
-  app: BaseApp,
-): Promise<Response> {
+export async function handleStaticPathsRequest(app: BaseApp): Promise<Response> {
   const staticPaths = new StaticPaths(app);
   const paths = await staticPaths.getAll();
   const response: StaticPathsResponse = {
@@ -84,10 +79,7 @@ export async function handleStaticPathsRequest(
  * Handles a prerender request, rendering the specified page. The response
  * body is fully buffered so streaming errors surface as a 500.
  */
-export async function handlePrerenderRequest(
-  app: BaseApp,
-  request: Request,
-): Promise<Response> {
+export async function handlePrerenderRequest(app: BaseApp, request: Request): Promise<Response> {
   const headers = new Headers();
   for (const [key, value] of request.headers.entries()) {
     headers.append(key, value);

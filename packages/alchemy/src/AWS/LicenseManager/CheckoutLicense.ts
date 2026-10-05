@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CheckoutLicense}.
  */
-export interface CheckoutLicenseRequest
-  extends licensemanager.CheckoutLicenseRequest {}
+export interface CheckoutLicenseRequest extends licensemanager.CheckoutLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CheckoutLicense` — check out
@@ -44,10 +43,7 @@ export interface CheckoutLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CheckoutLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CheckoutLicenseResponse,
-      licensemanager.CheckoutLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CheckoutLicenseResponse, licensemanager.CheckoutLicenseError>
   >
 > {}
 export const CheckoutLicense = Binding.Service<CheckoutLicense>(

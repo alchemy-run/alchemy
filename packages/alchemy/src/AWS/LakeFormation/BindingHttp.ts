@@ -16,12 +16,7 @@ import { isBindingHost } from "../Lambda/Function.ts";
  * `AWS.LakeFormation.Permissions`), so every binding grants its actions on
  * `Resource: ["*"]`.
  */
-export const makeLakeFormationHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeLakeFormationHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"GetDataLakePrincipal"`.
@@ -39,22 +34,18 @@ export const makeLakeFormationHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.LakeFormation.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.LakeFormation.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.LakeFormation.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.LakeFormation.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

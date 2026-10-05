@@ -2,11 +2,7 @@ import * as Effect from "effect/Effect";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../Bundle/TempRoot.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker } from "./Docker.ts";
 
@@ -31,11 +27,10 @@ export interface BundledServiceSource {
   handler?: string;
   port?: number;
   /**
-   * Bundler configuration for `main`: rolldown `input`/`output` overrides
-   * plus pure-annotation options (`pure`). `effect`, `@effect/*`,
-   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
-   * pure by default so unused code from those packages is tree-shaken; list
-   * additional packages via `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for `main`. Unused code is tree-shaken.
+   * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
+   * parts prune more aggressively. List extra packages with
+   * `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
 }
@@ -130,9 +125,7 @@ export const makeServiceImage = Effect.gen(function* () {
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };
@@ -154,10 +147,7 @@ export const makeServiceImage = Effect.gen(function* () {
       `COPY *.js /app/`,
     ];
     if (source.port !== undefined) {
-      lines.push(
-        `ENV PORT=${String(source.port)}`,
-        `EXPOSE ${String(source.port)}`,
-      );
+      lines.push(`ENV PORT=${String(source.port)}`, `EXPOSE ${String(source.port)}`);
     }
     lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
     return `${lines.join("\n")}\n`;
@@ -186,9 +176,7 @@ export const makeServiceImage = Effect.gen(function* () {
   const imageExists = (imageRef: string, context: string | undefined) =>
     docker.image.inspect(imageRef, context).pipe(
       Effect.map(() => true),
-      Effect.catchReason("PlatformError", "NotFound", () =>
-        Effect.succeed(false),
-      ),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
     );
 
   /**
@@ -221,11 +209,7 @@ export const makeServiceImage = Effect.gen(function* () {
     }
 
     const realMain = yield* resolveMainPath(source.main);
-    const contextDir = yield* getStableContextDir(
-      realMain,
-      dotAlchemy,
-      `${id}-image`,
-    );
+    const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
     yield* docker.materialize({
       context: contextDir,
       dockerfile,

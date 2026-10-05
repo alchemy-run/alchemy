@@ -1,8 +1,9 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
-import {
-  parseHeaders,
-  parseRedirects,
-} from "../../../internal/workers-shared/index.ts";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import { parseHeaders, parseRedirects } from "../../../internal/workers-shared/index.ts";
 import {
   constructHeaders,
   constructRedirects,
@@ -27,34 +28,24 @@ import type {
   RouterConfig,
   StaticRouting,
 } from "../../../internal/workers-shared/shared/types.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-const AssetsKvWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/assets/assets-kv.worker",
-    ),
-};
-const AssetsWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/assets/assets.worker",
-    ),
-};
-const RouterWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/assets/router.worker",
-    ),
-};
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
+import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
 import type { RuntimeWorker } from "../../RuntimeWorker.ts";
-import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
+
+const AssetsKvWorker = {
+  worker: () =>
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/assets/assets-kv.worker"),
+};
+const AssetsWorker = {
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/bindings/assets/assets.worker"),
+};
+const RouterWorker = {
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/bindings/assets/router.worker"),
+};
 
 export class Assets extends Plugin.Service<Assets, { isConfigured: boolean }>()(
   "cloudflare-runtime/plugin/Assets",
@@ -77,17 +68,13 @@ export const AssetsLive = Layer.effect(
       };
     }
 
-    const buildAssetManifest = Effect.fn("buildAssetManifest")(function* (
-      dir: string,
-    ) {
+    const buildAssetManifest = Effect.fn("buildAssetManifest")(function* (dir: string) {
       const files = yield* fs.readDirectory(dir, { recursive: true }).pipe(
         Effect.catchIf(
           (error) => error.reason._tag === "NotFound",
           () =>
             Effect.succeed([]).pipe(
-              Effect.tap(() =>
-                Effect.logWarning(`Could not read assets directory "${dir}"`),
-              ),
+              Effect.tap(() => Effect.logWarning(`Could not read assets directory "${dir}"`)),
             ),
         ),
         Effect.mapError(
@@ -101,13 +88,8 @@ export const AssetsLive = Layer.effect(
             }),
         ),
       );
-      const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(
-        dir,
-      ).pipe(
-        Effect.provide([
-          Layer.succeed(FileSystem.FileSystem, fs),
-          Layer.succeed(Path.Path, path),
-        ]),
+      const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(dir).pipe(
+        Effect.provide([Layer.succeed(FileSystem.FileSystem, fs), Layer.succeed(Path.Path, path)]),
         Effect.mapError(
           (cause) =>
             new SystemError({
@@ -212,20 +194,14 @@ export const AssetsLive = Layer.effect(
     const hashPath = (input: string) =>
       Effect.promise(async () => {
         const data = new TextEncoder().encode(input);
-        const hashBuffer = await crypto.subtle.digest(
-          "SHA-256",
-          data.buffer as ArrayBuffer,
-        );
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data.buffer as ArrayBuffer);
         return new Uint8Array(hashBuffer, 0, PATH_HASH_SIZE);
       });
 
     const bytesToHex = (buffer: Uint8Array) =>
       Array.from(buffer, (b) => b.toString(16).padStart(2, "0")).join("");
 
-    const compareManifestEntries = (
-      a: { pathHash: Uint8Array },
-      b: { pathHash: Uint8Array },
-    ) => {
+    const compareManifestEntries = (a: { pathHash: Uint8Array }, b: { pathHash: Uint8Array }) => {
       if (a.pathHash.length < b.pathHash.length) {
         return -1;
       }
@@ -268,19 +244,15 @@ export const AssetsLive = Layer.effect(
             },
           };
         }
-        const { encodedAssetManifest, assetsReverseMap } =
-          yield* buildAssetManifest(path.resolve(worker.assets.directory));
-        const { assetsConfig, routerConfig } = buildAssetConfigs(worker);
-        const [assetsKvWorker, assetsWorker, routerWorker] =
-          yield* Effect.forEach(
-            [AssetsKvWorker, AssetsWorker, RouterWorker],
-            (worker) =>
-              Effect.map(
-                Effect.promise(worker.worker),
-                formatInternalWorkerModules,
-              ),
-            { concurrency: "unbounded" },
-          );
+        const { encodedAssetManifest, assetsReverseMap } = yield* buildAssetManifest(
+          path.resolve(worker.assets.directory),
+        );
+        const { assetsConfig, routerConfig } = yield* buildAssetConfigs(worker);
+        const [assetsKvWorker, assetsWorker, routerWorker] = yield* Effect.forEach(
+          [AssetsKvWorker, AssetsWorker, RouterWorker],
+          (worker) => Effect.map(Effect.promise(worker.worker), formatInternalWorkerModules),
+          { concurrency: "unbounded" },
+        );
         return {
           services: [
             {
@@ -312,8 +284,8 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:worker",
               worker: {
-                compatibilityDate: "2024-07-31",
-                compatibilityFlags: ["nodejs_compat", "enable_ctx_exports"],
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                // Node.js compatibility is default-on for the internal date.
                 bindings: [
                   {
                     name: "ASSETS_KV_NAMESPACE",
@@ -338,12 +310,9 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:router",
               worker: {
-                compatibilityDate: "2024-07-31",
-                compatibilityFlags: [
-                  "nodejs_compat",
-                  "no_nodejs_compat_v2",
-                  "enable_ctx_exports",
-                ],
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                // Keep the intentional v2 opt-out; the date supplies v1.
+                compatibilityFlags: ["no_nodejs_compat_v2"],
                 bindings: [
                   {
                     name: "ASSET_WORKER",
@@ -371,36 +340,29 @@ export const AssetsLive = Layer.effect(
   }),
 );
 
-export const buildAssetConfigs = (
-  worker: Pick<
-    RuntimeWorker,
-    "assets" | "compatibilityDate" | "compatibilityFlags"
-  >,
-) => {
+export const buildAssetConfigs = Effect.fn("buildAssetConfigs")(function* (
+  worker: Pick<RuntimeWorker, "assets" | "compatibilityDate" | "compatibilityFlags">,
+) {
   let headers: AssetConfig["headers"] | undefined;
   if (worker.assets?.headers) {
-    const parsedHeaders = parseHeaders(worker.assets.headers);
-    headers = constructHeaders({
-      headers: parsedHeaders,
+    headers = (yield* constructHeaders({
+      headers: parseHeaders(worker.assets.headers),
       headersFile: worker.assets.headers,
-      logger: undefined!,
-    }).headers;
+    })).headers;
   }
   let redirects: AssetConfig["redirects"] | undefined;
   if (worker.assets?.redirects) {
-    const parsedRedirects = parseRedirects(worker.assets.redirects);
-    redirects = constructRedirects({
-      redirects: parsedRedirects,
+    redirects = (yield* constructRedirects({
+      redirects: parseRedirects(worker.assets.redirects),
       redirectsFile: worker.assets.redirects,
-      logger: undefined!,
-    }).redirects;
+    })).redirects;
   }
   let staticRouting: StaticRouting | undefined;
   if (Array.isArray(worker.assets?.runWorkerFirst)) {
     staticRouting = parseStaticRouting(worker.assets.runWorkerFirst);
   }
   const routerConfig: RouterConfig = {
-    // Matches wrangler: assets are served first unless `runWorkerFirst: true`.
+    // Assets are served first unless `runWorkerFirst: true`.
     // An array selects routes via `static_routing` instead of the blanket flag.
     invoke_user_worker_ahead_of_assets: worker.assets?.runWorkerFirst === true,
     static_routing: staticRouting,
@@ -416,7 +378,7 @@ export const buildAssetConfigs = (
     has_static_routing: !!staticRouting,
   };
   return { assetsConfig, routerConfig };
-};
+});
 
 export const local = (binding: string): BindingHook<Assets> =>
   Plugin.use(Assets, (assets) =>
@@ -430,8 +392,7 @@ export const local = (binding: string): BindingHook<Assets> =>
       : Effect.fail(
           new ConfigError({
             subtag: "Assets",
-            message:
-              "An assets binding cannot be used without worker.assets being specified.",
+            message: "An assets binding cannot be used without worker.assets being specified.",
             hint: "Remove the assets binding or specify worker.assets in your worker config.",
             detail: {
               binding,

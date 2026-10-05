@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { Framework } from "@alchemy.run/frontend-frameworks/core";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
-import * as Command from "effect/unstable/cli/Command";
-import * as Flag from "effect/unstable/cli/Flag";
 import * as Options from "./Options.ts";
 import * as Runtime from "./Runtime.ts";
 import * as Server from "./Server.ts";
@@ -21,15 +21,13 @@ const build = Command.make(
 const dev = Command.make(
   "dev",
   {
-    port: Flag.integer("port").pipe(Flag.optional),
+    port: Flag.Int("port").pipe(Flag.optional),
   },
   Effect.fn(function* ({ port }) {
     const framework = yield* Framework;
     // Thread the fixture's project root (Options.root) into Framework.dev,
     // mirroring what Server/buildAndPersist do for `live`/`build`.
-    const root = yield* Options.load().pipe(
-      Effect.flatMap(Options.resolveRoot),
-    );
+    const root = yield* Options.load().pipe(Effect.flatMap(Options.resolveRoot));
     const { url } = yield* framework.dev({ port: port.valueOrUndefined, root });
     yield* Effect.log(`Dev server running at ${url}`);
     yield* Effect.never;

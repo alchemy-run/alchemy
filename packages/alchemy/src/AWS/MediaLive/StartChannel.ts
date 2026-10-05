@@ -30,12 +30,7 @@ export interface StartChannel extends Binding.Service<
   (
     channel: Channel,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      medialive.StartChannelResponse,
-      medialive.StartChannelError
-    >
+    () => Effect.Effect<medialive.StartChannelResponse, medialive.StartChannelError>
   >
 > {}
-export const StartChannel = Binding.Service<StartChannel>(
-  "AWS.MediaLive.StartChannel",
-);
+export const StartChannel = Binding.Service<StartChannel>("AWS.MediaLive.StartChannel");

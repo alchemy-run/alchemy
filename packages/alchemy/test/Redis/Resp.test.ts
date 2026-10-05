@@ -1,4 +1,5 @@
 import { describe, expect, test } from "alchemy-test";
+import { ProtocolError, ReplyError } from "@/Redis/Errors.ts";
 import {
   decode,
   decodeAll,
@@ -17,7 +18,6 @@ import {
   type ParseResult,
   type Reply,
 } from "@/Redis/Resp.ts";
-import { ProtocolError, ReplyError } from "@/Redis/Errors.ts";
 
 const utf8 = new TextEncoder();
 const bytes = (value: string): Uint8Array => utf8.encode(value);
@@ -53,7 +53,7 @@ const drain = (input: Uint8Array, size: number): ParseResult[] => {
   return frames;
 };
 
-describe("encodeCommand", () => {
+describe("encodeCommand", { tags: ["unit", "local"] }, () => {
   test("PING is an array of bulk strings", () => {
     expect(encodeCommand("PING")).toEqual(bytes("*1\r\n$4\r\nPING\r\n"));
   });
@@ -66,9 +66,7 @@ describe("encodeCommand", () => {
 
   test("bulk length is bytes, not JS string length", () => {
     const encoded = encodeCommand("SET", ["k", "😀"]);
-    expect(encoded).toEqual(
-      bytes("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$4\r\n😀\r\n"),
-    );
+    expect(encoded).toEqual(bytes("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$4\r\n😀\r\n"));
   });
 
   test("binary args are length-prefixed without scanning", () => {
@@ -83,7 +81,7 @@ describe("encodeCommand", () => {
   });
 });
 
-describe("RESP2 decode", () => {
+describe("RESP2 decode", { tags: ["unit", "local"] }, () => {
   test("simple string", () => {
     expect(asReply("+OK\r\n")).toBe("OK");
     expect(asReply("+\r\n")).toBe("");
@@ -134,9 +132,7 @@ describe("RESP2 decode", () => {
       4,
       "foobar",
     ]);
-    const nested = asReply(
-      "*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Foo\r\n-Bar\r\n",
-    );
+    const nested = asReply("*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Foo\r\n-Bar\r\n");
     expect(Array.isArray(nested)).toBe(true);
     const [first, second] = nested as Reply[];
     expect(first).toEqual([1, 2, 3]);
@@ -148,11 +144,7 @@ describe("RESP2 decode", () => {
   });
 
   test("null element in array", () => {
-    expect(asReply("*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n")).toEqual([
-      "foo",
-      null,
-      "bar",
-    ]);
+    expect(asReply("*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n")).toEqual(["foo", null, "bar"]);
   });
 
   test("round-trip encodeReply", () => {
@@ -161,7 +153,7 @@ describe("RESP2 decode", () => {
   });
 });
 
-describe("RESP3 decode", () => {
+describe("RESP3 decode", { tags: ["unit", "local"] }, () => {
   test("null boolean double big number", () => {
     expect(asReply("_\r\n")).toBeNull();
     expect(asReply("#t\r\n")).toBe(true);
@@ -212,9 +204,7 @@ describe("RESP3 decode", () => {
   });
 
   test("streamed string", () => {
-    expect(
-      asReply("$?\r\n;5\r\nHello\r\n;1\r\n \r\n;5\r\nworld\r\n;0\r\n"),
-    ).toBe("Hello world");
+    expect(asReply("$?\r\n;5\r\nHello\r\n;1\r\n \r\n;5\r\nworld\r\n;0\r\n")).toBe("Hello world");
   });
 
   test("streamed array", () => {
@@ -222,7 +212,7 @@ describe("RESP3 decode", () => {
   });
 });
 
-describe("incremental parser", () => {
+describe("incremental parser", { tags: ["unit", "local"] }, () => {
   test("replies split one byte at a time", () => {
     const payload = encodeArray([
       encodeBulk("foo"),
@@ -260,7 +250,7 @@ describe("incremental parser", () => {
   });
 });
 
-describe("protocol errors", () => {
+describe("protocol errors", { tags: ["unit", "local"] }, () => {
   test("unknown type byte", () => {
     const result = decode("xOK\r\n");
     expect(result._tag).toBe("Protocol");

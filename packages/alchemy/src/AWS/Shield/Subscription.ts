@@ -104,9 +104,7 @@ export const SubscriptionProvider = () =>
         // Account-level singleton — report the single subscription, if any.
         list: () =>
           observeSubscription.pipe(
-            Effect.map((subscription) =>
-              subscription ? [buildAttrs(subscription)] : [],
-            ),
+            Effect.map((subscription) => (subscription ? [buildAttrs(subscription)] : [])),
           ),
 
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -118,20 +116,13 @@ export const SubscriptionProvider = () =>
           if (!subscription) {
             yield* shield
               .createSubscription({})
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             subscription = yield* shield
               .describeSubscription({})
               .pipe(Effect.map((r) => r.Subscription));
             if (!subscription) {
               return yield* Effect.fail(
-                new Error(
-                  "Failed to create or read the Shield Advanced subscription",
-                ),
+                new Error("Failed to create or read the Shield Advanced subscription"),
               );
             }
           }

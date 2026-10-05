@@ -111,9 +111,7 @@ export const consumeTrackerEvents = <StreamReq = never, Req = never>(
       "detail-type": (props.kinds ?? (["geofence-event"] as const)).map(
         (kind) => DETAIL_TYPES[kind],
       ),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

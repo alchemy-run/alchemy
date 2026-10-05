@@ -1,10 +1,10 @@
+import * as redshift from "@distilled.cloud/aws/redshift";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { EventSubscription } from "@/AWS/Redshift";
 import * as SNS from "@/AWS/SNS";
 import * as Test from "@/Test/Alchemy";
-import * as redshift from "@distilled.cloud/aws/redshift";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,6 +21,7 @@ test.provider(
       );
       expect(error._tag).toBe("SubscriptionNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:redshift", "live"] },
 );
 
 const readSubscription = (name: string) =>
@@ -55,10 +56,7 @@ test.provider(
       expect(created.subscriptionName).toBeDefined();
       expect(created.eventSubscriptionArn).toContain(":eventsubscription:");
       expect(created.sourceType).toBe("cluster");
-      expect([...created.eventCategories].sort()).toEqual([
-        "management",
-        "monitoring",
-      ]);
+      expect([...created.eventCategories].sort()).toEqual(["management", "monitoring"]);
       expect(created.severity).toBe("INFO");
       expect(created.enabled).toBe(true);
       expect(created.snsTopicArn).toContain(":sns:");
@@ -69,8 +67,7 @@ test.provider(
       expect(observed?.SourceType).toBe("cluster");
       expect(
         observed?.Tags?.some(
-          (t) =>
-            t.Key === "fixture" && t.Value === "redshift-event-subscription",
+          (t) => t.Key === "fixture" && t.Value === "redshift-event-subscription",
         ),
       ).toBe(true);
 
@@ -109,5 +106,8 @@ test.provider(
       );
       expect(error._tag).toBe("SubscriptionNotFoundFault");
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:redshift", "provider:aws:sns", "live"],
+    timeout: 180_000,
+  },
 );

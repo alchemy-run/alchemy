@@ -1,6 +1,6 @@
 import * as NodeHttp from "node:http";
-import path from "node:path";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import * as vite from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
@@ -16,6 +16,7 @@ vi.mock("../dev-server.ts", () => ({
   createDefaultContext: async () => ({}),
   startServer: async () => ({
     address: runtimeAddress,
+    proxySharedSecret: "dev-secret",
     close: async () => {},
   }),
 }));
@@ -52,8 +53,9 @@ describe("dev plugin", () => {
     await new Promise((resolve) => runtimeServer.close(resolve));
   });
 
-  const createDevServer = (plugins: vite.PluginOption) =>
+  const createDevServer = (plugins: vite.PluginOption, config: vite.UserConfig = {}) =>
     vite.createServer({
+      ...config,
       configFile: false,
       root,
       logLevel: "silent",
@@ -113,16 +115,60 @@ describe("dev plugin", () => {
   });
 
   it("creates the Distilled environment when configureServer is intact", async () => {
-    const server = await createDevServer(
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    );
+    const server = await createDevServer(cloudflareVitePlugin({ main: "./worker-entry.ts" }));
     try {
-      expect(server.environments["ssr"]).toBeInstanceOf(
-        DistilledDevEnvironment,
-      );
+      expect(server.environments["ssr"]).toBeInstanceOf(DistilledDevEnvironment);
     } finally {
       await server.close();
     }
+  });
+
+  it("accepts multiple aliases for the same Worker entry", async () => {
+    const server = await createDevServer([
+      {
+        name: "framework-entry-aliases",
+        config: () => ({
+          environments: {
+            ssr: {
+              build: {
+                rollupOptions: {
+                  input: {
+                    worker: "./worker-entry.ts",
+                    "entry.worker": path.join(root, "worker-entry.ts"),
+                  },
+                },
+              },
+            },
+          },
+        }),
+      },
+      cloudflareVitePlugin({}),
+    ]);
+    try {
+      expect(server.environments["ssr"]).toBeInstanceOf(DistilledDevEnvironment);
+      expect((await request(server, "/")).text).toBe("worker");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects distinct Worker entries", async () => {
+    await expect(
+      createDevServer(cloudflareVitePlugin({}), {
+        environments: {
+          ssr: {
+            build: {
+              rollupOptions: {
+                input: {
+                  first: "./worker-entry.ts",
+                  second: "./other-entry.ts",
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toThrow("Expected exactly one entry in the input, got 2 entries");
   });
 
   it("registers the proxy middleware after other plugins' post middlewares by default", async () => {

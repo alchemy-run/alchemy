@@ -1,22 +1,22 @@
+import { Retry } from "@distilled.cloud/prisma";
+import {
+  type GetEnvironmentVariablesResponse,
+  deleteEnvironmentVariable,
+  getEnvironmentVariables,
+  getEnvironmentVariable,
+  updateEnvironmentVariable,
+  createEnvironmentVariable,
+} from "@distilled.cloud/prisma/management";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import * as Redacted from "effect/Redacted";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  PrismaClient,
-  isConflict,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedEnvironmentVariable } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -26,7 +26,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { EnvironmentVariable as ApiEnvironmentVariable } from "./Types.ts";
 
 export interface EnvironmentVariableProps {
   /**
@@ -132,10 +131,9 @@ export interface EnvironmentVariable extends Resource<
  * ```
  *
  * @resource
+ * @product Compute
  */
-export const EnvironmentVariable = Resource<EnvironmentVariable>(
-  "Prisma.EnvironmentVariable",
-);
+export const EnvironmentVariable = Resource<EnvironmentVariable>("Prisma.EnvironmentVariable");
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
@@ -151,23 +149,16 @@ const validateEnvironmentVariableKey = (key: string) =>
     }
   });
 
-const validateEnvironmentVariableWrite = (
-  key: string,
-  value: Redacted.Redacted<string>,
-) =>
+const validateEnvironmentVariableWrite = (key: string, value: Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     yield* validateEnvironmentVariableKey(key);
     const raw = Redacted.value(value);
     if (raw.length === 0) {
       return yield* Effect.fail(
-        new Error(
-          `Prisma environment variable '${key}' value must be non-empty.`,
-        ),
+        new Error(`Prisma environment variable '${key}' value must be non-empty.`),
       );
     }
-    const byteLength = yield* Effect.sync(
-      () => new TextEncoder().encode(raw).byteLength,
-    );
+    const byteLength = yield* Effect.sync(() => new TextEncoder().encode(raw).byteLength);
     if (byteLength > ENV_VALUE_MAX_BYTES) {
       return yield* Effect.fail(
         new Error(
@@ -177,38 +168,67 @@ const validateEnvironmentVariableWrite = (
     }
   });
 
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listVariables = (
+  query: {
+    readonly projectId?: string;
+    readonly class?: "production" | "preview";
+    readonly key?: string;
+    readonly branchId?: string;
+    readonly limit?: number;
+  } = {},
+) =>
+  Effect.gen(function* () {
+    const variables: GetEnvironmentVariablesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getEnvironmentVariables(
+        cursor === undefined ? query : { ...query, cursor },
+      );
+      variables.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return variables;
+  });
+
 const findVariable = (
-  client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
   key: string,
   branchId?: string | null,
 ) =>
-  client
-    .listEnvironmentVariables({
-      projectId,
-      class: cls,
-      key,
-      ...(branchId ? { branchId } : {}),
-      limit: 100,
-    })
-    .pipe(
-      Effect.flatMap((variables) => {
-        const matches = variables.filter(
-          (variable) => variable.branchId === (branchId ?? null),
-        );
-        return matches.length > 1
-          ? Effect.fail(
-              new Error(
-                `Multiple Prisma environment variables match '${key}' in the requested scope; refusing to select one arbitrarily.`,
-              ),
-            )
-          : Effect.succeed(matches[0]);
-      }),
-    );
+  listVariables({
+    projectId,
+    class: cls,
+    key,
+    ...(branchId ? { branchId } : {}),
+    limit: 100,
+  }).pipe(
+    Effect.flatMap((variables) => {
+      const matches = variables.filter((variable) => variable.branchId === (branchId ?? null));
+      return matches.length > 1
+        ? Effect.fail(
+            new Error(
+              `Multiple Prisma environment variables match '${key}' in the requested scope; refusing to select one arbitrarily.`,
+            ),
+          )
+        : Effect.succeed(matches[0]);
+    }),
+  );
 
 const attrsFrom = (
-  variable: ApiEnvironmentVariable,
+  variable: ObservedEnvironmentVariable,
   value: Redacted.Redacted<string>,
 ): EnvironmentVariable["Attributes"] => ({
   environmentVariableId: variable.id,
@@ -228,7 +248,7 @@ const systemManagedVariableError = (key: string) =>
     `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
   );
 
-const ensureUserManagedVariable = (variable: ApiEnvironmentVariable) =>
+const ensureUserManagedVariable = (variable: ObservedEnvironmentVariable) =>
   Effect.gen(function* () {
     if (variable.isManagedBySystem) {
       return yield* Effect.fail(systemManagedVariableError(variable.key));
@@ -236,7 +256,7 @@ const ensureUserManagedVariable = (variable: ApiEnvironmentVariable) =>
   });
 
 const ensureVariableIdentity = (
-  variable: ApiEnvironmentVariable,
+  variable: ObservedEnvironmentVariable,
   expected: {
     projectId: string;
     branchId: string | null;
@@ -259,11 +279,10 @@ const ProviderLive = () =>
   Provider.effect(
     EnvironmentVariable,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["environmentVariableId"],
         list: () =>
-          client.listEnvironmentVariables().pipe(
+          listVariables().pipe(
             Effect.map((variables) =>
               variables
                 // System-managed variables are project-owned and cannot be
@@ -282,8 +301,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.environmentVariableId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -309,21 +327,16 @@ const ProviderLive = () =>
             ? undefined
             : output?.environmentVariableId;
           const variable = variableId
-            ? yield* client
-                .getEnvironmentVariable(variableId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getEnvironmentVariable({
+                envVarId: variableId,
+              }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findVariable(
-                      client,
-                      projectId,
-                      olds.class,
-                      olds.key,
-                      olds.branchId,
-                    )
+                  ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
                   : undefined;
               });
           if (!variable) return undefined;
@@ -339,9 +352,7 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ news, output }) {
           if (news.branchId !== undefined && news.class !== "preview") {
             return yield* Effect.fail(
-              new Error(
-                'Prisma branch-scoped environment variables must use class: "preview".',
-              ),
+              new Error('Prisma branch-scoped environment variables must use class: "preview".'),
             );
           }
           yield* validateEnvironmentVariableWrite(news.key, news.value);
@@ -350,33 +361,38 @@ const ProviderLive = () =>
             ? undefined
             : output?.environmentVariableId;
           let variable = variableId
-            ? yield* client
-                .getEnvironmentVariable(variableId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getEnvironmentVariable({
+                envVarId: variableId,
+              }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : undefined;
           const value = news.value;
           let created = false;
           if (!variable) {
-            const result = yield* client
-              .createEnvironmentVariable({
-                projectId,
-                ...(news.branchId ? { branchId: news.branchId } : {}),
-                class: news.class,
-                key: news.key,
-                value: Redacted.value(value),
-              })
-              .pipe(
-                Effect.map((variable) => ({ variable, created: true })),
-                Effect.catchIf(isConflict, () =>
-                  Effect.fail(
-                    new Error(
-                      `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
-                    ),
+            const result = yield* createEnvironmentVariable({
+              projectId,
+              ...(news.branchId ? { branchId: news.branchId } : {}),
+              class: news.class,
+              key: news.key,
+              value: Redacted.value(value),
+            }).pipe(
+              // A replayed create would mint a second variable; the retry
+              // policy cannot see the request, so opt out explicitly.
+              Retry.none,
+              Effect.map((response) => ({
+                variable: response.data,
+                created: true,
+              })),
+              Effect.catchTag("Conflict", () =>
+                Effect.fail(
+                  new Error(
+                    `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
                   ),
                 ),
-              );
+              ),
+            );
             variable = result.variable;
             created = result.created;
           }
@@ -388,17 +404,21 @@ const ProviderLive = () =>
           });
           yield* ensureUserManagedVariable(variable);
           if (!created) {
-            variable = yield* client.updateEnvironmentVariable(variable.id, {
+            variable = (yield* updateEnvironmentVariable({
+              envVarId: variable.id,
               value: Redacted.value(value),
-            });
+            })).data;
           }
           return attrsFrom(variable, value);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.environmentVariableId)) return;
-          const variable = yield* client
-            .getEnvironmentVariable(output.environmentVariableId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const variable = yield* getEnvironmentVariable({
+            envVarId: output.environmentVariableId,
+          }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           if (!variable) return;
           yield* ensureVariableIdentity(variable, {
             projectId: output.projectId,
@@ -416,31 +436,27 @@ const ProviderLive = () =>
             }
             return;
           }
-          yield* client
-            .deleteEnvironmentVariable(variable.id)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteEnvironmentVariable({
+            envVarId: variable.id,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),
   );
 
 const ProviderLocal = () =>
-  devProvider(
-    EnvironmentVariable,
-    ["environmentVariableId"],
-    ({ id, news }) => ({
-      environmentVariableId: devId("environment-variable", id),
-      projectId: attrOrString(news.project, "projectId"),
-      branchId: news.branchId ?? null,
-      class: news.class,
-      key: news.key,
-      value: news.value,
-      valueKid: devId("value-kid", id),
-      isManagedBySystem: false,
-      createdAt: DEV_TIMESTAMP,
-      updatedAt: DEV_TIMESTAMP,
-    }),
-  );
+  devProvider(EnvironmentVariable, ["environmentVariableId"], ({ id, news }) => ({
+    environmentVariableId: devId("environment-variable", id),
+    projectId: attrOrString(news.project, "projectId"),
+    branchId: news.branchId ?? null,
+    class: news.class,
+    key: news.key,
+    value: news.value,
+    valueKid: devId("value-kid", id),
+    isManagedBySystem: false,
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
 
 export const EnvironmentVariableProvider = () =>
   ProviderLayer.dual(EnvironmentVariable, {

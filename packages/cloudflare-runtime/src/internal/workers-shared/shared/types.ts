@@ -1,5 +1,6 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+// Alchemy modifications: uses Effect Schema instead of Zod and exposes mutable config types required by the worker implementations.
 import * as Schema from "effect/Schema";
 
 /**
@@ -51,13 +52,8 @@ const MetadataRedirectEntry = Schema.Struct({
   to: Schema.String,
 });
 
-const MetadataStaticRedirects = Schema.Record(
-  Schema.String,
-  MetadataStaticRedirectEntry,
-);
-export type MetadataStaticRedirects = Mutable<
-  typeof MetadataStaticRedirects.Type
->;
+const MetadataStaticRedirects = Schema.Record(Schema.String, MetadataStaticRedirectEntry);
+export type MetadataStaticRedirects = Mutable<typeof MetadataStaticRedirects.Type>;
 const MetadataRedirects = Schema.Record(Schema.String, MetadataRedirectEntry);
 export type MetadataRedirects = Mutable<typeof MetadataRedirects.Type>;
 
@@ -84,12 +80,7 @@ export const AssetConfigSchema = Schema.Struct({
   compatibility_date: Schema.optional(Schema.String),
   compatibility_flags: Schema.optional(Schema.Array(Schema.String)),
   html_handling: Schema.optional(
-    Schema.Literals([
-      "auto-trailing-slash",
-      "force-trailing-slash",
-      "drop-trailing-slash",
-      "none",
-    ]),
+    Schema.Literals(["auto-trailing-slash", "force-trailing-slash", "drop-trailing-slash", "none"]),
   ),
   not_found_handling: Schema.optional(
     Schema.Literals(["single-page-application", "404-page", "none"]),
@@ -100,9 +91,7 @@ export const AssetConfigSchema = Schema.Struct({
   ...InternalConfigFields,
 });
 
-export type EyeballRouterConfig = Mutable<
-  typeof EyeballRouterConfigSchema.Type
->;
+export type EyeballRouterConfig = Mutable<typeof EyeballRouterConfigSchema.Type>;
 export type RouterConfig = Mutable<typeof RouterConfigSchema.Type>;
 export type AssetConfig = Mutable<typeof AssetConfigSchema.Type>;
 

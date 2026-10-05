@@ -1,26 +1,30 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
-import type {
-  EnvironmentCreateResponse,
-  EnvironmentRenameResponse,
-  EnvironmentResponse,
-  EnvironmentsResponseEdgesItemNode,
-} from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import { Railway, type Environment as RailwayEnvironment } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import {
-  createRailwayName,
+  createRailwayEnvironmentName,
   matchesAlchemyPhysicalName,
-  sanitizeRailwayName,
+  sanitizeRailwayEnvironmentName,
 } from "./Metadata.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
+import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+import { waitOutCreateRateLimit } from "./transient.ts";
+
+const environmentFields = <E>(env: Query<RailwayEnvironment, E>) => ({
+  id: env.id,
+  name: env.name,
+  projectId: env.projectId,
+  isEphemeral: env.isEphemeral,
+  deletedAt: env.deletedAt,
+});
+type CloudEnvironment = UnwrapPlan<ReturnType<typeof environmentFields>>;
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -66,6 +70,20 @@ export type Environment = Resource<
   never,
   Providers
 >;
+
+const EnvironmentResource = Resource<Environment>("Railway.Environment");
+
+const resolveEnvironmentProps = (
+  props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>,
+): Effect.Effect<EnvironmentProps, never, Providers> =>
+  Effect.gen(function* () {
+    const resolved = Effect.isEffect(props) ? yield* props : props;
+    if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
+    const project = Effect.isEffect(resolved.project)
+      ? yield* resolved.project as Effect.Effect<Project, never, Providers>
+      : resolved.project;
+    return { ...resolved, project };
+  });
 
 /**
  * A Railway.Environment is an extra deploy environment under a Project
@@ -131,27 +149,22 @@ export type Environment = Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
-export const Environment = Resource<Environment>("Railway.Environment");
+export const Environment: typeof EnvironmentResource = Object.assign(
+  (id: string, props: EnvironmentProps | Effect.Effect<EnvironmentProps, never, Providers>) =>
+    EnvironmentResource(id, resolveEnvironmentProps(props)),
+  EnvironmentResource,
+);
 
-export class EnvironmentNotCreated extends Data.TaggedError(
-  "Railway.EnvironmentNotCreated",
-)<{
+export class EnvironmentNotCreated extends Data.TaggedError("Railway.EnvironmentNotCreated")<{
   name: string;
   projectId: string;
 }> {}
 
 export class EnvironmentProjectRequired extends Data.TaggedError(
   "Railway.EnvironmentProjectRequired",
-)<{
-  message: string;
-}> {}
-
-type CloudEnvironment =
-  | EnvironmentResponse
-  | EnvironmentCreateResponse
-  | EnvironmentRenameResponse
-  | EnvironmentsResponseEdgesItemNode;
+)<{ message: string }> {}
 
 const toAttrs = (
   env: CloudEnvironment,
@@ -170,53 +183,50 @@ const toAttrs = (
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    if (name !== undefined) return sanitizeRailwayName(name);
+    if (name !== undefined) return sanitizeRailwayEnvironmentName(name);
     if (existing !== undefined) return existing;
-    return yield* createRailwayName(id);
+    return yield* createRailwayEnvironmentName(id);
   });
 
-const isGone = (env: CloudEnvironment | undefined) =>
-  env === undefined || env.deletedAt != null;
+const isGone = (env: CloudEnvironment | undefined) => env === undefined || env.deletedAt != null;
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
+const readEnvironment = Query.fn((id: string, projectId?: string) =>
+  environmentFields(Railway.environment({ id, ...(projectId !== undefined ? { projectId } : {}) })),
+);
+
+const projectEnvironments = (projectId: string) =>
+  Query.items(Railway.environments({ projectId, first: 50 }).pipe(Query.map(environmentFields)));
+
+const environmentCreate = Query.fn(
+  (input: { name: string; projectId: string; sourceEnvironmentId?: string }) =>
+    environmentFields(Railway.environmentCreate({ input })),
+);
+
+const environmentRename = Query.fn((id: string, name: string) =>
+  environmentFields(Railway.environmentRename({ id, input: { name } })),
+);
+
+const environmentDelete = Query.fn((id: string) => Railway.environmentDelete({ id }));
+
 const getById = (environmentId: string, projectId?: string) =>
-  railway
-    .environment({
-      id: environmentId,
-      ...(projectId !== undefined ? { projectId } : {}),
-    })
-    .pipe(
-      Effect.map((env) => (isGone(env) ? undefined : env)),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  readEnvironment(environmentId, projectId).pipe(
+    Effect.map((env) => (isGone(env) ? undefined : env)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+  );
 
 const findByName = (projectId: string, name: string) =>
-  railway.environments.items({ projectId, first: 50 }).pipe(
+  projectEnvironments(projectId).pipe(
     Stream.filter((env) => !isGone(env) && env.name === name),
     Stream.take(1),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
-  );
-
-const listProjectEnvironments = (projectId: string) =>
-  railway.environments.items({ projectId, first: 50 }).pipe(
-    Stream.runCollect,
-    Effect.map((envs) => Array.from(envs)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed([] as EnvironmentsResponseEdgesItemNode[]),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 export const EnvironmentProvider = () =>
@@ -237,15 +247,12 @@ export const EnvironmentProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const name = yield* resolveName(id, olds?.name, output?.name);
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const found =
         (output?.environmentId !== undefined
           ? yield* getById(output.environmentId, output.projectId)
           : undefined) ??
-        (projectId !== undefined
-          ? yield* findByName(projectId, name)
-          : undefined);
+        (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, { name, projectId });
       if (output !== undefined) return attrs;
@@ -253,20 +260,27 @@ export const EnvironmentProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const projects = yield* listOwnedProjects();
-      const rows = yield* Effect.forEach(
-        projects,
-        (project) =>
-          listProjectEnvironments(project.projectId).pipe(
-            Effect.map((envs) =>
-              envs
-                .filter(
-                  (env) => !isGone(env) && matchesAlchemyPhysicalName(env.name),
-                )
-                .map((env) => toAttrs(env, { projectId: project.projectId })),
-            ),
+      const projects = yield* ownedProjects();
+      const rows = yield* Effect.forEach(projects, (project) =>
+        projectEnvironments(project.projectId).pipe(
+          Stream.filter((env) => env.deletedAt == null && matchesAlchemyPhysicalName(env.name)),
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).map((env) => {
+              const projectId = env.projectId || project.projectId;
+              return {
+                environmentId: env.id,
+                name: env.name,
+                projectId,
+                isEphemeral: env.isEphemeral,
+                url: `https://railway.com/project/${projectId}?environmentId=${env.id}`,
+              };
+            }),
           ),
-        { concurrency: 8 },
+          Effect.catchTag("RailwayNotFound", () =>
+            Effect.succeed([] as Environment["Attributes"][]),
+          ),
+        ),
       );
       return rows.flat();
     }),
@@ -290,27 +304,15 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* railway
-          .environmentCreate({
-            input: {
-              name,
-              projectId,
-              ...(props.sourceEnvironmentId !== undefined
-                ? { sourceEnvironmentId: props.sourceEnvironmentId }
-                : {}),
-            },
-          })
-          .pipe(
-            RailwayRetry.none,
-            Effect.retry({
-              while: (e) => e._tag === "RailwayRateLimited",
-              schedule: Schedule.spaced("30 seconds"),
-              times: 1,
-            }),
-            Effect.catchTag("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        const created = yield* waitOutCreateRateLimit(
+          environmentCreate({
+            name,
+            projectId,
+            ...(props.sourceEnvironmentId !== undefined
+              ? { sourceEnvironmentId: props.sourceEnvironmentId }
+              : {}),
+          }),
+        ).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -319,10 +321,7 @@ export const EnvironmentProvider = () =>
       }
 
       if (current.name !== name) {
-        current = yield* railway.environmentRename({
-          id: current.id,
-          input: { name },
-        });
+        current = yield* environmentRename(current.id, name);
       }
 
       return toAttrs(current, { name, projectId });
@@ -331,18 +330,13 @@ export const EnvironmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const environmentId = output.environmentId;
       if (environmentId.length === 0) return;
-      yield* railway
-        .environmentDelete({ id: environmentId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
-      yield* getById(environmentId, output.projectId).pipe(
-        Effect.map((env) => env === undefined),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (gone) => gone,
-          times: 8,
-        }),
+      yield* environmentDelete(environmentId).pipe(
+        Effect.catchTag("RailwayNotFound", () => Effect.void),
+      );
+      yield* waitUntilDeleted(
+        "Environment",
+        environmentId,
+        getById(environmentId, output.projectId).pipe(Effect.map((env) => env === undefined)),
       );
     }),
   });

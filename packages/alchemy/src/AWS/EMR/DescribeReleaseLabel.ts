@@ -22,10 +22,7 @@ export interface DescribeReleaseLabel extends Binding.Service<
   () => Effect.Effect<
     (
       request?: SVC.DescribeReleaseLabelInput,
-    ) => Effect.Effect<
-      SVC.DescribeReleaseLabelOutput,
-      SVC.DescribeReleaseLabelError
-    >
+    ) => Effect.Effect<SVC.DescribeReleaseLabelOutput, SVC.DescribeReleaseLabelError>
   >
 > {}
 export const DescribeReleaseLabel = Binding.Service<DescribeReleaseLabel>(

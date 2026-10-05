@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { SyncConfiguration } from "@/AWS/CodeConnections/SyncConfiguration.ts";
-import * as Test from "@/Test/Alchemy";
 import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { SyncConfiguration } from "@/AWS/CodeConnections/SyncConfiguration.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,13 +26,14 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "Found" as const),
-          Effect.catchTag("ResourceNotFoundException", (e) =>
-            Effect.succeed(e._tag),
-          ),
+          Effect.catchTag("ResourceNotFoundException", (e) => Effect.succeed(e._tag)),
         );
       expect(tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:codeconnections", "live"],
+    timeout: 60_000,
+  },
 );
 
 test.provider.skipIf(!REPOSITORY_LINK_ID || !GIT_SYNC_ROLE_ARN)(
@@ -74,9 +75,7 @@ test.provider.skipIf(!REPOSITORY_LINK_ID || !GIT_SYNC_ROLE_ARN)(
         SyncType: "CFN_STACK_SYNC",
         ResourceName: "alchemy-test-sync-stack",
       });
-      expect(observed.SyncConfiguration.TriggerResourceUpdateOn).toBe(
-        "FILE_CHANGE",
-      );
+      expect(observed.SyncConfiguration.TriggerResourceUpdateOn).toBe("FILE_CHANGE");
 
       // Destroy — configuration is deleted; verify out-of-band.
       yield* stack.destroy();
@@ -87,11 +86,12 @@ test.provider.skipIf(!REPOSITORY_LINK_ID || !GIT_SYNC_ROLE_ARN)(
         })
         .pipe(
           Effect.map((res) => res.SyncConfiguration),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       expect(after).toBeUndefined();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:codeconnections", "live"],
+    timeout: 120_000,
+  },
 );

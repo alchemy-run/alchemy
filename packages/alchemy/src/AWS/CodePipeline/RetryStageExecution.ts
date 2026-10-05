@@ -34,10 +34,7 @@ export interface RetryStageExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RetryStageExecutionRequest,
-    ) => Effect.Effect<
-      SVC.RetryStageExecutionOutput,
-      SVC.RetryStageExecutionError
-    >
+    ) => Effect.Effect<SVC.RetryStageExecutionOutput, SVC.RetryStageExecutionError>
   >
 > {}
 export const RetryStageExecution = Binding.Service<RetryStageExecution>(

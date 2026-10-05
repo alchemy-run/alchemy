@@ -62,9 +62,7 @@ export interface EnvironmentProps {
    * branches with branch protection rules, or `customBranchPolicies` to a
    * list of branch name patterns (e.g. `["main", "release/*"]`).
    */
-  deploymentBranchPolicy?:
-    | { protectedBranches: true }
-    | { customBranchPolicies: string[] };
+  deploymentBranchPolicy?: { protectedBranches: true } | { customBranchPolicies: string[] };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -205,6 +203,7 @@ export interface Environment extends Resource<
  * ```
  *
  * @resource
+ * @product Actions
  */
 export const Environment = Resource<Environment>("GitHub.Environment");
 
@@ -217,11 +216,7 @@ export const resolveEnvironmentName = (
   environment: string | Environment | undefined,
 ): string | undefined => {
   const ref = environment as unknown as string | { name: string } | undefined;
-  return ref === undefined
-    ? undefined
-    : typeof ref === "string"
-      ? ref
-      : ref.name;
+  return ref === undefined ? undefined : typeof ref === "string" ? ref : ref.name;
 };
 
 export const EnvironmentProvider = () =>
@@ -292,8 +287,7 @@ export const EnvironmentProvider = () =>
             ...(news.waitTimer !== undefined || olds?.waitTimer !== undefined
               ? { wait_timer: news.waitTimer ?? 0 }
               : {}),
-            ...(news.preventSelfReview !== undefined ||
-            olds?.preventSelfReview !== undefined
+            ...(news.preventSelfReview !== undefined || olds?.preventSelfReview !== undefined
               ? { prevent_self_review: news.preventSelfReview ?? false }
               : {}),
             ...(reviewers !== null && reviewers.length > 0
@@ -333,9 +327,7 @@ export const EnvironmentProvider = () =>
                 per_page: 100,
               },
             );
-            const observedNames = new Set(
-              observed.map((policy) => policy.name),
-            );
+            const observedNames = new Set(observed.map((policy) => policy.name));
             for (const name of desired) {
               if (!observedNames.has(name)) {
                 await octokit.rest.repos.createDeploymentBranchPolicy({

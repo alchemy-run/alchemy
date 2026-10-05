@@ -40,6 +40,4 @@ export interface StartImageScan extends Binding.Service<
   >
 > {}
 
-export const StartImageScan = Binding.Service<StartImageScan>(
-  "AWS.ECR.StartImageScan",
-);
+export const StartImageScan = Binding.Service<StartImageScan>("AWS.ECR.StartImageScan");

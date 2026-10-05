@@ -1,13 +1,13 @@
-import * as Drizzle from "@/Drizzle";
-import * as Provider from "@/Provider";
-import * as Stack from "@/Stack";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import * as Drizzle from "@/Drizzle";
+import * as Provider from "@/Provider";
+import * as Stack from "@/Stack";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Drizzle.providers() });
 
@@ -79,9 +79,7 @@ const stageWorkspace = (initialSource: string) =>
 const readMigrationDirs = (out: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    return (yield* fs.readDirectory(out))
-      .filter((name) => /^\d+_/.test(name))
-      .sort();
+    return (yield* fs.readDirectory(out)).filter((name) => /^\d+_/.test(name)).sort();
   });
 
 // Returns snapshots in chain order (each entry's prevIds points at the one
@@ -95,9 +93,7 @@ const readSnapshots = (out: string) =>
     const dirs = yield* readMigrationDirs(out);
     const snapshots: Array<{ id: string; prevIds: string[] }> = [];
     for (const dir of dirs) {
-      const text = yield* fs.readFileString(
-        path.join(out, dir, "snapshot.json"),
-      );
+      const text = yield* fs.readFileString(path.join(out, dir, "snapshot.json"));
       snapshots.push(
         yield* Effect.try({
           try: () => JSON.parse(text) as { id: string; prevIds: string[] },
@@ -122,21 +118,19 @@ const getStatus = Effect.fn(function* (fqn: string) {
   return s?.status;
 });
 
-test.provider("initial snapshot starts from the Drizzle origin", (stack) =>
-  Effect.gen(function* () {
-    const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+test.provider(
+  "initial snapshot starts from the Drizzle origin",
+  (stack) =>
+    Effect.gen(function* () {
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
 
-    yield* stack.deploy(
-      Drizzle.Schema("app-schema", {
-        schema: ws.schemaPath,
-        out: ws.out,
-      }),
-    );
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
 
-    const snapshots = yield* readSnapshots(ws.out);
-    expect(snapshots).toHaveLength(1);
-    expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
-  }),
+      const snapshots = yield* readSnapshots(ws.out);
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
+    }),
+  { tags: ["unit", "local"] },
 );
 
 test.provider(
@@ -145,12 +139,7 @@ test.provider(
     Effect.gen(function* () {
       const ws = yield* stageWorkspace(SCHEMA_SOURCE);
 
-      yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
       expect(yield* getStatus("app-schema")).toEqual("created");
 
       // Second deploy with the same schema. Before the fix, Schema.diff
@@ -158,14 +147,10 @@ test.provider(
       // flip to "updated" and downstream resources (e.g. Neon.Branch)
       // would see `schema.out` as an unresolved Output during plan and
       // cascade into their own spurious updates.
-      yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
-      );
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
       expect(yield* getStatus("app-schema")).toEqual("created");
     }),
+  { tags: ["unit", "local"] },
 );
 
 test.provider(
@@ -177,10 +162,7 @@ test.provider(
       const ws = yield* stageWorkspace(SCHEMA_SOURCE);
 
       const initial = yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }),
       );
       const [initialSnapshot] = yield* readSnapshots(ws.out);
 
@@ -191,10 +173,7 @@ test.provider(
       yield* Effect.sleep("1 second");
 
       const drifted = yield* stack.deploy(
-        Drizzle.Schema("app-schema", {
-          schema: driftedSchemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("app-schema", { schema: driftedSchemaPath, out: ws.out }),
       );
 
       expect(yield* getStatus("app-schema")).toEqual("updated");
@@ -203,18 +182,22 @@ test.provider(
       expect(snapshots).toHaveLength(2);
       expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
     }),
+  { tags: ["unit", "local"] },
 );
 
-test.provider("list returns [] (non-listable local build artifact)", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list returns [] (non-listable local build artifact)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(Drizzle.Schema);
-    const all = yield* provider.list();
-    expect(all).toEqual([]);
+      const provider = yield* Provider.findProvider(Drizzle.Schema);
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
 
-    yield* stack.destroy();
-  }),
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"] },
 );
 
 test.provider(
@@ -224,11 +207,7 @@ test.provider(
       const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
       yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("sqlite-schema", { dialect: "sqlite", schema: ws.schemaPath, out: ws.out }),
       );
 
       const dirs = yield* readMigrationDirs(ws.out);
@@ -242,6 +221,7 @@ test.provider(
       expect(snapshots).toHaveLength(1);
       expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
     }),
+  { tags: ["unit", "local"] },
 );
 
 test.provider(
@@ -251,63 +231,55 @@ test.provider(
       const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
       yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("sqlite-schema", { dialect: "sqlite", schema: ws.schemaPath, out: ws.out }),
       );
       const initialDirs = yield* readMigrationDirs(ws.out);
       expect(yield* getStatus("sqlite-schema")).toEqual("created");
 
       yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("sqlite-schema", { dialect: "sqlite", schema: ws.schemaPath, out: ws.out }),
       );
 
       expect(yield* getStatus("sqlite-schema")).toEqual("created");
       expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
     }),
+  { tags: ["unit", "local"] },
 );
 
-test.provider("sqlite CLI fallback updates after schema drift", (stack) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+test.provider(
+  "sqlite CLI fallback updates after schema drift",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
-    yield* stack.deploy(
-      Drizzle.Schema("sqlite-schema", {
-        dialect: "sqlite",
-        schema: ws.schemaPath,
-        out: ws.out,
-      }),
-    );
-    const [initialSnapshot] = yield* readSnapshots(ws.out);
+      yield* stack.deploy(
+        Drizzle.Schema("sqlite-schema", { dialect: "sqlite", schema: ws.schemaPath, out: ws.out }),
+      );
+      const [initialSnapshot] = yield* readSnapshots(ws.out);
 
-    const driftedSchemaPath = path.join(ws.root, "schema-sqlite-drifted.ts");
-    yield* fs.writeFileString(driftedSchemaPath, SQLITE_DRIFTED_SCHEMA_SOURCE);
+      const driftedSchemaPath = path.join(ws.root, "schema-sqlite-drifted.ts");
+      yield* fs.writeFileString(driftedSchemaPath, SQLITE_DRIFTED_SCHEMA_SOURCE);
 
-    yield* stack.deploy(
-      Drizzle.Schema("sqlite-schema", {
-        dialect: "sqlite",
-        schema: driftedSchemaPath,
-        out: ws.out,
-      }),
-    );
+      yield* stack.deploy(
+        Drizzle.Schema("sqlite-schema", {
+          dialect: "sqlite",
+          schema: driftedSchemaPath,
+          out: ws.out,
+        }),
+      );
 
-    expect(yield* getStatus("sqlite-schema")).toEqual("updated");
-    const dirs = yield* readMigrationDirs(ws.out);
-    expect(dirs).toHaveLength(2);
-    expect(dirs.every((dir) => !dir.endsWith("_migration"))).toBe(true);
+      expect(yield* getStatus("sqlite-schema")).toEqual("updated");
+      const dirs = yield* readMigrationDirs(ws.out);
+      expect(dirs).toHaveLength(2);
+      expect(dirs.every((dir) => !dir.endsWith("_migration"))).toBe(true);
 
-    const snapshots = yield* readSnapshots(ws.out);
-    expect(snapshots).toHaveLength(2);
-    expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
-  }),
+      const snapshots = yield* readSnapshots(ws.out);
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
+    }),
+  { tags: ["unit", "local"] },
 );
 
 test.provider(
@@ -319,19 +291,12 @@ test.provider(
       const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
 
       yield* stack.deploy(
-        Drizzle.Schema("sqlite-schema", {
-          dialect: "sqlite",
-          schema: ws.schemaPath,
-          out: ws.out,
-        }),
+        Drizzle.Schema("sqlite-schema", { dialect: "sqlite", schema: ws.schemaPath, out: ws.out }),
       );
       const initialDirs = yield* readMigrationDirs(ws.out);
 
       const renamedSchemaPath = path.join(ws.root, "schema-sqlite-renamed.ts");
-      yield* fs.writeFileString(
-        renamedSchemaPath,
-        SQLITE_RENAMED_COLUMN_SCHEMA_SOURCE,
-      );
+      yield* fs.writeFileString(renamedSchemaPath, SQLITE_RENAMED_COLUMN_SCHEMA_SOURCE);
       yield* Effect.sleep("1 second");
 
       // A column rename is ambiguous (rename vs drop+create) and the chosen
@@ -349,11 +314,10 @@ test.provider(
 
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "drizzle-kit needs a decision",
-        );
+        expect(String(result.failure)).toContain("drizzle-kit needs a decision");
       }
       // No migration was written for the undecided drift.
       expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
     }),
+  { tags: ["unit", "local"] },
 );

@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -77,28 +74,30 @@ test.provider(
       const after = yield* getSettings(accountId);
       expect(after.disableForTime ?? null).toEqual(beforeDisable);
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:devices", "live"] },
 );
 
 // Canonical `list()` test (account-scoped singleton): there is exactly one
 // device-settings object per account and no enumeration API, so `list()`
 // reads the single singleton and returns a one-element Attributes array.
-test.provider("list returns the account's device settings singleton", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
+test.provider(
+  "list returns the account's device settings singleton",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Devices.DeviceSettings,
-    );
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Cloudflare.Devices.DeviceSettings);
+      const all = yield* provider.list();
 
-    // Exactly one element — the account-wide singleton — well-typed as
-    // DeviceSettings["Attributes"].
-    expect(all.length).toEqual(1);
-    expect(all[0].accountId).toEqual(accountId);
-    expect(all[0].initialSettings).toBeDefined();
+      // Exactly one element — the account-wide singleton — well-typed as
+      // DeviceSettings["Attributes"].
+      expect(all.length).toEqual(1);
+      expect(all[0].accountId).toEqual(accountId);
+      expect(all[0].initialSettings).toBeDefined();
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:devices", "live"] },
 );

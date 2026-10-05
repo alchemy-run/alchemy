@@ -35,7 +35,6 @@ export interface DescribeOrganizationOverview extends Binding.Service<
     >
   >
 > {}
-export const DescribeOrganizationOverview =
-  Binding.Service<DescribeOrganizationOverview>(
-    "AWS.DevOpsGuru.DescribeOrganizationOverview",
-  );
+export const DescribeOrganizationOverview = Binding.Service<DescribeOrganizationOverview>(
+  "AWS.DevOpsGuru.DescribeOrganizationOverview",
+);

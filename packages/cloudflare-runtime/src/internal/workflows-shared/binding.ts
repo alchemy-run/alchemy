@@ -1,14 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+// Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
-import { InstanceEvent, instanceStatusName } from "./instance.ts";
-import {
-  isUserTriggeredPause,
-  isUserTriggeredRestart,
-  isUserTriggeredTerminate,
-  WorkflowError,
-} from "./lib/errors.ts";
-import { isValidWorkflowInstanceId } from "./lib/validators.ts";
 import type {
   DatabaseInstance,
   DatabaseVersion,
@@ -16,7 +9,22 @@ import type {
   Engine,
   EngineLogs,
 } from "./engine.ts";
+import { InstanceEvent, instanceStatusName } from "./instance.ts";
 import type { InstanceStatus as EngineInstanceStatus } from "./instance.ts";
+import {
+  isUserTriggeredDelete,
+  isUserTriggeredPause,
+  isUserTriggeredRestart,
+  createWorkflowError,
+  isUserTriggeredTerminate,
+  WorkflowError,
+} from "./lib/errors.ts";
+import {
+  isValidAddressableWorkflowInstanceId,
+  isValidWorkflowInstanceId,
+} from "./lib/validators.ts";
+import { parseWorkflowSubscriptionOptions } from "./subscription.ts";
+import type { WorkflowSubscription, WorkflowSubscriptionOptions } from "./subscription.ts";
 import type {
   WorkflowInstanceModifier,
   WorkflowIntrospectionOperation,
@@ -27,7 +35,46 @@ type Env = {
   ENGINE: DurableObjectNamespace<Engine>;
   BINDING_NAME: string;
   WORKFLOW_NAME: string;
+  MINIFLARE_LOOPBACK?: Fetcher;
 };
+
+/** Waits for Miniflare to finish deleting an instance's persistence files. */
+async function waitForPersistedInstanceDelete(env: Env, id: string | undefined): Promise<void> {
+  if (id === undefined || env.MINIFLARE_LOOPBACK === undefined) {
+    return;
+  }
+
+  const hexId = env.ENGINE.idFromName(id).toString();
+  const response = await env.MINIFLARE_LOOPBACK.fetch(
+    `http://localhost/core/workflow-storage/${encodeURIComponent(env.WORKFLOW_NAME)}/${hexId}?waitForPendingDelete=1`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to wait for persisted workflow instance '${id}' deletion`);
+  }
+}
+
+/** Aborts an Engine object before removing its persistence files. */
+async function deletePersistedInstance(env: Env, id: string): Promise<void> {
+  if (env.MINIFLARE_LOOPBACK === undefined) {
+    return;
+  }
+
+  const stub = env.ENGINE.get(env.ENGINE.idFromName(id));
+  try {
+    await stub.unsafeAbort();
+  } catch {
+    // Aborting the Durable Object rejects its RPC.
+  }
+
+  const response = await env.MINIFLARE_LOOPBACK.fetch(
+    `http://localhost/core/workflow-storage/${encodeURIComponent(env.WORKFLOW_NAME)}/${stub.id.toString()}?defer=1`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to delete persisted workflow instance '${id}'`);
+  }
+  await waitForPersistedInstanceDelete(env, id);
+}
 
 type WorkflowIntrospectionSession = {
   id: string;
@@ -38,10 +85,7 @@ type WorkflowIntrospectionSession = {
 // workerd may construct a fresh WorkflowBinding object for each RPC call. Store
 // sessions at module scope so start/modify/get/dispose calls, and later
 // WorkflowBinding.create() calls, all see the same active Workflow session.
-const workflowIntrospectionSessions = new Map<
-  string,
-  WorkflowIntrospectionSession
->();
+const workflowIntrospectionSessions = new Map<string, WorkflowIntrospectionSession>();
 
 function getWorkflowIntrospectionSession(
   workflowName: string,
@@ -126,6 +170,13 @@ export interface RestartFromStep {
   type?: "do" | "sleep" | "waitForEvent";
 }
 
+export interface WorkflowInstanceTerminateOptions {
+  /**
+   * If true, run registered rollback handlers before terminating the instance.
+   */
+  rollback?: boolean;
+}
+
 export interface WorkflowInstanceRestartOptions {
   from?: RestartFromStep;
 }
@@ -146,11 +197,10 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
       throw new WorkflowError("Workflow instance has invalid id");
     }
 
+    await waitForPersistedInstanceDelete(this.env, id);
     const stubId = this.env.ENGINE.idFromName(id);
     const stub = this.env.ENGINE.get(stubId);
-    const introspectionSession = workflowIntrospectionSessions.get(
-      this.env.WORKFLOW_NAME,
-    );
+    const introspectionSession = workflowIntrospectionSessions.get(this.env.WORKFLOW_NAME);
 
     if (introspectionSession !== undefined) {
       const modifier = stub.getInstanceModifier();
@@ -222,9 +272,7 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     batch: Array<WorkflowInstanceCreateOptions<unknown>>,
   ): Promise<Array<{ id: string }>> {
     if (batch.length === 0) {
-      throw new Error(
-        "WorkflowError: batchCreate should have at least 1 instance",
-      );
+      throw new Error("WorkflowError: batchCreate should have at least 1 instance");
     }
 
     return await Promise.all(
@@ -235,31 +283,99 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     );
   }
 
-  public async deleteBatch(
-    instanceIds: string[],
-  ): Promise<WorkflowBatchDeleteResult> {
-    if (instanceIds.length > 100) {
-      throw new WorkflowError(
-        "deleteBatch is limited to 100 instances at a time",
-      );
+  /**
+   * Deletes an instance. Named `deleteInstance` because `Fetcher.delete()` shadows
+   * a same-named JSRPC method.
+   */
+  public async deleteInstance(id: string): Promise<void> {
+    if (!isValidAddressableWorkflowInstanceId(id)) {
+      throw createWorkflowError("Instance ID is invalid", "instance.invalid_id");
     }
-    const deleted: { id: string }[] = [];
-    const errors: { id: string; code: number; message: string }[] = [];
-    for (const id of new Set(instanceIds)) {
-      try {
-        const handle = (await this.get(id)) as WorkflowHandle;
-        await handle.delete();
-        deleted.push({ id });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        errors.push({
-          id,
-          code: message.startsWith("instance.not_found") ? 404 : 400,
-          message,
-        });
+
+    const stub = this.env.ENGINE.get(this.env.ENGINE.idFromName(id));
+    try {
+      await stub.deleteInstance();
+    } catch (error) {
+      // delete aborts the instance
+      if (!isUserTriggeredDelete(error)) {
+        throw error;
       }
     }
-    return { deleted, errors };
+    await waitForPersistedInstanceDelete(this.env, id);
+  }
+
+  /** Deletes each unique instance once while preserving duplicate results. */
+  public async deleteBatch(options: {
+    instances: Array<string>;
+  }): Promise<WorkflowBatchDeleteResult> {
+    const instanceIds = options?.instances;
+    if (!Array.isArray(instanceIds)) {
+      throw createWorkflowError("Provided argument is invalid", "body");
+    }
+    if (instanceIds.length > 100) {
+      throw createWorkflowError(
+        "batchDeleteInstances only supports 100 instances at a time",
+        "body",
+      );
+    }
+    if (instanceIds.length === 0) {
+      throw createWorkflowError("batchDeleteInstances should have at least 1 instance", "body");
+    }
+    if (!instanceIds.every(isValidAddressableWorkflowInstanceId)) {
+      throw createWorkflowError("Instance ID is invalid", "instance.invalid_id");
+    }
+
+    const uniqueIds = [...new Set(instanceIds)];
+    const settled = await Promise.allSettled(uniqueIds.map((id) => this.deleteInstance(id)));
+    const resultsById = new Map(uniqueIds.map((id, index) => [id, settled[index]]));
+    const result: WorkflowBatchDeleteResult = { deleted: [], errors: [] };
+    for (const id of instanceIds) {
+      const deletion = resultsById.get(id);
+      if (deletion === undefined) {
+        throw new Error("Missing batch deletion result");
+      }
+      if (deletion.status === "fulfilled" || isUserTriggeredDelete(deletion.reason)) {
+        result.deleted.push({ id });
+        continue;
+      }
+
+      const isNotFound =
+        deletion.reason instanceof Error &&
+        deletion.reason.message.includes("(instance.not_found)");
+      result.errors.push({
+        id,
+        code: isNotFound ? 10400 : 10001,
+        message: isNotFound
+          ? "workflows.api.error.instance.not_found"
+          : "workflows.api.error.internal_server",
+      });
+    }
+
+    const missingIds = new Set(
+      result.errors.filter(({ code }) => code === 10400).map(({ id }) => id),
+    );
+    const cleanupIds = [...missingIds];
+    const cleanups = await Promise.allSettled(
+      cleanupIds.map((id) => deletePersistedInstance(this.env, id)),
+    );
+    const failedCleanupIds = new Set(
+      cleanupIds.filter((_, index) => cleanups[index]?.status === "rejected"),
+    );
+    if (failedCleanupIds.size === 0) {
+      return result;
+    }
+
+    const errorsById = new Map(result.errors.map((error) => [error.id, error]));
+    return {
+      deleted: result.deleted.filter(({ id }) => !failedCleanupIds.has(id)),
+      errors: instanceIds.flatMap((id) => {
+        if (failedCleanupIds.has(id)) {
+          return [{ id, code: 10001, message: "workflows.api.error.internal_server" }];
+        }
+        const error = errorsById.get(id);
+        return error === undefined ? [] : [error];
+      }),
+    };
   }
 
   public async unsafeGetBindingName(): Promise<string> {
@@ -294,18 +410,12 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     sessionId: string,
     operations: Array<WorkflowIntrospectionOperation>,
   ): Promise<void> {
-    const session = getWorkflowIntrospectionSession(
-      this.env.WORKFLOW_NAME,
-      sessionId,
-    );
+    const session = getWorkflowIntrospectionSession(this.env.WORKFLOW_NAME, sessionId);
     session.operations = operations;
   }
 
-  public async unsafeGetIntrospectionInstances(
-    sessionId: string,
-  ): Promise<Array<string>> {
-    return getWorkflowIntrospectionSession(this.env.WORKFLOW_NAME, sessionId)
-      .instanceIds;
+  public async unsafeGetIntrospectionInstances(sessionId: string): Promise<Array<string>> {
+    return getWorkflowIntrospectionSession(this.env.WORKFLOW_NAME, sessionId).instanceIds;
   }
 
   public async unsafeGetInstanceModifier(instanceId: string): Promise<unknown> {
@@ -340,19 +450,13 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     }
   }
 
-  public async unsafeWaitForStatus(
-    instanceId: string,
-    status: string,
-  ): Promise<void> {
+  public async unsafeWaitForStatus(instanceId: string, status: string): Promise<void> {
     const stubId = this.env.ENGINE.idFromName(instanceId);
     const stub = this.env.ENGINE.get(stubId);
     return await stub.waitForStatus(status);
   }
 
-  public async unsafeGetOutputOrError(
-    instanceId: string,
-    isOutput: boolean,
-  ): Promise<unknown> {
+  public async unsafeGetOutputOrError(instanceId: string, isOutput: boolean): Promise<unknown> {
     const stubId = this.env.ENGINE.idFromName(instanceId);
     const stub = this.env.ENGINE.get(stubId);
     return await stub.getOutputOrError(isOutput);
@@ -386,9 +490,9 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
     await this.stub.changeInstanceStatus("resume");
   }
 
-  public async terminate(): Promise<void> {
+  public async terminate(options?: WorkflowInstanceTerminateOptions): Promise<void> {
     try {
-      await this.stub.changeInstanceStatus("terminate");
+      await this.stub.changeInstanceStatus("terminate", undefined, options);
     } catch (e) {
       // terminate causes instance abortion
       if (!isUserTriggeredTerminate(e)) {
@@ -397,9 +501,18 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
     }
   }
 
-  public async restart(
-    options?: WorkflowInstanceRestartOptions,
-  ): Promise<void> {
+  public async delete(): Promise<void> {
+    try {
+      await this.stub.deleteInstance();
+    } catch (e) {
+      // delete aborts the instance
+      if (!isUserTriggeredDelete(e)) {
+        throw e;
+      }
+    }
+  }
+
+  public async restart(options?: WorkflowInstanceRestartOptions): Promise<void> {
     try {
       await this.stub.changeInstanceStatus("restart", options?.from);
     } catch (e) {
@@ -414,18 +527,14 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
     await this.stub.attemptRestart();
   }
 
-  public async status(): Promise<
-    InstanceStatus & { __LOCAL_DEV_STEP_OUTPUTS: Array<unknown> }
-  > {
+  public async status(): Promise<InstanceStatus & { __LOCAL_DEV_STEP_OUTPUTS: Array<unknown> }> {
     // Both getStatus() and readLogs() must use the same fresh stub.
     // After pause/restart/terminate aborts the DO, the stub goes stale
     const fetchStatusAndLogs = async () => {
       const status = await this.stub.getStatus();
 
       // NOTE(lduarte): for some reason, sync functions over RPC are typed as never instead of Promise<EngineLogs>
-      const logs = await (this.stub.readLogs() as unknown as Promise<
-        EngineLogs & Disposable
-      >);
+      const logs = await (this.stub.readLogs() as unknown as Promise<EngineLogs & Disposable>);
 
       return { status, logs };
     };
@@ -445,23 +554,19 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
 
     const filteredLogs = logs.logs.filter(
       (log) =>
-        log.event === InstanceEvent.STEP_SUCCESS ||
-        log.event === InstanceEvent.WAIT_COMPLETE,
+        log.event === InstanceEvent.STEP_SUCCESS || log.event === InstanceEvent.WAIT_COMPLETE,
     );
 
     const stepOutputs = filteredLogs.map((log) =>
-      log.event === InstanceEvent.STEP_SUCCESS
-        ? log.metadata.result
-        : log.metadata.payload,
+      log.event === InstanceEvent.STEP_SUCCESS ? log.metadata.result : log.metadata.payload,
     );
 
     const workflowOutput =
-      logs.logs.find((log) => log.event === InstanceEvent.WORKFLOW_SUCCESS)
-        ?.metadata.result ?? null;
+      logs.logs.find((log) => log.event === InstanceEvent.WORKFLOW_SUCCESS)?.metadata.result ??
+      null;
 
-    const workflowError = logs.logs.find(
-      (log) => log.event === InstanceEvent.WORKFLOW_FAILURE,
-    )?.metadata.error;
+    const workflowError = logs.logs.find((log) => log.event === InstanceEvent.WORKFLOW_FAILURE)
+      ?.metadata.error;
 
     return {
       status: instanceStatusName(result.status),
@@ -471,35 +576,16 @@ export class WorkflowHandle extends RpcTarget implements WorkflowInstance {
     };
   }
 
-  public async sendEvent(args: {
-    payload: unknown;
-    type: string;
-  }): Promise<void> {
+  public async subscribe(options?: WorkflowSubscriptionOptions): Promise<WorkflowSubscription> {
+    const parsedOptions = parseWorkflowSubscriptionOptions(options);
+    return this.stub.subscribe(parsedOptions);
+  }
+
+  public async sendEvent(args: { payload: unknown; type: string }): Promise<void> {
     await this.stub.receiveEvent({
       payload: args.payload,
       type: args.type,
       timestamp: new Date(),
     });
-  }
-
-  public async delete(): Promise<void> {
-    const { status } = await this.status();
-    if (
-      status !== "complete" &&
-      status !== "errored" &&
-      status !== "terminated"
-    ) {
-      throw new Error(
-        "instance.not_terminal: only instances in a terminal state (complete, errored, terminated) can be deleted",
-      );
-    }
-    try {
-      // Wiping the engine DO's storage makes a subsequent `get(id)` report
-      // instance.not_found — the local equivalent of deleting the record.
-      await this.stub.unsafeAbort("instance.deleted");
-    } catch {
-      // unsafeAbort aborts the DO out from under its own RPC channel, which
-      // may reject the call after the storage wipe already happened.
-    }
   }
 }

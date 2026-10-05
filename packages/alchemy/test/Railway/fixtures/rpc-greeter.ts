@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Function } from "@/Railway/Function.ts";
 import { enableRailwayRpc } from "@/Railway/rpc-server.ts";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Site } from "./rpc-shared.ts";
+import { Partition, Site } from "./rpc-shared.ts";
 
 export { Site };
 
@@ -14,6 +14,7 @@ export default class Greeter extends Function<Greeter>()(
   "Greeter",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
   },
   Effect.gen(function* () {

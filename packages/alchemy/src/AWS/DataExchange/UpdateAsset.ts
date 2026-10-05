@@ -29,16 +29,8 @@ export interface UpdateAsset extends Binding.Service<
     revision: Revision,
   ) => Effect.Effect<
     (
-      request: Omit<
-        dataexchange.UpdateAssetRequest,
-        "DataSetId" | "RevisionId"
-      >,
-    ) => Effect.Effect<
-      dataexchange.UpdateAssetResponse,
-      dataexchange.UpdateAssetError
-    >
+      request: Omit<dataexchange.UpdateAssetRequest, "DataSetId" | "RevisionId">,
+    ) => Effect.Effect<dataexchange.UpdateAssetResponse, dataexchange.UpdateAssetError>
   >
 > {}
-export const UpdateAsset = Binding.Service<UpdateAsset>(
-  "AWS.DataExchange.UpdateAsset",
-);
+export const UpdateAsset = Binding.Service<UpdateAsset>("AWS.DataExchange.UpdateAsset");

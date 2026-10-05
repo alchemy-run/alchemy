@@ -1,6 +1,6 @@
-import * as Effect from "effect/Effect";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 const swarmLocalNodeState = (): string | undefined => {
   const result = NodeChildProcess.spawnSync(
@@ -21,24 +21,20 @@ const swarmLocalNodeState = (): string | undefined => {
  * Concurrent test files race the init; the loser's "already part of a swarm"
  * error is folded into success by re-checking the node state.
  */
-export const ensureDockerSwarm: Effect.Effect<void, Error> = Effect.suspend(
-  () => {
-    if (swarmLocalNodeState() === "active") return Effect.void;
-    const init = NodeChildProcess.spawnSync(
-      "docker",
-      // 127.0.0.1 keeps init deterministic on hosts with several network
-      // interfaces (init otherwise refuses to pick an advertise address).
-      ["swarm", "init", "--advertise-addr", "127.0.0.1"],
-      { stdio: ["ignore", "ignore", "pipe"] },
-    );
-    if (init.status === 0 || swarmLocalNodeState() === "active") {
-      return Effect.void;
-    }
-    return Effect.fail(
-      new Error(`docker swarm init failed: ${String(init.stderr).trim()}`),
-    );
-  },
-);
+export const ensureDockerSwarm: Effect.Effect<void, Error> = Effect.suspend(() => {
+  if (swarmLocalNodeState() === "active") return Effect.void;
+  const init = NodeChildProcess.spawnSync(
+    "docker",
+    // 127.0.0.1 keeps init deterministic on hosts with several network
+    // interfaces (init otherwise refuses to pick an advertise address).
+    ["swarm", "init", "--advertise-addr", "127.0.0.1"],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  if (init.status === 0 || swarmLocalNodeState() === "active") {
+    return Effect.void;
+  }
+  return Effect.fail(new Error(`docker swarm init failed: ${String(init.stderr).trim()}`));
+});
 
 export const findAvailablePort = () =>
   Effect.callback<number, Error>((resume) => {
@@ -47,8 +43,7 @@ export const findAvailablePort = () =>
     server.on("error", (error) => resume(Effect.fail(error)));
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
-      const port =
-        typeof address === "object" && address ? address.port : undefined;
+      const port = typeof address === "object" && address ? address.port : undefined;
       server.close((error) => {
         if (error) {
           resume(Effect.fail(error));

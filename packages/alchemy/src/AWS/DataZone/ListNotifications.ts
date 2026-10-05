@@ -34,10 +34,7 @@ export interface ListNotifications extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListNotificationsRequest,
-    ) => Effect.Effect<
-      datazone.ListNotificationsOutput,
-      datazone.ListNotificationsError
-    >
+    ) => Effect.Effect<datazone.ListNotificationsOutput, datazone.ListNotificationsError>
   >
 > {}
 export const ListNotifications = Binding.Service<ListNotifications>(
