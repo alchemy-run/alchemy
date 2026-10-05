@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import { waitForOperation } from "@/GCP/Operation";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
@@ -49,6 +50,87 @@ const waitClusterOp = (project: string, operation: container.Operation) => {
     { budget: "20 minutes", interval: "10 seconds" },
   );
 };
+
+test.provider(
+  "replaces a node pool for create-only VM settings",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(GCP.Container.NodePool);
+      const olds: GCP.Container.NodePoolProps = {
+        cluster: "app",
+        location: HOST_LOCATION,
+        nodePoolId: "workers",
+        metadata: { "disable-legacy-endpoints": "true" },
+        advancedMachineFeatures: { enableNestedVirtualization: false },
+      };
+      const input = {
+        id: "Workers",
+        fqn: "Workers",
+        instanceId: "instance",
+        olds,
+        oldBindings: [],
+        newBindings: [],
+        output: {
+          nodePoolId: "workers",
+          clusterId: "app",
+          location: HOST_LOCATION,
+          metadata: olds.metadata,
+          advancedMachineFeatures: olds.advancedMachineFeatures,
+        },
+      } as const;
+
+      const nestedVirtualization = yield* provider.diff!({
+        ...input,
+        news: { ...olds, advancedMachineFeatures: { enableNestedVirtualization: true } },
+      } as never);
+      expect(nestedVirtualization).toEqual({ action: "replace", deleteFirst: true });
+
+      const metadata = yield* provider.diff!({
+        ...input,
+        news: { ...olds, metadata: { "disable-legacy-endpoints": "false" } },
+      } as never);
+      expect(metadata).toEqual({ action: "replace", deleteFirst: true });
+
+      // Adoption: olds is absent, and the observed pool's GKE-injected
+      // metadata and false-valued booleans must not be compared against
+      // user input that never mentioned those keys.
+      const adoptionInput = { ...input, olds: undefined } as const;
+
+      const adoptedNoMetadata = yield* provider.diff!({
+        ...adoptionInput,
+        news: { ...olds, metadata: {} },
+      } as never);
+      expect(adoptedNoMetadata).toBeUndefined();
+
+      const adoptedOtherMetadataKey = yield* provider.diff!({
+        ...adoptionInput,
+        news: { ...olds, metadata: { owner: "team-a" } },
+      } as never);
+      expect(adoptedOtherMetadataKey).toEqual({ action: "replace", deleteFirst: true });
+
+      const adoptedShielded = yield* provider.diff!({
+        ...adoptionInput,
+        news: { ...olds, metadata: {}, shieldedInstanceConfig: { enableSecureBoot: false } },
+      } as never);
+      expect(adoptedShielded).toBeUndefined();
+
+      // A row deployed before these props existed: olds never declared
+      // metadata, but the observed pool carries GKE's injected key.
+      // Spelling it out must not replace the pool.
+      const declaredObserved = yield* provider.diff!({
+        ...input,
+        olds: { cluster: "app", location: HOST_LOCATION, nodePoolId: "workers" },
+        news: {
+          cluster: "app",
+          location: HOST_LOCATION,
+          nodePoolId: "workers",
+          metadata: { "disable-legacy-endpoints": "true" },
+        },
+      } as never);
+      expect(declaredObserved).toBeUndefined();
+    }),
+  { tags: ["unit", "provider:gcp", "provider:gcp:container", "local"] },
+);
 
 test.provider(
   "lists clusters and treats a missing node pool as NotFound",
@@ -149,6 +231,15 @@ test.provider.skipIf(!runLifecycle)(
                   spot: true,
                   management: { autoRepair: false, autoUpgrade: true },
                   labels: { env: "test" },
+                  metadata: { "disable-legacy-endpoints": "true" },
+                  // The host has no Workload Identity, so GKE_METADATA is
+                  // rejected; set the alternative explicitly.
+                  workloadMetadataConfig: { mode: "GCE_METADATA" },
+                  shieldedInstanceConfig: {
+                    enableIntegrityMonitoring: true,
+                    enableSecureBoot: true,
+                  },
+                  advancedMachineFeatures: { enableNestedVirtualization: false },
                 });
               }),
             );
@@ -160,6 +251,9 @@ test.provider.skipIf(!runLifecycle)(
             expect(created.labels).toMatchObject({ env: "test" });
             expect(created.spot).toEqual(true);
             expect(created.nodeCount).toEqual(POOL_NODE_COUNT);
+            expect(created.metadata["disable-legacy-endpoints"]).toEqual("true");
+            expect(created.workloadMetadataConfig?.mode).toEqual("GCE_METADATA");
+            expect(created.shieldedInstanceConfig?.enableSecureBoot).toEqual(true);
             expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(created.status);
 
             const fetched = yield* container.getProjectsLocationsClustersNodePools({
@@ -168,6 +262,9 @@ test.provider.skipIf(!runLifecycle)(
             expect(fetched.name).toEqual(created.nodePoolId);
             expect(fetched.config?.resourceLabels?.env).toEqual("test");
             expect(fetched.config?.spot).toEqual(true);
+            expect(fetched.config?.metadata?.["disable-legacy-endpoints"]).toEqual("true");
+            expect(fetched.config?.workloadMetadataConfig?.mode).toEqual("GCE_METADATA");
+            expect(fetched.config?.shieldedInstanceConfig?.enableSecureBoot).toEqual(true);
 
             const updated = yield* stack.deploy(
               Effect.gen(function* () {
@@ -181,6 +278,15 @@ test.provider.skipIf(!runLifecycle)(
                   spot: true,
                   management: { autoRepair: true, autoUpgrade: true },
                   labels: { env: "prod", role: "workers" },
+                  metadata: { "disable-legacy-endpoints": "true" },
+                  // The host has no Workload Identity, so GKE_METADATA is
+                  // rejected; set the alternative explicitly.
+                  workloadMetadataConfig: { mode: "GCE_METADATA" },
+                  shieldedInstanceConfig: {
+                    enableIntegrityMonitoring: true,
+                    enableSecureBoot: true,
+                  },
+                  advancedMachineFeatures: { enableNestedVirtualization: false },
                 });
               }),
             );
