@@ -1,8 +1,8 @@
-import * as Effect from "effect/Effect";
 import {
   type GetProjectBranchesResponse,
   getProjectBranches,
 } from "@distilled.cloud/prisma/management";
+import * as Effect from "effect/Effect";
 import { isPrismaDevId } from "../Refs.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
 

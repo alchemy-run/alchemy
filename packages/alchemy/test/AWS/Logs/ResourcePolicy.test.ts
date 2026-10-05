@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
-import { ResourcePolicy } from "@/AWS/Logs/ResourcePolicy.ts";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
+import { ResourcePolicy } from "@/AWS/Logs/ResourcePolicy.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,14 +18,12 @@ const POLICY_NAME = "alchemy-test-logs-resource-policy";
 const findPolicy = Effect.fn(function* (policyName: string) {
   // quota is 10 policies per region — one call is exhaustive
   const described = yield* logs.describeResourcePolicies({ limit: 50 });
-  return (described.resourcePolicies ?? []).find(
-    (policy) => policy.policyName === policyName,
-  );
+  return (described.resourcePolicies ?? []).find((policy) => policy.policyName === policyName);
 });
 
-class ResourcePolicyStillExists extends Data.TaggedError(
-  "ResourcePolicyStillExists",
-)<{ readonly policyName: string }> {}
+class ResourcePolicyStillExists extends Data.TaggedError("ResourcePolicyStillExists")<{
+  readonly policyName: string;
+}> {}
 
 const assertPolicyDeleted = (policyName: string) =>
   findPolicy(policyName).pipe(
@@ -73,9 +71,7 @@ test.provider(
       // out-of-band verification via distilled
       const observedCreated = yield* findPolicy(POLICY_NAME);
       expect(observedCreated?.policyDocument).toContain("AlchemyTestV1");
-      expect(observedCreated?.policyDocument).toContain(
-        "route53.amazonaws.com",
-      );
+      expect(observedCreated?.policyDocument).toContain("route53.amazonaws.com");
 
       // update the document in place (same policy name)
       const updated = yield* stack.deploy(

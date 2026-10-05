@@ -1,3 +1,15 @@
+import { fileURLToPath } from "node:url";
+import * as acm from "@distilled.cloud/aws/acm";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * Wave 3 — Site→Router hostname binding.
  *
@@ -20,18 +32,6 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as acm from "@distilled.cloud/aws/acm";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,9 +77,7 @@ const compileStack = (
 
 const siteRowsOf = (bindings: Record<string, BindingRow[]>) =>
   Object.entries(bindings).flatMap(([fqn, rows]) =>
-    rows
-      .filter((row) => row.sid.startsWith("AWS.Website.Site"))
-      .map((row) => ({ fqn, ...row })),
+    rows.filter((row) => row.sid.startsWith("AWS.Website.Site")).map((row) => ({ fqn, ...row })),
   );
 
 describe(
@@ -92,10 +90,7 @@ describe(
         const compiled = yield* compileStack(
           Effect.gen(function* () {
             const router = yield* AWS.Website.Router("Router", {
-              domain: {
-                name: "router.example.com",
-                hostedZoneId: "Z1234567890ABC",
-              },
+              domain: { name: "router.example.com", hostedZoneId: "Z1234567890ABC" },
             });
             yield* AWS.Website.StaticSite("DocsSite", {
               path: fixtureDir,
@@ -113,25 +108,21 @@ describe(
           }),
         );
 
-        const expected = [
-          "docs.example.com",
-          "assets.example.com",
-          "old.example.com",
-        ];
+        const expected = ["docs.example.com", "assets.example.com", "old.example.com"];
 
-        const distributionRow = (
-          compiled.bindings["Router/Distribution"] ?? []
-        ).find((row) => row.sid === "AWS.Website.Site(DocsSite)");
+        const distributionRow = (compiled.bindings["Router/Distribution"] ?? []).find(
+          (row) => row.sid === "AWS.Website.Site(DocsSite)",
+        );
         expect(distributionRow?.data.aliases).toEqual(expected);
 
-        const certificateRow = (
-          compiled.bindings["Router/Certificate"] ?? []
-        ).find((row) => row.sid === "AWS.Website.Site(DocsSite)");
+        const certificateRow = (compiled.bindings["Router/Certificate"] ?? []).find(
+          (row) => row.sid === "AWS.Website.Site(DocsSite)",
+        );
         expect(certificateRow?.data.subjectAlternativeNames).toEqual(expected);
 
-        const recordsRow = (
-          compiled.bindings["Router/SiteAliasRecords"] ?? []
-        ).find((row) => row.sid === "AWS.Website.Site(DocsSite)");
+        const recordsRow = (compiled.bindings["Router/SiteAliasRecords"] ?? []).find(
+          (row) => row.sid === "AWS.Website.Site(DocsSite)",
+        );
         expect(recordsRow?.data.names).toEqual(expected);
 
         // The Router creates the record-set bind target alongside its own
@@ -146,10 +137,7 @@ describe(
         const compiled = yield* compileStack(
           Effect.gen(function* () {
             yield* AWS.Website.Router("Router", {
-              domain: {
-                name: "router.example.com",
-                hostedZoneId: "Z1234567890ABC",
-              },
+              domain: { name: "router.example.com", hostedZoneId: "Z1234567890ABC" },
             });
             return {};
           }),
@@ -164,10 +152,7 @@ describe(
         const compiled = yield* compileStack(
           Effect.gen(function* () {
             const router = yield* AWS.Website.Router("Router", {
-              domain: {
-                name: "router.example.com",
-                hostedZoneId: "Z1234567890ABC",
-              },
+              domain: { name: "router.example.com", hostedZoneId: "Z1234567890ABC" },
             });
             yield* AWS.Website.StaticSite("PathOnlySite", {
               path: fixtureDir,
@@ -236,12 +221,10 @@ describe(
             // A hand-built structural slice, as a cross-stack consumer would
             // assemble from another stack's outputs — carries no bindTargets.
             const routerRef = {
-              kvStoreArn:
-                "arn:aws:cloudfront::123456789012:key-value-store/9f6a",
+              kvStoreArn: "arn:aws:cloudfront::123456789012:key-value-store/9f6a",
               kvNamespace: "9f6a",
               distributionId: "E1234567890ABC",
-              distributionArn:
-                "arn:aws:cloudfront::123456789012:distribution/E1234567890ABC",
+              distributionArn: "arn:aws:cloudfront::123456789012:distribution/E1234567890ABC",
               url: "https://d111111abcdef8.cloudfront.net",
             };
             yield* AWS.Website.StaticSite("DocsSite", {
@@ -355,10 +338,7 @@ function certificateProviderForDiff() {
       }),
     ),
   );
-  return Layer.mergeAll(
-    CertificateProvider().pipe(Layer.provide(ambient)),
-    ambient,
-  );
+  return Layer.mergeAll(CertificateProvider().pipe(Layer.provide(ambient)), ambient);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,9 +375,7 @@ describe.skipIf(!testZone)(
             .listHostedZonesByName({ DNSName: `${zoneName}.` })
             .pipe(
               Effect.map((response) =>
-                (response.HostedZones ?? []).find(
-                  (candidate) => candidate.Name === `${zoneName}.`,
-                ),
+                (response.HostedZones ?? []).find((candidate) => candidate.Name === `${zoneName}.`),
               ),
             );
           if (!zone?.Id) {
@@ -438,25 +416,19 @@ describe.skipIf(!testZone)(
           });
 
           const deployed = yield* stack.deploy(withSite);
-          const distributionId = deployed.router.distribution
-            .distributionId as string;
+          const distributionId = deployed.router.distribution.distributionId as string;
 
           // Distribution aliases: the router's own hostname plus the site's
           // bound hostnames (canonical + redirect).
-          const config = yield* cloudfront.getDistributionConfig({
-            Id: distributionId,
-          });
+          const config = yield* cloudfront.getDistributionConfig({ Id: distributionId });
           const aliases = config.DistributionConfig?.Aliases?.Items ?? [];
           expect(aliases).toContain(routerHost);
           expect(aliases).toContain(siteHost);
           expect(aliases).toContain(redirectHost);
 
           // Certificate: issued, SANs cover the bound hostnames.
-          const certificateArn = (deployed.router.certificate as any)
-            .certificateArn as string;
-          const certificate = yield* acm.describeCertificate({
-            CertificateArn: certificateArn,
-          });
+          const certificateArn = (deployed.router.certificate as any).certificateArn as string;
+          const certificate = yield* acm.describeCertificate({ CertificateArn: certificateArn });
           expect(certificate.Certificate?.Status).toBe("ISSUED");
           const sans = certificate.Certificate?.SubjectAlternativeNames ?? [];
           expect(sans).toContain(siteHost);
@@ -474,8 +446,7 @@ describe.skipIf(!testZone)(
               .pipe(
                 Effect.map((response) =>
                   (response.ResourceRecordSets ?? []).find(
-                    (recordSet) =>
-                      recordSet.Name === `${name}.` && recordSet.Type === "A",
+                    (recordSet) => recordSet.Name === `${name}.` && recordSet.Type === "A",
                   ),
                 ),
               );
@@ -493,17 +464,11 @@ describe.skipIf(!testZone)(
                 cache: "no-store",
                 headers: { "cache-control": "no-cache" },
               });
-              return {
-                status: response.status,
-                location: response.headers.get("location"),
-              };
+              return { status: response.status, location: response.headers.get("location") };
             });
           const expectResponse = (
             url: string,
-            check: (response: {
-              status: number;
-              location: string | null;
-            }) => boolean,
+            check: (response: { status: number; location: string | null }) => boolean,
           ) =>
             fetchManual(url).pipe(
               Effect.flatMap((response) =>
@@ -515,36 +480,27 @@ describe.skipIf(!testZone)(
                       ),
                     ),
               ),
-              Effect.retry({
-                schedule: Schedule.exponential("2 seconds"),
-                times: 12,
-              }),
+              Effect.retry({ schedule: Schedule.exponential("2 seconds"), times: 12 }),
             );
 
           // HTTPS: the site serves on its own hostname (edge + DNS + TLS).
-          yield* expectResponse(
-            `https://${siteHost}/`,
-            (response) => response.status === 200,
-          );
+          yield* expectResponse(`https://${siteHost}/`, (response) => response.status === 200);
 
           // Redirect hostname 301s to the canonical site hostname, path and
           // query preserved.
           yield* expectResponse(
             `https://${redirectHost}/some/path?q=1`,
             (response) =>
-              response.status === 301 &&
-              response.location === `https://${siteHost}/some/path?q=1`,
+              response.status === 301 && response.location === `https://${siteHost}/some/path?q=1`,
           );
 
           // cloudfrontUrl:false — default-domain requests 301 to the
           // canonical router domain.
-          const defaultDomain = deployed.router.distribution
-            .domainName as string;
+          const defaultDomain = deployed.router.distribution.domainName as string;
           yield* expectResponse(
             `https://${defaultDomain}/x?y=2`,
             (response) =>
-              response.status === 301 &&
-              response.location === `https://${routerHost}/x?y=2`,
+              response.status === 301 && response.location === `https://${routerHost}/x?y=2`,
           );
 
           // Removal path: redeploy without the site — the bound hostnames must
@@ -555,13 +511,11 @@ describe.skipIf(!testZone)(
           const shrunkConfig = yield* cloudfront.getDistributionConfig({
             Id: shrunk.router.distribution.distributionId as string,
           });
-          const shrunkAliases =
-            shrunkConfig.DistributionConfig?.Aliases?.Items ?? [];
+          const shrunkAliases = shrunkConfig.DistributionConfig?.Aliases?.Items ?? [];
           expect(shrunkAliases).toContain(routerHost);
           expect(shrunkAliases).not.toContain(siteHost);
           expect(shrunkAliases).not.toContain(redirectHost);
-          const shrunkCertificateArn = (shrunk.router.certificate as any)
-            .certificateArn as string;
+          const shrunkCertificateArn = (shrunk.router.certificate as any).certificateArn as string;
           expect(shrunkCertificateArn).not.toBe(certificateArn);
           expect(yield* recordFor(siteHost)).toBeUndefined();
           expect(yield* recordFor(redirectHost)).toBeUndefined();

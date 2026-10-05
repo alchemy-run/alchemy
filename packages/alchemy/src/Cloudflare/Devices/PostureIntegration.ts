@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -171,15 +170,12 @@ export type DevicePostureIntegration = Resource<
  * @product Devices
  * @category Cloudflare One (Zero Trust)
  */
-export const DevicePostureIntegration =
-  Resource<DevicePostureIntegration>(TypeId);
+export const DevicePostureIntegration = Resource<DevicePostureIntegration>(TypeId);
 
 /**
  * Returns true if the given value is a DevicePostureIntegration resource.
  */
-export const isDevicePostureIntegration = (
-  value: unknown,
-): value is DevicePostureIntegration =>
+export const isDevicePostureIntegration = (value: unknown): value is DevicePostureIntegration =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DevicePostureIntegrationProvider = () =>
@@ -192,17 +188,15 @@ export const DevicePostureIntegrationProvider = () =>
     // lacks the entitlement, so treat it as "nothing to list".
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listDevicePostureIntegrations
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((i) => toAttributes(i, accountId)),
-            ),
+      return yield* zeroTrust.listDevicePostureIntegrations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((i) => toAttributes(i, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -288,12 +282,7 @@ export const DevicePostureIntegrationProvider = () =>
           accountId: output.accountId,
           integrationId: output.integrationId,
         })
-        .pipe(
-          Effect.catchTag(
-            "DevicePostureIntegrationNotFound",
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.void));
     }),
   });
 
@@ -314,11 +303,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getDevicePostureIntegration({ accountId, integrationId })
-    .pipe(
-      Effect.catchTag("DevicePostureIntegrationNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an integration by exact name.
@@ -326,20 +311,14 @@ const observeIntegration = (accountId: string, integrationId: string) =>
 const findByName = (accountId: string, name: string) =>
   zeroTrust
     .listDevicePostureIntegrations({ accountId })
-    .pipe(
-      Effect.map((list) =>
-        list.result.find((i) => i.name === name && i.id != null),
-      ),
-    );
+    .pipe(Effect.map((list) => list.result.find((i) => i.name === name && i.id != null)));
 
 const createIntegrationName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-type EncodedConfig = Parameters<
-  typeof zeroTrust.createDevicePostureIntegration
->[0]["config"];
+type EncodedConfig = Parameters<typeof zeroTrust.createDevicePostureIntegration>[0]["config"];
 
 /**
  * Project the alchemy config (flat, secrets `Redacted`) onto the wire
@@ -348,9 +327,7 @@ type EncodedConfig = Parameters<
  * present-fields projection is sufficient. The localized cast bridges the
  * flat shape to the union — it never touches error handling.
  */
-const encodeConfig = (
-  config: DevicePostureIntegrationConfig,
-): EncodedConfig => {
+const encodeConfig = (config: DevicePostureIntegrationConfig): EncodedConfig => {
   const out: Record<string, string> = {};
   if (config.apiUrl !== undefined) out.apiUrl = config.apiUrl;
   if (config.authUrl !== undefined) out.authUrl = config.authUrl;

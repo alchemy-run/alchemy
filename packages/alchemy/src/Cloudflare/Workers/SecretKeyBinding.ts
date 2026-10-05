@@ -1,17 +1,9 @@
 import type * as Binding from "./Binding.ts";
 import { makeBindingLayer } from "./BindingLayer.ts";
-import {
-  SecretKey,
-  type SecretKeyAccessor,
-  type SecretKeyPayload,
-} from "./SecretKey.ts";
+import { SecretKey, type SecretKeyAccessor, type SecretKeyPayload } from "./SecretKey.ts";
 
 /** The binding value produced by calling {@link SecretKey} (declared on `env` or `yield*`-ed). */
-export type SecretKeyBinding = Binding.Binding<
-  SecretKey["key"],
-  SecretKeyAccessor,
-  SecretKey
-> &
+export type SecretKeyBinding = Binding.Binding<SecretKey["key"], SecretKeyAccessor, SecretKey> &
   Readonly<SecretKeyPayload>;
 
 /**

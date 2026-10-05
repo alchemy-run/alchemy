@@ -43,9 +43,7 @@ export interface WriteStream extends Binding.Service<
   (stream: Stream | LegacyPipeline) => Effect.Effect<WriteStreamClient>
 > {}
 
-export const WriteStream = Binding.Service<WriteStream>(
-  "Cloudflare.Pipelines.WriteStream",
-);
+export const WriteStream = Binding.Service<WriteStream>("Cloudflare.Pipelines.WriteStream");
 
 export interface WriteStreamClient {
   raw: Effect.Effect<Pipeline, never, RuntimeContext>;

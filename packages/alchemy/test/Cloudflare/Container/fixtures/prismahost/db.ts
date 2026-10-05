@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
 import { Connection } from "@/Prisma/Connection.ts";
 import { Postgres } from "@/Prisma/Postgres.ts";
 import { Project } from "@/Prisma/Project.ts";
 import { Stage } from "@/Stage.ts";
-import * as Effect from "effect/Effect";
 
 /**
  * Local Prisma Postgres used as the container's DATABASE_URL origin — the

@@ -1,7 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Github from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { ReleaseVersion } from "./ReleaseVersion.ts";
 
 export default Cloudflare.Worker(
@@ -19,8 +19,7 @@ export default Cloudflare.Worker(
       (event) => {
         const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
         const isRelease =
-          event.payload.ref === "refs/heads/main" &&
-          title.startsWith("chore(release):");
+          event.payload.ref === "refs/heads/main" && title.startsWith("chore(release):");
 
         return isRelease
           ? versions.getByName(event.payload.head_commit!.id).generateBlog({

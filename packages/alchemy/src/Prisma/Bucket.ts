@@ -1,15 +1,4 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetBucketsResponse,
   deleteBucket,
@@ -18,8 +7,16 @@ import {
   createBucket,
   updateBucket,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
 import { desiredBranchId } from "./Internal/Branches.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedBucket } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -29,8 +26,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { ObservedBucket } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface BucketProps {
   /**
@@ -127,9 +122,7 @@ export const Bucket = Resource<Bucket>("Prisma.Bucket");
  * one requested or persisted. Convergence and deletion both refuse rather
  * than acting on a bucket that is not the one this resource manages.
  */
-export class BucketProjectMismatchError extends Data.TaggedError(
-  "BucketProjectMismatchError",
-)<{
+export class BucketProjectMismatchError extends Data.TaggedError("BucketProjectMismatchError")<{
   bucketId: string;
   actualProjectId: string;
   expectedProjectId: string;
@@ -157,16 +150,12 @@ const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listBuckets = (
-  filter: { projectId?: string; logicalId?: string; branchId?: string } = {},
-) =>
+const listBuckets = (filter: { projectId?: string; logicalId?: string; branchId?: string } = {}) =>
   Effect.gen(function* () {
     const buckets: GetBucketsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getBuckets(
-        cursor === undefined ? filter : { ...filter, cursor },
-      );
+      const page = yield* getBuckets(cursor === undefined ? filter : { ...filter, cursor });
       buckets.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -195,9 +184,7 @@ const findBucketByLogicalId = Effect.fn(function* (
     logicalId,
     branchId: branch.id,
   });
-  return buckets.find(
-    (bucket) => bucket.logicalId === logicalId && bucket.branchId === branch.id,
-  );
+  return buckets.find((bucket) => bucket.logicalId === logicalId && bucket.branchId === branch.id);
 });
 
 const ProviderLive = () =>
@@ -206,15 +193,13 @@ const ProviderLive = () =>
     Effect.gen(function* () {
       return {
         stables: ["bucketId"],
-        list: () =>
-          listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
+        list: () => listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.bucketId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -245,19 +230,13 @@ const ProviderLive = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ output, olds }) {
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) {
             const projectId = unresolvedProjectIdOf(olds.project);
             if (!projectId || olds.logicalId === undefined) return undefined;
             // Only a declaration assigns a logical ID, so a match is this
             // bucket.
-            const bucket = yield* findBucketByLogicalId(
-              projectId,
-              olds.logicalId,
-              olds.branchId,
-            );
+            const bucket = yield* findBucketByLogicalId(projectId, olds.logicalId, olds.branchId);
             return bucket ? attrsFrom(bucket) : undefined;
           }
           const bucket = yield* getBucket({ bucketId }).pipe(
@@ -269,9 +248,7 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ news, output }) {
           const projectId = yield* resolveProjectId(news.project);
           const logicalId = news.logicalId;
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           let observed: ObservedBucket | undefined = bucketId
             ? yield* getBucket({ bucketId }).pipe(
                 Effect.map((response) => response.data),
@@ -279,11 +256,7 @@ const ProviderLive = () =>
               )
             : undefined;
           if (!observed && logicalId !== undefined) {
-            observed = yield* findBucketByLogicalId(
-              projectId,
-              logicalId,
-              news.branchId,
-            );
+            observed = yield* findBucketByLogicalId(projectId, logicalId, news.branchId);
           }
           if (!observed) {
             observed = yield* createBucket({
@@ -302,12 +275,7 @@ const ProviderLive = () =>
                 Effect.fail(
                   logicalId === undefined
                     ? conflict
-                    : logicalIdTaken(
-                        logicalId,
-                        news.branchId,
-                        projectId,
-                        conflict,
-                      ),
+                    : logicalIdTaken(logicalId, news.branchId, projectId, conflict),
                 ),
               ),
             );
@@ -321,8 +289,7 @@ const ProviderLive = () =>
             });
           }
           const rename = news.name !== undefined && observed.name !== news.name;
-          const move =
-            news.branchId !== undefined && observed.branchId !== news.branchId;
+          const move = news.branchId !== undefined && observed.branchId !== news.branchId;
           if (rename || move) {
             const current = observed;
             observed = yield* updateBucket({
@@ -336,12 +303,7 @@ const ProviderLive = () =>
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.fail(
                   current.logicalId
-                    ? logicalIdTaken(
-                        current.logicalId,
-                        news.branchId,
-                        projectId,
-                        conflict,
-                      )
+                    ? logicalIdTaken(current.logicalId, news.branchId, projectId, conflict)
                     : conflict,
                 ),
               ),
@@ -357,9 +319,7 @@ const ProviderLive = () =>
             }).pipe(
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", (conflict) =>
-                Effect.fail(
-                  logicalIdTaken(logicalId, branchId, projectId, conflict),
-                ),
+                Effect.fail(logicalIdTaken(logicalId, branchId, projectId, conflict)),
               ),
             );
           }

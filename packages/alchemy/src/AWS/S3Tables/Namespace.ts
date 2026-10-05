@@ -64,10 +64,7 @@ export interface Namespace extends Resource<
  */
 export const Namespace = Resource<Namespace>("AWS.S3Tables.Namespace");
 
-const createNamespaceName = (
-  id: string,
-  props: { namespace?: string | undefined },
-) =>
+const createNamespaceName = (id: string, props: { namespace?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.namespace) {
       return props.namespace;
@@ -94,21 +91,18 @@ export const NamespaceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const tableBucketArn = output?.tableBucketArn ?? olds?.tableBucket;
       if (typeof tableBucketArn !== "string") return undefined;
-      const namespace =
-        output?.namespace ?? (yield* createNamespaceName(id, olds ?? {}));
-      return yield* s3tables
-        .getNamespace({ tableBucketARN: tableBucketArn, namespace })
-        .pipe(
-          Effect.map((n): Namespace["Attributes"] => ({
-            tableBucketArn,
-            namespace: n.namespace[0] ?? namespace,
-            namespaceId: n.namespaceId,
-            createdAt: n.createdAt,
-            createdBy: n.createdBy,
-            ownerAccountId: n.ownerAccountId,
-          })),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+      const namespace = output?.namespace ?? (yield* createNamespaceName(id, olds ?? {}));
+      return yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
+        Effect.map((n): Namespace["Attributes"] => ({
+          tableBucketArn,
+          namespace: n.namespace[0] ?? namespace,
+          namespaceId: n.namespaceId,
+          createdAt: n.createdAt,
+          createdBy: n.createdBy,
+          ownerAccountId: n.ownerAccountId,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
@@ -123,17 +117,14 @@ export const NamespaceProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const tableBucketArn = news.tableBucket as string;
-      const namespace =
-        output?.namespace ?? (yield* createNamespaceName(id, news));
+      const namespace = output?.namespace ?? (yield* createNamespaceName(id, news));
 
       // Observe — read live state; the namespace may have been removed
       // out-of-band even if `output` cached it.
-      let ns = yield* s3tables
-        .getNamespace({ tableBucketARN: tableBucketArn, namespace })
-        .pipe(
-          Effect.map((n) => n),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+      let ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
+        Effect.map((n) => n),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
 
       // Ensure — create if missing, tolerating a concurrent create.
       if (ns === undefined) {
@@ -148,17 +139,12 @@ export const NamespaceProvider = () =>
           );
         // Eventual consistency: getNamespace can briefly 404 a namespace that
         // createNamespace just returned.
-        ns = yield* s3tables
-          .getNamespace({ tableBucketARN: tableBucketArn, namespace })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "NotFoundException",
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
-            }),
-          );
+        ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NotFoundException",
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+          }),
+        );
       }
 
       yield* session.note(namespace);
@@ -182,10 +168,7 @@ export const NamespaceProvider = () =>
           // races them reports ConflictException — ride out the window.
           Effect.retry({
             while: (e) => e._tag === "ConflictException",
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
           }),
           Effect.catchTag("NotFoundException", () => Effect.void),
         );

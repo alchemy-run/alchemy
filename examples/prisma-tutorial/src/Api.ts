@@ -1,8 +1,8 @@
 import * as Prisma from "alchemy/Prisma";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Connection, Project } from "./Database.ts";
 
 export default class Api extends Prisma.Compute<Api>()(

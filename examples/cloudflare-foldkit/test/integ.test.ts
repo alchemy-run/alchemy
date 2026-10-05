@@ -1,6 +1,6 @@
+import { expect } from "bun:test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -32,10 +32,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -85,9 +82,7 @@ test(
     // assert on the compiled stylesheet Vite links from index.html instead
     // of SSR output.
     const html = yield* getBodyWhenReady(url, "stylesheet");
-    const link = html.match(
-      /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
-    );
+    const link = html.match(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/);
     expect(link).not.toBeNull();
     const href = link![1]!;
     const cssUrl = href.startsWith("http")

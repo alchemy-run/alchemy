@@ -105,8 +105,7 @@ export const HostedZone = Resource<HostedZone>("AWS.Route53.HostedZone");
 
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
-const normalizeName = (name: string) =>
-  name.endsWith(".") ? name : `${name}.`;
+const normalizeName = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
 export const HostedZoneProvider = () =>
   Provider.effect(
@@ -119,19 +118,14 @@ export const HostedZoneProvider = () =>
       // accepts the bare id — the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53
-          .getChange({ Id: changeId.replace(/^\/change\//, "") })
-          .pipe(
-            Effect.map((r) => r.ChangeInfo.Status),
-            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(60),
-              ]),
-              until: (status) => status === "INSYNC",
-            }),
-          );
+        return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
+          Effect.map((r) => r.ChangeInfo.Status),
+          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
+            until: (status) => status === "INSYNC",
+          }),
+        );
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -139,19 +133,13 @@ export const HostedZoneProvider = () =>
           DNSName: normalizeName(name),
           MaxItems: 1,
         });
-        return (response.HostedZones ?? []).find(
-          (zone) => zone.Name === normalizeName(name),
-        );
+        return (response.HostedZones ?? []).find((zone) => zone.Name === normalizeName(name));
       });
 
       const observe = Effect.fn(function* (id: string) {
         return yield* route53
           .getHostedZone({ Id: normalizeId(id) })
-          .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
       });
 
       const observedTags = Effect.fn(function* (id: string) {
@@ -209,9 +197,7 @@ export const HostedZoneProvider = () =>
             MaxItems: 300,
           };
         }
-        const deletable = sets.filter(
-          (set) => set.Type !== "SOA" && set.Type !== "NS",
-        );
+        const deletable = sets.filter((set) => set.Type !== "SOA" && set.Type !== "NS");
         if (deletable.length === 0) {
           return;
         }
@@ -226,9 +212,7 @@ export const HostedZoneProvider = () =>
               })),
             },
           })
-          .pipe(
-            Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
-          );
+          .pipe(Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)));
       });
 
       return {
@@ -254,8 +238,7 @@ export const HostedZoneProvider = () =>
           // (it deserializes as `undefined`), and an unknown old name must
           // fall through to the create/update recovery path.
           if (
-            (olds.name !== undefined &&
-              normalizeName(olds.name) !== normalizeName(news.name)) ||
+            (olds.name !== undefined && normalizeName(olds.name) !== normalizeName(news.name)) ||
             (olds.privateZone ?? false) !== (news.privateZone ?? false) ||
             olds.delegationSetId !== news.delegationSetId ||
             olds.vpc?.vpcId !== news.vpc?.vpcId
@@ -271,9 +254,7 @@ export const HostedZoneProvider = () =>
           // re-drive the create.
           const zoneId =
             output?.id ??
-            (olds?.name !== undefined
-              ? (yield* findByName(olds.name))?.Id
-              : undefined);
+            (olds?.name !== undefined ? (yield* findByName(olds.name))?.Id : undefined);
           if (zoneId === undefined) {
             return undefined;
           }
@@ -321,9 +302,7 @@ export const HostedZoneProvider = () =>
                     const existing = yield* findByName(news.name);
                     if (!existing) {
                       return yield* Effect.die(
-                        new Error(
-                          "hosted zone not found after HostedZoneAlreadyExists",
-                        ),
+                        new Error("hosted zone not found after HostedZoneAlreadyExists"),
                       );
                     }
                     return yield* observe(existing.Id).pipe(
@@ -340,9 +319,7 @@ export const HostedZoneProvider = () =>
                 ),
               );
             if (!created) {
-              return yield* Effect.die(
-                new Error("hosted zone could not be observed after create"),
-              );
+              return yield* Effect.die(new Error("hosted zone could not be observed after create"));
             }
             zone = {
               HostedZone: created.HostedZone,
@@ -388,13 +365,8 @@ export const HostedZoneProvider = () =>
             // have no dependency edge on the zone, so their deletes run
             // concurrently with ours (a classic Dependency Violation).
             Effect.retry({
-              while: (e) =>
-                e._tag === "PriorRequestNotComplete" ||
-                e._tag === "HostedZoneNotEmpty",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              while: (e) => e._tag === "PriorRequestNotComplete" || e._tag === "HostedZoneNotEmpty",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
         }),

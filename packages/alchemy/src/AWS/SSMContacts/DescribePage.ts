@@ -29,6 +29,4 @@ export interface DescribePage extends Binding.Service<
     ) => Effect.Effect<ssm.DescribePageResult, ssm.DescribePageError>
   >
 > {}
-export const DescribePage = Binding.Service<DescribePage>(
-  "AWS.SSMContacts.DescribePage",
-);
+export const DescribePage = Binding.Service<DescribePage>("AWS.SSMContacts.DescribePage");

@@ -41,9 +41,7 @@ export interface GetObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (
-      request: GetObjectRequest,
-    ) => Effect.Effect<S3.GetObjectOutput, S3.GetObjectError>
+    (request: GetObjectRequest) => Effect.Effect<S3.GetObjectOutput, S3.GetObjectError>
   >
 > {}
 

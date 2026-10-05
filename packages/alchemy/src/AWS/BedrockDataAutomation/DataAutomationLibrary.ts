@@ -10,12 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readBdaTags,
-  syncBdaTags,
-  toBdaTagList,
-  unredact,
-} from "./internal.ts";
+import { readBdaTags, syncBdaTags, toBdaTagList, unredact } from "./internal.ts";
 
 // Explicitly-typed pipeable repeat helper. Inlining `Effect.repeat` in a
 // provider lifecycle op leaks its conditional return type into declaration
@@ -124,10 +119,7 @@ export const DataAutomationLibraryProvider = () =>
         id: string,
         props: Pick<DataAutomationLibraryProps, "libraryName">,
       ) {
-        return (
-          props.libraryName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.libraryName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const toAttributes = (library: bda.DataAutomationLibrary) => ({
@@ -139,19 +131,14 @@ export const DataAutomationLibraryProvider = () =>
       const observeLibrary = Effect.fn(function* (libraryArn: string) {
         return yield* bda.getDataAutomationLibrary({ libraryArn }).pipe(
           Effect.map((r) => r.library),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const findLibraryArn = Effect.fn(function* (name: string) {
-        const summaries = yield* bda.listDataAutomationLibraries
-          .items({})
-          .pipe(Stream.runCollect);
+        const summaries = yield* bda.listDataAutomationLibraries.items({}).pipe(Stream.runCollect);
         return Array.from(summaries).find(
-          (s) =>
-            s.libraryName !== undefined && unredact(s.libraryName) === name,
+          (s) => s.libraryName !== undefined && unredact(s.libraryName) === name,
         )?.libraryArn;
       });
 
@@ -167,9 +154,7 @@ export const DataAutomationLibraryProvider = () =>
               Array.from(summaries),
               (s) =>
                 observeLibrary(s.libraryArn).pipe(
-                  Effect.map((library) =>
-                    library === undefined ? [] : [toAttributes(library)],
-                  ),
+                  Effect.map((library) => (library === undefined ? [] : [toAttributes(library)])),
                 ),
               { concurrency: 5 },
             );
@@ -178,8 +163,7 @@ export const DataAutomationLibraryProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const libraryArn =
-            output?.libraryArn ??
-            (yield* findLibraryArn(yield* createName(id, olds ?? {})));
+            output?.libraryArn ?? (yield* findLibraryArn(yield* createName(id, olds ?? {})));
           if (libraryArn === undefined) return undefined;
           const found = yield* observeLibrary(libraryArn);
           if (found === undefined) return undefined;
@@ -196,8 +180,7 @@ export const DataAutomationLibraryProvider = () =>
             oldName !== newName ||
             // updateDataAutomationLibrary only takes a description, so a KMS
             // key change can only be honored by replacement.
-            olds?.encryptionConfiguration?.kmsKeyId !==
-              news.encryptionConfiguration?.kmsKeyId
+            olds?.encryptionConfiguration?.kmsKeyId !== news.encryptionConfiguration?.kmsKeyId
           ) {
             return { action: "replace" } as const;
           }
@@ -205,18 +188,13 @@ export const DataAutomationLibraryProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const libraryName =
-            output?.libraryName ?? (yield* createName(id, news));
+          const libraryName = output?.libraryName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
-          const cachedArn =
-            output?.libraryArn ?? (yield* findLibraryArn(libraryName));
-          let live =
-            cachedArn === undefined
-              ? undefined
-              : yield* observeLibrary(cachedArn);
+          const cachedArn = output?.libraryArn ?? (yield* findLibraryArn(libraryName));
+          let live = cachedArn === undefined ? undefined : yield* observeLibrary(cachedArn);
 
           // 2. ENSURE — create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
@@ -235,16 +213,11 @@ export const DataAutomationLibraryProvider = () =>
                 Effect.catchTag("ConflictException", (conflict) =>
                   Effect.gen(function* () {
                     const arn = yield* findLibraryArn(libraryName);
-                    return arn === undefined
-                      ? yield* Effect.fail(conflict)
-                      : arn;
+                    return arn === undefined ? yield* Effect.fail(conflict) : arn;
                   }),
                 ),
               );
-            live =
-              createdArn === undefined
-                ? undefined
-                : yield* observeLibrary(createdArn);
+            live = createdArn === undefined ? undefined : yield* observeLibrary(createdArn);
           }
           if (live === undefined) {
             return yield* Effect.fail(
@@ -257,10 +230,7 @@ export const DataAutomationLibraryProvider = () =>
 
           // 3. SYNC — diff the OBSERVED description against the desired one;
           //    apply the idempotent update only on drift.
-          if (
-            unredact(live.libraryDescription ?? "") !==
-            (news.libraryDescription ?? "")
-          ) {
+          if (unredact(live.libraryDescription ?? "") !== (news.libraryDescription ?? "")) {
             yield* bda.updateDataAutomationLibrary({
               libraryArn: live.libraryArn,
               libraryDescription: news.libraryDescription ?? "",
@@ -278,9 +248,7 @@ export const DataAutomationLibraryProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* bda
             .deleteDataAutomationLibrary({ libraryArn: output.libraryArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // Deletion settles asynchronously (status ACTIVE → DELETING → gone)
           // and library names are unique, so wait for the terminal
           // disappearance — otherwise an immediate same-name re-create

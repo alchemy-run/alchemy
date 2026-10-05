@@ -27,7 +27,7 @@ import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as HttpServer from "effect/unstable/http/HttpServer";
+import * as HttpServer from "effect/http/HttpServer";
 
 const program = Effect.gen(function* () {
   const secret = yield* Config.Redacted("AUTH_SECRET");

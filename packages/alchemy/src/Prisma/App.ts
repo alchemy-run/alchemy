@@ -1,16 +1,4 @@
-import * as Effect from "effect/Effect";
-import { Unowned } from "../AdoptPolicy.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
   getServices,
@@ -18,10 +6,19 @@ import {
   updateService,
   createService,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import { desiredBranchId } from "./Internal/Branches.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedApp } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -31,9 +28,7 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { ObservedApp } from "./Internal/Observed.ts";
 import type { PrismaRegionId } from "./Types.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface AppProps {
   /**
@@ -144,9 +139,7 @@ export const App = Resource<App>("Prisma.App");
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listApps = (
-  filter: { projectId?: string; logicalId?: string; branchId?: string } = {},
-) =>
+const listApps = (filter: { projectId?: string; logicalId?: string; branchId?: string } = {}) =>
   Effect.gen(function* () {
     const apps: GetServicesResponse["data"][number][] = [];
     let cursor: string | undefined;
@@ -173,18 +166,14 @@ const listApps = (
   });
 
 const createDisplayName = (id: string, displayName: string | undefined) =>
-  displayName === undefined
-    ? createPhysicalName({ id })
-    : Effect.succeed(displayName);
+  displayName === undefined ? createPhysicalName({ id }) : Effect.succeed(displayName);
 
 const findApp = Effect.fn(function* (
   projectId: string,
   displayName: string,
   props: Pick<AppProps, "branchId" | "branchGitName">,
 ) {
-  const candidates = (yield* listApps({ projectId })).filter(
-    (app) => app.name === displayName,
-  );
+  const candidates = (yield* listApps({ projectId })).filter((app) => app.name === displayName);
   if (candidates.length === 0) return undefined;
   const branch = yield* desiredBranchId(projectId, props);
   if (!branch.resolved) return undefined;
@@ -207,17 +196,10 @@ const findAppByLogicalId = Effect.fn(function* (
   const branch = yield* desiredBranchId(projectId, props);
   if (!branch.resolved) return undefined;
   const apps = yield* listApps({ projectId, logicalId, branchId: branch.id });
-  return apps.find(
-    (app) => app.logicalId === logicalId && app.branchId === branch.id,
-  );
+  return apps.find((app) => app.logicalId === logicalId && app.branchId === branch.id);
 });
 
-const logicalIdTaken = (
-  logicalId: string,
-  branchId: string,
-  projectId: string,
-  cause: unknown,
-) =>
+const logicalIdTaken = (logicalId: string, branchId: string, projectId: string, cause: unknown) =>
   new Error(
     `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
     { cause },
@@ -235,11 +217,7 @@ const attrsFrom = (app: ObservedApp): App["Attributes"] => ({
   logicalId: app.logicalId ?? null,
 });
 
-const branchNeedsSync = Effect.fn(function* (
-  projectId: string,
-  app: ObservedApp,
-  props: AppProps,
-) {
+const branchNeedsSync = Effect.fn(function* (projectId: string, app: ObservedApp, props: AppProps) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return app.branchId !== props.branchId;
   }
@@ -254,9 +232,7 @@ const branchNeedsSync = Effect.fn(function* (
 const validateAppProps = (props: AppProps) =>
   Effect.gen(function* () {
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(
-        new Error("branchId and branchGitName are mutually exclusive."),
-      );
+      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
     }
     if (props.branchId === null || props.branchGitName === null) {
       return yield* Effect.fail(
@@ -279,8 +255,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output?.appId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -289,10 +264,7 @@ const ProviderLive = () =>
           }
           if (isResolved(news.regionId) && news.regionId !== undefined) {
             const currentRegionId = output?.regionId ?? olds.regionId;
-            if (
-              currentRegionId !== undefined &&
-              news.regionId !== currentRegionId
-            ) {
+            if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
               return yield* Effect.fail(
                 new Error(
                   `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
@@ -314,10 +286,7 @@ const ProviderLive = () =>
           };
           if (!isResolved(updateProps)) return undefined;
           const resolvedUpdateProps = {
-            ...(updateProps as Pick<
-              AppProps,
-              "displayName" | "branchId" | "branchGitName"
-            >),
+            ...(updateProps as Pick<AppProps, "displayName" | "branchId" | "branchGitName">),
             displayName: yield* createDisplayName(
               id,
               (updateProps as Pick<AppProps, "displayName">).displayName,
@@ -344,9 +313,7 @@ const ProviderLive = () =>
             : undefined;
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
-          const appId = isPrismaDevId(output?.appId)
-            ? undefined
-            : output?.appId;
+          const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -356,11 +323,7 @@ const ProviderLive = () =>
                 const projectId = unresolvedProjectIdOf(olds.project);
                 if (!projectId) return undefined;
                 if (olds.logicalId !== undefined) {
-                  return yield* findAppByLogicalId(
-                    projectId,
-                    olds.logicalId,
-                    olds,
-                  );
+                  return yield* findAppByLogicalId(projectId, olds.logicalId, olds);
                 }
                 return yield* findApp(
                   projectId,
@@ -387,9 +350,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          const appId = isPrismaDevId(output?.appId)
-            ? undefined
-            : output?.appId;
+          const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let app: ObservedApp | undefined = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -401,12 +362,8 @@ const ProviderLive = () =>
               projectId,
               displayName,
               branchId: branch.id,
-              ...(news.regionId === undefined
-                ? {}
-                : { regionId: news.regionId }),
-              ...(news.logicalId === undefined
-                ? {}
-                : { logicalId: news.logicalId }),
+              ...(news.regionId === undefined ? {} : { regionId: news.regionId }),
+              ...(news.logicalId === undefined ? {} : { logicalId: news.logicalId }),
             }).pipe(
               // A replayed create would make a second App; the retry policy
               // cannot see the request, so opt out explicitly.
@@ -419,27 +376,14 @@ const ProviderLive = () =>
                 Effect.gen(function* () {
                   if (
                     news.logicalId !== undefined &&
-                    (yield* findAppByLogicalId(
-                      projectId,
-                      news.logicalId,
-                      news,
-                    )) !== undefined
+                    (yield* findAppByLogicalId(projectId, news.logicalId, news)) !== undefined
                   ) {
                     return yield* Effect.fail(
-                      logicalIdTaken(
-                        news.logicalId,
-                        branch.id,
-                        projectId,
-                        conflict,
-                      ),
+                      logicalIdTaken(news.logicalId, branch.id, projectId, conflict),
                     );
                   }
                   const app = yield* findApp(projectId, displayName, news);
-                  if (
-                    app &&
-                    output?.appId !== undefined &&
-                    app.id === output.appId
-                  ) {
+                  if (app && output?.appId !== undefined && app.id === output.appId) {
                     return { app, created: false };
                   }
                   return yield* Effect.fail(
@@ -473,9 +417,7 @@ const ProviderLive = () =>
             app = yield* updateService({ serviceId: app.id, logicalId }).pipe(
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", (conflict) =>
-                Effect.fail(
-                  logicalIdTaken(logicalId, branch.id, projectId, conflict),
-                ),
+                Effect.fail(logicalIdTaken(logicalId, branch.id, projectId, conflict)),
               ),
             );
           }
@@ -495,10 +437,7 @@ const ProviderLive = () =>
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
           if (!app) return;
-          if (
-            app.projectId !== output.projectId ||
-            app.region.id !== output.regionId
-          ) {
+          if (app.projectId !== output.projectId || app.region.id !== output.regionId) {
             return yield* Effect.fail(
               new Error(
                 `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,

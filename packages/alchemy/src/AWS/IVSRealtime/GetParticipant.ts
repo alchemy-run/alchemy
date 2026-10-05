@@ -36,12 +36,7 @@ export interface GetParticipant extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetParticipantRequest,
-    ) => Effect.Effect<
-      ivsrealtime.GetParticipantResponse,
-      ivsrealtime.GetParticipantError
-    >
+    ) => Effect.Effect<ivsrealtime.GetParticipantResponse, ivsrealtime.GetParticipantError>
   >
 > {}
-export const GetParticipant = Binding.Service<GetParticipant>(
-  "AWS.IVSRealtime.GetParticipant",
-);
+export const GetParticipant = Binding.Service<GetParticipant>("AWS.IVSRealtime.GetParticipant");

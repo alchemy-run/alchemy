@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as CredentialsCache from "../Auth/CredentialsCache.ts";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import { deferUntilFirstUse, resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -32,9 +32,7 @@ declare module "@distilled.cloud/cloudflare/Credentials" {
  * caching rules. Non-OAuth credentials (API token / global key) never expire
  * and cache forever.
  */
-export const cacheUntilExpiry = <E>(
-  resolve: Effect.Effect<ResolvedCredentials, E>,
-) =>
+export const cacheUntilExpiry = <E>(resolve: Effect.Effect<ResolvedCredentials, E>) =>
   CredentialsCache.cacheUntilExpiry(resolve, (credentials) =>
     credentials.type === "oauth" ? credentials.expiresAt : undefined,
   );
@@ -50,7 +48,7 @@ export const fromAuthProvider = () =>
     Effect.gen(function* () {
       // Defer both profile lookup and credential resolution. Local-only dev
       // builds this layer too, but never evaluates its credential recipe.
-      const resolve = resolveProviderConfig<
+      const resolve = yield* resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME).pipe(
@@ -58,9 +56,7 @@ export const fromAuthProvider = () =>
         Effect.map((creds) =>
           Match.value(creds).pipe(
             Match.when({ type: "apiToken" }, (c) =>
-              apiTokenCredentials({
-                apiToken: Redacted.value(c.apiToken),
-              }),
+              apiTokenCredentials({ apiToken: Redacted.value(c.apiToken) }),
             ),
             Match.when({ type: "apiKey" }, (c) =>
               apiKeyCredentials({
@@ -79,19 +75,15 @@ export const fromAuthProvider = () =>
         ),
         Effect.mapError(
           (e) =>
-            new ConfigError({
-              message: `Failed to resolve Cloudflare credentials: ${e.message}`,
-            }),
+            new ConfigError({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
         ),
+        deferUntilFirstUse,
       );
-      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
 
       // `auth.read` refreshes and persists expired OAuth tokens when it is
       // re-run, so expiry-aware caching (instead of caching the first
       // resolution forever) is what keeps long-lived dev sessions
       // authenticated across the ~1h access-token lifetime.
-      return yield* cacheUntilExpiry(
-        resolve.pipe(Effect.provideContext(context)),
-      );
+      return yield* cacheUntilExpiry(resolve);
     }),
   );

@@ -1,13 +1,13 @@
+import { expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { Bucket } from "@/Neon/Bucket";
 import { Object as NeonObject } from "@/Neon/Object";
-import { ReadObject } from "@/Neon/ReadObject";
-import { WriteObject } from "@/Neon/WriteObject";
 import { ReadBucket } from "@/Neon/ReadBucket";
+import { ReadObject } from "@/Neon/ReadObject";
 import { WriteBucket } from "@/Neon/WriteBucket";
-import * as Effect from "effect/Effect";
+import { WriteObject } from "@/Neon/WriteObject";
 import * as Output from "@/Output";
-import * as Schema from "effect/Schema";
-import { expect, test } from "alchemy-test";
 
 interface Settings {
   theme: "system" | "light" | "dark";
@@ -39,27 +39,14 @@ const typeCases = (bucket: Bucket) =>
     yield* writer.put({ theme: "dark", pageSize: 50 });
     // @ts-expect-error The explicit theme union is retained.
     yield* writer.put({ theme: "blue", pageSize: 50 });
-    const invalidSettings = {
-      bucket,
-      key: "bad.json",
-      value: { theme: "blue", pageSize: 1 },
-    };
+    const invalidSettings = { bucket, key: "bad.json", value: { theme: "blue", pageSize: 1 } };
     // @ts-expect-error Explicit generic constrains the declared JSON value.
     yield* NeonObject<Settings>("Bad", invalidSettings);
     // @ts-expect-error JSON and raw body forms are mutually exclusive.
     yield* NeonObject("Mixed", { bucket, key: "mixed", value: 1, body: "raw" });
     // @ts-expect-error File and body forms are mutually exclusive.
-    yield* NeonObject("MixedFile", {
-      bucket,
-      key: "mixed",
-      source: "file.txt",
-      body: "raw",
-    });
-    const raw = yield* NeonObject("Raw", {
-      bucket,
-      key: "raw",
-      body: new Uint8Array([1]),
-    });
+    yield* NeonObject("MixedFile", { bucket, key: "mixed", source: "file.txt", body: "raw" });
+    const raw = yield* NeonObject("Raw", { bucket, key: "raw", body: new Uint8Array([1]) });
     const rawReader = yield* ReadObject(raw);
     const rawValue: Uint8Array | undefined = yield* rawReader.get();
     const rawWriter = yield* WriteObject(raw);
@@ -78,8 +65,7 @@ const typeCases = (bucket: Bucket) =>
       value: { count: Output.literal(1) },
     });
     const outputReader = yield* ReadObject(outputs);
-    const outputValue: { count: number } | undefined =
-      yield* outputReader.get();
+    const outputValue: { count: number } | undefined = yield* outputReader.get();
     const readBucket = yield* ReadBucket(bucket);
     // @ts-expect-error Read-only API cannot upload.
     readBucket.put("key", "value");
@@ -97,13 +83,5 @@ test.effect(
     Effect.sync(() => {
       expect(typeof typeCases).toBe("function");
     }),
-  {
-    tags: [
-      "unit",
-      "provider:neon",
-      "provider:neon:bucket",
-      "provider:neon:object",
-      "local",
-    ],
-  },
+  { tags: ["unit", "provider:neon", "provider:neon:bucket", "provider:neon:object", "local"] },
 );
