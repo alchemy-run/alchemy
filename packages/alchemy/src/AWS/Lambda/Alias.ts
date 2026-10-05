@@ -203,8 +203,11 @@ export const AliasProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          // An interrupted create's first checkpoint strips the Version
+          // reference while the Version is still being created (see
+          // stripUnresolved), so `olds.version` can be missing.
           const functionName =
-            output?.functionName ?? (olds ? resolvedProps(olds).version.functionName : undefined);
+            output?.functionName ?? (olds ? resolvedProps(olds).version?.functionName : undefined);
           if (!functionName) return undefined;
           const aliasName =
             output?.aliasName ??

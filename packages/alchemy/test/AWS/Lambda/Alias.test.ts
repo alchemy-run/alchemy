@@ -1,9 +1,12 @@
 import { fileURLToPath } from "node:url";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "alchemy-test";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
+import { type Alias, AliasProvider } from "@/AWS/Lambda/Alias.ts";
+import { stripUnresolved } from "@/Diff.ts";
+import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
@@ -215,3 +218,46 @@ const getAliasOrUndefined = Effect.fn(function* (functionName: string, name: str
     Name: name,
   }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
+
+// The first `creating` checkpoint persists `stripUnresolved(node.props)`.
+// When the Version is created in the same deploy, `version` is still an
+// unresolved Output at that point and is stripped. If the deploy fails
+// before the Alias's own create runs, the next plan's recovery `read`
+// receives those props as `olds` with no `output`, and has no function name
+// to look an alias up by.
+describe(
+  "recovery read after an interrupted create",
+  { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
+  () => {
+    it.effect("finds nothing when the Version reference was never resolved", () =>
+      Effect.gen(function* () {
+        const checkpointProps = stripUnresolved({
+          version: Output.literal("unresolved Version reference"),
+          aliasName: "live",
+        });
+        expect(checkpointProps).toEqual({ version: undefined, aliasName: "live" });
+        const recovered = yield* Effect.gen(function* () {
+          const provider = yield* Provider.Provider<Alias>("AWS.Lambda.Alias");
+          return yield* Effect.all(
+            [
+              // in-memory state store: stripped keys survive as `undefined`
+              checkpointProps,
+              // JSON state store: stripped keys are dropped
+              JSON.parse(JSON.stringify(checkpointProps)),
+            ].map((olds) =>
+              provider.read!({
+                id: "Live",
+                fqn: "Live",
+                instanceId: "0123456789abcdef0123456789abcdef",
+                olds,
+                output: undefined,
+              }),
+            ),
+          );
+          // No AWS services are provided: finding nothing must not reach Lambda.
+        }).pipe(Effect.provide(AliasProvider())) as Effect.Effect<unknown[]>;
+        expect(recovered).toEqual([undefined, undefined]);
+      }),
+    );
+  },
+);
