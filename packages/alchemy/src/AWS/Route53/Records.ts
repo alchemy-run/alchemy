@@ -175,19 +175,14 @@ export const RecordsProvider = () =>
     Records,
     Effect.gen(function* () {
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53
-          .getChange({ Id: changeId.replace(/^\/change\//, "") })
-          .pipe(
-            Effect.map((response) => response.ChangeInfo.Status),
-            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(60),
-              ]),
-              until: (status) => status === "INSYNC",
-            }),
-          );
+        return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
+          Effect.map((response) => response.ChangeInfo.Status),
+          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
+            until: (status) => status === "INSYNC",
+          }),
+        );
       });
 
       const findRecord = Effect.fn(function* (
@@ -202,16 +197,11 @@ export const RecordsProvider = () =>
             StartRecordType: type,
             MaxItems: 10,
           })
-          .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
-            recordSet.Name.toLowerCase() ===
-              normalizeName(name).toLowerCase() &&
+            recordSet.Name.toLowerCase() === normalizeName(name).toLowerCase() &&
             recordSet.Type === type &&
             recordSet.SetIdentifier === undefined,
         );
@@ -232,24 +222,17 @@ export const RecordsProvider = () =>
         live: route53.ResourceRecordSet,
         desired: route53.ResourceRecordSet,
       ): boolean => {
-        const normalizeDns = (value: string | undefined) =>
-          value?.toLowerCase().replace(/\.$/, "");
+        const normalizeDns = (value: string | undefined) => value?.toLowerCase().replace(/\.$/, "");
         if (desired.AliasTarget) {
           return (
-            normalizeDns(live.AliasTarget?.DNSName) ===
-              normalizeDns(desired.AliasTarget.DNSName) &&
-            live.AliasTarget?.HostedZoneId ===
-              desired.AliasTarget.HostedZoneId &&
+            normalizeDns(live.AliasTarget?.DNSName) === normalizeDns(desired.AliasTarget.DNSName) &&
+            live.AliasTarget?.HostedZoneId === desired.AliasTarget.HostedZoneId &&
             (live.AliasTarget?.EvaluateTargetHealth ?? false) ===
               (desired.AliasTarget.EvaluateTargetHealth ?? false)
           );
         }
-        const liveValues = (live.ResourceRecords ?? [])
-          .map((record) => record.Value)
-          .sort();
-        const desiredValues = (desired.ResourceRecords ?? [])
-          .map((record) => record.Value)
-          .sort();
+        const liveValues = (live.ResourceRecords ?? []).map((record) => record.Value).sort();
+        const desiredValues = (desired.ResourceRecords ?? []).map((record) => record.Value).sort();
         return (
           live.TTL === desired.TTL &&
           liveValues.length === desiredValues.length &&
@@ -323,11 +306,7 @@ export const RecordsProvider = () =>
           const found: string[] = [];
           let recordSet: route53.ResourceRecordSet | undefined;
           for (const name of output.names) {
-            const live = yield* findRecord(
-              output.hostedZoneId,
-              name,
-              output.type,
-            );
+            const live = yield* findRecord(output.hostedZoneId, name, output.type);
             if (live) {
               found.push(name);
               recordSet ??= live;
@@ -337,11 +316,8 @@ export const RecordsProvider = () =>
             ...output,
             names: found,
             ttl: recordSet?.TTL ?? output.ttl,
-            records:
-              recordSet?.ResourceRecords?.map((record) => record.Value) ??
-              output.records,
-            aliasTarget:
-              toAliasTarget(recordSet?.AliasTarget) ?? output.aliasTarget,
+            records: recordSet?.ResourceRecords?.map((record) => record.Value) ?? output.records,
+            aliasTarget: toAliasTarget(recordSet?.AliasTarget) ?? output.aliasTarget,
           };
         }),
         reconcile: Effect.fn(function* ({ news, output, session, bindings }) {
@@ -362,17 +338,12 @@ export const RecordsProvider = () =>
               aliasTarget: undefined,
             };
           }
-          const hostedZoneId = yield* resolveHostedZoneId(
-            explicitZoneId,
-            desired[0] ?? "",
-          );
+          const hostedZoneId = yield* resolveHostedZoneId(explicitZoneId, desired[0] ?? "");
           // `output.names` is the cache of which records this resource
           // managed before — the only way to know what to garbage-collect
           // (Route 53 records carry no tags to observe ownership from).
           const previous = output?.names ?? [];
-          const desiredKeys = new Set(
-            desired.map((name) => normalizeName(name).toLowerCase()),
-          );
+          const desiredKeys = new Set(desired.map((name) => normalizeName(name).toLowerCase()));
           const stale = previous.filter(
             (name) => !desiredKeys.has(normalizeName(name).toLowerCase()),
           );

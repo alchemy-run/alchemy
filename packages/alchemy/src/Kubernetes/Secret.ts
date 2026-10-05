@@ -3,11 +3,7 @@ import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   applyObject,
   connectCluster,
@@ -17,11 +13,7 @@ import {
 } from "./internal/client.ts";
 import type { KubernetesObjectRef } from "./internal/objects.ts";
 import { encodeSecretData } from "./internal/secret.ts";
-import {
-  connectionIdentity,
-  connectionOfOutput,
-  tryConnectionOf,
-} from "./internal/workload.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface SecretProps {
@@ -152,9 +144,7 @@ export const SecretProvider = () =>
           // immutable — changing any of them is a replacement.
           if (
             olds.name !== undefined &&
-            ((oldCluster !== undefined &&
-              newCluster !== undefined &&
-              oldCluster !== newCluster) ||
+            ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||
               olds.name !== news.name ||
               (olds.namespace ?? "default") !== (news.namespace ?? "default") ||
               (olds.type ?? "Opaque") !== (news.type ?? "Opaque"))
@@ -168,9 +158,7 @@ export const SecretProvider = () =>
           if (!connection) return undefined;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster gone — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return undefined;
           const observed = yield* readObject({
@@ -218,9 +206,7 @@ export const SecretProvider = () =>
             },
           });
           yield* session.note(`Applied v1/Secret ${namespace}/${news.name}`);
-          const uid =
-            (applied as { metadata?: { uid?: string } })?.metadata?.uid ??
-            output?.uid;
+          const uid = (applied as { metadata?: { uid?: string } })?.metadata?.uid ?? output?.uid;
           return { connection, name: news.name, namespace, type, ref, uid };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -228,9 +214,7 @@ export const SecretProvider = () =>
           if (!connection) return;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster already destroyed — nothing left to delete.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return;
           yield* deleteObject({ transport, object: output.ref }).pipe(

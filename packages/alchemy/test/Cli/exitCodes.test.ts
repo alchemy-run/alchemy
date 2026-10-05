@@ -1,11 +1,11 @@
-import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { describe, expect, it } from "alchemy-test";
-import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as FileSystem from "effect/FileSystem";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 
@@ -38,7 +38,64 @@ const exitCodeOf = (
     return yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-describe("CLI exit codes", () => {
+/** Like {@link exitCodeOf}, but from an empty project directory with stderr captured. */
+const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-exit-codes-",
+    });
+    const project = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-empty-project-",
+    });
+    const handle = yield* ChildProcess.make(runtime, [CLI, ...args], {
+      cwd: project,
+      env: { ALCHEMY_HOME: home },
+      extendEnv: true,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+      killSignal: "SIGTERM",
+      forceKillAfter: "1 second",
+    });
+    const [stderr, exitCode] = yield* Effect.all(
+      [handle.stderr.pipe(Stream.decodeText, Stream.mkString), handle.exitCode],
+      { concurrency: 2 },
+    );
+    return { stderr, exitCode };
+  }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
+  it.live("dev without a stack entrypoint reports it and exits 1", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject(["dev"]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
+      expect(stderr).not.toContain("PlatformError");
+      expect(stderr).not.toContain("at Effect.fn");
+    }),
+  );
+
+  it.live.skipIf(!nodeSupportsDevMode)(
+    "dev without a stack entrypoint reports it and exits 1 under node",
+    () =>
+      Effect.gen(function* () {
+        const { stderr, exitCode } = yield* runInEmptyProject(["dev"], nodePath!);
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
+        expect(stderr).not.toContain("PlatformError");
+      }),
+  );
+
+  it.live("plan accepts --adopt like deploy --dry-run", () =>
+    Effect.gen(function* () {
+      const { stderr, exitCode } = yield* runInEmptyProject(["plan", "--adopt"]);
+      expect(exitCode).toBe(1);
+      expect(stderr).not.toContain("Unrecognized flag");
+      expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
+    }),
+  );
+
   it.live("bare `profile` without a terminal prints help and exits 1", () =>
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["profile"])).toBe(1);
@@ -133,17 +190,9 @@ describe("CLI exit codes", () => {
   it.live("provider check-env accepts an explicit profile", () =>
     Effect.gen(function* () {
       expect(
-        yield* exitCodeOf(
-          [
-            "provider",
-            "check-env",
-            "--profile",
-            "default",
-            "--provider",
-            "neon",
-          ],
-          { NEON_API_KEY: "napi_test_key" },
-        ),
+        yield* exitCodeOf(["provider", "check-env", "--profile", "default", "--provider", "neon"], {
+          NEON_API_KEY: "napi_test_key",
+        }),
       ).toBe(0);
     }),
   );

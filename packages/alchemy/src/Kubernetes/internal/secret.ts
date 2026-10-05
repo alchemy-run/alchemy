@@ -7,9 +7,7 @@ import * as Redacted from "effect/Redacted";
  * resolves this silently (`stringData` wins), which hides mistakes; alchemy
  * refuses instead.
  */
-export class SecretDataKeyConflict extends Data.TaggedError(
-  "Kubernetes.SecretDataKeyConflict",
-)<{
+export class SecretDataKeyConflict extends Data.TaggedError("Kubernetes.SecretDataKeyConflict")<{
   keys: string[];
 }> {
   override get message(): string {
@@ -32,9 +30,7 @@ export const encodeSecretData = ({
   binaryData = {},
 }: SecretData): Effect.Effect<Record<string, string>, SecretDataKeyConflict> =>
   Effect.gen(function* () {
-    const conflicts = Object.keys(stringData).filter((key) =>
-      Object.hasOwn(binaryData, key),
-    );
+    const conflicts = Object.keys(stringData).filter((key) => Object.hasOwn(binaryData, key));
     if (conflicts.length > 0) {
       return yield* new SecretDataKeyConflict({ keys: conflicts });
     }
@@ -46,10 +42,7 @@ export const encodeSecretData = ({
         ]),
       ),
       ...Object.fromEntries(
-        Object.entries(binaryData).map(([key, value]) => [
-          key,
-          Redacted.value(value),
-        ]),
+        Object.entries(binaryData).map(([key, value]) => [key, Redacted.value(value)]),
       ),
     }));
   });

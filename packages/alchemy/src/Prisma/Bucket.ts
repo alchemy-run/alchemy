@@ -1,16 +1,20 @@
+import { Retry } from "@distilled.cloud/prisma";
+import {
+  type GetBucketsResponse,
+  deleteBucket,
+  getBuckets,
+  getBucket,
+  createBucket,
+} from "@distilled.cloud/prisma/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { PrismaClient, isNotFound } from "./Client.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedBucket } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -20,7 +24,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { Bucket as ApiBucket } from "./Types.ts";
 
 export interface BucketProps {
   /**
@@ -92,6 +95,7 @@ export interface Bucket extends Resource<
  * ```
  *
  * @resource
+ * @product Bucket
  */
 export const Bucket = Resource<Bucket>("Prisma.Bucket");
 
@@ -100,40 +104,57 @@ export const Bucket = Resource<Bucket>("Prisma.Bucket");
  * one requested or persisted. Convergence and deletion both refuse rather
  * than acting on a bucket that is not the one this resource manages.
  */
-export class BucketProjectMismatchError extends Data.TaggedError(
-  "BucketProjectMismatchError",
-)<{
+export class BucketProjectMismatchError extends Data.TaggedError("BucketProjectMismatchError")<{
   bucketId: string;
   actualProjectId: string;
   expectedProjectId: string;
   message: string;
 }> {}
 
-const attrsFrom = (bucket: ApiBucket): Bucket["Attributes"] => ({
+const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
   bucketId: bucket.id,
   name: bucket.name,
   projectId: bucket.project.id,
   createdAt: bucket.createdAt,
 });
 
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listBuckets = () =>
+  Effect.gen(function* () {
+    const buckets: GetBucketsResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getBuckets(cursor === undefined ? {} : { cursor });
+      buckets.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getBuckets: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return buckets;
+  });
+
 const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["bucketId"],
-        list: () =>
-          client
-            .listBuckets()
-            .pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
+        list: () => listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.bucketId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -158,26 +179,22 @@ const ProviderLive = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ output }) {
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) return undefined;
-          const bucket = yield* client
-            .getBucket(bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const bucket = yield* getBucket({ bucketId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           return bucket ? attrsFrom(bucket) : undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const projectId = yield* resolveProjectId(news.project);
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           const observed = bucketId
-            ? yield* client
-                .getBucket(bucketId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getBucket({ bucketId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : undefined;
           if (observed) {
             if (observed.project.id !== projectId) {
@@ -190,18 +207,28 @@ const ProviderLive = () =>
             }
             return attrsFrom(observed);
           }
-          const created = yield* client.createBucket({
+          const created = yield* createBucket({
             projectId,
-            name: news.name,
-            branchId: news.branchId,
-          });
+            ...(news.name === undefined ? {} : { name: news.name }),
+            ...(news.branchId === undefined || news.branchId === null
+              ? {}
+              : { branchId: news.branchId }),
+          }).pipe(
+            // A replayed create would make a second bucket; the retry policy
+            // cannot see the request, so opt out explicitly.
+            Retry.none,
+            Effect.map((response) => response.data),
+          );
           return attrsFrom(created);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.bucketId)) return;
-          const bucket = yield* client
-            .getBucket(output.bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const bucket = yield* getBucket({
+            bucketId: output.bucketId,
+          }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           if (!bucket) return;
           if (bucket.project.id !== output.projectId) {
             return yield* new BucketProjectMismatchError({
@@ -213,9 +240,9 @@ const ProviderLive = () =>
           }
           // Deletion cascades server-side: the Management API removes the
           // bucket together with its objects and any remaining keys.
-          yield* client
-            .deleteBucket(output.bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteBucket({
+            bucketId: output.bucketId,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),

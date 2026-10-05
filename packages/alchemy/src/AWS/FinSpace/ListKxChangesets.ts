@@ -28,6 +28,4 @@ export interface ListKxChangesets extends Binding.Service<
     ) => Effect.Effect<SVC.ListKxChangesetsResponse, SVC.ListKxChangesetsError>
   >
 > {}
-export const ListKxChangesets = Binding.Service<ListKxChangesets>(
-  "AWS.FinSpace.ListKxChangesets",
-);
+export const ListKxChangesets = Binding.Service<ListKxChangesets>("AWS.FinSpace.ListKxChangesets");

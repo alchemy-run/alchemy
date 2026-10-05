@@ -1,18 +1,15 @@
 import * as Effect from "effect/Effect";
 import { identity } from "effect/Function";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi } from "./HttpStateApi.ts";
-
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import {
-  StateStoreError,
-  type PersistedState,
-  type StateService,
-} from "./State.ts";
+import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -40,13 +37,7 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   ) => HttpClientRequest.HttpClientRequest;
 }
 
-export const checkHttpStateStoreAuth = ({
-  url,
-  authToken,
-}: {
-  url: string;
-  authToken: string;
-}) =>
+export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authToken: string }) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
@@ -73,20 +64,12 @@ export const checkHttpStateStoreAuth = ({
     );
   });
 
-export const makeHttpStateStore = ({
-  url,
-  authToken,
-  transformClient,
-  id,
-}: HttpStateStoreProps) =>
+export const makeHttpStateStore = ({ url, authToken, transformClient, id }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
       transformClient: HttpClient.mapRequest((req) =>
-        req.pipe(
-          HttpClientRequest.bearerToken(authToken),
-          transformClient ?? identity,
-        ),
+        req.pipe(HttpClientRequest.bearerToken(authToken), transformClient ?? identity),
       ),
     });
     const state = apiClient.state;
@@ -103,10 +86,8 @@ export const makeHttpStateStore = ({
           Effect.map((stacks) => [...stacks]),
           mapStateStoreError,
         ),
-      listStages: (stack) =>
-        state.listStages({ params: { stack } }).pipe(mapStateStoreError),
-      list: (request) =>
-        state.listResources({ params: request }).pipe(mapStateStoreError),
+      listStages: (stack) => state.listStages({ params: { stack } }).pipe(mapStateStoreError),
+      list: (request) => state.listResources({ params: request }).pipe(mapStateStoreError),
       get: (request) =>
         state
           .getState({
@@ -117,19 +98,13 @@ export const makeHttpStateStore = ({
             },
           })
           .pipe(
-            Effect.map((s) =>
-              s == null
-                ? undefined
-                : (reviveStateRecursive(s) as ResourceState),
-            ),
+            Effect.map((s) => (s == null ? undefined : (reviveStateRecursive(s) as ResourceState))),
             mapStateStoreError,
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
           Effect.map((resources) =>
-            resources.map(
-              (s) => reviveStateRecursive(s) as ReplacedResourceState,
-            ),
+            resources.map((s) => reviveStateRecursive(s) as ReplacedResourceState),
           ),
           mapStateStoreError,
         ),
@@ -178,9 +153,7 @@ export const makeHttpStateStore = ({
             params: { stack: request.stack, stage: request.stage },
           })
           .pipe(
-            Effect.map((s) =>
-              s == null ? undefined : reviveStateRecursive(s),
-            ),
+            Effect.map((s) => (s == null ? undefined : reviveStateRecursive(s))),
             mapStateStoreError,
           ),
       setOutput: (request) =>
@@ -233,57 +206,42 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
   });
 
 /**
- * Human-readable description of a state-store client failure.
- *
- * Several of the errors the HTTP client can raise carry an empty
- * `message` (e.g. the no-content `Unauthorized` the store returns on a
- * bad bearer token), which used to surface as a blank
- * `StateStoreError` with nothing to act on. Always produce a
- * non-empty message: prefer the error's own message, fall back to its
- * `_tag`/name, and append the HTTP status and any distinct `cause`
- * message when available.
+ * Describe a state-store failure using only its known kind and HTTP status.
+ * Client/decoder messages and causes can contain serialized state, including
+ * secrets unwrapped by encodeState, so they must not become diagnostics.
  */
 export const describeStateStoreFailure = (
   e: unknown,
   profileCommand = "alchemy profile edit",
 ): string => {
-  if (!(e instanceof Error)) return String(e);
-  const tag = (e as { _tag?: unknown })._tag;
-  let message =
-    e.message.trim() ||
-    (typeof tag === "string" ? tag : undefined) ||
-    e.name ||
-    "Unknown error";
-  if (typeof tag === "string" && tag.startsWith("Unauthorized")) {
-    message =
+  if (e instanceof HttpApiError.Unauthorized) {
+    return (
       "State store rejected the request as unauthorized. " +
-      `The stored state-store credentials may be stale. Run \`${profileCommand}\` to reconfigure them.`;
+      `The stored state-store credentials may be stale. Run \`${profileCommand}\` to reconfigure them.`
+    );
   }
-  const status = (e as { response?: { status?: unknown } }).response?.status;
-  if (typeof status === "number" && !message.includes(String(status))) {
-    message += ` (HTTP ${status})`;
+  if (HttpClientError.isHttpClientError(e)) {
+    const status = e.response?.status;
+    return `State store request failed (${e.reason._tag}${status === undefined ? "" : `, HTTP ${status}`}).`;
   }
-  if (e.cause instanceof Error) {
-    const causeMessage = e.cause.message.trim();
-    if (causeMessage && !message.includes(causeMessage)) {
-      message += ` — caused by: ${causeMessage}`;
-    }
-  }
-  return message;
+  return "State store request failed.";
 };
 
 /** Collapse any client failure into a {@link StateStoreError}. */
 const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     retryTransient,
-    Effect.tapError(Effect.log),
     Effect.catch((e: E) =>
       Effect.gen(function* () {
         const command = yield* profileCommandHint("alchemy profile edit");
         return yield* Effect.fail(
           new StateStoreError({
             message: describeStateStoreFailure(e, command),
-            cause: e instanceof Error ? e : undefined,
+            http: HttpClientError.isHttpClientError(e)
+              ? { status: e.response?.status }
+              : e instanceof HttpApiError.Unauthorized
+                ? { status: 401 }
+                : undefined,
           }),
         );
       }),

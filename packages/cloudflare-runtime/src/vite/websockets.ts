@@ -2,7 +2,7 @@ import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
-import { resolveForwardedHost } from "./forwarded-host.ts";
+import { proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
@@ -13,6 +13,7 @@ import { resolveForwardedHost } from "./forwarded-host.ts";
 export function handleWebSocket(
   httpServer: vite.HttpServer,
   address: string | URL,
+  proxySharedSecret: string,
 ): () => void {
   const upstreamBase = typeof address === "string" ? new URL(address) : address;
 
@@ -26,11 +27,7 @@ export function handleWebSocket(
     socket.on("close", () => sockets.delete(socket));
   };
 
-  const onUpgrade = (
-    request: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-  ) => {
+  const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
 
@@ -43,8 +40,7 @@ export function handleWebSocket(
     const base = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`;
     const url = new URL(request.url ?? "/", base);
 
-    const isViteRequest =
-      request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
+    const isViteRequest = request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
     const isSandboxRequest = hasSandboxOrigin(url.origin);
 
     // Vite handles its own HMR upgrades; forward Sandbox preview URLs anyway.
@@ -60,7 +56,7 @@ export function handleWebSocket(
       method: request.method,
       // Forward the client-facing host so the worker sees the URL the client
       // requested rather than the local workerd address.
-      headers: { ...request.headers, host: url.host },
+      headers: proxyRequestHeaders(request, url, proxySharedSecret),
     });
 
     const cleanup = () => {
@@ -95,9 +91,7 @@ export function handleWebSocket(
       }`;
       const headerLines: Array<string> = [statusLine];
       for (let i = 0; i < upstreamRes.rawHeaders.length; i += 2) {
-        headerLines.push(
-          `${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`,
-        );
+        headerLines.push(`${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`);
       }
       socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
 
@@ -139,8 +133,7 @@ export function handleWebSocket(
  * [^.]+ groups separated by - cause quadratic backtracking on hyphen-heavy input. Tokens
  * are documented as letters/digits/underscores only.
  */
-const SANDBOX_ORIGIN_REGEXP =
-  /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
+const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
 
 function hasSandboxOrigin(origin: string) {
   return SANDBOX_ORIGIN_REGEXP.test(origin);

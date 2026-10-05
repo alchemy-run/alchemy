@@ -23,9 +23,7 @@ export const reclaimTaskDefinitionFamily = (family: string) =>
         .listTaskDefinitions({ familyPrefix: family, status })
         .pipe(
           Effect.map((r) =>
-            (r.taskDefinitionArns ?? []).filter((arn) =>
-              arn.includes(`/${family}:`),
-            ),
+            (r.taskDefinitionArns ?? []).filter((arn) => arn.includes(`/${family}:`)),
           ),
         );
 

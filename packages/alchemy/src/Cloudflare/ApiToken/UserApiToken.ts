@@ -103,10 +103,9 @@ export type UserApiToken = Resource<
  * @product API Tokens
  * @category Account & Identity
  */
-export const UserApiToken = Resource<UserApiToken>(
-  "Cloudflare.ApiToken.UserApiToken",
-  { aliases: ["Cloudflare.UserApiToken"] },
-);
+export const UserApiToken = Resource<UserApiToken>("Cloudflare.ApiToken.UserApiToken", {
+  aliases: ["Cloudflare.UserApiToken"],
+});
 
 type UserApiTokenAttributes = UserApiToken["Attributes"];
 
@@ -117,12 +116,8 @@ export const UserApiTokenProvider = () =>
       if (!isResolved(news)) return undefined;
       const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
       const newName = yield* resolveName(id, news.name);
-      const oldPolicyFp = policyFingerprint(
-        resolvePolicies(olds?.policies ?? []),
-      );
-      const newPolicyFp = policyFingerprint(
-        resolvePolicies(news.policies ?? []),
-      );
+      const oldPolicyFp = policyFingerprint(resolvePolicies(olds?.policies ?? []));
+      const newPolicyFp = policyFingerprint(resolvePolicies(news.policies ?? []));
       const oldCondFp = conditionFingerprint(olds?.condition);
       const newCondFp = conditionFingerprint(news.condition);
       if (
@@ -169,9 +164,7 @@ export const UserApiTokenProvider = () =>
           notBefore: news.notBefore,
         });
         if (!result.value) {
-          return yield* Effect.die(
-            `Cloudflare did not return a value for token "${name}".`,
-          );
+          return yield* Effect.die(`Cloudflare did not return a value for token "${name}".`);
         }
         return buildAttributes(result, Redacted.make(result.value));
       }
@@ -211,9 +204,7 @@ export const UserApiTokenProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) =>
-              buildAttributes(token, Redacted.make("")),
-            ),
+            (page.result ?? []).map((token) => buildAttributes(token, Redacted.make(""))),
           ),
         ),
         // User-scoped tokens require user-level auth; an account-scoped token

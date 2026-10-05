@@ -47,6 +47,7 @@ export interface DecryptResult {
  * ```
  *
  * @binding
+ * @product Secret Key
  */
 export interface Decrypt extends Binding.Service<
   Decrypt,
@@ -54,9 +55,7 @@ export interface Decrypt extends Binding.Service<
   (
     key: SecretKey,
   ) => Effect.Effect<
-    (
-      request: DecryptRequest,
-    ) => Effect.Effect<DecryptResult, DecryptSecretKeyError, RuntimeContext>
+    (request: DecryptRequest) => Effect.Effect<DecryptResult, DecryptSecretKeyError, RuntimeContext>
   >
 > {}
 

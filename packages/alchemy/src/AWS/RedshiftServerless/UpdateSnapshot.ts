@@ -26,10 +26,7 @@ export interface UpdateSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: serverless.UpdateSnapshotRequest,
-    ) => Effect.Effect<
-      serverless.UpdateSnapshotResponse,
-      serverless.UpdateSnapshotError
-    >
+    ) => Effect.Effect<serverless.UpdateSnapshotResponse, serverless.UpdateSnapshotError>
   >
 > {}
 export const UpdateSnapshot = Binding.Service<UpdateSnapshot>(

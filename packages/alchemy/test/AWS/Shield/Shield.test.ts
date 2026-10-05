@@ -1,12 +1,12 @@
+import * as shield from "@distilled.cloud/aws/shield";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { EIP } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Protection, ProtectionGroup } from "@/AWS/Shield";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as shield from "@distilled.cloud/aws/shield";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,7 +16,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `SubscriptionNotFound` entitlement tag against the real API at near-zero
 // cost; the full lifecycle only runs on an already-subscribed account with
 // AWS_TEST_SHIELD_ADVANCED=1.
-describe("AWS.Shield", () => {
+describe("AWS.Shield", { tags: ["provider:aws", "provider:aws:shield", "live"] }, () => {
   test.provider(
     "getSubscriptionState succeeds without a subscription",
     () =>
@@ -148,6 +148,6 @@ describe("AWS.Shield", () => {
         );
         expect(goneGroup._tag).toBe("ResourceNotFoundException");
       }),
-    { timeout: 300_000 },
+    { tags: ["provider:aws:ec2"], timeout: 300_000 },
   );
 });

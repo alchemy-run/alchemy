@@ -1,21 +1,17 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Neon from "@/Neon/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import HyperdriveLocalWorker, {
-  LocalHyperdrive,
-} from "./fixtures/local-worker.ts";
-import HyperdriveRemoteWorker, {
-  RemoteHyperdrive,
-} from "./fixtures/remote-worker.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Neon from "@/Neon/index.ts";
+import * as Test from "@/Test/Alchemy";
+import HyperdriveLocalWorker, { LocalHyperdrive } from "./fixtures/local-worker.ts";
+import HyperdriveRemoteWorker, { RemoteHyperdrive } from "./fixtures/remote-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command. Neon has
@@ -25,15 +21,16 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
   body: string;
-}> {}
+}> {
+  override get message() {
+    return `worker answered ${this.status}: ${this.body.slice(0, 500)}`;
+  }
+}
 
 const getJsonReady = (url: string) =>
   Effect.gen(function* () {
@@ -53,10 +50,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -96,9 +90,7 @@ test.provider(
       expect(deployed.connection.hyperdriveId).toMatch(/^dev:/);
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/query`,
-      )) as QueryBody;
+      const body = (yield* getJsonReady(`${deployed.worker.url}/query`)) as QueryBody;
       expect(body.row.sum).toBe(2);
       // The query really ran against the dev origin's database.
       expect(body.row.db).toBe(deployed.project.databaseName);
@@ -107,7 +99,17 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 /**
@@ -148,9 +150,7 @@ test.provider(
       );
 
       // The locally-served worker's binding still round-trips SQL.
-      const body = (yield* getJsonReady(
-        `${deployed.worker.url}/query`,
-      )) as QueryBody;
+      const body = (yield* getJsonReady(`${deployed.worker.url}/query`)) as QueryBody;
       expect(body.row.sum).toBe(2);
       expect(body.row.db).toBe(deployed.project.databaseName);
 
@@ -164,11 +164,19 @@ test.provider(
         })
         .pipe(
           Effect.as(false),
-          Effect.catchTag("HyperdriveConfigNotFound", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

@@ -1,9 +1,10 @@
+import { pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
- * collector rides AsyncLocalStorage, so registration attribution survives
- * concurrent imports — see Registry.ts), then executes every collected
+ * Discovers `*.test.ts` files, imports them concurrently with an AsyncLocalStorage
+ * per-file collector (see Registry.ts), then executes every collected
  * test as an Effect — files run concurrently up to a limit, tests within a
  * file run sequentially unless their suite is `describe.concurrent`. Each
  * test gets a buffering Effect Logger + Console so its output can be shown
@@ -20,12 +21,10 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
-import { inspect } from "node:util";
-import { pathToFileURL } from "node:url";
-
 import { makeFileLog } from "./FileLog.ts";
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, titlePath } from "./Model.ts";
+import type { TestPlan } from "./Plan.ts";
 import * as Registry from "./Registry.ts";
 import {
   Reporter,
@@ -35,6 +34,7 @@ import {
   type TestMeta,
   type TestResult,
 } from "./Reporter.ts";
+import { compileTagsFilter, type TagsFilter } from "./Tags.ts";
 
 export interface RunOptions {
   /** Directory the run is rooted at (usually `packages/alchemy`). */
@@ -58,6 +58,10 @@ export interface RunOptions {
    * (`file > describe chain > name`).
    */
   readonly filter?: ((fullTitle: string) => boolean) | undefined;
+  /** Match the combined suite and test tags, in addition to other filters. */
+  readonly tagsFilter?: ReadonlyArray<string>;
+  readonly plan?: TestPlan | undefined;
+  readonly dryRun?: boolean;
   /** Default per-test timeout in ms. */
   readonly timeout: number;
   /** Times a failing test body is re-run before being reported as failed. */
@@ -86,14 +90,9 @@ const ANSI_RE =
 const stripAnsi = (text: string): string => text.replace(ANSI_RE, "");
 
 const formatArg = (value: unknown): string =>
-  stripAnsi(
-    typeof value === "string"
-      ? value
-      : inspect(value, { depth: 4, colors: false }),
-  );
+  stripAnsi(typeof value === "string" ? value : inspect(value, { depth: 4, colors: false }));
 
-const formatArgs = (args: ReadonlyArray<unknown>): string =>
-  args.map(formatArg).join(" ");
+const formatArgs = (args: ReadonlyArray<unknown>): string => args.map(formatArg).join(" ");
 
 const bufferingConsole = (logs: Array<LogEntry>): ConsoleModule.Console => {
   const push = (level: string, args: ReadonlyArray<unknown>) => {
@@ -122,9 +121,7 @@ const bufferingConsole = (logs: Array<LogEntry>): ConsoleModule.Console => {
     },
     timeEnd: (label) => {
       const start = times.get(label ?? "default");
-      push("info", [
-        `${label ?? "default"}: ${start === undefined ? "?" : Date.now() - start}ms`,
-      ]);
+      push("info", [`${label ?? "default"}: ${start === undefined ? "?" : Date.now() - start}ms`]);
     },
     timeLog: (label, ...args) => push("info", [label, ...args]),
     trace: (...args) => push("debug", args),
@@ -143,16 +140,12 @@ const withCapture =
             // `Effect.log("a", "b")` delivers the message as an array —
             // unwrap it so buffered output reads exactly like console output
             // instead of `[ 'a', 'b' ]`.
-            const parts = Array.isArray(options.message)
-              ? options.message
-              : [options.message];
+            const parts = Array.isArray(options.message) ? options.message : [options.message];
             logs.push({
               level: options.logLevel,
               message:
                 parts.map(formatArg).join(" ") +
-                (options.cause.reasons.length === 0
-                  ? ""
-                  : `\n${Cause.pretty(options.cause)}`),
+                (options.cause.reasons.length === 0 ? "" : `\n${Cause.pretty(options.cause)}`),
               time: options.date,
             });
           }),
@@ -173,9 +166,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const path = yield* Path.Path;
   const files: Array<string> = [];
 
-  const walk: (
-    dir: string,
-  ) => Effect.Effect<void, unknown, FileSystem.FileSystem> = Effect.fn(
+  const walk: (dir: string) => Effect.Effect<void, unknown, FileSystem.FileSystem> = Effect.fn(
     function* (dir: string) {
       const entries = yield* fs.readDirectory(dir);
       entries.sort();
@@ -199,9 +190,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const nameFilters: Array<string> = [];
   for (const p of options.paths) {
     const abs = path.isAbsolute(p) ? p : path.resolve(options.root, p);
-    const exists = yield* fs
-      .exists(abs)
-      .pipe(Effect.orElseSucceed(() => false));
+    const exists = yield* fs.exists(abs).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
       roots.push(abs);
     } else {
@@ -222,9 +211,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   const excludeSubstrings: Array<string> = [];
   for (const e of options.exclude ?? []) {
     const abs = path.isAbsolute(e) ? e : path.resolve(options.root, e);
-    const exists = yield* fs
-      .exists(abs)
-      .pipe(Effect.orElseSucceed(() => false));
+    const exists = yield* fs.exists(abs).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
       excludePrefixes.push(abs);
     } else {
@@ -243,11 +230,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   for (const abs of roots) {
     const stat = yield* fs
       .stat(abs)
-      .pipe(
-        Effect.mapError(
-          () => new Error(`alchemy-test: path not found: ${abs}`),
-        ),
-      );
+      .pipe(Effect.mapError(() => new Error(`alchemy-test: path not found: ${abs}`)));
     if (stat.type === "Directory") {
       yield* walk(abs);
     } else {
@@ -264,8 +247,7 @@ export const discover = Effect.fn(function* (options: RunOptions) {
   }
   if (excludePrefixes.length > 0 || excludeSubstrings.length > 0) {
     unique = unique.filter(
-      (file) =>
-        exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
+      (file) => exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
     );
   }
   return unique.sort();
@@ -281,28 +263,22 @@ export interface CollectedFile {
   readonly error?: string | undefined;
 }
 
-const collectFile = (
-  absolute: string,
-  relative: string,
-): Effect.Effect<CollectedFile> =>
+const collectFile = (absolute: string, relative: string): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
     try {
       const suite = await Registry.collect(relative, async () => {
         await import(pathToFileURL(absolute).href);
         // Flush microtasks + one macrotask so registrations deferred with
         // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
-        // tree — their ALS context resolves this file's collector.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        // tree — their AsyncLocalStorage context resolves this file's collector.
+        await new Promise<void>((resolve) => setImmediate(resolve));
       });
       return { file: relative, suite };
     } catch (error) {
       return {
         file: relative,
         suite: undefined,
-        error:
-          error instanceof Error
-            ? (error.stack ?? error.message)
-            : String(error),
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       };
     }
   });
@@ -323,7 +299,11 @@ const hookPermits = (hooks: ReadonlyArray<Hook>): number =>
   hooks.some((hook) => hook.exclusive === true) ? EXCLUSIVE_PERMITS : 1;
 
 interface ExecContext {
-  readonly options: RunOptions;
+  readonly options: Omit<RunOptions, "tagsFilter"> & {
+    readonly tagsFilter: TagsFilter;
+    readonly selectedTests?: ReadonlySet<TestCase>;
+  };
+  readonly suiteStates?: Map<Suite, Exit.Exit<void, unknown>>;
   readonly onlyMode: boolean;
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   readonly fileLogs: Array<LogEntry>;
@@ -345,6 +325,8 @@ const metaOf = (file: string, test: TestCase): TestMeta => {
     file,
     titlePath: parts,
     name: test.name,
+    tags: test.tags,
+    optInTags: test.optInTags,
   };
 };
 
@@ -353,6 +335,10 @@ const included = (
   test: TestCase,
   ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
+  if (ctx.options.selectedTests !== undefined && !ctx.options.selectedTests.has(test)) return false;
+  if (ctx.options.tagsFilter !== undefined && !ctx.options.tagsFilter(test.tags, test.optInTags)) {
+    return false;
+  }
   if (ctx.options.filter !== undefined) {
     // Match against the full nested title, so `-t` finds a test by any
     // fragment regardless of how it's nested in describe blocks.
@@ -373,19 +359,18 @@ const included = (
 };
 
 const isSkipped = (test: TestCase): "skip" | "todo" | undefined => {
-  if (test.mode === "todo" || test.body === undefined) return "todo";
+  if (test.mode === "todo") return "todo";
   let node: Suite | TestCase | undefined = test;
   while (node !== undefined) {
     if (node.mode === "skip") return "skip";
     node = node.parent;
   }
-  return undefined;
+  // Wrappers (e.g. alchemy's `test.skipIf`) drop the body of skipped tests,
+  // so a missing body only means "todo" once skip has been ruled out.
+  return test.body === undefined ? "todo" : undefined;
 };
 
-const hookChain = (
-  test: TestCase,
-  kind: "beforeEach" | "afterEach",
-): Array<Hook> => {
+const hookChain = (test: TestCase, kind: "beforeEach" | "afterEach"): Array<Hook> => {
   const chain: Array<Array<Hook>> = [];
   let suite: Suite | undefined = test.parent;
   while (suite !== undefined) {
@@ -411,14 +396,11 @@ const runHooks = (
 
 const prettyCause = (cause: Cause.Cause<unknown>): string => {
   const rendered = Cause.pretty(cause);
-  return stripAnsi(
-    rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered,
-  );
+  return stripAnsi(rendered.trim().length === 0 ? inspect(Cause.squash(cause)) : rendered);
 };
 
 const wasInterrupted = (exit: Exit.Exit<unknown, unknown>): boolean =>
-  Exit.isFailure(exit) &&
-  exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
+  Exit.isFailure(exit) && exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
 
 interface TestAttempt {
   readonly beforeEach: Exit.Exit<void, unknown>;
@@ -431,30 +413,19 @@ const attemptNeedsRetry = (
   expectsFailure: boolean | undefined,
 ): boolean => {
   if (Exit.isFailure(exit)) return !wasInterrupted(exit);
-  if (
-    Exit.isFailure(exit.value.beforeEach) ||
-    Exit.isFailure(exit.value.afterEach)
-  ) {
+  if (Exit.isFailure(exit.value.beforeEach) || Exit.isFailure(exit.value.afterEach)) {
     return true;
   }
-  return (
-    !expectsFailure &&
-    exit.value.body !== undefined &&
-    Exit.isFailure(exit.value.body)
-  );
+  return !expectsFailure && exit.value.body !== undefined && Exit.isFailure(exit.value.body);
 };
 
 const hookError = (attempt: TestAttempt): string | undefined => {
   const errors: Array<string> = [];
   if (Exit.isFailure(attempt.beforeEach)) {
-    errors.push(
-      `beforeEach hook failed:\n${prettyCause(attempt.beforeEach.cause)}`,
-    );
+    errors.push(`beforeEach hook failed:\n${prettyCause(attempt.beforeEach.cause)}`);
   }
   if (Exit.isFailure(attempt.afterEach)) {
-    errors.push(
-      `afterEach hook failed:\n${prettyCause(attempt.afterEach.cause)}`,
-    );
+    errors.push(`afterEach hook failed:\n${prettyCause(attempt.afterEach.cause)}`);
   }
   return errors.length === 0 ? undefined : errors.join("\n\n");
 };
@@ -481,12 +452,8 @@ const runBodyWithTimeout = Effect.fn(function* (
 ) {
   // Detached: a timed-out body whose teardown never settles must not block
   // the attempt fiber's own completion (a supervised child would).
-  const fiber = yield* Effect.forkDetach(Effect.suspend(body), {
-    startImmediately: true,
-  });
-  const awaited = yield* Fiber.await(fiber).pipe(
-    Effect.timeoutOption(Duration.millis(timeoutMs)),
-  );
+  const fiber = yield* Effect.forkDetach(Effect.suspend(body), { startImmediately: true });
+  const awaited = yield* Fiber.await(fiber).pipe(Effect.timeoutOption(Duration.millis(timeoutMs)));
   if (Option.isSome(awaited)) return awaited.value;
   // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
   // hung finalizer never provides. Fire it, then give teardown a bounded
@@ -508,12 +475,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const meta = metaOf(ctx.file, test);
   const skipped = isSkipped(test);
   if (skipped !== undefined) {
-    const result: TestResult = {
-      status: skipped,
-      durationMs: 0,
-      logs: [],
-      retries: 0,
-    };
+    const result: TestResult = { status: skipped, durationMs: 0, logs: [], retries: 0 };
     ctx.results.push({ meta, result });
     yield* ctx.emit({ _tag: "TestEnd", test: meta, result });
     return;
@@ -553,16 +515,12 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
           Effect.asVoid,
         ),
       ),
-      Effect.map(({ beforeEach, body }) => ({
-        beforeEach,
-        body,
-        afterEach: afterExit,
-      })),
+      Effect.map(({ beforeEach, body }) => ({ beforeEach, body, afterEach: afterExit })),
       withCapture(logs),
     );
   };
 
-  const start = Date.now();
+  let durationMs = 0;
   let retries = 0;
   const withLock = ctx.lock.withPermits(test.exclusive ? EXCLUSIVE_PERMITS : 1);
 
@@ -572,9 +530,23 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     Effect.Effect<any>,
     Exit.Exit<TestAttempt, unknown>
   > {
-    const fiber = yield* Effect.forkChild(withLock(attempt()), {
-      startImmediately: true,
-    });
+    const fiber = yield* Effect.forkChild(
+      withLock(
+        Effect.suspend(() => {
+          // Queue time behind an exclusive test is not execution time. Sum only
+          // attempts (including their hooks), retaining time spent on retries.
+          const start = Date.now();
+          return attempt().pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                durationMs += Date.now() - start;
+              }),
+            ),
+          );
+        }),
+      ),
+      { startImmediately: true },
+    );
     ctx.running.set(meta.id, fiber);
     const exit: Exit.Exit<TestAttempt, unknown> = yield* Fiber.await(fiber);
     ctx.running.delete(meta.id);
@@ -582,16 +554,12 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   });
 
   let exit = yield* runAttempt();
-  while (
-    attemptNeedsRetry(exit, test.fails) &&
-    retries < (test.retry ?? ctx.options.retry)
-  ) {
+  while (attemptNeedsRetry(exit, test.fails) && retries < (test.retry ?? ctx.options.retry)) {
     retries++;
     // Clear IN PLACE — TestStart handed this array's reference out.
     logs.length = 0;
     exit = yield* runAttempt();
   }
-  const durationMs = Date.now() - start;
 
   let status: TestResult["status"];
   let error: string | undefined;
@@ -618,10 +586,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
       status = "pass";
     } else {
       status = "fail";
-      error =
-        bodyExit === undefined
-          ? "test body did not run"
-          : prettyCause(bodyExit.cause);
+      error = bodyExit === undefined ? "test body did not run" : prettyCause(bodyExit.cause);
     }
   }
 
@@ -632,11 +597,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
 });
 
 /** Fail every (non-skipped) test in a subtree without running it. */
-const failSubtree = Effect.fn(function* (
-  suite: Suite,
-  ctx: ExecContext,
-  error: string,
-) {
+const failSubtree = Effect.fn(function* (suite: Suite, ctx: ExecContext, error: string) {
   const tests: Array<TestCase> = [];
   const collect = (s: Suite) => {
     for (const child of s.children) {
@@ -664,57 +625,62 @@ const failSubtree = Effect.fn(function* (
   }
 });
 
-const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> =
-  Effect.fn(function* (suite: Suite, ctx: ExecContext) {
-    const runnable = suite.children.filter((child) =>
-      child.type === "test"
-        ? included(child, ctx)
-        : suiteHasIncludedTests(child, ctx),
-    );
-    if (runnable.length === 0) return;
+const runSuite: (suite: Suite, ctx: ExecContext) => Effect.Effect<void> = Effect.fn(function* (
+  suite: Suite,
+  ctx: ExecContext,
+) {
+  const runnable = suite.children.filter((child) =>
+    child.type === "test" ? included(child, ctx) : suiteHasIncludedTests(child, ctx),
+  );
+  if (runnable.length === 0) return;
 
-    // If every included test below is skipped (e.g. describe.skip), report
-    // them without running any hooks.
-    if (!suiteHasRunnableTests(suite, ctx)) {
-      yield* Effect.forEach(
-        runnable,
-        (child) =>
-          child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
-        { discard: true },
-      );
-      return;
-    }
-
-    // beforeAll — captured into the file-level log buffer. Emits hook events
-    // so the TUI can show "setting up" instead of an unexplained queue.
-    if (suite.beforeAll.length > 0) {
-      yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
-      // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
-      // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
-      // slot so unrelated files can still run concurrently.
-      const exit = yield* ctx.lock
-        .withPermits(hookPermits(suite.beforeAll))(
-          runHooks(suite.beforeAll, ctx.options.timeout),
-        )
-        .pipe(withCapture(ctx.fileLogs), Effect.exit);
-      yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
-      if (Exit.isFailure(exit)) {
-        yield* failSubtree(suite, ctx, prettyCause(exit.cause));
-        yield* runAfterAll(suite, ctx);
-        return;
-      }
-    }
-
-    const sequential = suite.sequential || ctx.options.sequential;
+  // If every included test below is skipped (e.g. describe.skip), report
+  // them without running any hooks.
+  if (!suiteHasRunnableTests(suite, ctx)) {
     yield* Effect.forEach(
       runnable,
-      (child) =>
-        child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx),
-      { concurrency: sequential ? 1 : "unbounded", discard: true },
+      (child) => (child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx)),
+      { discard: true },
     );
+    return;
+  }
 
-    yield* runAfterAll(suite, ctx);
-  });
+  // beforeAll — captured into the file-level log buffer. Emits hook events
+  // so the TUI can show "setting up" instead of an unexplained queue.
+  const previousSetup = ctx.suiteStates?.get(suite);
+  if (previousSetup !== undefined && Exit.isFailure(previousSetup)) {
+    yield* failSubtree(suite, ctx, prettyCause(previousSetup.cause));
+    return;
+  }
+  if (previousSetup === undefined && suite.beforeAll.length > 0) {
+    yield* ctx.emit({ _tag: "HookStart", file: ctx.file, hook: "beforeAll" });
+    // Honor `{ exclusive: true }` on the hook (Hetzner quota, Railway
+    // plugin DBs). Non-exclusive beforeAll keeps the default 1-permit
+    // slot so unrelated files can still run concurrently.
+    const exit = yield* ctx.lock
+      .withPermits(hookPermits(suite.beforeAll))(runHooks(suite.beforeAll, ctx.options.timeout))
+      .pipe(withCapture(ctx.fileLogs), Effect.exit);
+    yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "beforeAll" });
+    ctx.suiteStates?.set(suite, exit);
+    if (Exit.isFailure(exit)) {
+      yield* failSubtree(suite, ctx, prettyCause(exit.cause));
+      if (ctx.suiteStates === undefined) yield* runAfterAll(suite, ctx);
+      return;
+    }
+  }
+
+  if (ctx.suiteStates !== undefined && !ctx.suiteStates.has(suite))
+    ctx.suiteStates.set(suite, Exit.succeed(undefined));
+
+  const sequential = suite.sequential || ctx.options.sequential;
+  yield* Effect.forEach(
+    runnable,
+    (child) => (child.type === "test" ? runTest(child, ctx) : runSuite(child, ctx)),
+    { concurrency: sequential ? 1 : "unbounded", discard: true },
+  );
+
+  if (ctx.suiteStates === undefined) yield* runAfterAll(suite, ctx);
+});
 
 const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   if (suite.afterAll.length === 0) return;
@@ -750,8 +716,7 @@ const suiteHasIncludedTests = (
 ): boolean => {
   for (const child of suite.children) {
     if (child.type === "test" && included(child, ctx)) return true;
-    if (child.type === "suite" && suiteHasIncludedTests(child, ctx))
-      return true;
+    if (child.type === "suite" && suiteHasIncludedTests(child, ctx)) return true;
   }
   return false;
 };
@@ -762,15 +727,10 @@ const suiteHasRunnableTests = (
   ctx: Pick<ExecContext, "onlyMode" | "options" | "file">,
 ): boolean => {
   for (const child of suite.children) {
-    if (
-      child.type === "test" &&
-      included(child, ctx) &&
-      isSkipped(child) === undefined
-    ) {
+    if (child.type === "test" && included(child, ctx) && isSkipped(child) === undefined) {
       return true;
     }
-    if (child.type === "suite" && suiteHasRunnableTests(child, ctx))
-      return true;
+    if (child.type === "suite" && suiteHasRunnableTests(child, ctx)) return true;
   }
   return false;
 };
@@ -779,7 +739,8 @@ const suiteHasRunnableTests = (
 // run
 // ---------------------------------------------------------------------------
 
-export const run = Effect.fn(function* (options: RunOptions) {
+export const run = Effect.fn(function* (input: RunOptions) {
+  const options = { ...input, tagsFilter: compileTagsFilter(input.tagsFilter ?? []) };
   const reporter = yield* Reporter;
   const path = yield* Path.Path;
   const startedAt = Date.now();
@@ -790,63 +751,109 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const emit = (event: TestEvent): Effect.Effect<void> =>
     reporter.emit(event).pipe(Effect.andThen(fileLog.append(event)));
 
-  const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
+  const absoluteFiles = yield* discover(input).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
 
-  // Phase 1 — import EVERY file before running anything, in parallel.
-  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
-  // registration stays correctly attributed under concurrent imports.
-  // Collecting fully up-front keeps run semantics simple: `.only` applies
-  // across the whole run, and the full test list is known before the first
-  // test starts.
-  //
-  // Concurrency is BOUNDED: kicking off every import at once floods the
-  // main thread with synchronous parse/link/evaluate work — timers and the
-  // progress line starve (a slow start becomes indistinguishable from a
-  // hang), and it maximizes exposure to loader races under concurrent
-  // dynamic imports. The shared dependency graph is deduped by the module
-  // cache, so a modest bound keeps nearly all of the speedup.
+  // Import every file before running anything so `.only` applies across
+  // the whole run. AsyncLocalStorage keeps registrations attached to their
+  // file while imports overlap. Bound collection to avoid loader saturation.
   const collectConcurrency =
-    options.concurrency === "unbounded"
-      ? 32
-      : Math.min(options.concurrency, 32);
+    options.concurrency === "unbounded" ? 32 : Math.min(options.concurrency, 32);
   // collectFile never fails — import errors are captured on the result.
   const collected = yield* Effect.forEach(
     absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),
     ([absolute, rel]) =>
-      collectFile(absolute, rel).pipe(
-        Effect.tap(() => emit({ _tag: "FileCollected", file: rel })),
-      ),
+      collectFile(absolute, rel).pipe(Effect.tap(() => emit({ _tag: "FileCollected", file: rel }))),
     { concurrency: collectConcurrency },
   );
 
-  const onlyMode = collected.some(
-    (c) => c.suite !== undefined && containsOnly(c.suite),
-  );
+  const onlyMode = collected.some((c) => c.suite !== undefined && containsOnly(c.suite));
 
-  // Announce the full test list before execution starts (drives the TUI).
-  const allMetas: Array<TestMeta> = [];
+  // Assign each case once, in phase/branch declaration order, before execution.
+  const assigned = new Set<TestCase>();
+  const remainingFileBranches = new Map<string, number>();
+  const candidates: Array<{ file: string; test: TestCase }> = [];
+  const candidateOptions = {
+    ...options,
+    tagsFilter: (tags: ReadonlyArray<string>, optInTags: ReadonlyArray<string> = []) =>
+      options.tagsFilter([...tags, ...optInTags], []),
+  };
   for (const c of collected) {
-    if (c.suite === undefined) continue;
-    const walk = (suite: Suite) => {
-      for (const child of suite.children) {
-        if (child.type === "test") {
-          if (included(child, { onlyMode, options, file: c.file })) {
-            allMetas.push(metaOf(c.file, child));
-          }
-        } else {
-          walk(child);
+    if (c.suite !== undefined)
+      forEachTest(c.suite, (test) => {
+        if (included(test, { onlyMode, options: candidateOptions, file: c.file }))
+          candidates.push({ file: c.file, test });
+      });
+  }
+  const phases = (input.plan ?? [{ tags: [] }]).map((phase) =>
+    (Array.isArray(phase) ? phase : [phase]).map((branch) => {
+      const tagsFilter = compileTagsFilter([...(input.tagsFilter ?? []), ...branch.tags]);
+      const selectedTests = new Set<TestCase>();
+      const selectedFiles = new Set<string>();
+      for (const { file, test } of candidates) {
+        if (!assigned.has(test) && tagsFilter(test.tags, test.optInTags)) {
+          assigned.add(test);
+          selectedFiles.add(file);
+          selectedTests.add(test);
         }
       }
+      for (const file of selectedFiles) {
+        remainingFileBranches.set(file, (remainingFileBranches.get(file) ?? 0) + 1);
+      }
+      return {
+        ...options,
+        tagsFilter,
+        expressions: [...(input.tagsFilter ?? []), ...branch.tags],
+        selectedTests,
+        concurrency: branch.concurrency ?? options.concurrency,
+      };
+    }),
+  );
+  const allMetas = candidates
+    .filter(({ test }) => assigned.has(test))
+    .map(({ file, test }) => metaOf(file, test));
+  if (input.dryRun) {
+    yield* emit({
+      _tag: "PlanPreview",
+      phases: phases.map((branches) =>
+        branches.map((branch) => {
+          const matched = candidates.filter(({ test }) => branch.selectedTests.has(test));
+          return {
+            tags: branch.expressions,
+            concurrency: branch.concurrency,
+            tests: matched.length,
+            files: new Set(matched.map(({ file }) => file)).size,
+            skipped: matched.filter(({ test }) => isSkipped(test) !== undefined).length,
+          };
+        }),
+      ),
+    });
+    const fileFailures = collected.flatMap((c) =>
+      c.error === undefined ? [] : [{ file: c.file, error: c.error }],
+    );
+    for (const failure of fileFailures) yield* emit({ _tag: "FileEnd", ...failure, logs: [] });
+    const summary: RunSummary = {
+      dryRun: true,
+      files: collected.length,
+      plan: {
+        found: candidates.length,
+        selected: assigned.size,
+        excluded: candidates.length - assigned.size,
+      },
+      passed: 0,
+      failed: fileFailures.length,
+      skipped: 0,
+      todo: 0,
+      durationMs: Date.now() - startedAt,
+      failures: [],
+      fileFailures,
     };
-    walk(c.suite);
+    yield* emit({ _tag: "RunEnd", summary });
+    yield* fileLog.close;
+    return summary;
   }
-  yield* emit({
-    _tag: "RunStart",
-    files: collected.length,
-    tests: allMetas,
-  });
+  yield* emit({ _tag: "RunStart", files: collected.length, tests: allMetas });
 
   // Phase 2 — run files concurrently.
   const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
@@ -884,9 +891,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // captured into this buffer over the (potentially very long) life of a
   // deploy/destroy hook; teeing each entry into the run log keeps the log
   // live instead of silent-until-FileEnd (which reads as a deadlocked run).
-  const liveHookLogBuffer = (
-    tee: (entry: LogEntry) => void,
-  ): Array<LogEntry> => {
+  const liveHookLogBuffer = (tee: (entry: LogEntry) => void): Array<LogEntry> => {
     const buffer: Array<LogEntry> = [];
     const push = Array.prototype.push.bind(buffer);
     buffer.push = (...entries: Array<LogEntry>) => {
@@ -896,17 +901,21 @@ export const run = Effect.fn(function* (options: RunOptions) {
     return buffer;
   };
 
-  const runFile = Effect.fn(function* (c: CollectedFile) {
-    const fileLogs = liveHookLogBuffer((entry) =>
-      fileLog.appendHookLine(c.file, entry),
-    );
-    const fileErrors: Array<string> = [];
+  const fileContexts = new Map<string, ExecContext>();
+  const fileLocks = new Map<string, Semaphore.Semaphore>();
+  for (const c of collected) fileLocks.set(c.file, yield* Semaphore.make(1));
+  const runFile = Effect.fn(function* (c: CollectedFile, branchOptions: ExecContext["options"]) {
+    const previous = fileContexts.get(c.file);
+    const fileLogs =
+      previous?.fileLogs ?? liveHookLogBuffer((entry) => fileLog.appendHookLine(c.file, entry));
+    const fileErrors = previous?.fileErrors ?? [];
     // Shares the LIVE hook-log buffer so the TUI can tail deploys.
-    yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
+    if (previous === undefined) yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
     let fileError = c.error;
     if (c.suite !== undefined) {
       const ctx: ExecContext = {
-        options,
+        options: branchOptions,
+        suiteStates: input.plan === undefined ? undefined : (previous?.suiteStates ?? new Map()),
         onlyMode,
         emit,
         fileLogs,
@@ -917,6 +926,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
         running,
         completed,
       };
+      fileContexts.set(c.file, ctx);
       forEachTest(c.suite, (test) => {
         if (included(test, ctx) && isSkipped(test) === undefined) {
           testIndex.set(metaOf(c.file, test).id, { test, ctx });
@@ -925,29 +935,76 @@ export const run = Effect.fn(function* (options: RunOptions) {
       const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
       if (Exit.isFailure(exit)) {
         fileError = prettyCause(exit.cause);
-      } else if (fileErrors.length > 0) {
+      } else if (input.plan === undefined && fileErrors.length > 0) {
         fileError = fileErrors.join("\n\n");
       }
     }
     if (fileError !== undefined) {
       fileFailures.push({ file: c.file, error: fileError });
     }
-    yield* emit({
-      _tag: "FileEnd",
-      file: c.file,
-      logs: fileLogs,
-      error: fileError,
-    });
+    if (input.plan !== undefined && c.suite !== undefined) {
+      // Count completed visits rather than declaration order: branches in a
+      // phase run concurrently, and any of them may finish this file last.
+      const remaining = remainingFileBranches.get(c.file)! - 1;
+      remainingFileBranches.set(c.file, remaining);
+      if (remaining > 0) return;
+
+      // Keep scopes only while another selected branch still needs the file.
+      // Teardown stays inside its concurrency slot and per-file lock so new
+      // files cannot accumulate resources retained until the end of a phase.
+      const ctx = fileContexts.get(c.file)!;
+      for (const suite of [...ctx.suiteStates!.keys()].reverse()) yield* runAfterAll(suite, ctx);
+      if (ctx.fileErrors.length > 0)
+        fileFailures.push({ file: ctx.file, error: ctx.fileErrors.join("\n\n") });
+      fileError =
+        fileFailures
+          .filter((failure) => failure.file === c.file)
+          .map((failure) => failure.error)
+          .join("\n\n") || undefined;
+    }
+    yield* emit({ _tag: "FileEnd", file: c.file, logs: fileLogs, error: fileError });
   });
 
-  yield* Effect.forEach(collected, runFile, {
-    concurrency: options.concurrency,
-    discard: true,
-  });
+  // Import errors are reported once even if no branch selects that file.
+  yield* Effect.forEach(
+    collected.filter((c) => c.error !== undefined),
+    (c) => runFile(c, options),
+  );
+  for (const [index, branches] of phases.entries()) {
+    if (input.plan !== undefined)
+      yield* emit({
+        _tag: "PlanPhaseStart",
+        phase: index + 1,
+        phases: phases.length,
+        tests: branches.reduce((count, branch) => count + branch.selectedTests.size, 0),
+      });
+    yield* Effect.forEach(
+      branches,
+      (branch) =>
+        Effect.forEach(
+          collected.filter(
+            (c) =>
+              c.suite !== undefined &&
+              suiteHasIncludedTests(c.suite, { file: c.file, onlyMode, options: branch }),
+          ),
+          (c) => fileLocks.get(c.file)!.withPermits(1)(runFile(c, branch)),
+          { concurrency: branch.concurrency, discard: true },
+        ),
+      { concurrency: "unbounded", discard: true },
+    );
+  }
 
   const failures = allResults.filter((r) => r.result.status === "fail");
   const summary: RunSummary = {
     files: collected.length,
+    plan:
+      input.plan === undefined
+        ? undefined
+        : {
+            found: candidates.length,
+            selected: assigned.size,
+            excluded: candidates.length - assigned.size,
+          },
     passed: allResults.filter((r) => r.result.status === "pass").length,
     failed: failures.length + fileFailures.length,
     skipped: allResults.filter((r) => r.result.status === "skip").length,

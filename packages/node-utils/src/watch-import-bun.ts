@@ -25,8 +25,7 @@ const loaders: Record<string, "js" | "jsx" | "ts" | "tsx"> = {
   ".tsx": "tsx",
 };
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Records every project-local module Bun loads after registration and watches
@@ -45,17 +44,20 @@ export class BunImportTracker {
 
   constructor(options: BunImportTrackerOptions) {
     if (process.versions.bun === undefined) {
-      throw new Error(
-        "BunImportTracker requires Bun; Node callers should use watchImport.",
-      );
+      throw new Error("BunImportTracker requires Bun; Node callers should use watchImport.");
     }
     this.#watcher = new DependencyWatcher(options);
     // Bun reports real paths (`/private/tmp/...` for `/tmp/...` on macOS);
     // match them against the root's real path too.
     const root = realpathSync.native(path.resolve(options.root)) + path.sep;
-    const nodeModules = `${path.sep}node_modules${path.sep}`;
+    const nodeModules = `node_modules${path.sep}`;
+    // `root` already ends in a separator, so the segment right after it has no
+    // leading one: a `.*${sep}node_modules${sep}` lookahead alone would miss
+    // `<root>node_modules/...` and intercept every dependency. Bun cannot
+    // return CommonJS source from `onLoad` (oven-sh/bun#19279), so a CJS
+    // dependency that reaches this probe loses its exports.
     const filter = new RegExp(
-      `^${escapeRegExp(root)}(?!.*${escapeRegExp(nodeModules)}).*\\.[cm]?[jt]sx?$`,
+      `^${escapeRegExp(root)}(?!(?:.*${escapeRegExp(path.sep)})?${escapeRegExp(nodeModules)}).*\\.[cm]?[jt]sx?$`,
     );
     Bun.plugin({
       name: "@alchemy.run/node-utils/watch-import-bun",
@@ -90,5 +92,4 @@ export class BunImportTracker {
   }
 }
 
-export const trackBunImports = (options: BunImportTrackerOptions) =>
-  new BunImportTracker(options);
+export const trackBunImports = (options: BunImportTrackerOptions) => new BunImportTracker(options);

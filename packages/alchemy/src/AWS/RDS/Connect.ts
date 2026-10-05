@@ -1,4 +1,4 @@
-import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import type * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -38,10 +38,7 @@ export interface ConnectionInfo {
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.
    */
-  refreshPassword?: Effect.Effect<
-    Redacted.Redacted<string>,
-    Credentials.CredentialsError
-  >;
+  refreshPassword?: Effect.Effect<Redacted.Redacted<string>, Presign.PresignError>;
 }
 
 interface ConnectOptionsBase {
@@ -163,7 +160,7 @@ export interface Connect extends Binding.Service<
   ) => Effect.Effect<
     Effect.Effect<
       ConnectionInfo,
-      secretsmanager.GetSecretValueError | Credentials.CredentialsError,
+      secretsmanager.GetSecretValueError | Presign.PresignError,
       RuntimeContext
     >
   >

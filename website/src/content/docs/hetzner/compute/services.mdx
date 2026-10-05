@@ -18,7 +18,7 @@ implementation:
 // src/api.ts
 import * as Hetzner from "alchemy/Hetzner";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Box } from "./server.ts";
 
 export default class Api extends Hetzner.Service<Api>()(
@@ -112,7 +112,7 @@ export default class Api extends Hetzner.Service<Api>()(
     env: { GREETING: "hello" },
   },
   Effect.gen(function* () {
-    const greeting = yield* Config.string("GREETING");
+    const greeting = yield* Config.String("GREETING");
     // ...
   }),
 ) {}

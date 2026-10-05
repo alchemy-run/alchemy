@@ -2,9 +2,7 @@ import * as Layer from "effect/Layer";
 import * as Provider from "../Provider.ts";
 import { Schema, SchemaProvider } from "./Schema.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Drizzle",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Drizzle") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

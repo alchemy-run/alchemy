@@ -1,11 +1,12 @@
-import type {
-  EnvironmentResponseVolumeInstancesEdgesItemNode,
-  VolumeInstanceBackupListResultItem,
-  VolumeInstanceBackupScheduleKind,
-  VolumeInstanceResponse,
-  VolumeState,
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import {
+  Railway,
+  type VolumeInstance,
+  type VolumeInstanceBackup,
+  type VolumeInstanceBackupScheduleKind,
+  type VolumeState,
+  type WorkflowId,
 } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -14,9 +15,36 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted, environmentVolumes } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+const backupFields = <E>(backup: Query<VolumeInstanceBackup, E>) => ({
+  id: backup.id,
+  name: backup.name,
+  createdAt: backup.createdAt,
+  expiresAt: backup.expiresAt,
+  usedMB: backup.usedMB,
+  referencedMB: backup.referencedMB,
+  volumeInstanceSizeMB: backup.volumeInstanceSizeMB,
+  scheduleId: backup.scheduleId,
+});
+const volumeFields = <E>(instance: Query<VolumeInstance, E>) => ({
+  id: instance.id,
+  volumeId: instance.volumeId,
+  environmentId: instance.environmentId,
+  serviceId: instance.serviceId,
+  deletedAt: instance.deletedAt,
+  isPendingDeletion: instance.isPendingDeletion,
+  state: instance.state,
+  mountPath: instance.mountPath,
+  volume: {
+    id: instance.volume.id,
+    name: instance.volume.name,
+    projectId: instance.volume.projectId,
+  },
+});
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -40,9 +68,7 @@ export type VolumeBackupVolume = {
  * spans more than one. Accepts a `Railway.Project` (primary
  * environment), a `Railway.Environment`, or `{ environmentId }`.
  */
-export type VolumeBackupEnvironment = {
-  readonly environmentId: string;
-};
+export type VolumeBackupEnvironment = { readonly environmentId: string };
 
 export type VolumeBackupScheduleKind = VolumeInstanceBackupScheduleKind;
 
@@ -122,21 +148,13 @@ const resolveVolumeBackupProps = (
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
     const volume = Effect.isEffect(resolved.volume)
-      ? yield* resolved.volume as Effect.Effect<
-          VolumeBackupVolume,
-          never,
-          Providers
-        >
+      ? yield* resolved.volume as Effect.Effect<VolumeBackupVolume, never, Providers>
       : resolved.volume;
     const environment =
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              VolumeBackupEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<VolumeBackupEnvironment, never, Providers>
           : resolved.environment;
     return { ...resolved, volume, environment };
   });
@@ -251,54 +269,39 @@ const VolumeBackupResource = Resource<VolumeBackup>("Railway.VolumeBackup");
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const VolumeBackup: typeof VolumeBackupResource = Object.assign(
-  (
-    id: string,
-    props:
-      | VolumeBackupProps
-      | Effect.Effect<VolumeBackupProps, never, Providers>,
-  ) => VolumeBackupResource(id, resolveVolumeBackupProps(props)),
+  (id: string, props: VolumeBackupProps | Effect.Effect<VolumeBackupProps, never, Providers>) =>
+    VolumeBackupResource(id, resolveVolumeBackupProps(props)),
   VolumeBackupResource,
 );
 
-export class VolumeBackupNotCreated extends Data.TaggedError(
-  "Railway.VolumeBackupNotCreated",
-)<{
+export class VolumeBackupNotCreated extends Data.TaggedError("Railway.VolumeBackupNotCreated")<{
   name: string;
   volumeInstanceId: string;
 }> {}
 
 export class VolumeBackupVolumeRequired extends Data.TaggedError(
   "Railway.VolumeBackupVolumeRequired",
-)<{
-  message: string;
-}> {}
+)<{ message: string }> {}
 
 export class VolumeBackupWorkflowFailed extends Data.TaggedError(
   "Railway.VolumeBackupWorkflowFailed",
-)<{
-  workflowId: string;
-  error: string;
-}> {}
+)<{ workflowId: string; error: string }> {}
 
-class VolumeBackupPending extends Data.TaggedError(
-  "Railway.VolumeBackupPending",
-)<{
+class VolumeBackupPending extends Data.TaggedError("Railway.VolumeBackupPending")<{
   volumeInstanceId: string;
   state: string;
 }> {}
 
-type CloudBackup = VolumeInstanceBackupListResultItem;
-type CloudInstance =
-  | EnvironmentResponseVolumeInstancesEdgesItemNode
-  | VolumeInstanceResponse;
+type CloudBackup = UnwrapPlan<ReturnType<typeof backupFields>>;
+type CloudInstance = UnwrapPlan<ReturnType<typeof volumeFields>>;
 
 const volumeInstanceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { volumeInstanceId?: unknown };
-  return typeof rec.volumeInstanceId === "string" &&
-    rec.volumeInstanceId.length > 0
+  return typeof rec.volumeInstanceId === "string" && rec.volumeInstanceId.length > 0
     ? rec.volumeInstanceId
     : undefined;
 };
@@ -306,17 +309,13 @@ const volumeInstanceIdOf = (value: unknown): string | undefined => {
 const volumeIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { volumeId?: unknown };
-  return typeof rec.volumeId === "string" && rec.volumeId.length > 0
-    ? rec.volumeId
-    : undefined;
+  return typeof rec.volumeId === "string" && rec.volumeId.length > 0 ? rec.volumeId : undefined;
 };
 
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -342,9 +341,7 @@ const isGoneInstance = (instance: CloudInstance | undefined) =>
   instance.isPendingDeletion ||
   goneState(instance.state);
 
-const uniqueKinds = (
-  kinds: readonly VolumeBackupScheduleKind[],
-): VolumeBackupScheduleKind[] => {
+const uniqueKinds = (kinds: readonly VolumeBackupScheduleKind[]): VolumeBackupScheduleKind[] => {
   const seen = new Set<VolumeBackupScheduleKind>();
   const out: VolumeBackupScheduleKind[] = [];
   for (const kind of kinds) {
@@ -364,21 +361,25 @@ const resolveName = (id: string, existing?: string) =>
     return yield* createRailwayName(id);
   });
 
+const volumeInstanceBackupList = Query.fn((volumeInstanceId: string) =>
+  Railway.volumeInstanceBackupList({ volumeInstanceId }).pipe(Query.map(backupFields)),
+);
+
+const volumeInstanceBackupScheduleList = Query.fn((volumeInstanceId: string) =>
+  Railway.volumeInstanceBackupScheduleList({ volumeInstanceId }).pipe(
+    Query.map((schedule) => schedule.kind),
+  ),
+);
+
 const listBackups = (volumeInstanceId: string) =>
-  railway
-    .volumeInstanceBackupList({ volumeInstanceId })
-    .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed([] as VolumeInstanceBackupListResultItem[]),
-      ),
-    );
+  volumeInstanceBackupList(volumeInstanceId).pipe(
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudBackup[])),
+  );
 
 const listSchedules = (volumeInstanceId: string) =>
-  railway.volumeInstanceBackupScheduleList({ volumeInstanceId }).pipe(
-    Effect.map((items) => uniqueKinds(items.map((item) => item.kind))),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed([] as VolumeBackupScheduleKind[]),
-    ),
+  volumeInstanceBackupScheduleList(volumeInstanceId).pipe(
+    Effect.map((kinds) => uniqueKinds(kinds)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as VolumeBackupScheduleKind[])),
   );
 
 const toAttrs = (
@@ -407,10 +408,7 @@ const toAttrs = (
   schedules: context.schedules ?? [],
 });
 
-const findBackup = (
-  backups: readonly CloudBackup[],
-  match: { id?: string; name?: string },
-) => {
+const findBackup = (backups: readonly CloudBackup[], match: { id?: string; name?: string }) => {
   if (match.id !== undefined && match.id.length > 0) {
     const byId = backups.find((backup) => backup.id === match.id);
     if (byId !== undefined) return byId;
@@ -421,33 +419,31 @@ const findBackup = (
   return undefined;
 };
 
+const readVolumeInstance = Query.fn((id: string) => volumeFields(Railway.volumeInstance({ id })));
+
 const getByInstanceId = (volumeInstanceId: string) =>
-  railway.volumeInstance({ id: volumeInstanceId }).pipe(
-    Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
+  readVolumeInstance(volumeInstanceId).pipe(
+    Effect.map((instance): CloudInstance | undefined =>
+      isGoneInstance(instance) ? undefined : instance,
     ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
-  railway.environment({ id: environmentId, projectId }).pipe(
-    Effect.map((env) =>
-      env.deletedAt != null
-        ? []
-        : env.volumeInstances.edges
-            .map((edge) => edge.node)
-            .filter((node) => !isGoneInstance(node)),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed([] as EnvironmentResponseVolumeInstancesEdgesItemNode[]),
+  environmentVolumes(environmentId, projectId, volumeFields).pipe(
+    Effect.map((rows) => rows.filter((node) => !isGoneInstance(node))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as CloudInstance[])),
+  );
+
+const liveEnvironments = (projectId: string) =>
+  Query.items(
+    Railway.environments({ projectId, first: 50 }).pipe(
+      Query.map((env) => ({ id: env.id, deletedAt: env.deletedAt })),
     ),
   );
 
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
-  railway.environments.items({ projectId: project.projectId, first: 50 }).pipe(
+const _listEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
+  liveEnvironments(project.projectId).pipe(
     Stream.filter((env) => env.deletedAt == null),
     Stream.map((env) => env.id),
     Stream.runCollect,
@@ -458,27 +454,58 @@ const listEnvironmentIds = (project: {
       }
       return Array.from(set);
     }),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(
-        project.environmentId.length > 0 ? [project.environmentId] : [],
-      ),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
     ),
   );
 
-const waitForWorkflow = (
-  workflowId: string,
-  volumeInstanceId: string,
-  mode: "create" | "delete",
-) =>
+const readWorkflowStatus = Query.fn((workflowId: string) => {
+  const workflow = Railway.workflowStatus({ workflowId });
+  return { status: workflow.status, error: workflow.error };
+});
+
+const workflowIdFields = <E>(result: Query<WorkflowId, E>) => ({ workflowId: result.workflowId });
+
+const volumeInstanceBackupRestore = Query.fn(
+  (volumeInstanceBackupId: string, volumeInstanceId: string) =>
+    workflowIdFields(
+      Railway.volumeInstanceBackupRestore({ volumeInstanceBackupId, volumeInstanceId }),
+    ),
+);
+
+const volumeInstancePITRRestore = Query.fn(
+  (args: {
+    volumeInstanceId: string;
+    targetTimestamp: string;
+    newServiceName?: string;
+    sourceRepoPath?: string;
+  }) => workflowIdFields(Railway.volumeInstancePITRRestore(args)),
+);
+
+const volumeInstanceBackupCreate = Query.fn((volumeInstanceId: string, name: string) =>
+  workflowIdFields(Railway.volumeInstanceBackupCreate({ volumeInstanceId, name })),
+);
+
+const volumeInstanceBackupDelete = Query.fn(
+  (volumeInstanceBackupId: string, volumeInstanceId: string) =>
+    workflowIdFields(
+      Railway.volumeInstanceBackupDelete({ volumeInstanceBackupId, volumeInstanceId }),
+    ),
+);
+
+const volumeInstanceBackupLock = Query.fn(
+  (volumeInstanceBackupId: string, volumeInstanceId: string) =>
+    Railway.volumeInstanceBackupLock({ volumeInstanceBackupId, volumeInstanceId }),
+);
+
+const volumeInstanceBackupScheduleUpdate = Query.fn(
+  (volumeInstanceId: string, kinds: ReadonlyArray<VolumeInstanceBackupScheduleKind>) =>
+    Railway.volumeInstanceBackupScheduleUpdate({ volumeInstanceId, kinds }),
+);
+
+const waitForWorkflow = (workflowId: string, volumeInstanceId: string, mode: "create" | "delete") =>
   Effect.gen(function* () {
-    const result = yield* railway.workflowStatus({ workflowId }).pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed({
-          status: "NotFound",
-          error: null,
-        } as const),
-      ),
-    );
+    const result = yield* readWorkflowStatus(workflowId);
     if (result.status === "Complete") return result;
     if (result.status === "Error") {
       return yield* new VolumeBackupWorkflowFailed({
@@ -486,10 +513,7 @@ const waitForWorkflow = (
         error: result.error ?? "backup workflow failed",
       });
     }
-    return yield* new VolumeBackupPending({
-      volumeInstanceId,
-      state: result.status,
-    });
+    return yield* new VolumeBackupPending({ volumeInstanceId, state: result.status });
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.VolumeBackupPending",
@@ -519,10 +543,7 @@ const waitUntilReady = (volumeInstanceId: string) =>
     Effect.flatMap((instance) => {
       if (!instanceReady(instance)) {
         return Effect.fail(
-          new VolumeBackupPending({
-            volumeInstanceId,
-            state: instance?.state ?? "missing",
-          }),
+          new VolumeBackupPending({ volumeInstanceId, state: instance?.state ?? "missing" }),
         );
       }
       return Effect.succeed(instance);
@@ -532,9 +553,7 @@ const waitUntilReady = (volumeInstanceId: string) =>
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag("Railway.VolumeBackupPending", () =>
-      getByInstanceId(volumeInstanceId),
-    ),
+    Effect.catchTag("Railway.VolumeBackupPending", () => getByInstanceId(volumeInstanceId)),
   );
 
 const waitForBackup = (input: {
@@ -550,10 +569,7 @@ const waitForBackup = (input: {
         backups.find((backup) => !input.previousIds.has(backup.id));
       if (found === undefined) {
         return Effect.fail(
-          new VolumeBackupPending({
-            volumeInstanceId: input.volumeInstanceId,
-            state: "creating",
-          }),
+          new VolumeBackupPending({ volumeInstanceId: input.volumeInstanceId, state: "creating" }),
         );
       }
       return Effect.succeed(found);
@@ -574,20 +590,13 @@ const waitForBackup = (input: {
     ),
   );
 
-const waitUntilGone = (
-  volumeInstanceId: string,
-  volumeInstanceBackupId: string,
-) =>
-  listBackups(volumeInstanceId).pipe(
-    Effect.map(
-      (backups) =>
-        !backups.some((backup) => backup.id === volumeInstanceBackupId),
+const waitUntilGone = (volumeInstanceId: string, volumeInstanceBackupId: string) =>
+  waitUntilDeleted(
+    "VolumeBackup",
+    volumeInstanceBackupId,
+    listBackups(volumeInstanceId).pipe(
+      Effect.map((backups) => !backups.some((backup) => backup.id === volumeInstanceBackupId)),
     ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
-      times: 8,
-    }),
   );
 
 const observeInstance = Effect.fn(function* (input: {
@@ -596,10 +605,7 @@ const observeInstance = Effect.fn(function* (input: {
   projectId?: string;
   environmentId?: string;
 }) {
-  if (
-    input.volumeInstanceId !== undefined &&
-    input.volumeInstanceId.length > 0
-  ) {
+  if (input.volumeInstanceId !== undefined && input.volumeInstanceId.length > 0) {
     const byId = yield* getByInstanceId(input.volumeInstanceId);
     if (byId !== undefined) return byId;
   }
@@ -608,10 +614,7 @@ const observeInstance = Effect.fn(function* (input: {
     input.projectId !== undefined &&
     input.volumeId !== undefined
   ) {
-    const instances = yield* listVolumeInstances(
-      input.environmentId,
-      input.projectId,
-    );
+    const instances = yield* listVolumeInstances(input.environmentId, input.projectId);
     return instances.find((instance) => instance.volumeId === input.volumeId);
   }
   return undefined;
@@ -625,10 +628,10 @@ export const restoreVolumeBackup = Effect.fn(function* (input: {
   volumeInstanceId: string;
   volumeInstanceBackupId: string;
 }) {
-  const result = yield* railway.volumeInstanceBackupRestore({
-    volumeInstanceBackupId: input.volumeInstanceBackupId,
-    volumeInstanceId: input.volumeInstanceId,
-  });
+  const result = yield* volumeInstanceBackupRestore(
+    input.volumeInstanceBackupId,
+    input.volumeInstanceId,
+  );
   if (result.workflowId != null && result.workflowId.length > 0) {
     yield* waitForWorkflow(result.workflowId, input.volumeInstanceId, "create");
   }
@@ -646,15 +649,11 @@ export const restoreVolumePITR = Effect.fn(function* (input: {
   newServiceName?: string;
   sourceRepoPath?: string;
 }) {
-  const result = yield* railway.volumeInstancePITRRestore({
+  const result = yield* volumeInstancePITRRestore({
     volumeInstanceId: input.volumeInstanceId,
     targetTimestamp: input.targetTimestamp,
-    ...(input.newServiceName !== undefined
-      ? { newServiceName: input.newServiceName }
-      : {}),
-    ...(input.sourceRepoPath !== undefined
-      ? { sourceRepoPath: input.sourceRepoPath }
-      : {}),
+    ...(input.newServiceName !== undefined ? { newServiceName: input.newServiceName } : {}),
+    ...(input.sourceRepoPath !== undefined ? { sourceRepoPath: input.sourceRepoPath } : {}),
   });
   if (result.workflowId != null && result.workflowId.length > 0) {
     yield* waitForWorkflow(result.workflowId, input.volumeInstanceId, "create");
@@ -691,15 +690,8 @@ export const VolumeBackupProvider = () =>
         output.volumeId !== undefined &&
         nextVolumeId !== output.volumeId;
       const nameChanged =
-        news.name !== undefined &&
-        news.name.length > 0 &&
-        news.name !== output.name;
-      if (
-        instanceChanged ||
-        environmentChanged ||
-        volumeChanged ||
-        nameChanged
-      ) {
+        news.name !== undefined && news.name.length > 0 && news.name !== output.name;
+      if (instanceChanged || environmentChanged || volumeChanged || nameChanged) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -712,57 +704,39 @@ export const VolumeBackupProvider = () =>
       const name = yield* resolveName(id, output?.name ?? olds?.name);
       if (volumeInstanceId === undefined) return undefined;
       const backups = yield* listBackups(volumeInstanceId);
-      const found = findBackup(backups, {
-        id: output?.volumeInstanceBackupId,
-        name,
-      });
+      const found = findBackup(backups, { id: output?.volumeInstanceBackupId, name });
       if (found === undefined) return undefined;
       const schedules = yield* listSchedules(volumeInstanceId);
       const attrs = toAttrs(found, {
         volumeInstanceId,
-        volumeId:
-          output?.volumeId ??
-          (olds !== undefined ? volumeIdOf(olds.volume) : undefined),
-        projectId:
-          output?.projectId ??
-          (olds !== undefined ? projectIdOf(olds.volume) : undefined),
+        volumeId: output?.volumeId ?? (olds !== undefined ? volumeIdOf(olds.volume) : undefined),
+        projectId: output?.projectId ?? (olds !== undefined ? projectIdOf(olds.volume) : undefined),
         environmentId:
           output?.environmentId ??
           (olds !== undefined
-            ? (environmentIdOf(olds.environment) ??
-              environmentIdOf(olds.volume))
+            ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.volume))
             : undefined),
         schedules,
       });
       if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name ?? undefined)
-        ? attrs
-        : Unowned(attrs);
+      return matchesAlchemyPhysicalName(found.name ?? undefined) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const envRows = yield* railway.environments
-            .items({ projectId: project.projectId, first: 50 })
-            .pipe(
-              Stream.filter((env) => env.deletedAt == null),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-                Effect.succeed([]),
-              ),
-            );
-          const instances = envRows.flatMap((env) =>
-            env.volumeInstances.edges
-              .map((edge) => edge.node)
-              .filter(
-                (instance) =>
-                  instance.deletedAt == null &&
-                  matchesAlchemyPhysicalName(instance.volume.name),
-              ),
+          const envRows = yield* liveEnvironments(project.projectId).pipe(
+            Stream.filter((env) => env.deletedAt == null),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("RailwayNotFound", () => Effect.succeed([])),
           );
+          const instances = (yield* Effect.forEach(envRows, (env) =>
+            listVolumeInstances(env.id, project.projectId),
+          ))
+            .flat()
+            .filter((instance) => matchesAlchemyPhysicalName(instance.volume.name));
           const nested = yield* Effect.forEach(instances, (instance) =>
             Effect.gen(function* () {
               const backups = yield* listBackups(instance.id);
@@ -799,8 +773,7 @@ export const VolumeBackupProvider = () =>
         output?.environmentId;
       const projectId = projectIdOf(props.volume) ?? output?.projectId;
       const volumeId = volumeIdOf(props.volume) ?? output?.volumeId;
-      let volumeInstanceId =
-        volumeInstanceIdOf(props.volume) ?? output?.volumeInstanceId;
+      let volumeInstanceId = volumeInstanceIdOf(props.volume) ?? output?.volumeInstanceId;
 
       const instance = yield* observeInstance({
         volumeInstanceId,
@@ -813,8 +786,7 @@ export const VolumeBackupProvider = () =>
       }
       if (volumeInstanceId === undefined || volumeInstanceId.length === 0) {
         return yield* new VolumeBackupVolumeRequired({
-          message:
-            "VolumeBackup requires a resolved Railway.Volume (volumeInstanceId)",
+          message: "VolumeBackup requires a resolved Railway.Volume (volumeInstanceId)",
         });
       }
 
@@ -825,54 +797,29 @@ export const VolumeBackupProvider = () =>
 
       let current: CloudBackup | undefined;
       const existing = yield* listBackups(volumeInstanceId);
-      current = findBackup(existing, {
-        id: output?.volumeInstanceBackupId,
-        name,
-      });
+      current = findBackup(existing, { id: output?.volumeInstanceBackupId, name });
 
       if (current === undefined) {
         const ready = yield* waitUntilReady(volumeInstanceId);
         if (ready === undefined || isGoneInstance(ready)) {
-          return yield* new VolumeBackupNotCreated({
-            name,
-            volumeInstanceId,
-          });
+          return yield* new VolumeBackupNotCreated({ name, volumeInstanceId });
         }
         const previousIds = new Set(existing.map((backup) => backup.id));
-        const created = yield* railway.volumeInstanceBackupCreate({
-          volumeInstanceId,
-          name,
-        });
+        const created = yield* volumeInstanceBackupCreate(volumeInstanceId, name);
         if (created.workflowId != null && created.workflowId.length > 0) {
-          yield* waitForWorkflow(
-            created.workflowId,
-            volumeInstanceId,
-            "create",
-          );
+          yield* waitForWorkflow(created.workflowId, volumeInstanceId, "create");
         }
-        current = yield* waitForBackup({
-          volumeInstanceId,
-          name,
-          previousIds,
-        });
+        current = yield* waitForBackup({ volumeInstanceId, name, previousIds });
       }
 
       if (current === undefined) {
-        return yield* new VolumeBackupNotCreated({
-          name,
-          volumeInstanceId,
-        });
+        return yield* new VolumeBackupNotCreated({ name, volumeInstanceId });
       }
 
       if (props.lock === true && current.expiresAt != null) {
-        yield* railway.volumeInstanceBackupLock({
-          volumeInstanceBackupId: current.id,
-          volumeInstanceId,
-        });
+        yield* volumeInstanceBackupLock(current.id, volumeInstanceId);
         const locked = yield* listBackups(volumeInstanceId).pipe(
-          Effect.map((backups) =>
-            findBackup(backups, { id: current!.id, name }),
-          ),
+          Effect.map((backups) => findBackup(backups, { id: current!.id, name })),
         );
         if (locked !== undefined) current = locked;
       }
@@ -881,10 +828,7 @@ export const VolumeBackupProvider = () =>
       if (props.schedules !== undefined) {
         const desired = uniqueKinds(props.schedules);
         if (kindsKey(desired) !== kindsKey(schedules)) {
-          yield* railway.volumeInstanceBackupScheduleUpdate({
-            volumeInstanceId,
-            kinds: desired,
-          });
+          yield* volumeInstanceBackupScheduleUpdate(volumeInstanceId, desired);
           schedules = yield* listSchedules(volumeInstanceId);
         }
       }
@@ -901,22 +845,17 @@ export const VolumeBackupProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const volumeInstanceBackupId = output.volumeInstanceBackupId;
       const volumeInstanceId = output.volumeInstanceId;
-      if (
-        volumeInstanceBackupId.length === 0 ||
-        volumeInstanceId.length === 0
-      ) {
+      if (volumeInstanceBackupId.length === 0 || volumeInstanceId.length === 0) {
         return;
       }
-      const deleted = yield* railway
-        .volumeInstanceBackupDelete({
-          volumeInstanceBackupId,
-          volumeInstanceId,
-        })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-            Effect.succeed({ workflowId: null as string | null }),
-          ),
-        );
+      const deleted = yield* volumeInstanceBackupDelete(
+        volumeInstanceBackupId,
+        volumeInstanceId,
+      ).pipe(
+        Effect.catchTag("RailwayNotFound", () =>
+          Effect.succeed({ workflowId: null as string | null }),
+        ),
+      );
       if (deleted.workflowId != null && deleted.workflowId.length > 0) {
         yield* waitForWorkflow(deleted.workflowId, volumeInstanceId, "delete");
       }

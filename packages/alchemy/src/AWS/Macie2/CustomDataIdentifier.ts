@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryThroughEnablement } from "./common.ts";
 
@@ -123,9 +118,7 @@ const CustomDataIdentifierResource = Resource<CustomDataIdentifier>(
 export { CustomDataIdentifierResource as CustomDataIdentifier };
 
 const createName = (id: string, props: Partial<CustomDataIdentifierProps>) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
 // The whole definition is immutable — any change replaces.
 const fingerprint = (props: Partial<CustomDataIdentifierProps>) =>
@@ -138,10 +131,7 @@ const fingerprint = (props: Partial<CustomDataIdentifierProps>) =>
     severityLevels: props.severityLevels ?? [],
   });
 
-const buildIdentifierAttrs = (
-  id: string,
-  live: macie2.GetCustomDataIdentifierResponse,
-) => ({
+const buildIdentifierAttrs = (id: string, live: macie2.GetCustomDataIdentifierResponse) => ({
   id,
   arn: live.arn!,
   name: live.name!,
@@ -157,12 +147,8 @@ export const CustomDataIdentifierProvider = () =>
           // flagged `deleted: true`. Treat it (and a disabled Macie session)
           // as gone.
           Effect.map((d) => (d.deleted ? undefined : d)),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-          Effect.catchTag("AccessDeniedException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -173,21 +159,15 @@ export const CustomDataIdentifierProvider = () =>
           const live = yield* getIdentifier(output.id);
           if (!live) return undefined;
           const attrs = buildIdentifierAttrs(output.id, live);
-          return (yield* hasAlchemyTags(id, live.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* macie2.listCustomDataIdentifiers
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.catchTag("AccessDeniedException", () =>
-                  Effect.succeed([]),
-                ),
-              );
+            const pages = yield* macie2.listCustomDataIdentifiers.pages({}).pipe(
+              Stream.runCollect,
+              Effect.catchTag("AccessDeniedException", () => Effect.succeed([])),
+            );
             const out: CustomDataIdentifier["Attributes"][] = [];
             for (const page of pages) {
               for (const summary of page.items ?? []) {
@@ -217,9 +197,7 @@ export const CustomDataIdentifierProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative; output caches the id.
           let identifierId = output?.id;
-          let live = identifierId
-            ? yield* getIdentifier(identifierId)
-            : undefined;
+          let live = identifierId ? yield* getIdentifier(identifierId) : undefined;
 
           if (!live || identifierId === undefined) {
             // 2. ENSURE — create the identifier (retry through enablement lag).
@@ -238,10 +216,7 @@ export const CustomDataIdentifierProvider = () =>
             identifierId = created.customDataIdentifierId!;
           } else {
             // 3. SYNC tags — the definition is immutable; only tags mutate.
-            const { upsert, removed } = diffTags(
-              tagRecord(live.tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
                 resourceArn: live.arn!,

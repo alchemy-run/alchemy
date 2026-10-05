@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type { GetVolumeResponseVolume } from "@distilled.cloud/hetzner/volumes";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -114,14 +114,11 @@ export type VolumeAttachment = Resource<
  * ```
  *
  * @resource
+ * @product Volume
  */
-export const VolumeAttachment = Resource<VolumeAttachment>(
-  "Hetzner.VolumeAttachment",
-);
+export const VolumeAttachment = Resource<VolumeAttachment>("Hetzner.VolumeAttachment");
 
-class VolumeAttachmentError extends Data.TaggedError(
-  "Hetzner.VolumeAttachmentError",
-)<{
+class VolumeAttachmentError extends Data.TaggedError("Hetzner.VolumeAttachmentError")<{
   message: string;
 }> {}
 
@@ -170,7 +167,7 @@ const serverIdOf = (value: unknown): number | undefined => {
 };
 
 const getById = (id: number) =>
-  Services.volumes.getVolume({ id }).pipe(
+  Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -226,7 +223,7 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
   );
 
 const detach = (volumeId: number) =>
-  Services.volumeActions.detachVolume({ id: volumeId }).pipe(
+  Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
     Effect.tap(({ action }) =>
       waitForAction(action).pipe(
         // Volume detach can outlive the action poll under load; observe
@@ -238,7 +235,7 @@ const detach = (volumeId: number) =>
   );
 
 const attach = (volumeId: number, serverId: number, automount: boolean) =>
-  Services.volumeActions
+  Hetzner.volumeActions
     .attachVolume({
       id: volumeId,
       server: serverId,
@@ -246,9 +243,7 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
     })
     .pipe(
       Effect.tap(({ action }) =>
-        waitForAction(action).pipe(
-          Effect.catchTag("ActionTimeout", () => Effect.void),
-        ),
+        waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
       ),
       Effect.catchTag("UnprocessableEntity", () => Effect.void),
       Effect.retry({
@@ -263,7 +258,7 @@ export const VolumeAttachmentProvider = () =>
     stables: ["volumeId", "serverId", "linuxDevice"],
     nuke: { dependsOn: ["Hetzner.Volume", "Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Services.volumes.listVolumes
+      const items = yield* Hetzner.volumes.listVolumes
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -297,11 +292,9 @@ export const VolumeAttachmentProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const volumeId =
-        output?.volumeId ??
-        (olds !== undefined ? volumeIdOf(olds.volume) : undefined);
+        output?.volumeId ?? (olds !== undefined ? volumeIdOf(olds.volume) : undefined);
       const serverId =
-        output?.serverId ??
-        (olds !== undefined ? serverIdOf(olds.server) : undefined);
+        output?.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
       if (volumeId === undefined || serverId === undefined) {
         return undefined;
       }
@@ -311,7 +304,7 @@ export const VolumeAttachmentProvider = () =>
       }
       return toAttrs(found, output?.automount ?? olds?.automount ?? false);
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const volumeId = volumeIdOf(news.volume);
       const serverId = serverIdOf(news.server);
       if (volumeId === undefined || serverId === undefined) {
@@ -336,9 +329,7 @@ export const VolumeAttachmentProvider = () =>
           current = (yield* waitUntilServer(current.id, null)) ?? current;
         }
         yield* attach(current.id, serverId, desiredAutomount);
-        current =
-          (yield* waitUntilServer(current.id, serverId)) ??
-          (yield* getById(volumeId));
+        current = (yield* waitUntilServer(current.id, serverId)) ?? (yield* getById(volumeId));
         if (current === undefined) {
           return yield* new VolumeNotFound({ volumeId });
         }

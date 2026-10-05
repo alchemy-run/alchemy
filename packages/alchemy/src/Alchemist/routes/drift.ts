@@ -27,8 +27,7 @@ export interface DriftSnapshot {
 /** Whether the drift check found anything worth repairing. */
 export const hasDrift = (snapshot: DriftSnapshot): boolean =>
   snapshot.resources.some(
-    (resource) =>
-      resource.status === "drifted" || resource.status === "missing",
+    (resource) => resource.status === "drifted" || resource.status === "missing",
   );
 
 const status = (action: string) =>
@@ -39,15 +38,11 @@ const status = (action: string) =>
       : ("drifted" as const);
 
 /** Compare deployed state against the real cloud and plan the repair. */
-export const inspect = Effect.fn("Alchemist.drift.inspect")(function* (
-  target: StackTarget,
-) {
+export const inspect = Effect.fn("Alchemist.drift.inspect")(function* (target: StackTarget) {
   const report = withSpanEvents(yield* Progress);
   // `open` emits importing-module / resolving-services at the real work
   // boundaries; hand it the wrapped reporter so they land in traces too.
-  const session = yield* open(target).pipe(
-    Effect.provideService(Progress, report),
-  );
+  const session = yield* open(target).pipe(Effect.provideService(Progress, report));
   const identity = {
     name: session.stack.name,
     stage: session.stack.stage,
@@ -80,9 +75,7 @@ export const inspect = Effect.fn("Alchemist.drift.inspect")(function* (
  * Converge state back to the cloud's actual shape. Engine apply events are
  * reported through {@link Progress}.
  */
-export const repair = Effect.fn("Alchemist.drift.repair")(function* (
-  snapshot: DriftSnapshot,
-) {
+export const repair = Effect.fn("Alchemist.drift.repair")(function* (snapshot: DriftSnapshot) {
   const report = withSpanEvents(yield* Progress);
   return yield* Effect.provide(
     EngineDrift.repair(

@@ -27,6 +27,7 @@ import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { provideProcessTelemetry } from "../../Telemetry.ts";
+import { withManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 
 /**
  * The tag every bundled platform program registers itself under
@@ -45,28 +46,21 @@ export const entrypointLayer = (entrypoint: unknown): Layer.Layer<any> =>
   makeEntrypointLayer(entrypointTag, entrypoint);
 
 /** `Stack` from the `ALCHEMY_STACK_NAME` / `ALCHEMY_STAGE` the host injects. */
-export const stackFromEnv: Layer.Layer<Stack, Config.ConfigError> =
-  Layer.effect(
-    Stack,
-    Effect.all([
-      Config.string("ALCHEMY_STACK_NAME"),
-      Config.string("ALCHEMY_STAGE"),
-    ]).pipe(
-      Effect.map(([name, stage]) => ({
-        name,
-        stage,
-        bindings: {},
-        resources: {},
-        actions: {},
-      })),
-    ),
-  );
+export const stackFromEnv: Layer.Layer<Stack, Config.ConfigError> = Layer.effect(
+  Stack,
+  Effect.all([Config.String("ALCHEMY_STACK_NAME"), Config.String("ALCHEMY_STAGE")]).pipe(
+    Effect.map(([name, stage]) => ({
+      name,
+      stage,
+      bindings: {},
+      resources: {},
+      actions: {},
+    })),
+  ),
+);
 
 /** `Stack` from constants baked in at deploy time. */
-export const stackConstant = (
-  name: string,
-  stage: string,
-): Layer.Layer<Stack> =>
+export const stackConstant = (name: string, stage: string): Layer.Layer<Stack> =>
   Layer.succeed(Stack, {
     name,
     stage,
@@ -88,10 +82,9 @@ export const resolveProgram = (
 ): Effect.Effect<any, any, any> =>
   entrypointTag.pipe(
     Effect.flatMap((self) => {
-      const program: Effect.Effect<any, any, any> =
-        self.RuntimeContext.exports.pipe(
-          Effect.flatMap((exports: any) => exports[exportKey]),
-        );
+      const program: Effect.Effect<any, any, any> = self.RuntimeContext.exports.pipe(
+        Effect.flatMap((exports: any) => exports[exportKey]),
+      );
       return options?.telemetry
         ? program.pipe(provideProcessTelemetry(self.RuntimeContext))
         : program;
@@ -106,7 +99,14 @@ export const resolveProgram = (
 export const runProcess = (
   label: string,
   program: Effect.Effect<unknown, unknown>,
-  options?: { readonly exitOnComplete?: boolean },
+  options?: {
+    readonly exitOnComplete?: boolean;
+    /**
+     * Enable process-wide SIGTERM/SIGINT handling and bounded cleanup for the
+     * managed Fly bootstrap. May force process exit; see {@link withManagedHttpShutdown}.
+     */
+    readonly managedHttpShutdownTimeoutMs?: number;
+  },
 ): Promise<void> => {
   console.log(`${label} bootstrap starting...`);
   // Node 26 exits 13 (unsettled TLA) when the event loop is empty while
@@ -114,10 +114,15 @@ export const runProcess = (
   // no native handle; an HTTP `listen` does. Hold a timer so run-only
   // Services stay up the same way Bun does.
   const keepAlive = setInterval(() => undefined, 1 << 30);
-  return Effect.runPromise(program).then(
-    () => {
+  const managed = options?.managedHttpShutdownTimeoutMs;
+  const execution =
+    managed === undefined
+      ? program.pipe(Effect.as(false))
+      : withManagedHttpShutdown(program, managed);
+  return Effect.runPromise(execution).then(
+    (shutdown) => {
       clearInterval(keepAlive);
-      if (options?.exitOnComplete) {
+      if (shutdown || options?.exitOnComplete) {
         console.log(`${label} completed.`);
         process.exit(0);
       }

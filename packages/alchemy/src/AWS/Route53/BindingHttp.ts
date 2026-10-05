@@ -59,9 +59,7 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
                 Action: [...options.actions],
                 Resource: options.wildcardIam
                   ? ["*"]
-                  : [
-                      Output.interpolate`arn:aws:route53:::hostedzone/${zone.id}`,
-                    ],
+                  : [Output.interpolate`arn:aws:route53:::hostedzone/${zone.id}`],
               },
             ],
           });
@@ -110,9 +108,7 @@ export const makeRoute53HealthCheckHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`arn:aws:route53:::healthcheck/${healthCheck.id}`,
-                ],
+                Resource: [Output.interpolate`arn:aws:route53:::healthcheck/${healthCheck.id}`],
               },
             ],
           });

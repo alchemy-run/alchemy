@@ -36,6 +36,4 @@ export interface ListAccessPoints extends Binding.Service<
     >
   >
 > {}
-export const ListAccessPoints = Binding.Service<ListAccessPoints>(
-  "AWS.S3Control.ListAccessPoints",
-);
+export const ListAccessPoints = Binding.Service<ListAccessPoints>("AWS.S3Control.ListAccessPoints");

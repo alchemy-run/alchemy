@@ -30,7 +30,6 @@ export interface ValidateAssessmentReportIntegrity extends Binding.Service<
   >
 > {}
 
-export const ValidateAssessmentReportIntegrity =
-  Binding.Service<ValidateAssessmentReportIntegrity>(
-    "AWS.AuditManager.ValidateAssessmentReportIntegrity",
-  );
+export const ValidateAssessmentReportIntegrity = Binding.Service<ValidateAssessmentReportIntegrity>(
+  "AWS.AuditManager.ValidateAssessmentReportIntegrity",
+);

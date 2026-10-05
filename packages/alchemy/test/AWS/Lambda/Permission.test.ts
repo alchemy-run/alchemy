@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -46,7 +46,7 @@ test.provider(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -86,16 +86,14 @@ test.provider(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 180_000 },
 );
 
 // Out-of-band proof that the trailing destroy removed the host function (and
 // with it the permission's policy) from the cloud.
 const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
   yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`Function ${functionName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`Function ${functionName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -103,10 +101,7 @@ const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
   );
 });
 
-const getPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const getPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
     Effect.flatMap(({ Policy }) =>
       Effect.try({
@@ -117,16 +112,13 @@ const getPolicyStatement = Effect.fn(function* (
               Condition?: unknown;
             }>;
           };
-          const statement = policy.Statement?.find(
-            (statement) => statement.Sid === statementId,
-          );
+          const statement = policy.Statement?.find((statement) => statement.Sid === statementId);
           if (!statement) {
             throw new Error(`Policy statement ${statementId} not found`);
           }
           return statement;
         },
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
       }),
     ),
     Effect.retry({

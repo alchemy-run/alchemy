@@ -29,12 +29,7 @@ import type { Table } from "./Table.ts";
  * `glue:ResetJobBookmark` are evaluated with no resource — an ARN-scoped
  * Allow never matches and IAM implicit-denies).
  */
-export const makeGlueJobHttpBinding = <
-  I extends { JobName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Glue.GetJobRun`. */
   tag: string;
   /** The distilled operation; `JobName` is injected from the job. */
@@ -80,12 +75,7 @@ export const makeGlueJobHttpBinding = <
  * by `Name`: the runtime callable injects the bound crawler's name and the
  * deploy-time half grants `actions` on the crawler ARN.
  */
-export const makeGlueCrawlerHttpBinding = <
-  I extends { Name: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeGlueCrawlerHttpBinding = <I extends { Name: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Glue.StartCrawler`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the crawler. */
@@ -226,9 +216,7 @@ export const makeGlueTableHttpBinding = <
                 Action: [...options.actions],
                 Resource: [
                   // arn:…:table/{db}/{tbl} → arn:…:catalog
-                  Output.map(table.tableArn, (arn) =>
-                    arn.replace(/:table\/.*$/, ":catalog"),
-                  ),
+                  Output.map(table.tableArn, (arn) => arn.replace(/:table\/.*$/, ":catalog")),
                   // arn:…:table/{db}/{tbl} → arn:…:database/{db}
                   Output.map(table.tableArn, (arn) =>
                     arn.replace(/:table\/([^/]+)\/.*$/, ":database/$1"),

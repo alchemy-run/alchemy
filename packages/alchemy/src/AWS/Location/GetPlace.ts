@@ -7,10 +7,7 @@ import type { PlaceIndex } from "./PlaceIndex.ts";
  * `GetPlace` request with `IndexName` injected from the bound
  * resource.
  */
-export interface GetPlaceRequest extends Omit<
-  location.GetPlaceRequest,
-  "IndexName"
-> {}
+export interface GetPlaceRequest extends Omit<location.GetPlaceRequest, "IndexName"> {}
 
 /**
  * Fetches the full details of a place by the `PlaceId` returned from a search.
@@ -36,9 +33,7 @@ export interface GetPlace extends Binding.Service<
   (
     index: PlaceIndex,
   ) => Effect.Effect<
-    (
-      request: GetPlaceRequest,
-    ) => Effect.Effect<location.GetPlaceResponse, location.GetPlaceError>
+    (request: GetPlaceRequest) => Effect.Effect<location.GetPlaceResponse, location.GetPlaceError>
   >
 > {}
 export const GetPlace = Binding.Service<GetPlace>("AWS.Location.GetPlace");

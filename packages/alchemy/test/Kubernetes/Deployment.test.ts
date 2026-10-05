@@ -1,24 +1,22 @@
+import * as dynamodb from "@distilled.cloud/aws/dynamodb";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network.ts";
 import { Cluster } from "@/AWS/EKS/Cluster.ts";
 import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
 import * as Kubernetes from "@/Kubernetes";
 import { readObject } from "@/Kubernetes/internal/client.ts";
-import * as Core from "@/Test/Core";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Core from "@/Test/Core";
 import EksHostApi from "./fixtures/deployment.ts";
 
-const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
-};
+const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Ungated probe: `Deployment` is a composite host (in-cluster
@@ -37,6 +35,7 @@ test.provider(
       expect(Array.isArray(all)).toBe(true);
       expect(all).toEqual([]);
     }),
+  { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:deployment", "live"] },
 );
 
 // Full end-to-end (gated). An EKS Auto Mode cluster takes ~10–15 min to
@@ -82,151 +81,157 @@ const infra = Effect.gen(function* () {
 
 const sharedStack = Core.scratchStack(testOptions, "EksServerHost");
 
-describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
-  let baseUrl: string;
-  let helmRelease: Kubernetes.HelmChart["Attributes"];
-  let helmCluster: Cluster["Attributes"];
-  let e2eSecret: Kubernetes.Secret["Attributes"];
-  const clusterTransport = () =>
-    makeEksTransport({
-      clusterName: helmCluster.clusterName,
-      endpoint: helmCluster.endpoint!,
-      certificateAuthorityData: helmCluster.certificateAuthorityData!,
-    });
-  const E2E_SECRET_VALUE = "alchemy-e2e-value";
-  const E2E_SECRET_VALUE_B64 = Buffer.from(E2E_SECRET_VALUE).toString("base64");
-  // Non-UTF-8 bytes, supplied base64-encoded the way the API's `data` is.
-  const E2E_SECRET_BINARY_B64 = Buffer.from([0x00, 0xff, 0x10]).toString(
-    "base64",
-  );
+describe.skipIf(!process.env.AWS_TEST_SLOW)(
+  "Kubernetes Deployment E2E",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:dynamodb",
+      "provider:aws:ec2",
+      "provider:aws:eks",
+      "provider:kubernetes",
+      "provider:kubernetes:deployment",
+      "provider:kubernetes:helmchart",
+      "provider:kubernetes:secret",
+      "live",
+    ],
+  },
+  () => {
+    let baseUrl: string;
+    let helmRelease: Kubernetes.HelmChart["Attributes"];
+    let helmCluster: Cluster["Attributes"];
+    let e2eSecret: Kubernetes.Secret["Attributes"];
+    const clusterTransport = () =>
+      makeEksTransport({
+        clusterName: helmCluster.clusterName,
+        endpoint: helmCluster.endpoint!,
+        certificateAuthorityData: helmCluster.certificateAuthorityData!,
+      });
+    const E2E_SECRET_VALUE = "alchemy-e2e-value";
+    const E2E_SECRET_VALUE_B64 = Buffer.from(E2E_SECRET_VALUE).toString("base64");
+    // Non-UTF-8 bytes, supplied base64-encoded the way the API's `data` is.
+    const E2E_SECRET_BINARY_B64 = Buffer.from([0x00, 0xff, 0x10]).toString("base64");
 
-  beforeAll(
-    Effect.gen(function* () {
-      yield* sharedStack.destroy();
-      // Phase 1: cluster + network only.
-      yield* sharedStack.deploy(infra);
-      // Phase 2: same infra + the Deployment fixture (refs the cluster) +
-      // a HelmChart rendering the local fixture chart onto the cluster +
-      // a Secret with Redacted string data.
-      const { host, cluster, release, secret } = yield* sharedStack.deploy(
-        Effect.gen(function* () {
-          const { cluster } = yield* infra;
-          const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
-            cluster,
-            chart: `${import.meta.dirname}/fixtures/chart`,
-            values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
-          });
-          const secret = yield* Kubernetes.Secret("E2ESecret", {
-            cluster,
-            name: "alchemy-e2e-secret",
-            stringData: { token: Redacted.make(E2E_SECRET_VALUE) },
-            binaryData: { blob: Redacted.make(E2E_SECRET_BINARY_B64) },
-          });
-          const host = yield* EksHostApi;
-          return { host, cluster, release, secret };
-        }),
-      );
-      helmRelease = release;
-      helmCluster = cluster;
-      e2eSecret = secret;
-      // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
-      // listener is the Service port, not 80).
-      expect(host.url).toBeTruthy();
-      baseUrl = host.url!.replace(/\/+$/, "");
-
-      // NLB DNS + pod readiness ramp — retry /health.
-      yield* HttpClient.get(`${baseUrl}/health`).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : Effect.fail(new Error(`/health ${res.status}`)),
-        ),
-        Effect.tapError((e) => Effect.logWarning(String(e))),
-        Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 60 }),
-      );
-    }),
-    // Cluster create (~18 min) + image build/push + Auto Mode node launch +
-    // NLB provisioning/DNS + URL readiness poll (~5–10 min) routinely total
-    // 35+ min end-to-end.
-    { timeout: 2_700_000 },
-  );
-
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 600_000,
-  });
-
-  test.provider(
-    "bound DynamoDB PutItem writes an item from inside the pod",
-    () =>
+    beforeAll(
       Effect.gen(function* () {
-        // Deterministic id: the table is created fresh by this suite's deploy
-        // (beforeAll starts with a destroy), so no stale item can pre-exist,
-        // and a stable id keeps re-runs convergent instead of accreting items.
-        const itemId = "eks-deployment-put-item";
-        const res = yield* HttpClient.get(`${baseUrl}/put?id=${itemId}`).pipe(
-          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
+        yield* sharedStack.destroy();
+        // Phase 1: cluster + network only.
+        yield* sharedStack.deploy(infra);
+        // Phase 2: same infra + the Deployment fixture (refs the cluster) +
+        // a HelmChart rendering the local fixture chart onto the cluster +
+        // a Secret with Redacted string data.
+        const { host, cluster, release, secret } = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const { cluster } = yield* infra;
+            const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
+              cluster,
+              chart: `${import.meta.dirname}/fixtures/chart`,
+              values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
+            });
+            const secret = yield* Kubernetes.Secret("E2ESecret", {
+              cluster,
+              name: "alchemy-e2e-secret",
+              stringData: { token: Redacted.make(E2E_SECRET_VALUE) },
+              binaryData: { blob: Redacted.make(E2E_SECRET_BINARY_B64) },
+            });
+            const host = yield* EksHostApi;
+            return { host, cluster, release, secret };
+          }),
         );
-        expect(res.status).toBe(200);
-        const body = (yield* res.json) as { written: string; table: string };
-        expect(body.written).toBe(itemId);
+        helmRelease = release;
+        helmCluster = cluster;
+        e2eSecret = secret;
+        // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
+        // listener is the Service port, not 80).
+        expect(host.url).toBeTruthy();
+        baseUrl = host.url!.replace(/\/+$/, "");
 
-        // Prove the binding actually reached DynamoDB: read the item back
-        // out-of-band via the control-plane API.
-        const got = yield* dynamodb
-          .getItem({ TableName: body.table, Key: { pk: { S: itemId } } })
-          .pipe(
-            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        // NLB DNS + pod readiness ramp — retry /health.
+        yield* HttpClient.get(`${baseUrl}/health`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.succeed(res)
+              : Effect.fail(new Error(`/health ${res.status}`)),
+          ),
+          Effect.tapError((e) => Effect.logWarning(String(e))),
+          Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 60 }),
+        );
+      }),
+      // Cluster create (~18 min) + image build/push + Auto Mode node launch +
+      // NLB provisioning/DNS + URL readiness poll (~5–10 min) routinely total
+      // 35+ min end-to-end.
+      { timeout: 2_700_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 600_000 });
+
+    test.provider(
+      "bound DynamoDB PutItem writes an item from inside the pod",
+      () =>
+        Effect.gen(function* () {
+          // Deterministic id: the table is created fresh by this suite's deploy
+          // (beforeAll starts with a destroy), so no stale item can pre-exist,
+          // and a stable id keeps re-runs convergent instead of accreting items.
+          const itemId = "eks-deployment-put-item";
+          const res = yield* HttpClient.get(`${baseUrl}/put?id=${itemId}`).pipe(
+            Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
           );
-        expect(got.Item?.pk?.S).toBe(itemId);
-      }),
-    { timeout: 180_000 },
-  );
+          expect(res.status).toBe(200);
+          const body = (yield* res.json) as { written: string; table: string };
+          expect(body.written).toBe(itemId);
 
-  test.provider(
-    "HelmChart renders and applies its objects onto the cluster",
-    () =>
-      Effect.gen(function* () {
-        // The chart rendered both ConfigMaps (the conditional one was
-        // toggled on via values) into the default namespace.
-        expect(helmRelease.objects).toHaveLength(2);
-        expect(helmRelease.namespace).toBe("default");
-        // The generic attributes persist the cluster connection for
-        // adapter-based delete.
-        expect(helmRelease.connection.auth.kind).toBe("aws-eks");
+          // Prove the binding actually reached DynamoDB: read the item back
+          // out-of-band via the control-plane API.
+          const got = yield* dynamodb
+            .getItem({ TableName: body.table, Key: { pk: { S: itemId } } })
+            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }));
+          expect(got.Item?.pk?.S).toBe(itemId);
+        }),
+      { timeout: 180_000 },
+    );
 
-        // Read the primary ConfigMap back out-of-band through the
-        // Kubernetes API and prove the values reached the cluster.
-        const configRef = helmRelease.objects.find((object) =>
-          object.name.endsWith("-config"),
-        )!;
-        expect(configRef).toBeDefined();
-        const transport = yield* clusterTransport();
-        const applied = (yield* readObject({
-          transport,
-          object: configRef,
-        })) as { data?: Record<string, string> } | undefined;
-        expect(applied?.data?.message).toBe("helm-e2e");
-        expect(applied?.data?.release).toBe(helmRelease.releaseName);
-      }),
-    { timeout: 120_000 },
-  );
+    test.provider(
+      "HelmChart renders and applies its objects onto the cluster",
+      () =>
+        Effect.gen(function* () {
+          // The chart rendered both ConfigMaps (the conditional one was
+          // toggled on via values) into the default namespace.
+          expect(helmRelease.objects).toHaveLength(2);
+          expect(helmRelease.namespace).toBe("default");
+          // The generic attributes persist the cluster connection for
+          // adapter-based delete.
+          expect(helmRelease.connection.auth.kind).toBe("aws-eks");
 
-  test.provider(
-    "Secret applies Redacted string data without exposing it in attributes",
-    () =>
-      Effect.gen(function* () {
-        // Attributes must not carry the plaintext or its base64 form.
-        const serialized = JSON.stringify(e2eSecret);
-        expect(serialized).not.toContain(E2E_SECRET_VALUE);
-        expect(serialized).not.toContain(E2E_SECRET_VALUE_B64);
-        const transport = yield* clusterTransport();
-        const applied = (yield* readObject({
-          transport,
-          object: e2eSecret.ref,
-        })) as { data?: Record<string, string> } | undefined;
-        expect(applied?.data?.token).toBe(E2E_SECRET_VALUE_B64);
-        expect(applied?.data?.blob).toBe(E2E_SECRET_BINARY_B64);
-      }),
-    { timeout: 120_000 },
-  );
-});
+          // Read the primary ConfigMap back out-of-band through the
+          // Kubernetes API and prove the values reached the cluster.
+          const configRef = helmRelease.objects.find((object) => object.name.endsWith("-config"))!;
+          expect(configRef).toBeDefined();
+          const transport = yield* clusterTransport();
+          const applied = (yield* readObject({ transport, object: configRef })) as
+            | { data?: Record<string, string> }
+            | undefined;
+          expect(applied?.data?.message).toBe("helm-e2e");
+          expect(applied?.data?.release).toBe(helmRelease.releaseName);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "Secret applies Redacted string data without exposing it in attributes",
+      () =>
+        Effect.gen(function* () {
+          // Attributes must not carry the plaintext or its base64 form.
+          const serialized = JSON.stringify(e2eSecret);
+          expect(serialized).not.toContain(E2E_SECRET_VALUE);
+          expect(serialized).not.toContain(E2E_SECRET_VALUE_B64);
+          const transport = yield* clusterTransport();
+          const applied = (yield* readObject({ transport, object: e2eSecret.ref })) as
+            | { data?: Record<string, string> }
+            | undefined;
+          expect(applied?.data?.token).toBe(E2E_SECRET_VALUE_B64);
+          expect(applied?.data?.blob).toBe(E2E_SECRET_BINARY_B64);
+        }),
+      { timeout: 120_000 },
+    );
+  },
+);

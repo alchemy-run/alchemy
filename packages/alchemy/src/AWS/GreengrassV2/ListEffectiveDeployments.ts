@@ -37,7 +37,6 @@ export interface ListEffectiveDeployments extends Binding.Service<
     >
   >
 > {}
-export const ListEffectiveDeployments =
-  Binding.Service<ListEffectiveDeployments>(
-    "AWS.GreengrassV2.ListEffectiveDeployments",
-  );
+export const ListEffectiveDeployments = Binding.Service<ListEffectiveDeployments>(
+  "AWS.GreengrassV2.ListEffectiveDeployments",
+);

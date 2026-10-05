@@ -35,10 +35,7 @@ export interface CreateDBClusterSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<rds.CreateDBClusterSnapshotMessage, "DBClusterIdentifier">,
-    ) => Effect.Effect<
-      rds.CreateDBClusterSnapshotResult,
-      rds.CreateDBClusterSnapshotError
-    >
+    ) => Effect.Effect<rds.CreateDBClusterSnapshotResult, rds.CreateDBClusterSnapshotError>
   >
 > {}
 export const CreateDBClusterSnapshot = Binding.Service<CreateDBClusterSnapshot>(
