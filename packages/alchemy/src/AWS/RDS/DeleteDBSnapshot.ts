@@ -28,6 +28,4 @@ export interface DeleteDBSnapshot extends Binding.Service<
     ) => Effect.Effect<rds.DeleteDBSnapshotResult, rds.DeleteDBSnapshotError>
   >
 > {}
-export const DeleteDBSnapshot = Binding.Service<DeleteDBSnapshot>(
-  "AWS.RDS.DeleteDBSnapshot",
-);
+export const DeleteDBSnapshot = Binding.Service<DeleteDBSnapshot>("AWS.RDS.DeleteDBSnapshot");

@@ -26,21 +26,13 @@ const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
   {
-    providers: Layer.mergeAll(
-      AWS.providers(),
-      Cloudflare.providers(),
-      GitHub.providers(),
-    ),
+    providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const CLOUDFLARE_API_TOKEN = yield* Config.Redacted("CLOUDFLARE_API_TOKEN");
-    const TEST_CLOUDFLARE_ACCOUNT_ID = yield* Config.String(
-      "TEST_CLOUDFLARE_ACCOUNT_ID",
-    );
-    const PROD_CLOUDFLARE_ACCOUNT_ID = yield* Config.String(
-      "PROD_CLOUDFLARE_ACCOUNT_ID",
-    );
+    const TEST_CLOUDFLARE_ACCOUNT_ID = yield* Config.String("TEST_CLOUDFLARE_ACCOUNT_ID");
+    const PROD_CLOUDFLARE_ACCOUNT_ID = yield* Config.String("PROD_CLOUDFLARE_ACCOUNT_ID");
     const ANTHROPIC_API_KEY = yield* Config.Redacted("ANTHROPIC_API_KEY");
     const DISCORD_WEBHOOK_URL = yield* Config.Redacted("DISCORD_WEBHOOK_URL");
 
@@ -127,13 +119,9 @@ export default Alchemy.Stack(
 
     return {
       TEST_CLOUDFLARE_ACCOUNT_ID,
-      TEST_CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_API_TOKEN.value.pipe(
-        Output.map(Redacted.value),
-      ),
+      TEST_CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_API_TOKEN.value.pipe(Output.map(Redacted.value)),
       PROD_CLOUDFLARE_ACCOUNT_ID,
-      PROD_CLOUDFLARE_API_TOKEN: PROD_CLOUDFLARE_API_TOKEN.value.pipe(
-        Output.map(Redacted.value),
-      ),
+      PROD_CLOUDFLARE_API_TOKEN: PROD_CLOUDFLARE_API_TOKEN.value.pipe(Output.map(Redacted.value)),
       AWS_ROLE_ARN: role.roleArn,
     };
   }).pipe(Effect.orDie),

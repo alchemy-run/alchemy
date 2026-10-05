@@ -208,8 +208,8 @@ Call the bound methods from `fetch`:
 
 ```diff lang="typescript"
 // src/gateway.ts
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
 // ...
 Effect.gen(function* () {
   const users = yield* Fly.bindService(Users);
@@ -374,7 +374,7 @@ A bound client also forwards requests to the Service's `fetch`
 handler. A relative URL resolves against the Service's `privateUrl`:
 
 ```typescript
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 const users = yield* Fly.bindService(Users);
 const response = yield* users.fetch(HttpClientRequest.get("/hello"));

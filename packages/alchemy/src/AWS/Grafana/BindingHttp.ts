@@ -90,7 +90,7 @@ export const makeGrafanaWorkspaceHttpBinding = <
         request?: Omit<I, "workspaceId">,
       ) {
         return yield* op({
-          ...(request ?? {}),
+          ...request,
           workspaceId: yield* workspaceId,
         } as I);
       });

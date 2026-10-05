@@ -35,6 +35,4 @@ export interface CreateKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.CreateKxDataviewResponse, SVC.CreateKxDataviewError>
   >
 > {}
-export const CreateKxDataview = Binding.Service<CreateKxDataview>(
-  "AWS.FinSpace.CreateKxDataview",
-);
+export const CreateKxDataview = Binding.Service<CreateKxDataview>("AWS.FinSpace.CreateKxDataview");

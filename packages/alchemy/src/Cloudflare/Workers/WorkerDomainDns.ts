@@ -26,16 +26,8 @@ import {
   type ValidationRecord,
 } from "../CustomHostname/CustomHostname.ts";
 import { CLOUDFLARE_DNS } from "../DNS/Adapter.ts";
-import {
-  findZoneByName,
-  isId,
-  type Reference as ZoneReference,
-} from "../Zone/lookup.ts";
-import type {
-  WorkerDomainConfig,
-  WorkerProps,
-  WorkerRouteConfig,
-} from "./Worker.ts";
+import { findZoneByName, isId, type Reference as ZoneReference } from "../Zone/lookup.ts";
+import type { WorkerDomainConfig, WorkerProps, WorkerRouteConfig } from "./Worker.ts";
 
 /**
  * A Worker's `domain` cannot be served through Cloudflare for SaaS as
@@ -44,9 +36,7 @@ import type {
  * support. Raised as a defect while the stack program is being built,
  * before anything is deployed.
  */
-export class WorkerDomainDnsError extends Data.TaggedError(
-  "WorkerDomainDnsError",
-)<{
+export class WorkerDomainDnsError extends Data.TaggedError("WorkerDomainDnsError")<{
   readonly workerId: string;
   readonly message: string;
 }> {}
@@ -80,8 +70,7 @@ export const customHostnameVerificationRecords = (
   return records;
 };
 
-const sanitize = (hostname: string) =>
-  hostname.replaceAll(/[^a-zA-Z0-9-]/g, "-");
+const sanitize = (hostname: string) => hostname.replaceAll(/[^a-zA-Z0-9-]/g, "-");
 
 /**
  * The Worker's `transformProps` hook. `domain.dns` omitted keeps the
@@ -114,9 +103,7 @@ export const transformWorkerDomainProps = (
       // Native custom domains already publish their own DNS. The adapter's
       // zone pins the zone when the domain config does not.
       const pinned =
-        native.zoneId !== undefined ||
-        native.zoneName !== undefined ||
-        native.zone !== undefined;
+        native.zoneId !== undefined || native.zoneName !== undefined || native.zone !== undefined;
       return {
         ...props,
         domain:
@@ -127,9 +114,7 @@ export const transformWorkerDomainProps = (
     }
     // The local Worker serves on localhost and ignores `domain`.
     if ((yield* defaultProviderMode) === "local") return props;
-    return yield* composeSaasDomain(id, props, domain, dns).pipe(
-      Namespace.push(id),
-    );
+    return yield* composeSaasDomain(id, props, domain, dns).pipe(Namespace.push(id));
   });
 
 const composeSaasDomain = (
@@ -163,9 +148,7 @@ const composeSaasDomain = (
         `\`domain.cnameTarget\` is required when ${via}: the hostname in the SaaS zone that custom hostnames CNAME to, typically the zone's fallback origin (\`Cloudflare.CustomHostname.FallbackOrigin\`).`,
       );
     }
-    const hostnames = [
-      ...new Set([domain.name, ...(domain.aliases ?? [])]),
-    ] as unknown[];
+    const hostnames = [...new Set([domain.name, ...(domain.aliases ?? [])])] as unknown[];
     for (const hostname of hostnames) {
       if (typeof hostname !== "string") {
         return yield* fail(
@@ -188,10 +171,7 @@ const composeSaasDomain = (
       });
       yield* adapter.records(`Hostname-${key}-Verification`, {
         records: Output.map(
-          Output.all(
-            customHostname.ownershipVerification,
-            customHostname.validationRecords,
-          ),
+          Output.all(customHostname.ownershipVerification, customHostname.validationRecords),
           ([ownership, validation]) =>
             customHostnameVerificationRecords(
               ownership as OwnershipVerification | undefined,
@@ -208,10 +188,7 @@ const composeSaasDomain = (
       // `InvalidRoutePattern`, code 10022), so derive the pattern from the
       // custom hostname: the Worker deploys after it.
       routes.push({
-        pattern: Output.map(
-          customHostname.hostname,
-          (name) => `${name}/*`,
-        ) as unknown as string,
+        pattern: Output.map(customHostname.hostname, (name) => `${name}/*`) as unknown as string,
         zoneId: zoneId as string,
       });
     }
@@ -258,14 +235,10 @@ const resolveSaasZoneId = (
     }
     const { accountId } = yield* yield* CloudflareEnvironment;
     const match = yield* findZoneByName({ accountId, name }).pipe(
-      Effect.catch((error) =>
-        fail(`looking up the SaaS zone "${name}" failed: ${String(error)}`),
-      ),
+      Effect.catch((error) => fail(`looking up the SaaS zone "${name}" failed: ${String(error)}`)),
     );
     if (match === undefined) {
-      return yield* fail(
-        `the SaaS zone "${name}" was not found in the Cloudflare account.`,
-      );
+      return yield* fail(`the SaaS zone "${name}" was not found in the Cloudflare account.`);
     }
     return match.id as Input<string>;
   });

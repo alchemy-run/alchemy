@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 import SecureUsers from "./secure-users.ts";
 
 /** Public Service on the stack network that proxies to {@link SecureUsers}. */
@@ -24,9 +24,7 @@ export default class SecureGateway extends Fly.Service<SecureGateway>()(
         return HttpServerResponse.text(yield* response.text);
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 502 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 502 })),
         ),
       ),
     };

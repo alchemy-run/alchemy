@@ -1,21 +1,18 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { fetchFrom, httpService, nginx } from "./fixtures/flycast.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilAppGone = (appName: string) =>
   machines.getApp({ app_name: appName }).pipe(
@@ -30,9 +27,7 @@ const waitUntilAppGone = (appName: string) =>
 
 const waitUntilIpGone = (appName: string, ip: string) =>
   machines.listAppIPAssignments({ app_name: appName }).pipe(
-    Effect.map((res) =>
-      (res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone",
-    ),
+    Effect.map((res) => ((res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone")),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -150,18 +145,12 @@ test.provider(
       expect(fetched?.ip).toEqual(replaced.ip.ip);
       expect(fetched?.ip).not.toContain(":");
 
-      const oldGone = yield* waitUntilIpGone(
-        created.app.appName,
-        created.ip.ip,
-      );
+      const oldGone = yield* waitUntilIpGone(created.app.appName, created.ip.ip);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const ipGone = yield* waitUntilIpGone(
-        replaced.app.appName,
-        replaced.ip.ip,
-      );
+      const ipGone = yield* waitUntilIpGone(replaced.app.appName, replaced.ip.ip);
       expect(ipGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(replaced.app.appName);
       expect(appGone).toEqual("gone");
@@ -217,12 +206,10 @@ test.provider(
       expect(created.flycast.type).toEqual("private_v6");
       expect(created.flycast.shared).toBe(false);
       expect(created.flycast.network).toBeUndefined();
-      expect(
-        yield* observedNetwork(created.app.appName, created.flycast.ip),
-      ).toMatchObject({ name: "" });
-      expect(
-        yield* observedNetwork(created.app.appName, created.publicV6.ip),
-      ).toBeNull();
+      expect(yield* observedNetwork(created.app.appName, created.flycast.ip)).toMatchObject({
+        name: "",
+      });
+      expect(yield* observedNetwork(created.app.appName, created.publicV6.ip)).toBeNull();
       expect(created.publicV6.type).toEqual("v6");
       expect(created.publicV6.ip).toContain(":");
       expect(created.sharedV4.type).toEqual("shared_v4");
@@ -286,9 +273,7 @@ test.provider(
       expect(deployed.flycast.type).toEqual("private_v6");
       expect(deployed.publicV6.type).toEqual("v6");
       expect(deployed.publicV6.ip).not.toEqual(existing.ip);
-      expect(
-        yield* observedNetwork(app.appName, deployed.publicV6.ip),
-      ).toBeNull();
+      expect(yield* observedNetwork(app.appName, deployed.publicV6.ip)).toBeNull();
       const listed = yield* machines.listAppIPAssignments({
         app_name: app.appName,
       });
@@ -315,24 +300,16 @@ test.provider(
         );
       const flycast = yield* deploy("private_v6");
       expect(flycast.ip.type).toEqual("private_v6");
-      expect(
-        yield* observedNetwork(flycast.app.appName, flycast.ip.ip),
-      ).toBeDefined();
+      expect(yield* observedNetwork(flycast.app.appName, flycast.ip.ip)).toBeDefined();
       const publicV6 = yield* deploy("v6");
       expect(publicV6.ip.type).toEqual("v6");
       expect(publicV6.ip.ip).not.toEqual(flycast.ip.ip);
-      expect(
-        yield* observedNetwork(publicV6.app.appName, publicV6.ip.ip),
-      ).toBeNull();
-      expect(
-        yield* waitUntilIpGone(flycast.app.appName, flycast.ip.ip),
-      ).toEqual("gone");
+      expect(yield* observedNetwork(publicV6.app.appName, publicV6.ip.ip)).toBeNull();
+      expect(yield* waitUntilIpGone(flycast.app.appName, flycast.ip.ip)).toEqual("gone");
       const back = yield* deploy("private_v6");
       expect(back.ip.type).toEqual("private_v6");
       expect(back.ip.ip).not.toEqual(publicV6.ip.ip);
-      expect(
-        yield* waitUntilIpGone(publicV6.app.appName, publicV6.ip.ip),
-      ).toEqual("gone");
+      expect(yield* waitUntilIpGone(publicV6.app.appName, publicV6.ip.ip)).toEqual("gone");
       yield* stack.destroy();
       expect(yield* waitUntilAppGone(flycast.app.appName)).toEqual("gone");
     }).pipe(logLevel),
@@ -367,9 +344,7 @@ test.provider(
       );
       expect(deployed.flycast.type).toEqual("private_v6");
       const flycastUrl = `http://${deployed.backend.appName}.flycast/`;
-      expect(yield* fetchFrom(deployed.caller, flycastUrl)).toContain(
-        "Welcome to nginx",
-      );
+      expect(yield* fetchFrom(deployed.caller, flycastUrl)).toContain("Welcome to nginx");
 
       // No public address: the fly.dev hostname does not serve the backend.
       const publicResult = yield* HttpClient.get(
@@ -389,9 +364,7 @@ test.provider(
       };
       yield* machines.stopMachine(target);
       yield* machines.waitMachine({ ...target, state: "stopped", timeout: 30 });
-      expect(yield* fetchFrom(deployed.caller, flycastUrl)).toContain(
-        "Welcome to nginx",
-      );
+      expect(yield* fetchFrom(deployed.caller, flycastUrl)).toContain("Welcome to nginx");
       expect((yield* machines.getMachine(target)).state).toEqual("started");
 
       yield* stack.destroy();
@@ -437,26 +410,22 @@ test.provider(
       const onA = yield* deploy(networks.a);
       expect(onA.tenantA.network).toEqual(networks.a);
       expect(onA.flycast.network).toEqual(networks.a);
-      expect(
-        yield* observedNetwork(onA.backend.appName, onA.flycast.ip),
-      ).toMatchObject({ name: networks.a });
-      expect(
-        yield* fetchFrom(onA.callerA, `http://${onA.backend.appName}.flycast/`),
-      ).toContain("Welcome to nginx");
+      expect(yield* observedNetwork(onA.backend.appName, onA.flycast.ip)).toMatchObject({
+        name: networks.a,
+      });
+      expect(yield* fetchFrom(onA.callerA, `http://${onA.backend.appName}.flycast/`)).toContain(
+        "Welcome to nginx",
+      );
 
       const onB = yield* deploy(networks.b);
       expect(onB.flycast.ip).not.toEqual(onA.flycast.ip);
       expect(onB.flycast.network).toEqual(networks.b);
-      expect(
-        yield* waitUntilIpGone(onA.backend.appName, onA.flycast.ip),
-      ).toEqual("gone");
+      expect(yield* waitUntilIpGone(onA.backend.appName, onA.flycast.ip)).toEqual("gone");
 
       const onDefault = yield* deploy(undefined);
       expect(onDefault.flycast.ip).not.toEqual(onB.flycast.ip);
       expect(onDefault.flycast.network).toBeUndefined();
-      expect(
-        yield* waitUntilIpGone(onB.backend.appName, onB.flycast.ip),
-      ).toEqual("gone");
+      expect(yield* waitUntilIpGone(onB.backend.appName, onB.flycast.ip)).toEqual("gone");
 
       yield* stack.destroy();
       for (const app of [onA.backend, onA.tenantA, onA.tenantB])
@@ -520,10 +489,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const ipGone = yield* waitUntilIpGone(
-        deployed.app.appName,
-        deployed.ip.ip,
-      );
+      const ipGone = yield* waitUntilIpGone(deployed.app.appName, deployed.ip.ip);
       expect(ipGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");

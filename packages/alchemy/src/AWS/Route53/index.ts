@@ -1,9 +1,4 @@
-export {
-  Adapter,
-  AdapterLive,
-  ROUTE53_DNS,
-  type AdapterOptions,
-} from "./Adapter.ts";
+export { Adapter, AdapterLive, ROUTE53_DNS, type AdapterOptions } from "./Adapter.ts";
 export {
   ChangeResourceRecordSets,
   type ChangeResourceRecordSetsRequest,
@@ -30,10 +25,7 @@ export {
   type ListResourceRecordSetsRequest,
 } from "./ListResourceRecordSets.ts";
 export { ListResourceRecordSetsHttp } from "./ListResourceRecordSetsHttp.ts";
-export {
-  QueryLoggingConfig,
-  QueryLoggingConfigProvider,
-} from "./QueryLoggingConfig.ts";
+export { QueryLoggingConfig, QueryLoggingConfigProvider } from "./QueryLoggingConfig.ts";
 export { Record, RecordProvider } from "./Record.ts";
 export {
   RecordList,
@@ -48,8 +40,5 @@ export {
   VpcAssociationAuthorization,
   VpcAssociationAuthorizationProvider,
 } from "./VpcAssociationAuthorization.ts";
-export {
-  ZoneVpcAssociation,
-  ZoneVpcAssociationProvider,
-} from "./ZoneVpcAssociation.ts";
+export { ZoneVpcAssociation, ZoneVpcAssociationProvider } from "./ZoneVpcAssociation.ts";
 // NOTE: BindingHttp.ts is shared scaffolding and intentionally NOT exported.

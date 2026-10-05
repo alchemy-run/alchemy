@@ -1,3 +1,16 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as acm from "@distilled.cloud/aws/acm";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * `AWS.ECS.Service` load-balancer custom domains, served live over HTTPS:
  *
@@ -21,19 +34,6 @@ import * as Alchemy from "@/index.ts";
 import * as Output from "@/Output";
 import { isResourceState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as acm from "@distilled.cloud/aws/acm";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const providers = Layer.mergeAll(AWS.providers(), Cloudflare.providers());
@@ -41,8 +41,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers,
 });
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Cloudflare-hosted names.
 const CF_NAME = `ecs-dns.${zoneName}`;
@@ -52,8 +51,7 @@ const R53_ZONE = `ecs-dns-r53.${zoneName}`;
 const R53_NAME = `api.${R53_ZONE}`;
 
 /** Logical id prefix the service gives each domain name's records. */
-const domainRecordId = (name: string) =>
-  `Domain-${name.replaceAll(/[^a-zA-Z0-9-]/g, "-")}`;
+const domainRecordId = (name: string) => `Domain-${name.replaceAll(/[^a-zA-Z0-9-]/g, "-")}`;
 
 class DnsNotPublished extends Data.TaggedError("DnsNotPublished")<{
   readonly name: string;
@@ -89,11 +87,7 @@ const defaultNetwork = Effect.gen(function* () {
         { Name: "default-for-az", Values: ["true"] },
       ],
     })
-    .pipe(
-      Effect.map((r) =>
-        (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-      ),
-    );
+    .pipe(Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))));
   return { vpcId: net.vpcId as string, subnets };
 });
 
@@ -140,9 +134,7 @@ const waitForAuthoritative = (
         if (!published) {
           return yield* Effect.fail(new DnsNotPublished({ name, server }));
         }
-      }).pipe(
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 40 }),
-      ),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 40 })),
     );
   });
 
@@ -155,9 +147,7 @@ const expectServes = (name: string, text: string) =>
     // exits on the first 200.
     const body = yield* client.get(url).pipe(
       Effect.flatMap((res): Effect.Effect<string, unknown> =>
-        res.status === 200
-          ? res.text
-          : Effect.fail(new NotServing({ url, status: res.status })),
+        res.status === 200 ? res.text : Effect.fail(new NotServing({ url, status: res.status })),
       ),
       Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 84 }),
     );
@@ -168,17 +158,13 @@ const albDnsName = (loadBalancerArn: string) =>
   elbv2
     .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
     .pipe(
-      Effect.map((r) =>
-        (r.LoadBalancers?.[0]?.DNSName ?? "").replace(/\.$/, "").toLowerCase(),
-      ),
+      Effect.map((r) => (r.LoadBalancers?.[0]?.DNSName ?? "").replace(/\.$/, "").toLowerCase()),
     );
 
 const loadBalancerGone = (loadBalancerArn: string) =>
   elbv2.describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] }).pipe(
     Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-    Effect.catchTag("LoadBalancerNotFoundException", () =>
-      Effect.succeed(true),
-    ),
+    Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
   );
 
 /** The HTTPS listener's certificate: ISSUED, for `names`, in `region`. */
@@ -201,9 +187,7 @@ const expectIssuedCertificate = (
     });
     expect(Certificate?.Status).toBe("ISSUED");
     expect(Certificate?.DomainName).toBe(names[0]);
-    expect([...(Certificate?.SubjectAlternativeNames ?? [])].sort()).toEqual(
-      [...names].sort(),
-    );
+    expect([...(Certificate?.SubjectAlternativeNames ?? [])].sort()).toEqual([...names].sort());
   });
 
 /** Persisted state rows of the scratch stack, keyed by FQN. */
@@ -290,12 +274,10 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           const albDns = yield* albDnsName(deployed.loadBalancerArn);
           expect(albDns).not.toBe("");
           const listCnames = (name: string) =>
-            dns.listRecords
-              .items({ zoneId, name: { exact: name }, type: "CNAME" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-              );
+            dns.listRecords.items({ zoneId, name: { exact: name }, type: "CNAME" }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
           for (const name of [CF_NAME, CF_ALIAS]) {
             const cnames = yield* listCnames(name);
             expect(cnames).toHaveLength(1);
@@ -304,9 +286,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           }
           const rows = yield* stateRows(stack);
           for (const name of [CF_NAME, CF_ALIAS]) {
-            expect(rows.get(`CfSvc/${domainRecordId(name)}-CNAME`)).toBe(
-              "Cloudflare.DNS.Records",
-            );
+            expect(rows.get(`CfSvc/${domainRecordId(name)}-CNAME`)).toBe("Cloudflare.DNS.Records");
           }
 
           // The certificate is issued in the service's region.
@@ -317,17 +297,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           );
 
           // HTTPS 200 on both names through the ALB.
-          const cloudflareNs = yield* Effect.tryPromise(() =>
-            resolveNs(zoneName),
-          ).pipe(Effect.orDie);
+          const cloudflareNs = yield* Effect.tryPromise(() => resolveNs(zoneName)).pipe(
+            Effect.orDie,
+          );
           for (const name of [CF_NAME, CF_ALIAS]) {
             yield* waitForAuthoritative(cloudflareNs, name, (resolver) =>
               resolver
                 .resolveCname(name)
                 .then((answers) =>
-                  answers.some(
-                    (a) => a.replace(/\.$/, "").toLowerCase() === albDns,
-                  ),
+                  answers.some((a) => a.replace(/\.$/, "").toLowerCase() === albDns),
                 ),
             );
             yield* expectServes(name, "ecs-dns-cloudflare");
@@ -341,9 +319,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
               Effect.flatMap((cnames) =>
                 cnames.length === 0
                   ? Effect.void
-                  : Effect.fail(
-                      new RecordsStillPresent({ name, count: cnames.length }),
-                    ),
+                  : Effect.fail(new RecordsStillPresent({ name, count: cnames.length })),
               ),
               Effect.retry({
                 schedule: Schedule.spaced("2 seconds"),
@@ -423,9 +399,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           expect(aliases.map((r) => r.Type).sort()).toEqual(["A", "AAAA"]);
           for (const record of aliases) {
             // Route 53 may prefix ELB alias targets with `dualstack.`.
-            expect(
-              record.AliasTarget!.DNSName!.replace(/\.$/, "").toLowerCase(),
-            ).toMatch(
+            expect(record.AliasTarget!.DNSName!.replace(/\.$/, "").toLowerCase()).toMatch(
               new RegExp(`^(dualstack\\.)?${albDns.replaceAll(".", "\\.")}$`),
             );
           }
@@ -444,23 +418,18 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           );
 
           // HTTPS 200 through the delegation.
-          yield* waitForAuthoritative(
-            deployed.nameServers,
-            R53_NAME,
-            (resolver) =>
-              resolver.resolve4(R53_NAME).then((ips) => ips.length > 0),
+          yield* waitForAuthoritative(deployed.nameServers, R53_NAME, (resolver) =>
+            resolver.resolve4(R53_NAME).then((ips) => ips.length > 0),
           );
           yield* expectServes(R53_NAME, "ecs-dns-route53");
 
           // Destroy removes the zone (and its records) and the delegation.
           yield* stack.destroy();
           expect(yield* loadBalancerGone(service.loadBalancerArn)).toBe(true);
-          const zoneGone = yield* route53
-            .getHostedZone({ Id: hostedZoneId })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
-            );
+          const zoneGone = yield* route53.getHostedZone({ Id: hostedZoneId }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
+          );
           expect(zoneGone).toBe(true);
           const delegation = yield* dns.listRecords
             .items({

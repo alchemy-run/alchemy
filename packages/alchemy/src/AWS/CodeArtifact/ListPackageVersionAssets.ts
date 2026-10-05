@@ -48,7 +48,6 @@ export interface ListPackageVersionAssets extends Binding.Service<
   >
 > {}
 
-export const ListPackageVersionAssets =
-  Binding.Service<ListPackageVersionAssets>(
-    "AWS.CodeArtifact.ListPackageVersionAssets",
-  );
+export const ListPackageVersionAssets = Binding.Service<ListPackageVersionAssets>(
+  "AWS.CodeArtifact.ListPackageVersionAssets",
+);

@@ -31,10 +31,7 @@ export interface StartReplicationTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: dms.StartReplicationTaskMessage,
-    ) => Effect.Effect<
-      dms.StartReplicationTaskResponse,
-      dms.StartReplicationTaskError
-    >
+    ) => Effect.Effect<dms.StartReplicationTaskResponse, dms.StartReplicationTaskError>
   >
 > {}
 

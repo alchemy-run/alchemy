@@ -110,9 +110,7 @@ export interface DnsAddressTarget {
 export type DnsAliasTarget = DnsHostnameTarget | DnsAddressTarget;
 
 /** Whether a target is a hostname (CNAME / Route 53 alias) target. */
-export const isHostnameTarget = (
-  target: DnsAliasTarget,
-): target is DnsHostnameTarget =>
+export const isHostnameTarget = (target: DnsAliasTarget): target is DnsHostnameTarget =>
   "hostname" in target && target.hostname !== undefined;
 
 /** Binding contract of an {@link DnsAdapter.aliasSet} record set. */
@@ -125,13 +123,7 @@ export type DnsAliasSetBinding = {
  * A record set other composites bind hostnames onto via `{ names }` (see
  * `AWS.Website.Router`'s `bindTargets.records`).
  */
-export type DnsAliasSet = ResourceLike<
-  string,
-  any,
-  any,
-  DnsAliasSetBinding,
-  any
-> &
+export type DnsAliasSet = ResourceLike<string, any, any, DnsAliasSetBinding, any> &
   Pick<Resource<string, any, any, DnsAliasSetBinding, any>, "bind">;
 
 /**
@@ -149,9 +141,7 @@ export class DnsAdapterError extends Data.TaggedError("DnsAdapterError")<{
  * `providers()` layer is missing from the stack. Raised as a defect while
  * the stack program is being built, like a missing resource provider.
  */
-export class DnsAdapterNotRegistered extends Data.TaggedError(
-  "DnsAdapterNotRegistered",
-)<{
+export class DnsAdapterNotRegistered extends Data.TaggedError("DnsAdapterNotRegistered")<{
   readonly type: string;
 }> {
   override get message() {
@@ -231,10 +221,7 @@ export const adapterLayer = <R>(
 /**
  * Fill in `zone` / `options` from a {@link DnsConfig} on every call.
  */
-export const bind = <R>(
-  adapter: DnsAdapter<R>,
-  config: DnsConfig,
-): DnsAdapter<R> => {
+export const bind = <R>(adapter: DnsAdapter<R>, config: DnsConfig): DnsAdapter<R> => {
   const zone: DnsZone = {
     ...(config.zone === undefined ? {} : { zone: config.zone as string }),
     ...(config.options === undefined ? {} : { options: config.options }),
@@ -262,17 +249,14 @@ export const resolve = (config: DnsConfig): Effect.Effect<DnsAdapter> =>
   Effect.serviceOption(adapterService(config.type)).pipe(
     Effect.flatMap(
       Option.match({
-        onNone: () =>
-          Effect.die(new DnsAdapterNotRegistered({ type: config.type })),
-        onSome: (adapter) =>
-          Effect.succeed(bind(adapter as DnsAdapter, config)),
+        onNone: () => Effect.die(new DnsAdapterNotRegistered({ type: config.type })),
+        onSome: (adapter) => Effect.succeed(bind(adapter as DnsAdapter, config)),
       }),
     ),
   );
 
 /** Normalize a DNS name: lowercase, no trailing dot. */
-export const normalizeDnsName = (name: string) =>
-  name.replace(/\.$/, "").toLowerCase();
+export const normalizeDnsName = (name: string) => name.replace(/\.$/, "").toLowerCase();
 
 /** `A` / `AAAA` records for an address target (values may be Outputs). */
 export const addressRecords = (
@@ -289,9 +273,8 @@ export const addressRecords = (
   }
   const lift = (value: Input<string[]> | undefined): any =>
     Output.isOutput(value) ? value : Output.literal((value ?? []) as string[]);
-  return Output.map(
-    Output.all(lift(ipv4) as any, lift(ipv6) as any),
-    ([v4, v6]: any) => toRecords(v4 as string[], v6 as string[]),
+  return Output.map(Output.all(lift(ipv4) as any, lift(ipv6) as any), ([v4, v6]: any) =>
+    toRecords(v4 as string[], v6 as string[]),
   ) as unknown as Input<DnsRecord[]>;
 };
 
@@ -300,10 +283,7 @@ export const addressRecords = (
  * target, or `A` / `AAAA` records for an address target. A convenience for
  * adapters whose `alias` publishes through a list-of-records resource.
  */
-export const aliasRecords = (
-  name: string,
-  target: DnsAliasTarget,
-): Input<DnsRecord[]> =>
+export const aliasRecords = (name: string, target: DnsAliasTarget): Input<DnsRecord[]> =>
   isHostnameTarget(target)
     ? [{ name, type: "CNAME", value: target.hostname as string }]
     : addressRecords(name, target.ipv4, target.ipv6);

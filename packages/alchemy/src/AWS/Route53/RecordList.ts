@@ -91,36 +91,25 @@ const unquote = (value: string) => value.replace(/^"|"$/g, "");
 const normalizeValue = (type: DnsRecordType, value: string) =>
   type === "TXT" ? unquote(value) : normalizeName(value);
 
-const toWire = (type: DnsRecordType, value: string) =>
-  type === "TXT" ? `"${value}"` : value;
+const toWire = (type: DnsRecordType, value: string) => (type === "TXT" ? `"${value}"` : value);
 
 const keyOf = (entry: RecordListEntry) =>
   `${entry.hostedZoneId}|${entry.name}|${entry.type}|${entry.value}`;
 
-const groupKeyOf = (entry: {
-  hostedZoneId: string;
-  name: string;
-  type: string;
-}) => `${entry.hostedZoneId}|${entry.name}|${entry.type}`;
+const groupKeyOf = (entry: { hostedZoneId: string; name: string; type: string }) =>
+  `${entry.hostedZoneId}|${entry.name}|${entry.type}`;
 
 const waitForChange = (changeId: string) =>
   route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
     Effect.map((response) => response.ChangeInfo.Status),
     Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING" as const)),
     Effect.repeat({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(60),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
       until: (status) => status === "INSYNC",
     }),
   );
 
-const findRecordSet = (
-  hostedZoneId: string,
-  name: string,
-  type: DnsRecordType,
-) =>
+const findRecordSet = (hostedZoneId: string, name: string, type: DnsRecordType) =>
   route53
     .listResourceRecordSets({
       HostedZoneId: normalizeHostedZoneId(hostedZoneId),
@@ -141,17 +130,11 @@ const findRecordSet = (
       Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)),
     );
 
-const liveValuesOf = (
-  type: DnsRecordType,
-  recordSet: route53.ResourceRecordSet | undefined,
-) =>
-  (recordSet?.ResourceRecords ?? []).map((record) =>
-    normalizeValue(type, record.Value),
-  );
+const liveValuesOf = (type: DnsRecordType, recordSet: route53.ResourceRecordSet | undefined) =>
+  (recordSet?.ResourceRecords ?? []).map((record) => normalizeValue(type, record.Value));
 
 const sameValues = (a: string[], b: string[]) =>
-  a.length === b.length &&
-  [...a].sort().every((value, index) => value === [...b].sort()[index]);
+  a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
 
 /**
  * Plan the change converging one `(zone, name, type)` record set: `desired`
@@ -171,18 +154,11 @@ const planRecordSetChange = (
     const liveValues = liveValuesOf(type, live);
     const desiredValues = desired.map((entry) => entry.value);
     const removed = new Set(
-      previous
-        .map((entry) => entry.value)
-        .filter((value) => !desiredValues.includes(value)),
+      previous.map((entry) => entry.value).filter((value) => !desiredValues.includes(value)),
     );
     const values =
       type === "TXT"
-        ? [
-            ...new Set([
-              ...liveValues.filter((value) => !removed.has(value)),
-              ...desiredValues,
-            ]),
-          ]
+        ? [...new Set([...liveValues.filter((value) => !removed.has(value)), ...desiredValues])]
         : type === "CNAME"
           ? desiredValues.slice(-1)
           : [...new Set(desiredValues)];
@@ -191,17 +167,10 @@ const planRecordSetChange = (
     if (values.length === 0) {
       // Nothing of ours (or anyone's, for TXT) remains: delete what we own.
       const ours =
-        live !== undefined &&
-        (type === "TXT" || liveValues.every((value) => removed.has(value)));
-      return ours
-        ? ({ Action: "DELETE", ResourceRecordSet: live } as route53.Change)
-        : undefined;
+        live !== undefined && (type === "TXT" || liveValues.every((value) => removed.has(value)));
+      return ours ? ({ Action: "DELETE", ResourceRecordSet: live } as route53.Change) : undefined;
     }
-    if (
-      live === undefined ||
-      !sameValues(liveValues, values) ||
-      live.TTL !== ttl
-    ) {
+    if (live === undefined || !sameValues(liveValues, values) || live.TTL !== ttl) {
       return {
         Action: "UPSERT",
         ResourceRecordSet: {
@@ -241,9 +210,7 @@ const applyChanges = (hostedZoneId: string, changes: route53.Change[]) =>
               submitChanges(hostedZoneId, [change]).pipe(
                 Effect.map((response) => [response.ChangeInfo.Id]),
                 Effect.catchTag("InvalidChangeBatch", (error) =>
-                  change.Action === "DELETE"
-                    ? Effect.succeed([] as string[])
-                    : Effect.fail(error),
+                  change.Action === "DELETE" ? Effect.succeed([] as string[]) : Effect.fail(error),
                 ),
               ),
             ).pipe(Effect.map((ids) => ids.flat())),
@@ -256,18 +223,12 @@ const applyChanges = (hostedZoneId: string, changes: route53.Change[]) =>
  * Converge every `(zone, name, type)` record set touched by `desired` or
  * `previous`, one change batch per hosted zone.
  */
-const syncRecordSets = (
-  desired: RecordListEntry[],
-  previous: RecordListEntry[],
-) =>
+const syncRecordSets = (desired: RecordListEntry[], previous: RecordListEntry[]) =>
   Effect.gen(function* () {
     const desiredGroups = groupBy(desired);
     const previousGroups = groupBy(previous);
     const changesByZone = new Map<string, route53.Change[]>();
-    for (const key of new Set([
-      ...desiredGroups.keys(),
-      ...previousGroups.keys(),
-    ])) {
+    for (const key of new Set([...desiredGroups.keys(), ...previousGroups.keys()])) {
       const group = desiredGroups.get(key) ?? [];
       const before = previousGroups.get(key) ?? [];
       const sample = group[0] ?? before[0];
@@ -322,9 +283,7 @@ export const RecordListProvider = () =>
         const name = normalizeName(record.name);
         let hostedZoneId = zoneCache.get(name);
         if (hostedZoneId === undefined) {
-          hostedZoneId = normalizeHostedZoneId(
-            yield* resolveHostedZoneId(news.hostedZoneId, name),
-          );
+          hostedZoneId = normalizeHostedZoneId(yield* resolveHostedZoneId(news.hostedZoneId, name));
           zoneCache.set(name, hostedZoneId);
         }
         const entry: RecordListEntry = {

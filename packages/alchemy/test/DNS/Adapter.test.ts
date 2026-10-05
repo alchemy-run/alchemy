@@ -1,3 +1,16 @@
+import { resolve4, Resolver } from "node:dns/promises";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as cfdns from "@distilled.cloud/cloudflare/dns";
+import * as HetznerErrors from "@distilled.cloud/hetzner";
+import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
+import * as hetznerZones from "@distilled.cloud/hetzner/zones";
+import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * The DNS adapter contract (`alchemy/DNS`) against its three built-in hosts.
  *
@@ -16,33 +29,15 @@ import * as DNS from "@/DNS";
 import * as Hetzner from "@/Hetzner";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as cfdns from "@distilled.cloud/cloudflare/dns";
-import * as HetznerErrors from "@distilled.cloud/hetzner";
-import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
-import * as hetznerZones from "@distilled.cloud/hetzner/zones";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { resolve4, Resolver } from "node:dns/promises";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    Cloudflare.providers(),
-    AWS.providers(),
-    Hetzner.providers(),
-  ),
+  providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers(), Hetzner.providers()),
 });
 
 // A stack WITHOUT the Hetzner (or AWS) host registered.
 const cloudflareOnly = Test.make({ providers: Cloudflare.providers() });
 
-const CF_ZONE =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const CF_ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const TARGET_1 = "example.net";
 const TARGET_2 = "example.org";
@@ -58,8 +53,7 @@ const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 type RecordType = "A" | "AAAA" | "CNAME" | "TXT";
 
 /** Lowercase, no trailing dot, TXT unquoted. */
-const normalize = (value: string) =>
-  value.replace(/^"|"$/g, "").replace(/\.$/, "").toLowerCase();
+const normalize = (value: string) => value.replace(/^"|"$/g, "").replace(/\.$/, "").toLowerCase();
 
 const sorted = (values: readonly string[]) => [...values].map(normalize).sort();
 
@@ -73,11 +67,7 @@ const resolveCloudflareZoneId = Effect.gen(function* () {
 });
 
 /** Cloudflare records at `(name, type)` (the harness's fresh token may 403 briefly). */
-const cloudflareRecords = (
-  zoneId: string,
-  name: string,
-  type: RecordType | "NS",
-) =>
+const cloudflareRecords = (zoneId: string, name: string, type: RecordType | "NS") =>
   cfdns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
     Stream.filter((r) => normalize(r.name) === name && r.type === type),
     Stream.runCollect,
@@ -111,9 +101,7 @@ const delegate = <Req>(
         zoneId: cfZoneId,
         name,
         type: "NS",
-        content: Output.map(nameServers, (servers) =>
-          normalize(servers[index]!),
-        ),
+        content: Output.map(nameServers, (servers) => normalize(servers[index]!)),
       }),
   );
 
@@ -159,10 +147,7 @@ const queryServer = (server: string, name: string, type: RecordType) =>
               : resolver.resolveTxt(name),
       catch: (error) =>
         new DnsQueryFailed({
-          code:
-            error instanceof Error && "code" in error
-              ? String(error.code)
-              : "UNKNOWN",
+          code: error instanceof Error && "code" in error ? String(error.code) : "UNKNOWN",
           server,
           name,
         }),
@@ -247,18 +232,14 @@ const CF = {
 const cloudflareProgram = (version: 1 | 2) =>
   Effect.gen(function* () {
     const dns = yield* DNS.resolve(Cloudflare.DNS.Adapter({ zone: CF_ZONE }));
-    const proxied = yield* DNS.resolve(
-      Cloudflare.DNS.Adapter({ zone: CF_ZONE, proxied: true }),
-    );
+    const proxied = yield* DNS.resolve(Cloudflare.DNS.Adapter({ zone: CF_ZONE, proxied: true }));
     const target = version === 1 ? TARGET_1 : TARGET_2;
 
     yield* dns.alias("Cname", { name: CF.cname, target: { hostname: target } });
     yield* dns.alias("Addresses", {
       name: CF.addresses,
       target:
-        version === 1
-          ? { ipv4: ["192.0.2.10"], ipv6: ["2001:db8::10"] }
-          : { ipv4: ["192.0.2.11"] },
+        version === 1 ? { ipv4: ["192.0.2.10"], ipv6: ["2001:db8::10"] } : { ipv4: ["192.0.2.11"] },
     });
     yield* proxied.alias("Proxied", {
       name: CF.proxied,
@@ -293,60 +274,32 @@ describe("Cloudflare.DNS adapter", () => {
         const cname = yield* cloudflareRecords(zoneId, CF.cname, "CNAME");
         expect(sorted(cname.map((r) => r.content ?? ""))).toEqual([TARGET_1]);
         expect(cname[0]?.proxied).toBe(false);
-        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual([
-          "192.0.2.10",
-        ]);
-        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual([
-          "2001:db8::10",
-        ]);
-        const proxiedCname = yield* cloudflareRecords(
-          zoneId,
-          CF.proxied,
-          "CNAME",
-        );
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual(["192.0.2.10"]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual(["2001:db8::10"]);
+        const proxiedCname = yield* cloudflareRecords(zoneId, CF.proxied, "CNAME");
         expect(proxiedCname).toHaveLength(1);
         expect(proxiedCname[0]?.proxied).toBe(true);
         for (const name of [CF.setA, CF.setB]) {
-          const [record, ...extra] = yield* cloudflareRecords(
-            zoneId,
-            name,
-            "CNAME",
-          );
+          const [record, ...extra] = yield* cloudflareRecords(zoneId, name, "CNAME");
           expect(extra).toHaveLength(0);
           expect(normalize(record?.content ?? "")).toBe(TARGET_1);
           expect(record?.proxied).toBe(false);
         }
         expect(yield* cloudflareValues(zoneId, CF.txt, "TXT")).toEqual([TXT_1]);
-        const recordCname = yield* cloudflareRecords(
-          zoneId,
-          CF.recordCname,
-          "CNAME",
-        );
-        expect(sorted(recordCname.map((r) => r.content ?? ""))).toEqual([
-          TARGET_1,
-        ]);
+        const recordCname = yield* cloudflareRecords(zoneId, CF.recordCname, "CNAME");
+        expect(sorted(recordCname.map((r) => r.content ?? ""))).toEqual([TARGET_1]);
         expect(recordCname[0]?.proxied).toBe(false);
 
         // Change targets, drop a declared set name, an address and a record.
         yield* stack.deploy(cloudflareProgram(2));
 
-        expect(yield* cloudflareValues(zoneId, CF.cname, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
-        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual([
-          "192.0.2.11",
-        ]);
-        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual(
-          [],
-        );
+        expect(yield* cloudflareValues(zoneId, CF.cname, "CNAME")).toEqual([TARGET_2]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "A")).toEqual(["192.0.2.11"]);
+        expect(yield* cloudflareValues(zoneId, CF.addresses, "AAAA")).toEqual([]);
         expect(yield* cloudflareValues(zoneId, CF.setA, "CNAME")).toEqual([]);
-        expect(yield* cloudflareValues(zoneId, CF.setB, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
+        expect(yield* cloudflareValues(zoneId, CF.setB, "CNAME")).toEqual([TARGET_2]);
         expect(yield* cloudflareValues(zoneId, CF.txt, "TXT")).toEqual([TXT_2]);
-        expect(
-          yield* cloudflareValues(zoneId, CF.recordCname, "CNAME"),
-        ).toEqual([]);
+        expect(yield* cloudflareValues(zoneId, CF.recordCname, "CNAME")).toEqual([]);
 
         yield* stack.destroy();
 
@@ -383,9 +336,7 @@ const route53Program = (cfZoneId: string, version: 1 | 2) =>
     const zone = yield* AWS.Route53.HostedZone("Zone", { name: R53_ZONE });
     yield* delegate(cfZoneId, R53_ZONE, zone.nameServers, 4);
 
-    const dns = yield* DNS.resolve(
-      AWS.Route53.Adapter({ hostedZoneId: zone.id }),
-    );
+    const dns = yield* DNS.resolve(AWS.Route53.Adapter({ hostedZoneId: zone.id }));
     const target = version === 1 ? TARGET_1 : TARGET_2;
 
     // An address target: the Route 53 adapter declares an
@@ -448,9 +399,7 @@ const route53Set = (hostedZoneId: string, name: string, type: RecordType) =>
 
 const route53Values = (hostedZoneId: string, name: string, type: RecordType) =>
   route53Set(hostedZoneId, name, type).pipe(
-    Effect.map((set) =>
-      sorted((set?.ResourceRecords ?? []).map((r) => r.Value)),
-    ),
+    Effect.map((set) => sorted((set?.ResourceRecords ?? []).map((r) => r.Value))),
   );
 
 const waitUntilHostedZoneGone = (hostedZoneId: string) =>
@@ -477,11 +426,7 @@ describe("AWS.Route53 adapter", () => {
 
         // Publicly delegated from the Cloudflare zone.
         expect(
-          sorted(
-            (yield* cloudflareRecords(cfZoneId, R53_ZONE, "NS")).map(
-              (r) => r.content ?? "",
-            ),
-          ),
+          sorted((yield* cloudflareRecords(cfZoneId, R53_ZONE, "NS")).map((r) => r.content ?? "")),
         ).toEqual(sorted(zone.nameServers));
 
         // Route 53 state.
@@ -489,21 +434,12 @@ describe("AWS.Route53 adapter", () => {
         expect(normalize(www?.AliasTarget?.DNSName ?? "")).toBe(R53.origin);
         expect(www?.AliasTarget?.HostedZoneId).toBe(zoneId);
         expect(
-          normalize(
-            (yield* route53Set(zoneId, R53.www, "AAAA"))?.AliasTarget
-              ?.DNSName ?? "",
-          ),
+          normalize((yield* route53Set(zoneId, R53.www, "AAAA"))?.AliasTarget?.DNSName ?? ""),
         ).toBe(R53.origin);
-        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual([
-          "192.0.2.20",
-        ]);
-        expect(yield* route53Values(zoneId, R53.origin, "AAAA")).toEqual([
-          "2001:db8::20",
-        ]);
+        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual(["192.0.2.20"]);
+        expect(yield* route53Values(zoneId, R53.origin, "AAAA")).toEqual(["2001:db8::20"]);
         for (const name of [R53.cname, R53.setA, R53.setB, R53.recordCname]) {
-          expect(yield* route53Values(zoneId, name, "CNAME")).toEqual([
-            TARGET_1,
-          ]);
+          expect(yield* route53Values(zoneId, name, "CNAME")).toEqual([TARGET_1]);
         }
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_1]);
 
@@ -518,20 +454,12 @@ describe("AWS.Route53 adapter", () => {
         // Change targets and addresses, drop a declared set name and a record.
         yield* stack.deploy(route53Program(cfZoneId, 2));
 
-        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual([
-          "192.0.2.21",
-        ]);
-        expect(yield* route53Values(zoneId, R53.cname, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
+        expect(yield* route53Values(zoneId, R53.origin, "A")).toEqual(["192.0.2.21"]);
+        expect(yield* route53Values(zoneId, R53.cname, "CNAME")).toEqual([TARGET_2]);
         expect(yield* route53Values(zoneId, R53.setA, "CNAME")).toEqual([]);
-        expect(yield* route53Values(zoneId, R53.setB, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
+        expect(yield* route53Values(zoneId, R53.setB, "CNAME")).toEqual([TARGET_2]);
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_2]);
-        expect(yield* route53Values(zoneId, R53.recordCname, "CNAME")).toEqual(
-          [],
-        );
+        expect(yield* route53Values(zoneId, R53.recordCname, "CNAME")).toEqual([]);
         // The alias follows its target's new address.
         yield* waitForAuthoritative(servers, R53.www, "A", ["192.0.2.21"]);
         yield* waitForAuthoritative(servers, R53.cname, "CNAME", [TARGET_2]);
@@ -580,9 +508,7 @@ const hetznerProgram = (version: 1 | 2) =>
     yield* dns.alias("Addresses", {
       name: HZ.addresses,
       target:
-        version === 1
-          ? { ipv4: ["192.0.2.30"], ipv6: ["2001:db8::30"] }
-          : { ipv4: ["192.0.2.31"] },
+        version === 1 ? { ipv4: ["192.0.2.30"], ipv6: ["2001:db8::30"] } : { ipv4: ["192.0.2.31"] },
     });
     const set = yield* dns.aliasSet("Set", {
       names: version === 1 ? [HZ.setA] : [],
@@ -635,19 +561,11 @@ describe("Hetzner.DNS adapter", () => {
         const zone = yield* stack.deploy(hetznerProgram(1));
         const zoneId = zone.zoneId;
 
-        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([
-          TARGET_1,
-        ]);
-        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual([
-          "192.0.2.30",
-        ]);
-        expect(yield* hetznerValues(zoneId, HZ.addresses, "AAAA")).toEqual([
-          "2001:db8::30",
-        ]);
+        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([TARGET_1]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual(["192.0.2.30"]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "AAAA")).toEqual(["2001:db8::30"]);
         for (const name of [HZ.setA, HZ.setB, HZ.recordCname]) {
-          expect(yield* hetznerValues(zoneId, name, "CNAME")).toEqual([
-            TARGET_1,
-          ]);
+          expect(yield* hetznerValues(zoneId, name, "CNAME")).toEqual([TARGET_1]);
         }
         expect(yield* hetznerValues(zoneId, HZ.txt, "TXT")).toEqual([TXT_1]);
 
@@ -659,21 +577,13 @@ describe("Hetzner.DNS adapter", () => {
 
         yield* stack.deploy(hetznerProgram(2));
 
-        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
-        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual([
-          "192.0.2.31",
-        ]);
+        expect(yield* hetznerValues(zoneId, HZ.cname, "CNAME")).toEqual([TARGET_2]);
+        expect(yield* hetznerValues(zoneId, HZ.addresses, "A")).toEqual(["192.0.2.31"]);
         expect(yield* hetznerValues(zoneId, HZ.addresses, "AAAA")).toEqual([]);
         expect(yield* hetznerValues(zoneId, HZ.setA, "CNAME")).toEqual([]);
-        expect(yield* hetznerValues(zoneId, HZ.setB, "CNAME")).toEqual([
-          TARGET_2,
-        ]);
+        expect(yield* hetznerValues(zoneId, HZ.setB, "CNAME")).toEqual([TARGET_2]);
         expect(yield* hetznerValues(zoneId, HZ.txt, "TXT")).toEqual([TXT_2]);
-        expect(yield* hetznerValues(zoneId, HZ.recordCname, "CNAME")).toEqual(
-          [],
-        );
+        expect(yield* hetznerValues(zoneId, HZ.recordCname, "CNAME")).toEqual([]);
         yield* waitForAuthoritative(servers, HZ.cname, "CNAME", [TARGET_2]);
         yield* waitForAuthoritative(servers, HZ.addresses, "A", ["192.0.2.31"]);
         yield* waitForAuthoritative(servers, HZ.setA, "CNAME", []);
@@ -698,9 +608,7 @@ describe("Hetzner.DNS adapter", () => {
         const alias = yield* failureOf(
           stack.deploy(
             Effect.gen(function* () {
-              const dns = yield* DNS.resolve(
-                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
-              );
+              const dns = yield* DNS.resolve(Hetzner.DNS.Adapter({ zone: HZ_ZONE }));
               yield* dns.alias("Apex", {
                 name: `${HZ_ZONE.toUpperCase()}.`,
                 target: { hostname: TARGET_1 },
@@ -715,9 +623,7 @@ describe("Hetzner.DNS adapter", () => {
         const aliasSet = yield* failureOf(
           stack.deploy(
             Effect.gen(function* () {
-              const dns = yield* DNS.resolve(
-                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
-              );
+              const dns = yield* DNS.resolve(Hetzner.DNS.Adapter({ zone: HZ_ZONE }));
               yield* dns.aliasSet("Set", {
                 names: [`www.${HZ_ZONE}`, HZ_ZONE],
                 target: { hostname: TARGET_1 },
@@ -766,9 +672,7 @@ describe("DNS.resolve", () => {
         const failure = yield* failureOf(
           stack.deploy(
             Effect.gen(function* () {
-              const dns = yield* DNS.resolve(
-                Hetzner.DNS.Adapter({ zone: HZ_ZONE }),
-              );
+              const dns = yield* DNS.resolve(Hetzner.DNS.Adapter({ zone: HZ_ZONE }));
               yield* dns.records("Records", {
                 records: [{ name: HZ.txt, type: "TXT", value: TXT_1 }],
               });

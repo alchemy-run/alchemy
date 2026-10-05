@@ -1,3 +1,15 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { getDomain, getProject } from "@distilled.cloud/prisma/management";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 /**
  * `domain.dns` on Prisma websites, deployed for real: a StaticSite whose
  * custom hostname is published through `Cloudflare.DNS.Adapter()`. Asserts
@@ -14,18 +26,6 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Prisma from "@/Prisma/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { getDomain, getProject } from "@distilled.cloud/prisma/management";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
 const { test } = Test.make({
@@ -75,8 +75,7 @@ const recordsUnder = (zoneId: string) =>
     Effect.map((chunk) =>
       Array.from(chunk).filter(
         (record) =>
-          trimDot(record.name) === HOSTNAME ||
-          trimDot(record.name).endsWith(`.${HOSTNAME}`),
+          trimDot(record.name) === HOSTNAME || trimDot(record.name).endsWith(`.${HOSTNAME}`),
       ),
     ),
   );
@@ -85,19 +84,13 @@ const byKey = <T extends { name: string; type: string; value: string }>(
   records: ReadonlyArray<T>,
 ) =>
   [...records].sort((a, b) =>
-    `${a.name}|${a.type}|${a.value}`.localeCompare(
-      `${b.name}|${b.type}|${b.value}`,
-    ),
+    `${a.name}|${a.type}|${a.value}`.localeCompare(`${b.name}|${b.type}|${b.value}`),
   );
 
 /** Wait until every authoritative nameserver of the zone answers each CNAME. */
-const waitForAuthoritativeCnames = (
-  records: ReadonlyArray<{ name: string; value: string }>,
-) =>
+const waitForAuthoritativeCnames = (records: ReadonlyArray<{ name: string; value: string }>) =>
   Effect.gen(function* () {
-    const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(
-      Effect.orDie,
-    );
+    const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
     const servers = (yield* Effect.forEach(nameServers, (ns) =>
       Effect.tryPromise(() => resolve4(ns)).pipe(Effect.orDie),
     )).flat();
@@ -109,19 +102,13 @@ const waitForAuthoritativeCnames = (
             r.setServers([server]);
             return r;
           });
-          const answers = yield* Effect.tryPromise(() =>
-            resolver.resolveCname(record.name),
-          ).pipe(Effect.orElseSucceed(() => [] as string[]));
-          if (
-            !answers.some((answer) => trimDot(answer) === trimDot(record.value))
-          ) {
-            return yield* Effect.fail(
-              new CnameNotPublished({ server, name: record.name }),
-            );
+          const answers = yield* Effect.tryPromise(() => resolver.resolveCname(record.name)).pipe(
+            Effect.orElseSucceed(() => [] as string[]),
+          );
+          if (!answers.some((answer) => trimDot(answer) === trimDot(record.value))) {
+            return yield* Effect.fail(new CnameNotPublished({ server, name: record.name }));
           }
-        }).pipe(
-          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-        ),
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
       ),
     );
   });
@@ -149,10 +136,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       );
       expect(site.url).toBe(`https://${HOSTNAME}`);
       const domain = site.domain!;
-      const projectId =
-        typeof site.project === "string"
-          ? site.project
-          : site.project!.projectId;
+      const projectId = typeof site.project === "string" ? site.project : site.project!.projectId;
       expect(domain.hostname).toBe(HOSTNAME);
       expect(domain.appId).toBe(site.compute!.appId);
       // The routing CNAME to the app's regional switchboard, published
@@ -162,9 +146,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
           (record) =>
             record.type === "CNAME" &&
             trimDot(record.name) === HOSTNAME &&
-            /^switchboard\.[a-z0-9-]+\.prisma\.build$/.test(
-              trimDot(record.value),
-            ),
+            /^switchboard\.[a-z0-9-]+\.prisma\.build$/.test(trimDot(record.value)),
         ),
       ).toBe(true);
 
@@ -226,9 +208,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
                 }),
               ),
         ),
-        Effect.tapError((error) =>
-          Effect.logInfo("Prisma domain pending", error),
-        ),
+        Effect.tapError((error) => Effect.logInfo("Prisma domain pending", error)),
         Effect.retry({
           while: (error) => error._tag === "DomainNotActive",
           schedule: Schedule.spaced("10 seconds"),
@@ -240,15 +220,8 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(`https://${HOSTNAME}/`).pipe(
         Effect.flatMap(
-          (
-            res,
-          ): Effect.Effect<
-            string,
-            HttpClientError.HttpClientError | SiteNotServing
-          > =>
-            res.status === 200
-              ? res.text
-              : Effect.fail(new SiteNotServing({ status: res.status })),
+          (res): Effect.Effect<string, HttpClientError.HttpClientError | SiteNotServing> =>
+            res.status === 200 ? res.text : Effect.fail(new SiteNotServing({ status: res.status })),
         ),
         Effect.timeout("10 seconds"),
         Effect.tapError((error) =>

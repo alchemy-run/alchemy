@@ -17,11 +17,7 @@ import * as Effect from "effect/Effect";
 import * as DNS from "../DNS/Adapter.ts";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
-import {
-  Certificate,
-  validationRecordsOf,
-  type CertificateProps,
-} from "./ACM/Certificate.ts";
+import { Certificate, validationRecordsOf, type CertificateProps } from "./ACM/Certificate.ts";
 import { CertificateValidation } from "./ACM/CertificateValidation.ts";
 import type { Providers } from "./Providers.ts";
 import { adapter as route53Adapter, ROUTE53_DNS } from "./Route53/Adapter.ts";

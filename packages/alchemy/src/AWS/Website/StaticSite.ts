@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import { createHash } from "node:crypto";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
 import { toPath } from "../../FQN.ts";
@@ -11,7 +11,6 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { isResource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -24,6 +23,7 @@ import {
   MANAGED_CACHING_OPTIMIZED_POLICY_ID,
 } from "../CloudFront/ManagedPolicies.ts";
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
@@ -279,9 +279,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     if (isLocal && props.dev) {
       const dev = yield* Command.Dev("Dev", {
         command: props.dev.command,
-        cwd:
-          props.dev.cwd ??
-          (typeof props.path === "string" ? props.path : undefined),
+        cwd: props.dev.cwd ?? (typeof props.path === "string" ? props.path : undefined),
         env: props.dev.env,
       });
       const devUrl = Output.map(dev.url, (url) => url ?? props.dev?.url);
@@ -343,13 +341,9 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
   server?: KvSiteServerOptions,
 ) {
   const domain = normalizeWebsiteDomain(props.domain);
-  const routerDomain = domain?.router
-    ? (domain as WebsiteRouterDomainProps)
-    : undefined;
+  const routerDomain = domain?.router ? (domain as WebsiteRouterDomainProps) : undefined;
   const standaloneDomain =
-    domain && !domain.router
-      ? (domain as WebsiteStandaloneDomainProps)
-      : undefined;
+    domain && !domain.router ? (domain as WebsiteStandaloneDomainProps) : undefined;
   const sitePath = (props.path ?? ".") as string;
   const indexPage = props.indexPage ?? "index.html";
   const assetPrefix = normalizePrefix(props.assets?.path);
@@ -358,9 +352,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     .filter(Boolean)
     .map(normalizeRoutePath);
   const invalidationProps =
-    props.invalidation !== undefined
-      ? props.invalidation
-      : { paths: "all" as const, wait: false };
+    props.invalidation !== undefined ? props.invalidation : { paths: "all" as const, wait: false };
 
   if (routerDomain && props.edge) {
     return yield* Effect.die(
@@ -378,22 +370,14 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     );
   }
   if (routerDomain?.aliases?.length && !routerDomain.name) {
-    return yield* Effect.die(
-      `"domain.aliases" requires "domain.name" on a Router-attached site.`,
-    );
+    return yield* Effect.die(`"domain.aliases" requires "domain.name" on a Router-attached site.`);
   }
-  if (
-    routerDomain?.redirects?.length &&
-    (!routerDomain.name || routerDomain.name.includes("*"))
-  ) {
+  if (routerDomain?.redirects?.length && (!routerDomain.name || routerDomain.name.includes("*"))) {
     return yield* Effect.die(
       `"domain.redirects" requires a concrete (non-wildcard) "domain.name" to redirect to.`,
     );
   }
-  if (
-    standaloneDomain?.redirects?.length &&
-    standaloneDomain.name.includes("*")
-  ) {
+  if (standaloneDomain?.redirects?.length && standaloneDomain.name.includes("*")) {
     return yield* Effect.die(
       `"domain.redirects" requires a concrete (non-wildcard) "domain.name" to redirect to.`,
     );
@@ -498,12 +482,10 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
         `RoutesUpdateAlias${index + 1}`,
         alias,
       ]),
-      ...(routerDomain.redirects ?? []).map(
-        (redirect, index): [string, string] => [
-          `RoutesUpdateRedirect${index + 1}`,
-          redirect,
-        ],
-      ),
+      ...(routerDomain.redirects ?? []).map((redirect, index): [string, string] => [
+        `RoutesUpdateRedirect${index + 1}`,
+        redirect,
+      ]),
     ];
     yield* Effect.forEach(
       hostPatterns,
@@ -530,9 +512,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     // both cases the site registers KV host-matching only and the
     // hostname must be covered by the Router's own `domain`.
     const concreteHostnames = [
-      ...(routerDomain.name && !routerDomain.name.includes("*")
-        ? [routerDomain.name]
-        : []),
+      ...(routerDomain.name && !routerDomain.name.includes("*") ? [routerDomain.name] : []),
       ...(routerDomain.aliases ?? []).filter((alias) => !alias.includes("*")),
       ...(routerDomain.redirects ?? []),
     ];
@@ -568,12 +548,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       : [Output.interpolate`${routerRef.url}${routerPathPrefix ?? ""}`];
   } else {
     const domain = standaloneDomain;
-    if (
-      domain &&
-      !domain.cert &&
-      !domain.hostedZoneId &&
-      domain.dns === false
-    ) {
+    if (domain && !domain.cert && !domain.hostedZoneId && domain.dns === false) {
       return yield* Effect.die(
         "StaticSite domain configuration with `dns: false` requires `cert`.",
       );
@@ -585,10 +560,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
             "Certificate",
             {
               domainName: domain.name,
-              subjectAlternativeNames: [
-                ...(domain.aliases ?? []),
-                ...(domain.redirects ?? []),
-              ],
+              subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
               hostedZoneId: domain.hostedZoneId,
               tags: props.tags,
             },
@@ -722,23 +694,13 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       defaultCacheBehavior: {
         targetOriginId: "default",
         viewerProtocolPolicy: "redirect-to-https",
-        allowedMethods: [
-          "DELETE",
-          "GET",
-          "HEAD",
-          "OPTIONS",
-          "PATCH",
-          "POST",
-          "PUT",
-        ],
+        allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         cachedMethods: ["GET", "HEAD"],
         compress: true,
         cachePolicyId: serverCachePolicy
           ? serverCachePolicy.cachePolicyId
           : MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-        originRequestPolicyId: server
-          ? MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID
-          : undefined,
+        originRequestPolicyId: server ? MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID : undefined,
         functionAssociations,
       },
       customErrorResponses,
@@ -892,19 +854,14 @@ const buildKvEntries = (args: {
       for (const file of fileList ?? []) {
         entries[`/${file}`] = "s3";
       }
-      const errorPagePath =
-        "/" + (args.errorPage ?? args.indexPage).replace(/^\//, "");
+      const errorPagePath = "/" + (args.errorPage ?? args.indexPage).replace(/^\//, "");
       const metadata: KvSiteMetadata = {
         base:
           args.routerPathPrefix && args.routerPathPrefix !== "/"
             ? args.routerPathPrefix
             : undefined,
-        custom404:
-          serverHost !== undefined || args.errorPage
-            ? undefined
-            : errorPagePath,
-        errorResponseCode:
-          serverHost === undefined && args.errorPage ? 404 : undefined,
+        custom404: serverHost !== undefined || args.errorPage ? undefined : errorPagePath,
+        errorResponseCode: serverHost === undefined && args.errorPage ? 404 : undefined,
         s3: {
           domain: bucketDomain,
           dir: args.s3Dir,
@@ -926,9 +883,7 @@ const buildKvEntries = (args: {
       Output.asOutput(args.bucketDomain as any),
       Output.asOutput(args.serverHost as any),
       Output.asOutput(args.imageHost as any),
-    ) as Output.Output<
-      [string[] | undefined, string, string | undefined, string | undefined]
-    >,
+    ) as Output.Output<[string[] | undefined, string, string | undefined, string | undefined]>,
   );
 
 interface KvSiteMetadata {
@@ -996,9 +951,7 @@ async function handler(event) {
   return response || event.request;
 }`;
 
-const buildResponseFunctionCode = (
-  userInjection?: string,
-) => `import cf from "cloudfront";
+const buildResponseFunctionCode = (userInjection?: string) => `import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
   return event.response;
@@ -1007,18 +960,12 @@ async function handler(event) {
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
 
-const normalizeUploadPrefix = (
-  assetPrefix: string,
-  routerPathPrefix: string | undefined,
-) => {
-  const parts = [assetPrefix, routerPathPrefix?.replace(/^\//, "")].filter(
-    Boolean,
-  );
+const normalizeUploadPrefix = (assetPrefix: string, routerPathPrefix: string | undefined) => {
+  const parts = [assetPrefix, routerPathPrefix?.replace(/^\//, "")].filter(Boolean);
   return parts.join("/") || "";
 };
 
-const normalizeRoutePath = (value: string) =>
-  `/${value.replace(/^\/+|\/+$/g, "")}`;
+const normalizeRoutePath = (value: string) => `/${value.replace(/^\/+|\/+$/g, "")}`;
 
 /**
  * Convert a host pattern (`docs.example.com`, `*.example.com`) into the

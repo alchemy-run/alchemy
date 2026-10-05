@@ -4,12 +4,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 /** Whether the automation rule is applied to new and updated findings. */
@@ -124,9 +119,7 @@ export interface AutomationRule extends Resource<
  * });
  * ```
  */
-const AutomationRuleResource = Resource<AutomationRule>(
-  "AWS.SecurityHub.AutomationRule",
-);
+const AutomationRuleResource = Resource<AutomationRule>("AWS.SecurityHub.AutomationRule");
 
 export { AutomationRuleResource as AutomationRule };
 
@@ -140,17 +133,11 @@ export const AutomationRuleProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       const getRule = (arn: string) =>
-        securityhub
-          .batchGetAutomationRules({ AutomationRulesArns: [arn] })
-          .pipe(
-            Effect.map((r) => r.Rules?.[0]),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InvalidAccessException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        securityhub.batchGetAutomationRules({ AutomationRulesArns: [arn] }).pipe(
+          Effect.map((r) => r.Rules?.[0]),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
+        );
 
       // `ListAutomationRules` is not modeled as paginated in the Smithy spec
       // (no `.pages` helper) — page manually, bounded (accounts are limited
@@ -213,9 +200,7 @@ export const AutomationRuleProvider = () =>
         }),
         list: () =>
           listRules.pipe(
-            Effect.map((all) =>
-              all.filter((r) => r.RuleArn).map((r) => buildAttrs(r)),
-            ),
+            Effect.map((all) => all.filter((r) => r.RuleArn).map((r) => buildAttrs(r))),
           ),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);

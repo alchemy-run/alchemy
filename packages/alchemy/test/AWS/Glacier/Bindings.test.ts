@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as glacier from "@distilled.cloud/aws/glacier";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import GlacierBindingsFunctionLive, {
-  GlacierBindingsFunction,
-} from "./bindings-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import GlacierBindingsFunctionLive, { GlacierBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -27,15 +25,9 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        glacier.listJobs({
-          accountId: "-",
-          vaultName: "alchemy-nonexistent-glacier-vault-probe",
-        }),
+        glacier.listJobs({ accountId: "-", vaultName: "alchemy-nonexistent-glacier-vault-probe" }),
       );
-      expect([
-        "ResourceNotFoundException",
-        "NoLongerSupportedException",
-      ]).toContain(error._tag);
+      expect(["ResourceNotFoundException", "NoLongerSupportedException"]).toContain(error._tag);
     }),
   { tags: ["provider:aws", "provider:aws:glacier", "live"] },
 );
@@ -72,14 +64,7 @@ const post = (path: string) =>
 
 describe(
   "Glacier Bindings (E2E)",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:glacier",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:glacier", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -102,15 +87,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       }),
@@ -124,23 +104,19 @@ describe(
       { timeout: 300_000 },
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "all 13 capabilities initialize in the runtime",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/bindings")) as any;
-          expect(response.bound).toHaveLength(13);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("all 13 capabilities initialize in the runtime", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/bindings")) as any;
+        expect(response.bound).toHaveLength(13);
+      }),
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "DescribeVault reads the bound vault's stats",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* get("/vault")) as any;
-          expect(typeof response.vaultName).toBe("string");
-          expect(response.numberOfArchives).toBe(0);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("DescribeVault reads the bound vault's stats", () =>
+      Effect.gen(function* () {
+        const response = (yield* get("/vault")) as any;
+        expect(typeof response.vaultName).toBe("string");
+        expect(response.numberOfArchives).toBe(0);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(
@@ -167,15 +143,13 @@ describe(
         }),
     );
 
-    test.provider.skipIf(!RUN_LIVE)(
-      "multipart mutation bindings surface the typed not-found",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* post("/multipart/typed-not-found")) as any;
-          expect(response.upload).toBe(true);
-          expect(response.complete).toBe(true);
-          expect(response.abort).toBe(true);
-        }),
+    test.provider.skipIf(!RUN_LIVE)("multipart mutation bindings surface the typed not-found", () =>
+      Effect.gen(function* () {
+        const response = (yield* post("/multipart/typed-not-found")) as any;
+        expect(response.upload).toBe(true);
+        expect(response.complete).toBe(true);
+        expect(response.abort).toBe(true);
+      }),
     );
 
     test.provider.skipIf(!RUN_LIVE)(
@@ -202,10 +176,9 @@ describe(
           if (response.started) {
             expect(typeof response.jobId).toBe("string");
           } else {
-            expect([
-              "InvalidParameterValueException",
-              "ResourceNotFoundException",
-            ]).toContain(response.error);
+            expect(["InvalidParameterValueException", "ResourceNotFoundException"]).toContain(
+              response.error,
+            );
           }
         }),
     );

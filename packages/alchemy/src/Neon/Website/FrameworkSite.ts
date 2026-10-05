@@ -25,10 +25,7 @@ export interface FrameworkSiteOptions {
   /** Build input hashing. Set false to rebuild every deployment. @default true */
   memo?: MemoOptions | boolean;
   /** Build, development, and runtime values. Public framework prefixes are browser-visible; Redacted does not prevent build tools from embedding a value. */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /** Static-file routing within the Function, not a separate CDN. */
   assets?: WebsiteAssetsProps;
   /** Native framework dev server, including external-server mode. */
@@ -63,9 +60,7 @@ export type WebsiteDomain =
     };
 
 /** The hostname of a {@link WebsiteDomain}. */
-export const websiteDomainName = (
-  domain: WebsiteDomain | undefined,
-): string | undefined =>
+export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
 
 /** Scope references are forwarded to the composed resources without resolution. */
@@ -130,10 +125,7 @@ export const deployWebsite = Effect.fn(function* (
         // Validate the artifact before provisioning an implicit backend.
         region: Output.map(artifact.hash, () => "aws-us-east-2" as const),
       })));
-  const scope =
-    props.branch !== undefined
-      ? { branch: props.branch }
-      : { project: project! };
+  const scope = props.branch !== undefined ? { branch: props.branch } : { project: project! };
   const fn = yield* Function("Function", {
     ...props.function,
     ...scope,
@@ -144,11 +136,7 @@ export const deployWebsite = Effect.fn(function* (
   const domain = domainName
     ? yield* CustomDomain("Domain", { function: fn, hostname: domainName })
     : undefined;
-  if (
-    domain !== undefined &&
-    typeof props.domain === "object" &&
-    props.domain.dns !== undefined
-  ) {
+  if (domain !== undefined && typeof props.domain === "object" && props.domain.dns !== undefined) {
     const dns = yield* DNS.resolve(props.domain.dns);
     // Not "Domain": Route 53 names a CNAME alias by the bare id, which
     // would collide with the CustomDomain above.
@@ -175,16 +163,12 @@ export const makeFrameworkSite = Effect.fn(function* (
   const context = yield* AlchemyContext;
   const remote = yield* ProviderModePolicy;
   if (props.project !== undefined && props.branch !== undefined) {
-    return yield* Effect.die(
-      new Error("Specify branch or project, never both."),
-    );
+    return yield* Effect.die(new Error("Specify branch or project, never both."));
   }
   const handling = props.assets?.notFoundHandling;
   const targetConfig = {
     notFoundHandling:
-      handling === "single-page-application"
-        ? "spa"
-        : (handling ?? config.notFoundHandling),
+      handling === "single-page-application" ? "spa" : (handling ?? config.notFoundHandling),
     htmlHandling: props.assets?.htmlHandling ?? config.htmlHandling,
   };
   const build = yield* Server("Build", {
@@ -207,11 +191,7 @@ export const makeFrameworkSite = Effect.fn(function* (
   }
   const requiredPath = (value: string | undefined) =>
     value === undefined
-      ? Effect.die(
-          new Error(
-            `The ${config.framework} build produced no Neon Fetch output.`,
-          ),
-        )
+      ? Effect.die(new Error(`The ${config.framework} build produced no Neon Fetch output.`))
       : Effect.succeed(value);
   const artifact = yield* WebsiteArtifact("Artifact", {
     root: props.rootDir ?? ".",

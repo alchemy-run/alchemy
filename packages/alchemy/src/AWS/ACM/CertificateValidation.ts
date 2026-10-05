@@ -3,10 +3,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  describeCertificateDetail,
-  waitForCertificateIssued,
-} from "./Certificate.ts";
+import { describeCertificateDetail, waitForCertificateIssued } from "./Certificate.ts";
 
 export interface CertificateValidationProps {
   /**

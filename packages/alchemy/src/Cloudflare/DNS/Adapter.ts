@@ -56,21 +56,15 @@ export interface AdapterOptions {
  * dns: Cloudflare.DNS.Adapter({ zone: "example.com", proxied: true })
  * ```
  */
-export const Adapter = (
-  options: AdapterOptions = {},
-): DnsConfig<typeof CLOUDFLARE_DNS> => {
+export const Adapter = (options: AdapterOptions = {}): DnsConfig<typeof CLOUDFLARE_DNS> => {
   const zone =
-    options.zone === undefined ||
-    typeof options.zone === "string" ||
-    Output.isOutput(options.zone)
+    options.zone === undefined || typeof options.zone === "string" || Output.isOutput(options.zone)
       ? (options.zone as Input<string> | undefined)
       : (options.zone as { zoneId: Input<string> }).zoneId;
   return {
     type: CLOUDFLARE_DNS,
     ...(zone === undefined ? {} : { zone }),
-    ...(options.proxied === undefined
-      ? {}
-      : { options: { proxied: options.proxied } }),
+    ...(options.proxied === undefined ? {} : { options: { proxied: options.proxied } }),
   };
 };
 
@@ -95,11 +89,7 @@ export const adapter = {
         })
       : RecordList(`${id}-Addresses`, {
           zone,
-          records: addressRecords(
-            name,
-            target.ipv4,
-            target.ipv6,
-          ) as DnsRecord[],
+          records: addressRecords(name, target.ipv4, target.ipv6) as DnsRecord[],
         }),
   aliasSet: (id, { zone, options, names, target }) =>
     Records(`${id}-CNAME`, {

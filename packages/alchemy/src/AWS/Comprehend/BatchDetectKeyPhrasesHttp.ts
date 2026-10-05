@@ -1,7 +1,7 @@
 import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Layer from "effect/Layer";
-import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 import { BatchDetectKeyPhrases } from "./BatchDetectKeyPhrases.ts";
+import { makeComprehendHttpBinding } from "./BindingHttp.ts";
 
 export const BatchDetectKeyPhrasesHttp = Layer.effect(
   BatchDetectKeyPhrases,

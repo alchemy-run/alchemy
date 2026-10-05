@@ -62,8 +62,7 @@ export interface PackageVersionStateChangeDetail {
  * A CodeArtifact package version state change EventBridge event delivered to
  * the handler.
  */
-export type PackageVersionStateChangeEvent =
-  EventRecord<PackageVersionStateChangeDetail>;
+export type PackageVersionStateChangeEvent = EventRecord<PackageVersionStateChangeDetail>;
 
 export interface PackageVersionStateChangesProps extends EventRouteProps {
   /**
@@ -129,10 +128,7 @@ export interface PackageVersionStateChangesProps extends EventRouteProps {
  * );
  * ```
  */
-export const consumePackageVersionStateChanges = <
-  StreamReq = never,
-  Req = never,
->(
+export const consumePackageVersionStateChanges = <StreamReq = never, Req = never>(
   props: PackageVersionStateChangesProps,
   process: (
     events: Stream.Stream<PackageVersionStateChangeEvent, never, StreamReq>,
@@ -147,13 +143,9 @@ export const consumePackageVersionStateChanges = <
         ? {
             detail: {
               ...(props.domains ? { domainName: [...props.domains] } : {}),
-              ...(props.repositories
-                ? { repositoryName: [...props.repositories] }
-                : {}),
+              ...(props.repositories ? { repositoryName: [...props.repositories] } : {}),
               ...(props.formats ? { packageFormat: [...props.formats] } : {}),
-              ...(props.states
-                ? { packageVersionState: [...props.states] }
-                : {}),
+              ...(props.states ? { packageVersionState: [...props.states] } : {}),
             },
           }
         : {}),

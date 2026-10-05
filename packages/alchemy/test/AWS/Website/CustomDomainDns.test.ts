@@ -1,3 +1,19 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import { fileURLToPath } from "node:url";
+import * as acm from "@distilled.cloud/aws/acm";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
+import * as zones from "@distilled.cloud/hetzner/zones";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * Custom domains on AWS website composites through each DNS host `domain.dns`
  * can name — live deployments served over HTTPS:
@@ -21,29 +37,9 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Hetzner from "@/Hetzner";
 import * as Test from "@/Test/Alchemy";
-import * as acm from "@distilled.cloud/aws/acm";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
-import * as zones from "@distilled.cloud/hetzner/zones";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    AWS.providers(),
-    Cloudflare.providers(),
-    Hetzner.providers(),
-  ),
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers(), Hetzner.providers()),
 });
 
 // Anchor the fixture to the repo root regardless of the runner's cwd.
@@ -80,22 +76,14 @@ const cloudflareZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-const listCloudflareRecords = (
-  zoneId: string,
-  name: string,
-  type: "CNAME" | "NS",
-) =>
+const listCloudflareRecords = (zoneId: string, name: string, type: "CNAME" | "NS") =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
 
 /** NS records in the Cloudflare zone delegating `name` to `nameServers`. */
-const delegate = (
-  zoneId: string,
-  name: string,
-  nameServers: readonly string[],
-) =>
+const delegate = (zoneId: string, name: string, nameServers: readonly string[]) =>
   Effect.forEach(nameServers, (nameServer, index) =>
     Cloudflare.DNS.Record(`Delegation${index + 1}`, {
       zoneId,
@@ -105,9 +93,7 @@ const delegate = (
     }),
   );
 
-const cloudflareNameServers = Effect.tryPromise(() => resolveNs(ZONE)).pipe(
-  Effect.orDie,
-);
+const cloudflareNameServers = Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
 
 /**
  * Wait until every authoritative nameserver answers `name` acceptably, so
@@ -133,15 +119,13 @@ const waitForAuthoritative = (
             r.setServers([server]);
             return r;
           });
-          const answers = yield* Effect.tryPromise(() =>
-            query(resolver, name),
-          ).pipe(Effect.orElseSucceed(() => [] as string[]));
+          const answers = yield* Effect.tryPromise(() => query(resolver, name)).pipe(
+            Effect.orElseSucceed(() => [] as string[]),
+          );
           if (!accept(answers)) {
             return yield* new NotYet({ what: `${name} @ ${server}` });
           }
-        }).pipe(
-          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-        ),
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
       { discard: true },
     );
   });
@@ -151,8 +135,7 @@ const cnameTo =
   (answers: string[]): boolean =>
     answers.some((answer) => bare(answer) === bare(target));
 
-const queryCname = (resolver: Resolver, name: string) =>
-  resolver.resolveCname(name);
+const queryCname = (resolver: Resolver, name: string) => resolver.resolveCname(name);
 
 const queryA = (resolver: Resolver, name: string) => resolver.resolve4(name);
 
@@ -164,9 +147,7 @@ const expectServesHttps = (hostname: string) =>
       Effect.flatMap((res): Effect.Effect<number, NotYet> =>
         res.status === 200
           ? Effect.succeed(res.status)
-          : Effect.fail(
-              new NotYet({ what: `https://${hostname}/ -> ${res.status}` }),
-            ),
+          : Effect.fail(new NotYet({ what: `https://${hostname}/ -> ${res.status}` })),
       ),
       Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 60 }),
     );
@@ -179,14 +160,11 @@ const viewerCertificateOf = (distributionId: string) =>
     const { DistributionConfig } = yield* cloudfront.getDistributionConfig({
       Id: distributionId,
     });
-    const certificateArn =
-      DistributionConfig?.ViewerCertificate?.ACMCertificateArn;
+    const certificateArn = DistributionConfig?.ViewerCertificate?.ACMCertificateArn;
     expect(certificateArn).toBeDefined();
     const { Certificate } = yield* acm
       .describeCertificate({ CertificateArn: certificateArn! })
-      .pipe(
-        Effect.provideService(Region, Effect.succeed("us-east-1" as const)),
-      );
+      .pipe(Effect.provideService(Region, Effect.succeed("us-east-1" as const)));
     expect(Certificate).toBeDefined();
     return {
       certificate: Certificate!,
@@ -194,11 +172,7 @@ const viewerCertificateOf = (distributionId: string) =>
     };
   });
 
-const expectRecordsGone = (
-  zoneId: string,
-  names: readonly string[],
-  type: "CNAME" | "NS",
-) =>
+const expectRecordsGone = (zoneId: string, names: readonly string[], type: "CNAME" | "NS") =>
   Effect.forEach(names, (name) =>
     listCloudflareRecords(zoneId, name, type).pipe(
       Effect.map((records) => expect(records).toHaveLength(0)),
@@ -247,10 +221,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
               };
             }),
           );
-          expect(site.urls.slice(0, 2)).toEqual([
-            `https://${CF_SITE}`,
-            `https://${CF_SITE_ALIAS}`,
-          ]);
+          expect(site.urls.slice(0, 2)).toEqual([`https://${CF_SITE}`, `https://${CF_SITE_ALIAS}`]);
 
           // Each hostname is a DNS-only CNAME to the distribution.
           for (const name of [CF_SITE, CF_SITE_ALIAS]) {
@@ -261,12 +232,8 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           }
 
           // The certificate was validated through Cloudflare and is issued.
-          const { certificate, aliases } = yield* viewerCertificateOf(
-            site.distributionId,
-          );
-          expect(aliases).toEqual(
-            expect.arrayContaining([CF_SITE, CF_SITE_ALIAS]),
-          );
+          const { certificate, aliases } = yield* viewerCertificateOf(site.distributionId);
+          expect(aliases).toEqual(expect.arrayContaining([CF_SITE, CF_SITE_ALIAS]));
           expect(certificate.Status).toBe("ISSUED");
           expect(certificate.SubjectAlternativeNames).toEqual(
             expect.arrayContaining([CF_SITE, CF_SITE_ALIAS]),
@@ -277,24 +244,13 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           expect(validation.length).toBeGreaterThan(0);
           for (const record of validation) {
             expect(record).toBeDefined();
-            const published = yield* listCloudflareRecords(
-              zoneId,
-              bare(record!.Name),
-              "CNAME",
-            );
-            expect(published.map((r) => bare(r.content!))).toContain(
-              bare(record!.Value),
-            );
+            const published = yield* listCloudflareRecords(zoneId, bare(record!.Name), "CNAME");
+            expect(published.map((r) => bare(r.content!))).toContain(bare(record!.Value));
           }
 
           const nameServers = yield* cloudflareNameServers;
           for (const name of [CF_SITE, CF_SITE_ALIAS]) {
-            yield* waitForAuthoritative(
-              nameServers,
-              name,
-              queryCname,
-              cnameTo(site.domainName),
-            );
+            yield* waitForAuthoritative(nameServers, name, queryCname, cnameTo(site.domainName));
             yield* expectServesHttps(name);
           }
 
@@ -341,16 +297,10 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
             expect(records[0]!.proxied).toBe(false);
           }
 
-          const { certificate, aliases } = yield* viewerCertificateOf(
-            deployed.distributionId,
-          );
-          expect(aliases).toEqual(
-            expect.arrayContaining([ROUTER_HOST, ROUTER_DOCS_HOST]),
-          );
+          const { certificate, aliases } = yield* viewerCertificateOf(deployed.distributionId);
+          expect(aliases).toEqual(expect.arrayContaining([ROUTER_HOST, ROUTER_DOCS_HOST]));
           expect(certificate.Status).toBe("ISSUED");
-          expect(certificate.SubjectAlternativeNames).toContain(
-            ROUTER_DOCS_HOST,
-          );
+          expect(certificate.SubjectAlternativeNames).toContain(ROUTER_DOCS_HOST);
 
           yield* waitForAuthoritative(
             yield* cloudflareNameServers,
@@ -361,11 +311,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           yield* expectServesHttps(ROUTER_DOCS_HOST);
 
           yield* stack.destroy();
-          yield* expectRecordsGone(
-            zoneId,
-            [ROUTER_HOST, ROUTER_DOCS_HOST],
-            "CNAME",
-          );
+          yield* expectRecordsGone(zoneId, [ROUTER_HOST, ROUTER_DOCS_HOST], "CNAME");
         }),
       { timeout: 2_400_000 },
     );
@@ -406,11 +352,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           expect(deployed.url).toBe(`https://${R53_SITE}`);
 
           // Cloudflare delegates the subdomain to Route 53.
-          const delegation = yield* listCloudflareRecords(
-            cfZoneId,
-            R53_ZONE,
-            "NS",
-          );
+          const delegation = yield* listCloudflareRecords(cfZoneId, R53_ZONE, "NS");
           expect(delegation.map((r) => bare(r.content!)).sort()).toEqual(
             nameServers.map(bare).sort(),
           );
@@ -425,13 +367,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           const alias = ResourceRecordSets?.[0];
           expect(alias?.Name).toBe(`${R53_SITE}.`);
           expect(alias?.Type).toBe("A");
-          expect(bare(alias?.AliasTarget?.DNSName ?? "")).toBe(
-            bare(deployed.domainName),
-          );
+          expect(bare(alias?.AliasTarget?.DNSName ?? "")).toBe(bare(deployed.domainName));
 
-          const { certificate } = yield* viewerCertificateOf(
-            deployed.distributionId,
-          );
+          const { certificate } = yield* viewerCertificateOf(deployed.distributionId);
           expect(certificate.Status).toBe("ISSUED");
 
           yield* waitForAuthoritative(
@@ -443,17 +381,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           yield* expectServesHttps(R53_SITE);
 
           yield* stack.destroy();
-          const zoneGone = yield* route53
-            .getHostedZone({ Id: deployed.hostedZoneId })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (gone) => gone,
-                times: 10,
-              }),
-            );
+          const zoneGone = yield* route53.getHostedZone({ Id: deployed.hostedZoneId }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (gone) => gone,
+              times: 10,
+            }),
+          );
           expect(zoneGone).toBe(true);
           yield* expectRecordsGone(cfZoneId, [R53_ZONE], "NS");
         }),
@@ -496,13 +432,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
             rr_name: HZ_SITE.slice(0, -(ZONE.length + 1)),
             rr_type: "CNAME",
           });
-          expect(rrset.records.map((r) => bare(r.value))).toEqual([
-            bare(deployed.domainName),
-          ]);
+          expect(rrset.records.map((r) => bare(r.value))).toEqual([bare(deployed.domainName)]);
 
-          const { certificate } = yield* viewerCertificateOf(
-            deployed.distributionId,
-          );
+          const { certificate } = yield* viewerCertificateOf(deployed.distributionId);
           expect(certificate.Status).toBe("ISSUED");
 
           yield* waitForAuthoritative(
@@ -514,17 +446,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           yield* expectServesHttps(HZ_SITE);
 
           yield* stack.destroy();
-          const zoneGone = yield* zones
-            .getZone({ id_or_name: String(deployed.zoneId) })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("NotFound", () => Effect.succeed(true)),
-              Effect.repeat({
-                schedule: Schedule.spaced("2 seconds"),
-                until: (gone) => gone,
-                times: 10,
-              }),
-            );
+          const zoneGone = yield* zones.getZone({ id_or_name: String(deployed.zoneId) }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (gone) => gone,
+              times: 10,
+            }),
+          );
           expect(zoneGone).toBe(true);
           yield* expectRecordsGone(cfZoneId, [HZ_DELEGATED], "NS");
         }),

@@ -95,24 +95,19 @@ export const isSendEmail = (value: unknown): value is SendEmail =>
   "kind" in value &&
   (value as SendEmail).kind === SendEmailTypeId;
 
-export const SendEmail: (
-  id: string,
-  props?: SendEmailProps,
-) => Effect.Effect<SendEmail> = Effect.fn(function* (
-  id: string,
-  props?: SendEmailProps,
-) {
-  // Capture the `Alchemy.remote()` decoration the same way resources do —
-  // at registration time, from the ambient ProviderModePolicy reference.
-  // `send_email` has no cloud-side resource (and thus no provider mode to
-  // stamp), so the captured flag rides on the descriptor instead.
-  const devRemote = (yield* ProviderModePolicy) === true || undefined;
-  return {
-    kind: SendEmailTypeId,
-    name: id,
-    destinationAddress: props?.destinationAddress,
-    allowedDestinationAddresses: props?.allowedDestinationAddresses,
-    allowedSenderAddresses: props?.allowedSenderAddresses,
-    devRemote,
-  } satisfies SendEmail;
-});
+export const SendEmail: (id: string, props?: SendEmailProps) => Effect.Effect<SendEmail> =
+  Effect.fn(function* (id: string, props?: SendEmailProps) {
+    // Capture the `Alchemy.remote()` decoration the same way resources do —
+    // at registration time, from the ambient ProviderModePolicy reference.
+    // `send_email` has no cloud-side resource (and thus no provider mode to
+    // stamp), so the captured flag rides on the descriptor instead.
+    const devRemote = (yield* ProviderModePolicy) === true || undefined;
+    return {
+      kind: SendEmailTypeId,
+      name: id,
+      destinationAddress: props?.destinationAddress,
+      allowedDestinationAddresses: props?.allowedDestinationAddresses,
+      allowedSenderAddresses: props?.allowedSenderAddresses,
+      devRemote,
+    } satisfies SendEmail;
+  });

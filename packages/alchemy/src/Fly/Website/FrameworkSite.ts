@@ -17,16 +17,10 @@ import {
   type WebsiteNotFoundHandling,
 } from "../../Website/assets.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
-import {
-  Server as FrameworkServer,
-  type ServerDevProps,
-} from "../../Website/Server.ts";
+import { Server as FrameworkServer, type ServerDevProps } from "../../Website/Server.ts";
 import { App } from "../App.ts";
 import { Bucket } from "../Bucket.ts";
-import {
-  Certificate,
-  type CertificateDnsRequirements,
-} from "../Certificate.ts";
+import { Certificate, type CertificateDnsRequirements } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import type { Providers } from "../Providers.ts";
 import { Service, type ServiceProps } from "../Service.ts";
@@ -61,9 +55,7 @@ export type WebsiteDomain =
     };
 
 /** The hostname of a {@link WebsiteDomain}. */
-export const websiteDomainName = (
-  domain: WebsiteDomain | undefined,
-): string | undefined =>
+export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
 
 const acmeChallengeRecords = (
@@ -77,9 +69,7 @@ const acmeChallengeRecords = (
   const expected = `_acme-challenge.${hostname}`;
   const name =
     challenge.name !== undefined &&
-    DNS.normalizeDnsName(challenge.name).endsWith(
-      DNS.normalizeDnsName(hostname),
-    )
+    DNS.normalizeDnsName(challenge.name).endsWith(DNS.normalizeDnsName(hostname))
       ? challenge.name
       : expected;
   return [{ name, type: "CNAME", value: challenge.target }];
@@ -92,9 +82,7 @@ const acmeChallengeRecords = (
  * hostname (`Domain`). No-op for a plain hostname or an object without
  * `dns`.
  */
-export const publishWebsiteDomainDns = Effect.fn(
-  "Fly.Website.publishDomainDns",
-)(function* (args: {
+export const publishWebsiteDomainDns = Effect.fn("Fly.Website.publishDomainDns")(function* (args: {
   readonly domain: WebsiteDomain;
   readonly certificate: Certificate;
   readonly ip: IpAssignment;
@@ -153,10 +141,7 @@ export interface FrameworkSiteProps {
    * bindings — values become Machine env vars. Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Hashed
    * client files are uploaded to Tigris regardless of this bag.
@@ -249,10 +234,7 @@ const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
 
 const envRecord = (
   env:
-    | Record<
-        string,
-        string | Redacted.Redacted<string> | Output.Output<string | undefined>
-      >
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
     | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
@@ -330,16 +312,11 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   );
   const main = Output.map(buildOut, (out) => out.main);
 
-  const extraFiles = Output.mapEffect(
-    (out: { distDir: string; main: string }) =>
-      packSiteExtraFiles(
-        out.distDir,
-        config.skipClientAssets === true ? "next" : "client",
-      ),
+  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+    packSiteExtraFiles(out.distDir, config.skipClientAssets === true ? "next" : "client"),
   )(buildOut);
 
-  const app =
-    props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
+  const app = props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
 
   const ip = yield* IpAssignment("Shared", {
     app,
@@ -383,9 +360,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     statics = Output.mapEffect(([clientDir, bucketName]: [string, string]) =>
       Effect.gen(function* () {
         const assetsDir = path.join(clientDir, "assets");
-        const exists = yield* fs
-          .exists(assetsDir)
-          .pipe(Effect.orElseSucceed(() => false));
+        const exists = yield* fs.exists(assetsDir).pipe(Effect.orElseSucceed(() => false));
         return exists
           ? [
               {
@@ -470,8 +445,5 @@ export const makeFrameworkSite = (
 ) => runFrameworkSite(id, props, config).pipe(Effect.orDie);
 
 /** Push {@link id} then run {@link makeFrameworkSite}. */
-export const frameworkSite = (
-  id: string,
-  props: FrameworkSiteProps,
-  config: FrameworkSiteConfig,
-) => makeFrameworkSite(id, props, config).pipe(Namespace.push(id));
+export const frameworkSite = (id: string, props: FrameworkSiteProps, config: FrameworkSiteConfig) =>
+  makeFrameworkSite(id, props, config).pipe(Namespace.push(id));

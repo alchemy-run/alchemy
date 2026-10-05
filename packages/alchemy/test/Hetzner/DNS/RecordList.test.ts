@@ -1,5 +1,3 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import * as zoneRrsetActions from "@distilled.cloud/hetzner/zone_rrset_actions";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as zones from "@distilled.cloud/hetzner/zones";
@@ -7,13 +5,12 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -26,16 +23,12 @@ const zone = Hetzner.Zone("Zone", { ttl: 3600 });
 
 /** Live values (TXT unquoted, hostnames without a trailing dot), sorted. */
 const liveValues = (zoneId: number, name: string, type: string) =>
-  zoneRrsets
-    .getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
-    .pipe(
-      Effect.map(({ rrset }) =>
-        rrset.records
-          .map((r) => r.value.replace(/^"|"$/g, "").replace(/\.$/, ""))
-          .sort(),
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    );
+  zoneRrsets.getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type }).pipe(
+    Effect.map(({ rrset }) =>
+      rrset.records.map((r) => r.value.replace(/^"|"$/g, "").replace(/\.$/, "")).sort(),
+    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const waitUntilZoneGone = (zoneId: number) =>
   zones.getZone({ id_or_name: String(zoneId) }).pipe(
@@ -85,14 +78,9 @@ test.provider.skipIf(!hasHetznerCreds)(
       );
       expect(created.records).toHaveLength(4);
       expect(created.records.every((r) => r.zoneId === zoneId)).toBe(true);
-      expect(yield* liveValues(zoneId, "cname", "CNAME")).toEqual([
-        "target-1.example.net",
-      ]);
+      expect(yield* liveValues(zoneId, "cname", "CNAME")).toEqual(["target-1.example.net"]);
       expect(yield* liveValues(zoneId, "txt", "TXT")).toEqual([FOREIGN, OURS]);
-      expect(yield* liveValues(zoneId, "a", "A")).toEqual([
-        "203.0.113.10",
-        "203.0.113.11",
-      ]);
+      expect(yield* liveValues(zoneId, "a", "A")).toEqual(["203.0.113.10", "203.0.113.11"]);
 
       // Change the CNAME target, drop an address, add a record (zone
       // pinned by name).
@@ -110,9 +98,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
-      expect(yield* liveValues(zoneId, "cname", "CNAME")).toEqual([
-        "target-2.example.net",
-      ]);
+      expect(yield* liveValues(zoneId, "cname", "CNAME")).toEqual(["target-2.example.net"]);
       expect(yield* liveValues(zoneId, "a", "A")).toEqual(["203.0.113.10"]);
       expect(yield* liveValues(zoneId, "added", "TXT")).toEqual([OURS]);
       expect(yield* liveValues(zoneId, "txt", "TXT")).toEqual([FOREIGN, OURS]);
@@ -128,12 +114,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(yield* waitUntilZoneGone(zoneId)).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:dns",
-      "provider:hetzner:zone",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:dns", "provider:hetzner:zone", "live"],
     timeout: 120_000,
   },
 );

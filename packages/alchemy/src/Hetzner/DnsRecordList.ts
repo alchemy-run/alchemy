@@ -112,9 +112,7 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const retryLocked = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Locked",
@@ -182,10 +180,7 @@ const addValues = (entry: Omit<RecordListEntry, "value">, values: string[]) =>
     yield* waitForZoneAction(action.id);
   });
 
-const removeValues = (
-  entry: Omit<RecordListEntry, "value">,
-  values: string[],
-) =>
+const removeValues = (entry: Omit<RecordListEntry, "value">, values: string[]) =>
   Effect.gen(function* () {
     const live = new Set(yield* getRrsetValues(entry));
     const present = values.filter((value) => live.has(value));
@@ -220,9 +215,7 @@ const syncRrset = (desired: RecordListEntry[], previous: RecordListEntry[]) =>
     const sample = desired[0] ?? previous[0];
     const live = yield* getRrsetValues(sample);
     const wanted = [...new Set(desired.map((entry) => entry.value))];
-    const stale = previous
-      .map((entry) => entry.value)
-      .filter((value) => !wanted.includes(value));
+    const stale = previous.map((entry) => entry.value).filter((value) => !wanted.includes(value));
     const replaced =
       sample.type === "CNAME" && wanted.length > 0
         ? live.filter((value) => !wanted.includes(value))
@@ -250,19 +243,17 @@ export const RecordListProvider = () =>
     reconcile: Effect.fn(function* ({ news, output, session, bindings }) {
       const zones = new Map<string, { id: number; name: string }>();
       const desiredByKey = new Map<string, RecordListEntry>();
-      const bound = (
-        bindings as ReadonlyArray<ResourceBinding<RecordListBinding>>
-      ).flatMap((binding) => binding.data?.names ?? []);
+      const bound = (bindings as ReadonlyArray<ResourceBinding<RecordListBinding>>).flatMap(
+        (binding) => binding.data?.names ?? [],
+      );
       const aliases =
         news.target === undefined
           ? []
-          : [...new Set([...(news.names ?? []), ...bound])].map(
-              (name): DnsRecord => ({
-                name,
-                type: "CNAME",
-                value: news.target!,
-              }),
-            );
+          : [...new Set([...(news.names ?? []), ...bound])].map((name): DnsRecord => ({
+              name,
+              type: "CNAME",
+              value: news.target!,
+            }));
       for (const record of [...(news.records ?? []), ...aliases]) {
         const hostname = normalizeName(record.name);
         let zone = zones.get(hostname);
@@ -285,11 +276,7 @@ export const RecordListProvider = () =>
       // a zone action that takes seconds to apply).
       yield* Effect.forEach(
         new Set([...desiredGroups.keys(), ...previousGroups.keys()]),
-        (key) =>
-          syncRrset(
-            desiredGroups.get(key) ?? [],
-            previousGroups.get(key) ?? [],
-          ),
+        (key) => syncRrset(desiredGroups.get(key) ?? [], previousGroups.get(key) ?? []),
         { concurrency: RRSET_CONCURRENCY, discard: true },
       );
       yield* session.note(`${desired.length} record(s)`);

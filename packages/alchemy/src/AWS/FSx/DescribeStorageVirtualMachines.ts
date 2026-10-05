@@ -39,7 +39,6 @@ export interface DescribeStorageVirtualMachines extends Binding.Service<
     >
   >
 > {}
-export const DescribeStorageVirtualMachines =
-  Binding.Service<DescribeStorageVirtualMachines>(
-    "AWS.FSx.DescribeStorageVirtualMachines",
-  );
+export const DescribeStorageVirtualMachines = Binding.Service<DescribeStorageVirtualMachines>(
+  "AWS.FSx.DescribeStorageVirtualMachines",
+);

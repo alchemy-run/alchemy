@@ -50,9 +50,7 @@ export interface AdapterOptions {
  * });
  * ```
  */
-export const Adapter = (
-  options: AdapterOptions = {},
-): DnsConfig<typeof ROUTE53_DNS> => ({
+export const Adapter = (options: AdapterOptions = {}): DnsConfig<typeof ROUTE53_DNS> => ({
   type: ROUTE53_DNS,
   ...(options.hostedZoneId === undefined ? {} : { zone: options.hostedZoneId }),
 });
@@ -83,11 +81,7 @@ export const adapter = {
     !isHostnameTarget(target)
       ? RecordList(`${id}-Addresses`, {
           hostedZoneId,
-          records: addressRecords(
-            name,
-            target.ipv4,
-            target.ipv6,
-          ) as DnsRecord[],
+          records: addressRecords(name, target.ipv4, target.ipv6) as DnsRecord[],
         })
       : target.route53Alias === undefined
         ? Record(id, {
@@ -97,15 +91,13 @@ export const adapter = {
             ttl: CNAME_TTL,
             records: [target.hostname as string],
           })
-        : Effect.forEach(
-            ipv6 ? (["A", "AAAA"] as const) : (["A"] as const),
-            (type) =>
-              Record(ipv6 ? `${id}-${type}` : id, {
-                hostedZoneId,
-                name,
-                type,
-                aliasTarget: aliasTargetOf(target),
-              }),
+        : Effect.forEach(ipv6 ? (["A", "AAAA"] as const) : (["A"] as const), (type) =>
+            Record(ipv6 ? `${id}-${type}` : id, {
+              hostedZoneId,
+              name,
+              type,
+              aliasTarget: aliasTargetOf(target),
+            }),
           ),
   aliasSet: (id, { zone: hostedZoneId, names, target }) =>
     Records(id, {

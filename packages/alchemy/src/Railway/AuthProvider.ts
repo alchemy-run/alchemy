@@ -1,11 +1,10 @@
-import * as railway from "@distilled.cloud/railway";
-import { DEFAULT_API_BASE_URL } from "@distilled.cloud/railway";
+import * as Os from "node:os";
+import { DEFAULT_API_BASE_URL, type GqlTransport } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import * as Os from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
@@ -21,13 +20,11 @@ import {
   getEnvRedactedRequired,
   mapPromptCancellation,
 } from "../Auth/Env.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
+import { storedSecret, storedValueText, validateFieldValues } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
 import {
+  cancelLoginSession,
+  createLoginSession,
   loginSessionUrl,
   pollLoginSessionToken,
   provideAnonymousRailway,
@@ -61,28 +58,24 @@ export type RailwayResolvedCredentials = {
   source: { type: RailwayAuthConfig["method"]; details?: string };
 };
 
-const options: Array<{
-  value: RailwayAuthConfig["method"];
-  label: string;
-  description?: string;
-}> = [
-  {
-    value: "oauth",
-    label: "OAuth (CLI login session)",
-    description:
-      "recommended — open railway.com/cli-login, confirm the pairing code",
-  },
-  {
-    value: "env",
-    label: "Environment Variables",
-    description: `${RAILWAY_API_TOKEN_ENV} + optional ${RAILWAY_API_URL_ENV}`,
-  },
-  {
-    value: "stored",
-    label: "API Token",
-    description: "enter interactively and store inline in the provider file",
-  },
-];
+const options: Array<{ value: RailwayAuthConfig["method"]; label: string; description?: string }> =
+  [
+    {
+      value: "oauth",
+      label: "OAuth (CLI login session)",
+      description: "recommended — open railway.com/cli-login, confirm the pairing code",
+    },
+    {
+      value: "env",
+      label: "Environment Variables",
+      description: `${RAILWAY_API_TOKEN_ENV} + optional ${RAILWAY_API_URL_ENV}`,
+    },
+    {
+      value: "stored",
+      label: "API Token",
+      description: "enter interactively and store inline in the provider file",
+    },
+  ];
 
 const normalizeApiBaseUrl = (explicit?: string) => {
   const trimmed = (explicit ?? "").trim().replace(/\/+$/, "");
@@ -108,10 +101,7 @@ const resolveApiBaseUrl = (explicit?: string) =>
  *   Does not require a pre-existing token. An optional `RAILWAY_API_URL`
  *   overrides the backboard host (default `https://backboard.railway.com`).
  */
-export const RailwayAuth = AuthProviderLayer<
-  RailwayAuthConfig,
-  RailwayResolvedCredentials
->()(
+export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedCredentials>()(
   RAILWAY_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const interaction = Interaction.accessors;
@@ -133,9 +123,7 @@ export const RailwayAuth = AuthProviderLayer<
         .pipe(mapPromptCancellation);
       const trimmed = (urlPrompt ?? "").trim();
       const apiBaseUrl =
-        trimmed.length > 0 && trimmed !== DEFAULT_API_BASE_URL
-          ? trimmed
-          : undefined;
+        trimmed.length > 0 && trimmed !== DEFAULT_API_BASE_URL ? trimmed : undefined;
 
       yield* interaction.output.success("Railway: credentials saved.");
       return { method: "stored" as const, token, apiBaseUrl };
@@ -151,17 +139,12 @@ export const RailwayAuth = AuthProviderLayer<
         }
       });
 
-      const withAnonymous = <A, E>(
-        effect: Effect.Effect<A, E, railway.GraphQLRequirements>,
-      ) => provideAnonymousRailway(effect, apiBaseUrl);
+      const withAnonymous = <A, E>(effect: Effect.Effect<A, E, GqlTransport>) =>
+        provideAnonymousRailway(effect, apiBaseUrl);
 
-      const code = yield* withAnonymous(railway.createLoginSession({})).pipe(
+      const code = yield* withAnonymous(createLoginSession()).pipe(
         Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: "Railway login session create failed",
-              cause: e,
-            }),
+          (e) => new AuthError({ message: "Railway login session create failed", cause: e }),
         ),
       );
 
@@ -178,9 +161,7 @@ export const RailwayAuth = AuthProviderLayer<
         Effect.catch(() => Effect.succeed(true)),
       );
 
-      const cancel = withAnonymous(railway.cancelLoginSession({ code })).pipe(
-        Effect.catch(() => Effect.void),
-      );
+      const cancel = withAnonymous(cancelLoginSession(code)).pipe(Effect.catch(() => Effect.void));
 
       // The token only ever arrives through the poll; the awaitExternal
       // prompt renders the pairing URL + code and re-opens the browser on
@@ -190,8 +171,7 @@ export const RailwayAuth = AuthProviderLayer<
           interaction.prompt
             .awaitExternal({
               message: "Railway authorization",
-              waitingLabel:
-                "waiting for browser authorization (up to 5 minutes)…",
+              waitingLabel: "waiting for browser authorization (up to 5 minutes)…",
               url,
               code,
               openFailed,
@@ -205,10 +185,7 @@ export const RailwayAuth = AuthProviderLayer<
         Effect.mapError((e) =>
           e instanceof AuthError
             ? e
-            : new AuthError({
-                message: "Railway login session poll failed",
-                cause: e,
-              }),
+            : new AuthError({ message: "Railway login session poll failed", cause: e }),
         ),
       );
 
@@ -223,46 +200,36 @@ export const RailwayAuth = AuthProviderLayer<
       return {
         method: "oauth" as const,
         token,
-        apiBaseUrl:
-          apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
+        apiBaseUrl: apiBaseUrl === DEFAULT_API_BASE_URL ? undefined : apiBaseUrl,
       };
     });
 
     const configureInteractive = (profileName: string) =>
-      interaction.prompt
-        .select({
-          message: "Railway authentication method",
-          options,
-        })
-        .pipe(
-          Effect.flatMap((method) =>
-            Match.value(method).pipe(
-              Match.when("env", () =>
-                Effect.gen(function* () {
-                  const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
-                  if (!token) {
-                    yield* interaction.output.warning(
-                      `Railway: ${RAILWAY_API_TOKEN_ENV} is not currently set — export it before deploying.`,
-                    );
-                  }
-                  return { method: "env" as const };
-                }),
-              ),
-              Match.when("stored", () => loginStored(profileName)),
-              Match.when("oauth", () => loginOAuth(profileName)),
-              Match.exhaustive,
+      interaction.prompt.select({ message: "Railway authentication method", options }).pipe(
+        Effect.flatMap((method) =>
+          Match.value(method).pipe(
+            Match.when("env", () =>
+              Effect.gen(function* () {
+                const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
+                if (!token) {
+                  yield* interaction.output.warning(
+                    `Railway: ${RAILWAY_API_TOKEN_ENV} is not currently set — export it before deploying.`,
+                  );
+                }
+                return { method: "env" as const };
+              }),
             ),
+            Match.when("stored", () => loginStored(profileName)),
+            Match.when("oauth", () => loginOAuth(profileName)),
+            Match.exhaustive,
           ),
-        );
+        ),
+      );
 
     const configureCredentials = (profileName: string) =>
       configureInteractive(profileName).pipe(
         Effect.mapError(
-          (e) =>
-            new AuthError({
-              message: "failed to configure credentials",
-              cause: e,
-            }),
+          (e) => new AuthError({ message: "failed to configure credentials", cause: e }),
         ),
       );
 
@@ -288,27 +255,16 @@ export const RailwayAuth = AuthProviderLayer<
 
     const configureWith = (
       _profileName: string,
-      input: {
-        readonly method: string;
-        readonly values: Record<string, string>;
-      },
+      input: { readonly method: string; readonly values: Record<string, string> },
     ): Effect.Effect<RailwayAuthConfig, AuthError, Interaction.Interaction> =>
       input.method === "stored"
-        ? validateFieldValues(
-            RAILWAY_AUTH_PROVIDER_NAME,
-            tokenFields,
-            input.values,
-          ).pipe(
+        ? validateFieldValues(RAILWAY_AUTH_PROVIDER_NAME, tokenFields, input.values).pipe(
             Effect.map((values) => ({
               method: "stored" as const,
-              token: Redacted.value(
-                storedSecret(values.token) ?? Redacted.make(""),
-              ),
+              token: Redacted.value(storedSecret(values.token) ?? Redacted.make("")),
               apiBaseUrl: storedValueText(values.apiBaseUrl),
             })),
-            Effect.tap(() =>
-              interaction.output.success("Railway: credentials saved."),
-            ),
+            Effect.tap(() => interaction.output.success("Railway: credentials saved.")),
           )
         : input.method === "env"
           ? Effect.succeed({ method: "env" as const })
@@ -353,10 +309,7 @@ export const RailwayAuth = AuthProviderLayer<
                 token,
                 tokenKind: "account" as const,
                 apiBaseUrl,
-                source: {
-                  type: "env" as const,
-                  details: RAILWAY_API_TOKEN_ENV,
-                },
+                source: { type: "env" as const, details: RAILWAY_API_TOKEN_ENV },
               } satisfies RailwayResolvedCredentials;
             }),
           ),
@@ -402,9 +355,7 @@ export const RailwayAuth = AuthProviderLayer<
         )
         .pipe(
           Effect.mapError((e) =>
-            e instanceof AuthError
-              ? e
-              : new AuthError({ message: "login failed", cause: e }),
+            e instanceof AuthError ? e : new AuthError({ message: "login failed", cause: e }),
           ),
         );
 

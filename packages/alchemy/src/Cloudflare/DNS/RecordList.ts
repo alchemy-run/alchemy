@@ -1,7 +1,6 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import type { DnsRecord, DnsRecordType } from "../../DNS/Adapter.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -102,19 +101,15 @@ const normalizeName = (name: string) => name.replace(/\.$/, "").toLowerCase();
 const unquote = (content: string | null | undefined): string =>
   (content ?? "").replace(/^"|"$/g, "");
 
-const normalizeValue = (
-  type: DnsRecordType,
-  value: string | null | undefined,
-) => (type === "TXT" ? unquote(value) : normalizeName(value ?? ""));
+const normalizeValue = (type: DnsRecordType, value: string | null | undefined) =>
+  type === "TXT" ? unquote(value) : normalizeName(value ?? "");
 
 const keyOf = (entry: { name: string; type: string; value: string }) =>
   `${entry.name}|${entry.type}|${entry.value}`;
 
 const listAt = (zoneId: string, name: string, type: DnsRecordType) =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
-    Stream.filter(
-      (record) => normalizeName(record.name) === name && record.type === type,
-    ),
+    Stream.filter((record) => normalizeName(record.name) === name && record.type === type),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
@@ -122,12 +117,7 @@ const listAt = (zoneId: string, name: string, type: DnsRecordType) =>
 /**
  * Converge one `(zone, name, type)` group of desired records.
  */
-const syncGroup = (
-  zoneId: string,
-  name: string,
-  type: DnsRecordType,
-  desired: RecordListEntry[],
-) =>
+const syncGroup = (zoneId: string, name: string, type: DnsRecordType, desired: RecordListEntry[]) =>
   Effect.gen(function* () {
     const live = yield* listAt(zoneId, name, type);
     const liveByValue = new Map(
@@ -160,10 +150,7 @@ const syncGroup = (
             })
             .pipe(Effect.catchTag("DnsRecordAlreadyExists", () => Effect.void));
         }
-      } else if (
-        existing.ttl !== entry.ttl ||
-        (type !== "TXT" && (existing.proxied ?? false))
-      ) {
+      } else if (existing.ttl !== entry.ttl || (type !== "TXT" && (existing.proxied ?? false))) {
         yield* dns.updateRecord({
           zoneId,
           dnsRecordId: existing.id,
@@ -179,9 +166,7 @@ const syncGroup = (
     if (type === "A" || type === "AAAA") {
       const wanted = new Set(desired.map((entry) => entry.value));
       yield* Effect.forEach(
-        live.filter(
-          (record) => !wanted.has(normalizeValue(type, record.content)),
-        ),
+        live.filter((record) => !wanted.has(normalizeValue(type, record.content))),
         (record) => dns.deleteRecord({ zoneId, dnsRecordId: record.id }),
         { discard: true },
       );
@@ -196,10 +181,7 @@ const removeEntries = (entries: RecordListEntry[]) =>
       listAt(entry.zoneId, entry.name, entry.type).pipe(
         Effect.flatMap((live) =>
           Effect.forEach(
-            live.filter(
-              (record) =>
-                normalizeValue(entry.type, record.content) === entry.value,
-            ),
+            live.filter((record) => normalizeValue(entry.type, record.content) === entry.value),
             (record) =>
               dns
                 .deleteRecord({ zoneId: entry.zoneId, dnsRecordId: record.id })
@@ -220,10 +202,7 @@ export const RecordListProvider = () =>
       const present = yield* Effect.forEach(output.records, (entry) =>
         listAt(entry.zoneId, entry.name, entry.type).pipe(
           Effect.map((live) =>
-            live.some(
-              (record) =>
-                normalizeValue(entry.type, record.content) === entry.value,
-            )
+            live.some((record) => normalizeValue(entry.type, record.content) === entry.value)
               ? [entry]
               : [],
           ),
@@ -282,9 +261,7 @@ export const RecordListProvider = () =>
 
       // Garbage-collect records this list published before but no longer
       // lists. A CNAME whose name is still listed was overwritten in place.
-      const desiredKeys = new Set(
-        desired.map((entry) => `${entry.zoneId}|${keyOf(entry)}`),
-      );
+      const desiredKeys = new Set(desired.map((entry) => `${entry.zoneId}|${keyOf(entry)}`));
       const stillListedCname = new Set(
         desired
           .filter((entry) => entry.type === "CNAME")
@@ -293,16 +270,12 @@ export const RecordListProvider = () =>
       const stale = (output?.records ?? []).filter(
         (entry) =>
           !desiredKeys.has(`${entry.zoneId}|${keyOf(entry)}`) &&
-          !(
-            entry.type === "CNAME" &&
-            stillListedCname.has(`${entry.zoneId}|${entry.name}`)
-          ),
+          !(entry.type === "CNAME" && stillListedCname.has(`${entry.zoneId}|${entry.name}`)),
       );
       yield* removeEntries(stale);
 
       yield* session.note(
-        `${desired.length} record(s)` +
-          (stale.length > 0 ? ` (-${stale.length})` : ""),
+        `${desired.length} record(s)` + (stale.length > 0 ? ` (-${stale.length})` : ""),
       );
       return { records: desired };
     }),

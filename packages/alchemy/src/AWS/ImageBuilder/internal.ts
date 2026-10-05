@@ -56,30 +56,22 @@ export const retryWhileDependedOn = <A, E extends { _tag: string }, R>(
  * an Alchemy-owned recipe or pipeline. Callers derive the name from their
  * owned resource output; this helper never scans or deletes by broad prefix.
  */
-export const deleteImageBuilderLogGroup = Effect.fn(function* (
-  logGroupName: string,
-) {
+export const deleteImageBuilderLogGroup = Effect.fn(function* (logGroupName: string) {
   yield* logs.deleteLogGroup({ logGroupName }).pipe(
     Effect.retry({
       while: (error) =>
-        error._tag === "OperationAbortedException" ||
-        error._tag === "ServiceUnavailableException",
-      schedule: Schedule.max([
-        Schedule.fixed("500 millis"),
-        Schedule.recurs(10),
-      ]),
+        error._tag === "OperationAbortedException" || error._tag === "ServiceUnavailableException",
+      schedule: Schedule.max([Schedule.fixed("500 millis"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
 
   for (let attempt = 0; attempt < 20; attempt++) {
-    const present = yield* logs.describeLogGroups
-      .items({ logGroupNamePrefix: logGroupName })
-      .pipe(
-        Stream.filter((group) => group.logGroupName === logGroupName),
-        Stream.runHead,
-        Effect.map(Option.isSome),
-      );
+    const present = yield* logs.describeLogGroups.items({ logGroupNamePrefix: logGroupName }).pipe(
+      Stream.filter((group) => group.logGroupName === logGroupName),
+      Stream.runHead,
+      Effect.map(Option.isSome),
+    );
     if (!present) return;
     yield* Effect.sleep("500 millis");
   }
@@ -142,10 +134,7 @@ export const syncImageBuilderTags = Effect.fn(function* (
  * @param resourceType e.g. `image-recipe`, `infrastructure-configuration`
  * @param resourcePath the name (plus `/{version}` segments where relevant)
  */
-export const imageBuilderArn = Effect.fn(function* (
-  resourceType: string,
-  resourcePath: string,
-) {
+export const imageBuilderArn = Effect.fn(function* (resourceType: string, resourcePath: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   return `arn:aws:imagebuilder:${region}:${accountId}:${resourceType}/${resourcePath.toLowerCase()}`;
 });

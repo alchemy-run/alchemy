@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { HostedZone, RecordList } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { HostedZone, RecordList } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,11 +22,7 @@ const FOREIGN = "alchemy-recordlist=foreign";
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
 /** Live values (TXT unquoted) of the simple record set `(name, type)`, sorted. */
-const liveValues = (
-  zoneId: string,
-  name: string,
-  type: "A" | "CNAME" | "TXT",
-) =>
+const liveValues = (zoneId: string, name: string, type: "A" | "CNAME" | "TXT") =>
   route53
     .listResourceRecordSets({
       HostedZoneId: normalizeId(zoneId),
@@ -103,17 +99,9 @@ test.provider(
         }),
       );
       expect(created.records).toHaveLength(4);
-      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([
-        "target-1.example.net",
-      ]);
-      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([
-        FOREIGN,
-        OURS,
-      ]);
-      expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual([
-        "203.0.113.10",
-        "203.0.113.11",
-      ]);
+      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual(["target-1.example.net"]);
+      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([FOREIGN, OURS]);
+      expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual(["203.0.113.10", "203.0.113.11"]);
 
       // Change the CNAME target, drop an address, add a record.
       yield* stack.deploy(
@@ -134,15 +122,10 @@ test.provider(
           });
         }),
       );
-      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([
-        "target-2.example.net",
-      ]);
+      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual(["target-2.example.net"]);
       expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual(["203.0.113.10"]);
       expect(yield* liveValues(zoneId, ADDED_NAME, "TXT")).toEqual([OURS]);
-      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([
-        FOREIGN,
-        OURS,
-      ]);
+      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([FOREIGN, OURS]);
 
       // Remove the list (the zone stays): only its own values go.
       yield* stack.deploy(zone);

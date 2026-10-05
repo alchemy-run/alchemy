@@ -16,10 +16,7 @@ import {
   type WebsiteNotFoundHandling,
 } from "../../Website/assets.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
-import {
-  Server as FrameworkServer,
-  type ServerDevProps,
-} from "../../Website/Server.ts";
+import { Server as FrameworkServer, type ServerDevProps } from "../../Website/Server.ts";
 import type { Providers } from "../Providers.ts";
 import { RecordSet } from "../RecordSet.ts";
 import { Server } from "../Server.ts";
@@ -62,15 +59,11 @@ export type WebsiteDomain =
     };
 
 /** The hostname of a {@link WebsiteDomain}. */
-export const websiteDomainName = (
-  domain: WebsiteDomain | undefined,
-): string | undefined =>
+export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
 
 /** The DNS adapter config of a {@link WebsiteDomain}, when it names one. */
-const websiteDomainDns = (
-  domain: WebsiteDomain | undefined,
-): DNS.DnsConfig | undefined =>
+const websiteDomainDns = (domain: WebsiteDomain | undefined): DNS.DnsConfig | undefined =>
   typeof domain === "object" ? domain.dns : undefined;
 
 /**
@@ -98,38 +91,36 @@ export const requireWebsiteDomainZone = (
  * {@link RecordSet} named `Domain` in `zone` (unchanged from before DNS
  * adapters existed).
  */
-export const publishWebsiteDomain = Effect.fn("Hetzner.Website.publishDomain")(
-  function* (props: {
-    readonly domain?: WebsiteDomain | undefined;
-    readonly zone?: Ref<Zone> | undefined;
-    readonly server: Server;
-    readonly tags?: Record<string, string> | undefined;
-  }) {
-    const name = websiteDomainName(props.domain);
-    if (name === undefined) return;
-    const dnsConfig = websiteDomainDns(props.domain);
-    if (dnsConfig !== undefined) {
-      const dns = yield* DNS.resolve(dnsConfig);
-      yield* dns.alias("Domain", {
-        name,
-        target: {
-          ipv4: Output.map(props.server.ipv4, (ip) =>
-            ip === undefined ? [] : [ip],
-          ) as unknown as Input<string[]>,
-        },
-      });
-      return;
-    }
-    if (props.zone !== undefined) {
-      yield* bindWebsiteDomain({
-        domain: name,
-        zone: props.zone,
-        server: props.server,
-        tags: props.tags,
-      });
-    }
-  },
-);
+export const publishWebsiteDomain = Effect.fn("Hetzner.Website.publishDomain")(function* (props: {
+  readonly domain?: WebsiteDomain | undefined;
+  readonly zone?: Ref<Zone> | undefined;
+  readonly server: Server;
+  readonly tags?: Record<string, string> | undefined;
+}) {
+  const name = websiteDomainName(props.domain);
+  if (name === undefined) return;
+  const dnsConfig = websiteDomainDns(props.domain);
+  if (dnsConfig !== undefined) {
+    const dns = yield* DNS.resolve(dnsConfig);
+    yield* dns.alias("Domain", {
+      name,
+      target: {
+        ipv4: Output.map(props.server.ipv4, (ip) =>
+          ip === undefined ? [] : [ip],
+        ) as unknown as Input<string[]>,
+      },
+    });
+    return;
+  }
+  if (props.zone !== undefined) {
+    yield* bindWebsiteDomain({
+      domain: name,
+      zone: props.zone,
+      server: props.server,
+      tags: props.tags,
+    });
+  }
+});
 
 /**
  * Props shared by every Hetzner framework website composite.
@@ -155,10 +146,7 @@ export interface FrameworkSiteProps {
    * dev server). Not Cloudflare Worker bindings. Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`).
    */
@@ -246,9 +234,7 @@ export interface Website {
   readonly service: Service | undefined;
 }
 
-export class FrameworkSiteError extends Data.TaggedError(
-  "Hetzner.Website.FrameworkSiteError",
-)<{
+export class FrameworkSiteError extends Data.TaggedError("Hetzner.Website.FrameworkSiteError")<{
   readonly framework: string;
   readonly message: string;
   readonly cause?: unknown;
@@ -256,10 +242,7 @@ export class FrameworkSiteError extends Data.TaggedError(
 
 export const unwrapEnv = (
   env:
-    | Record<
-        string,
-        string | Redacted.Redacted<string> | Output.Output<string | undefined>
-      >
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
     | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
@@ -298,9 +281,7 @@ export const bindWebsiteDomain = Effect.fn(function* (props: {
     if (apex === undefined || domain === apex) return "@";
     const suffix = `.${apex}`;
     if (domain.endsWith(suffix)) return domain.slice(0, -suffix.length);
-    throw new Error(
-      `Hetzner.Website domain "${domain}" is not inside zone "${apex}"`,
-    );
+    throw new Error(`Hetzner.Website domain "${domain}" is not inside zone "${apex}"`);
   })(zone.name as never);
   yield* RecordSet("Domain", {
     zone,
@@ -315,10 +296,7 @@ export const websiteUrl = (args: {
   readonly domain?: string | undefined;
   readonly service: Service;
   readonly port: number;
-}) =>
-  args.domain !== undefined
-    ? `http://${args.domain}:${String(args.port)}`
-    : args.service.url;
+}) => (args.domain !== undefined ? `http://${args.domain}:${String(args.port)}` : args.service.url);
 
 /**
  * Shared implementation behind the Hetzner framework website composites:
@@ -407,19 +385,15 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     PORT: String(port),
   };
 
-  const extraFiles = Output.mapEffect(
-    (out: { distDir: string; main: string }) =>
-      packSiteExtraFiles(
-        out.distDir,
-        config.skipClientAssets === true ? "next" : "client",
-      ).pipe(
-        Effect.map((files) =>
-          files?.map((file) => ({
-            source: file.source,
-            destination: file.dest,
-          })),
-        ),
+  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+    packSiteExtraFiles(out.distDir, config.skipClientAssets === true ? "next" : "client").pipe(
+      Effect.map((files) =>
+        files?.map((file) => ({
+          source: file.source,
+          destination: file.dest,
+        })),
       ),
+    ),
   )(buildOut);
 
   const service = yield* Service("Service", {

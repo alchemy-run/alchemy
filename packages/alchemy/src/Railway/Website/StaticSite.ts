@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -8,6 +7,7 @@ import * as Namespace from "../../Namespace.ts";
 import type * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import { Project } from "../Project.ts";
 import { Service } from "../Service.ts";
@@ -18,7 +18,6 @@ import {
   type FrameworkSiteProps,
   type Website,
 } from "./FrameworkSite.ts";
-import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 // `env` comes from FrameworkSiteProps (which additionally accepts `Output`
 // values, e.g. `VITE_API_URL: api.url`) — it must be omitted from the
@@ -27,10 +26,7 @@ import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 export interface StaticSiteProps
   extends
     Omit<Command.BuildProps, "env">,
-    Pick<
-      FrameworkSiteProps,
-      "project" | "environment" | "domain" | "tags" | "env"
-    > {
+    Pick<FrameworkSiteProps, "project" | "environment" | "domain" | "tags" | "env"> {
   /**
    * Local dev configuration. When `alchemy dev` runs with `dev.command`,
    * the build is skipped and `command` is spawned as a long-lived child
@@ -72,10 +68,7 @@ export interface StaticSiteProps
 
 const envRecord = (
   env:
-    | Record<
-        string,
-        string | Redacted.Redacted<string> | Output.Output<string | undefined>
-      >
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
     | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
@@ -153,7 +146,6 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     const isLocal = ctx.dev && remoted !== true;
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
     if (isLocal && props.dev !== undefined) {
@@ -182,15 +174,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const clientAbs = path.resolve(cwd, props.outdir);
 
-    const {
-      NODE_SERVE_ENTRY_FILE_NAME,
-      relativeClientDirExpression,
-      writeNodeServeEntry,
-    } = yield* loadFrontendCore;
-    const servePath = path.join(
-      path.dirname(clientAbs),
-      NODE_SERVE_ENTRY_FILE_NAME,
-    );
+    const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
+      yield* loadFrontendCore;
+    const servePath = path.join(path.dirname(clientAbs), NODE_SERVE_ENTRY_FILE_NAME);
     yield* writeNodeServeEntry({
       output: {
         clientDirectory: clientAbs,
@@ -201,11 +187,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
       clientDirExpression: relativeClientDirExpression(servePath, clientAbs),
       notFoundHandling:
-        props.errorPage !== undefined
-          ? "404-page"
-          : props.spa === true
-            ? "spa"
-            : "none",
+        props.errorPage !== undefined ? "404-page" : props.spa === true ? "spa" : "none",
       printUrl: isLocal,
       platform: "node",
     });
@@ -215,17 +197,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       const dev = yield* Command.Dev("Dev", {
         command: `${runtime} ${servePath}`,
         cwd: path.dirname(servePath),
-        env: {
-          ...props.env,
-          PORT: "0",
-          HOST: "127.0.0.1",
-        },
+        env: { ...props.env, PORT: "0", HOST: "127.0.0.1" },
       }).pipe(Namespace.push(id));
-      return {
-        url: dev.url,
-        service: undefined,
-        project: undefined,
-      } satisfies Website;
+      return { url: dev.url, service: undefined, project: undefined } satisfies Website;
     }
 
     const project = Effect.isEffect(props.project)
@@ -264,9 +238,5 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       } satisfies Website;
     }
 
-    return {
-      url: service.url,
-      service,
-      project,
-    } satisfies Website;
+    return { url: service.url, service, project } satisfies Website;
   }).pipe(Effect.orDie);

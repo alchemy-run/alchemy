@@ -1,3 +1,15 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * `domain.dns` on a Fly website, deployed for real: the DNS adapter
  * publishes the Fly Certificate's ACME challenge `CNAME` and the site's
@@ -11,33 +23,14 @@ import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Fly from "@/Fly";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { assertAppGone, getText } from "./fixtures/deployment.ts";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    Fly.providers(),
-    Cloudflare.providers(),
-    AWS.providers(),
-  ),
+  providers: Layer.mergeAll(Fly.providers(), Cloudflare.providers(), AWS.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const CLOUDFLARE_HOST = `fly-dns.${ZONE}`;
@@ -68,11 +61,7 @@ const cloudflareZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-const cloudflareRecords = (
-  zoneId: string,
-  name: string,
-  type: "A" | "AAAA" | "CNAME" | "NS",
-) =>
+const cloudflareRecords = (zoneId: string, name: string, type: "A" | "AAAA" | "CNAME" | "NS") =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
@@ -116,15 +105,13 @@ const waitForAuthoritativeA = (
           r.setServers([server]);
           return r;
         });
-        const answers = yield* Effect.tryPromise(() =>
-          resolver.resolve4(name),
-        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        const answers = yield* Effect.tryPromise(() => resolver.resolve4(name)).pipe(
+          Effect.orElseSucceed(() => [] as string[]),
+        );
         if (!expected.every((ip) => answers.includes(ip))) {
           return yield* Effect.fail(new NotPublished({ server, name }));
         }
-      }).pipe(
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-      ),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
     );
   });
 
@@ -136,13 +123,10 @@ const waitForIssuedCertificate = (appName: string, hostname: string) =>
   machines.checkAppCertificate({ app_name: appName, hostname }).pipe(
     Effect.flatMap((checked) =>
       (checked.certificates ?? []).some(
-        (certificate) =>
-          certificate.source === "fly" && certificate.status === "active",
+        (certificate) => certificate.source === "fly" && certificate.status === "active",
       )
         ? Effect.succeed(checked)
-        : Effect.fail(
-            new CertificateNotIssued({ hostname, status: checked.status }),
-          ),
+        : Effect.fail(new CertificateNotIssued({ hostname, status: checked.status })),
     ),
     Effect.retry({
       while: (error) => error._tag === "CertificateNotIssued",
@@ -159,10 +143,7 @@ const serveOverHttps = (hostname: string) =>
 const cloneSite = Effect.gen(function* () {
   const path = yield* Path.Path;
   return yield* cloneFixture(
-    path.resolve(
-      import.meta.dirname,
-      "../../Cloudflare/Website/staticsite-fixture",
-    ),
+    path.resolve(import.meta.dirname, "../../Cloudflare/Website/staticsite-fixture"),
     {
       prefix: "alchemy-fly-dns-",
       tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
@@ -233,28 +214,16 @@ test.provider(
 
         yield* waitForIssuedCertificate(appName, CLOUDFLARE_HOST);
 
-        const nameServers = yield* Effect.tryPromise(() =>
-          resolveNs(ZONE),
-        ).pipe(Effect.orDie);
+        const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
         yield* waitForAuthoritativeA(nameServers, CLOUDFLARE_HOST, [ip]);
-        expect(yield* serveOverHttps(CLOUDFLARE_HOST)).toContain(
-          "StaticSite fixture v1",
-        );
+        expect(yield* serveOverHttps(CLOUDFLARE_HOST)).toContain("StaticSite fixture v1");
 
         yield* stack.destroy();
         expect(
-          yield* cloudflareRecords(
-            zoneId,
-            `_acme-challenge.${CLOUDFLARE_HOST}`,
-            "CNAME",
-          ),
+          yield* cloudflareRecords(zoneId, `_acme-challenge.${CLOUDFLARE_HOST}`, "CNAME"),
         ).toEqual([]);
-        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A")).toEqual(
-          [],
-        );
-        expect(
-          yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "AAAA"),
-        ).toEqual([]);
+        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A")).toEqual([]);
+        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "AAAA")).toEqual([]);
         yield* assertAppGone(appName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
     }).pipe(logLevel),
@@ -283,10 +252,7 @@ test.provider(
                 zoneId,
                 name: ROUTE53_ZONE,
                 type: "NS",
-                content: Output.map(
-                  zone.nameServers,
-                  (nameServers) => nameServers[index]!,
-                ),
+                content: Output.map(zone.nameServers, (nameServers) => nameServers[index]!),
               });
             }
             const site = yield* Fly.Website.StaticSite("Site", {
@@ -309,39 +275,32 @@ test.provider(
 
         // The delegation is live in Cloudflare.
         const delegation = yield* cloudflareRecords(zoneId, ROUTE53_ZONE, "NS");
-        expect(
-          delegation.map((record) => normalize(record.content)).sort(),
-        ).toEqual(zone.nameServers.map(normalize).sort());
+        expect(delegation.map((record) => normalize(record.content)).sort()).toEqual(
+          zone.nameServers.map(normalize).sort(),
+        );
 
         // The records live in Route 53, not Cloudflare.
         const sets = yield* route53Records(zone.id);
         const find = (name: string, type: string) =>
           sets.find((set) => normalize(set.Name) === name && set.Type === type);
         expect(
-          find(
-            `_acme-challenge.${ROUTE53_HOST}`,
-            "CNAME",
-          )?.ResourceRecords?.map((record) => normalize(record.Value)),
-        ).toEqual([normalize(challenge!.target)]);
-        expect(
-          find(ROUTE53_HOST, "A")?.ResourceRecords?.map(
-            (record) => record.Value,
+          find(`_acme-challenge.${ROUTE53_HOST}`, "CNAME")?.ResourceRecords?.map((record) =>
+            normalize(record.Value),
           ),
-        ).toEqual([ip]);
+        ).toEqual([normalize(challenge!.target)]);
+        expect(find(ROUTE53_HOST, "A")?.ResourceRecords?.map((record) => record.Value)).toEqual([
+          ip,
+        ]);
         expect(yield* cloudflareRecords(zoneId, ROUTE53_HOST, "A")).toEqual([]);
 
         yield* waitForIssuedCertificate(appName, ROUTE53_HOST);
 
         yield* waitForAuthoritativeA(zone.nameServers, ROUTE53_HOST, [ip]);
-        expect(yield* serveOverHttps(ROUTE53_HOST)).toContain(
-          "StaticSite fixture v1",
-        );
+        expect(yield* serveOverHttps(ROUTE53_HOST)).toContain("StaticSite fixture v1");
 
         yield* stack.destroy();
         yield* assertHostedZoneGone(zone.id);
-        expect(yield* cloudflareRecords(zoneId, ROUTE53_ZONE, "NS")).toEqual(
-          [],
-        );
+        expect(yield* cloudflareRecords(zoneId, ROUTE53_ZONE, "NS")).toEqual([]);
         yield* assertAppGone(appName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
     }).pipe(logLevel),

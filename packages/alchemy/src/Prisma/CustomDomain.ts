@@ -3,16 +3,10 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
-import * as Output from "../Output.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import type { App } from "./App.ts";
 import {
   PrismaApiError,
   PrismaClient,
@@ -20,15 +14,10 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
-import type { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { Providers } from "./Providers.ts";
-import {
-  concreteIdOf,
-  concreteIdsChanged,
-  isInputObject,
-  isPrismaDevId,
-} from "./Refs.ts";
+import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./Refs.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
 
 type AppReference = string | App | Compute;
@@ -140,49 +129,32 @@ const attrsFrom = (domain: ApiCustomDomain): CustomDomain["Attributes"] => ({
   updatedAt: domain.updatedAt,
 });
 
-const normalizeHostname = (hostname: string) =>
-  hostname.trim().replace(/\.$/, "").toLowerCase();
+const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "").toLowerCase();
 
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
-const adoptionRequiredError = (
-  hostname: string,
-  appId: string,
-  detail: string,
-) =>
+const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
   new Error(
     `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
   );
 
-const appIdValue = (app: AppReference | undefined) =>
-  typeof app === "string" ? app : app?.appId;
+const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
 
-const unresolvedAppIdOf = (app: AppReference | undefined) =>
-  concreteIdOf(appIdValue(app));
+const unresolvedAppIdOf = (app: AppReference | undefined) => concreteIdOf(appIdValue(app));
 
-const resolveAppId = (app: AppReference) =>
-  Effect.gen(function* () {
-    const value = appIdValue(app);
-    if (typeof value === "string") return value;
-    if (Output.isOutput(value)) {
-      const accessor = yield* value as Output.Output<string>;
-      return yield* accessor;
-    }
-    return yield* Effect.fail(new Error("Unable to resolve Prisma app id."));
-  });
+const resolveAppId = (app: AppReference) => {
+  const value = appIdValue(app);
+  return typeof value === "string"
+    ? Effect.succeed(value)
+    : Effect.fail(new Error("Unable to resolve Prisma app id."));
+};
 
-const findDomain = (
-  client: PrismaManagementClient,
-  appId: string,
-  hostname: string,
-) =>
+const findDomain = (client: PrismaManagementClient, appId: string, hostname: string) =>
   client.listAppDomains(appId).pipe(
     Effect.catchIf(isNotFound, () => Effect.succeed([])),
     Effect.flatMap((domains) => {
-      const matches = domains.filter((domain) =>
-        sameHostname(domain.hostname, hostname),
-      );
+      const matches = domains.filter((domain) => sameHostname(domain.hostname, hostname));
       return matches.length > 1
         ? Effect.fail(
             new Error(
@@ -229,9 +201,9 @@ const waitForAuthoritativeCname = (hostname: string) =>
     const labels = hostname.split(".");
     let servers: string[] = [];
     for (let i = 1; i < labels.length - 1 && servers.length === 0; i++) {
-      const names = yield* Effect.tryPromise(() =>
-        dns.resolveNs(labels.slice(i).join(".")),
-      ).pipe(Effect.orElseSucceed(() => [] as string[]));
+      const names = yield* Effect.tryPromise(() => dns.resolveNs(labels.slice(i).join("."))).pipe(
+        Effect.orElseSucceed(() => [] as string[]),
+      );
       const addresses = yield* Effect.forEach(
         names,
         (name) =>
@@ -250,9 +222,7 @@ const waitForAuthoritativeCname = (hostname: string) =>
           instance.setServers([server]);
           return instance;
         });
-        const answers = yield* Effect.tryPromise(() =>
-          resolver.resolveCname(hostname),
-        );
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
         return answers.length > 0;
       }).pipe(
         Effect.timeout("3 seconds"),
@@ -271,35 +241,24 @@ const waitForAuthoritativeCname = (hostname: string) =>
     if (visible) yield* Effect.sleep("10 seconds");
   });
 
-const ensureDefaultBranchApp = (
-  client: PrismaManagementClient,
-  appId: string,
-) =>
+const ensureDefaultBranchApp = (client: PrismaManagementClient, appId: string) =>
   Effect.gen(function* () {
     const app = yield* client.getApp(appId);
     if (!app.branchId) {
       return yield* Effect.fail(
-        new Error(
-          "Prisma custom domains can only be attached to apps on the default Branch.",
-        ),
+        new Error("Prisma custom domains can only be attached to apps on the default Branch."),
       );
     }
     const branch = yield* client
       .getBranch(app.branchId)
       .pipe(
         Effect.catchIf(isNotFound, () =>
-          Effect.fail(
-            new Error(
-              `Unable to verify default Branch for Prisma app ${appId}.`,
-            ),
-          ),
+          Effect.fail(new Error(`Unable to verify default Branch for Prisma app ${appId}.`)),
         ),
       );
     if (!branch.isDefault) {
       return yield* Effect.fail(
-        new Error(
-          "Prisma custom domains can only be attached to apps on the default Branch.",
-        ),
+        new Error("Prisma custom domains can only be attached to apps on the default Branch."),
       );
     }
   });
@@ -332,9 +291,7 @@ const ProviderLive = () =>
           const newAppId = isResolved(news.app)
             ? unresolvedAppIdOf(news.app as AppReference)
             : undefined;
-          const oldHostname = normalizeHostname(
-            output?.hostname ?? olds.hostname,
-          );
+          const oldHostname = normalizeHostname(output?.hostname ?? olds.hostname);
           const newHostname = isResolved(news.hostname)
             ? normalizeHostname(news.hostname)
             : undefined;
@@ -362,14 +319,10 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
             : yield* Effect.gen(function* () {
                 const appId = unresolvedAppIdOf(olds.app);
-                return appId
-                  ? yield* findDomain(client, appId, olds.hostname)
-                  : undefined;
+                return appId ? yield* findDomain(client, appId, olds.hostname) : undefined;
               });
           if (!domain) return undefined;
           const attrs = attrsFrom(domain);
@@ -384,9 +337,7 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
             : yield* findDomain(client, appId, hostname);
           const identityMatches = (domain: ApiCustomDomain) =>
             domain.appId === appId && sameHostname(domain.hostname, hostname);
@@ -398,9 +349,7 @@ const ProviderLive = () =>
             );
           }
           if (domain && customDomainId === undefined) {
-            return yield* Effect.fail(
-              adoptionRequiredError(hostname, appId, "already exists"),
-            );
+            return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
           }
           if (!domain) {
             yield* ensureDefaultBranchApp(client, appId);
@@ -418,11 +367,7 @@ const ProviderLive = () =>
                 }),
                 Effect.catchIf(isConflict, () =>
                   Effect.fail(
-                    adoptionRequiredError(
-                      hostname,
-                      appId,
-                      "appeared after the adoption check",
-                    ),
+                    adoptionRequiredError(hostname, appId, "appeared after the adoption check"),
                   ),
                 ),
                 Effect.flatMap((result) =>
@@ -452,10 +397,7 @@ const ProviderLive = () =>
             .getCustomDomain(output.customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!domain) return;
-          if (
-            domain.appId !== output.appId ||
-            !sameHostname(domain.hostname, output.hostname)
-          ) {
+          if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
             return yield* Effect.fail(
               new Error(
                 `Prisma custom domain '${output.customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,

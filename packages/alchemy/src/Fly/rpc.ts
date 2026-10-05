@@ -1,8 +1,8 @@
 import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { HttpEffect } from "../Http.ts";
 import { RPC_PATH_PREFIX, serveRpc } from "../Rpc.ts";
 
@@ -29,10 +29,8 @@ const ED25519_SPKI_PREFIX = "302a300506032b6570032100";
 /** Oldest accepted `Fly-Src` timestamp, in seconds. */
 const MAX_FLY_SRC_AGE_SECONDS = 300;
 
-const header = (
-  headers: Record<string, string | undefined>,
-  name: string,
-): string => headers[name] ?? "";
+const header = (headers: Record<string, string | undefined>, name: string): string =>
+  headers[name] ?? "";
 
 const tokensEqual = (left: string, right: string): boolean => {
   if (left.length !== right.length) return false;
@@ -70,24 +68,15 @@ const loadPublicKey = Effect.gen(function* () {
  * for a caller in `org`. Fly adds the header only to requests that arrive
  * over its private network, so a public request can never pass.
  */
-export const verifyFlySrc = (
-  headers: Record<string, string | undefined>,
-  org: string,
-) =>
+export const verifyFlySrc = (headers: Record<string, string | undefined>, org: string) =>
   Effect.gen(function* () {
     const source = header(headers, FLY_SRC_HEADER);
     const signature = header(headers, FLY_SRC_SIGNATURE_HEADER);
-    if (source.length === 0 || signature.length === 0 || org.length === 0)
-      return false;
+    if (source.length === 0 || signature.length === 0 || org.length === 0) return false;
     const key = yield* loadPublicKey;
     if (key === undefined) return false;
     const valid = yield* Effect.try(() =>
-      crypto.verify(
-        null,
-        Buffer.from(source),
-        key,
-        Buffer.from(signature, "base64"),
-      ),
+      crypto.verify(null, Buffer.from(source), key, Buffer.from(signature, "base64")),
     ).pipe(Effect.orElseSucceed(() => false));
     if (!valid) return false;
     const fields = Object.fromEntries(
@@ -125,18 +114,13 @@ export const serveFlyRpc = <Req = never>(
     }));
     const bindingPort = env.bindingPort;
     const onBindingPort =
-      bindingPort.length > 0 &&
-      header(headers, "fly-forwarded-port") === bindingPort;
+      bindingPort.length > 0 && header(headers, "fly-forwarded-port") === bindingPort;
     if (!isRpc && !onBindingPort) return yield* fallback;
     if (!(yield* verifyFlySrc(headers, env.org))) return unauthorized;
     if (isRpc) {
       const expected = env.token;
       const provided = header(headers, RPC_TOKEN_HEADER);
-      if (
-        expected.length === 0 ||
-        provided.length === 0 ||
-        !tokensEqual(provided, expected)
-      ) {
+      if (expected.length === 0 || provided.length === 0 || !tokensEqual(provided, expected)) {
         return unauthorized;
       }
     }
@@ -147,7 +131,6 @@ export const serveFlyRpc = <Req = never>(
 export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>
   Object.fromEntries(
     Object.entries(shape ?? {}).filter(
-      ([key, value]) =>
-        key !== "fetch" && key !== "run" && typeof value === "function",
+      ([key, value]) => key !== "fetch" && key !== "run" && typeof value === "function",
     ),
   );

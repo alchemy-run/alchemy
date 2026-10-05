@@ -1,3 +1,18 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import { fileURLToPath } from "node:url";
+import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
+import * as lambda from "@distilled.cloud/aws/lambda";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * `AWS.Lambda.Function` custom domains (`domain`): an API Gateway v2 HTTP
  * API front door, a regional ACM certificate, an API Gateway domain name +
@@ -15,33 +30,15 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import * as lambda from "@distilled.cloud/aws/lambda";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const handlerPath = fileURLToPath(
-  new URL("./fixtures/domain-handler.ts", import.meta.url),
-);
+const handlerPath = fileURLToPath(new URL("./fixtures/domain-handler.ts", import.meta.url));
 const BODY = "hello from a custom domain";
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 /** Cloudflare-hosted hostnames (test 1). */
 const CF_NAME = `fn-dns.${zoneName}`;
@@ -71,11 +68,7 @@ const resolveCloudflareZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-const listCloudflareRecords = (
-  zoneId: string,
-  name: string,
-  type: "CNAME" | "NS",
-) =>
+const listCloudflareRecords = (zoneId: string, name: string, type: "CNAME" | "NS") =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
@@ -112,16 +105,12 @@ const waitForAuthoritative = (
       if (!accept(answers)) {
         return yield* Effect.fail(new RecordNotPublished({ name, server }));
       }
-    }).pipe(
-      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-    ),
+    }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
   );
 
 const waitForCloudflareCname = (name: string, target: string) =>
   Effect.gen(function* () {
-    const nameServers = yield* Effect.tryPromise(() =>
-      resolveNs(zoneName),
-    ).pipe(Effect.orDie);
+    const nameServers = yield* Effect.tryPromise(() => resolveNs(zoneName)).pipe(Effect.orDie);
     const servers = yield* nameServerIps(nameServers);
     yield* waitForAuthoritative(
       servers,
@@ -160,9 +149,7 @@ const listStackApis = (stackName: string, stage: string) =>
       nextToken = page.NextToken;
     } while (nextToken !== undefined);
     return apis.filter(
-      (api) =>
-        api.Tags?.["alchemy::stack"] === stackName &&
-        api.Tags?.["alchemy::stage"] === stage,
+      (api) => api.Tags?.["alchemy::stack"] === stackName && api.Tags?.["alchemy::stage"] === stage,
     );
   });
 
@@ -243,15 +230,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
             expect((mappings.Items ?? []).map((m) => m.ApiId)).toEqual([apiId]);
 
             // The Cloudflare CNAME points at the regional target, DNS-only.
-            const cnames = yield* listCloudflareRecords(
-              cfZoneId,
-              name,
-              "CNAME",
-            );
+            const cnames = yield* listCloudflareRecords(cfZoneId, name, "CNAME");
             expect(cnames).toHaveLength(1);
-            expect(trimDot(cnames[0]!.content ?? "")).toBe(
-              trimDot(target.hostname),
-            );
+            expect(trimDot(cnames[0]!.content ?? "")).toBe(trimDot(target.hostname));
             expect(cnames[0]!.proxied).toBe(false);
 
             yield* waitForCloudflareCname(name, target.hostname);
@@ -263,9 +244,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           // Both API Gateway domains, their CNAMEs, and the API are gone.
           for (const name of [CF_NAME, CF_ALIAS]) {
             expect(yield* waitForApiDomainGone(name)).toBe(true);
-            expect(
-              yield* listCloudflareRecords(cfZoneId, name, "CNAME"),
-            ).toHaveLength(0);
+            expect(yield* listCloudflareRecords(cfZoneId, name, "CNAME")).toHaveLength(0);
           }
           expect(yield* listStackApis(stack.name, stack.stage)).toHaveLength(0);
         }),
@@ -293,10 +272,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
                   zoneId: cfZoneId,
                   name: R53_ZONE,
                   type: "NS",
-                  content: Output.map(
-                    zone.nameServers,
-                    (servers: string[]) => servers[index]!,
-                  ),
+                  content: Output.map(zone.nameServers, (servers: string[]) => servers[index]!),
                   ttl: 300,
                 });
               }
@@ -328,26 +304,17 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
             HostedZoneId: deployed.zoneId,
           });
           const aliases = (recordSets.ResourceRecordSets ?? []).filter(
-            (record) =>
-              trimDot(record.Name) === R53_NAME && record.Type === "A",
+            (record) => trimDot(record.Name) === R53_NAME && record.Type === "A",
           );
           expect(aliases).toHaveLength(1);
-          expect(trimDot(aliases[0]!.AliasTarget?.DNSName ?? "")).toBe(
-            trimDot(target.hostname),
-          );
-          expect(aliases[0]!.AliasTarget?.HostedZoneId).toBe(
-            target.hostedZoneId,
-          );
+          expect(trimDot(aliases[0]!.AliasTarget?.DNSName ?? "")).toBe(trimDot(target.hostname));
+          expect(aliases[0]!.AliasTarget?.HostedZoneId).toBe(target.hostedZoneId);
 
           // The delegation is live in Cloudflare.
-          const delegation = yield* listCloudflareRecords(
-            cfZoneId,
-            R53_ZONE,
-            "NS",
+          const delegation = yield* listCloudflareRecords(cfZoneId, R53_ZONE, "NS");
+          expect(delegation.map((r) => trimDot(r.content ?? "")).sort()).toEqual(
+            deployed.nameServers.map(trimDot).sort(),
           );
-          expect(
-            delegation.map((r) => trimDot(r.content ?? "")).sort(),
-          ).toEqual(deployed.nameServers.map(trimDot).sort());
 
           // Route 53's own nameservers answer the alias before HTTPS.
           const servers = yield* nameServerIps(deployed.nameServers);
@@ -362,16 +329,12 @@ describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
           yield* stack.destroy();
 
           expect(yield* waitForApiDomainGone(R53_NAME)).toBe(true);
-          const zoneGone = yield* route53
-            .getHostedZone({ Id: deployed.zoneId })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
-            );
+          const zoneGone = yield* route53.getHostedZone({ Id: deployed.zoneId }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(true)),
+          );
           expect(zoneGone).toBe(true);
-          expect(
-            yield* listCloudflareRecords(cfZoneId, R53_ZONE, "NS"),
-          ).toHaveLength(0);
+          expect(yield* listCloudflareRecords(cfZoneId, R53_ZONE, "NS")).toHaveLength(0);
         }),
       { timeout: 900_000 },
     );
@@ -384,9 +347,7 @@ const invalidDomainDefect = (exit: Exit.Exit<unknown, unknown>) => {
   const reason = exit.cause.reasons.find(
     (r) => Cause.isDieReason(r) && r.defect instanceof InvalidFunctionDomain,
   );
-  return reason && Cause.isDieReason(reason)
-    ? (reason.defect as InvalidFunctionDomain)
-    : undefined;
+  return reason && Cause.isDieReason(reason) ? (reason.defect as InvalidFunctionDomain) : undefined;
 };
 
 describe(
@@ -463,14 +424,10 @@ describe(
 
           yield* stack.destroy();
 
-          const gone = yield* lambda
-            .getFunction({ FunctionName: deployed.functionName })
-            .pipe(
-              Effect.map(() => false),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(true),
-              ),
-            );
+          const gone = yield* lambda.getFunction({ FunctionName: deployed.functionName }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+          );
           expect(gone).toBe(true);
         }),
       { timeout: 180_000 },

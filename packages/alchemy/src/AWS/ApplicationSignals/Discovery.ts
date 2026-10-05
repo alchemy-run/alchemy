@@ -45,9 +45,7 @@ export interface Discovery extends Resource<
  *
  * @resource
  */
-export const Discovery = Resource<Discovery>(
-  "AWS.ApplicationSignals.Discovery",
-);
+export const Discovery = Resource<Discovery>("AWS.ApplicationSignals.Discovery");
 
 export const DiscoveryProvider = () =>
   Provider.effect(

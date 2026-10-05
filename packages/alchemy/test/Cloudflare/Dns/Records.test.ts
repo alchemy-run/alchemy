@@ -1,19 +1,18 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test record names — disjoint from other suites and the
 // same on every run.
@@ -31,9 +30,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -52,22 +49,14 @@ const listByType = (zoneId: string, name: string, type: "A" | "CNAME") =>
     }),
   );
 
-const listCnames = (zoneId: string, name: string) =>
-  listByType(zoneId, name, "CNAME");
+const listCnames = (zoneId: string, name: string) => listByType(zoneId, name, "CNAME");
 
 const purge = (zoneId: string, name: string) =>
   listCnames(zoneId, name).pipe(
-    Effect.flatMap(
-      Effect.forEach((r) => dns.deleteRecord({ zoneId, dnsRecordId: r.id })),
-    ),
+    Effect.flatMap(Effect.forEach((r) => dns.deleteRecord({ zoneId, dnsRecordId: r.id }))),
   );
 
-const tags = [
-  "provider:cloudflare",
-  "provider:cloudflare:dns",
-  "provider:cloudflare:zone",
-  "live",
-];
+const tags = ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"];
 
 test.provider(
   "creates, updates, garbage-collects and deletes a CNAME set",
@@ -172,10 +161,7 @@ const findOwnedError = (cause: Cause.Cause<unknown>) =>
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);
 
 test.provider(
   "adoption — an existing record errors without adopt, is taken over with adopt(true)",

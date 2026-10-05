@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -67,13 +66,7 @@ export type McpPortalAttributes = {
   createdAt: string | undefined;
 };
 
-export type McpPortal = Resource<
-  TypeId,
-  McpPortalProps,
-  McpPortalAttributes,
-  never,
-  Providers
->;
+export type McpPortal = Resource<TypeId, McpPortalProps, McpPortalAttributes, never, Providers>;
 
 /**
  * A Cloudflare Zero Trust **AI Controls MCP portal** — a hosted gateway
@@ -127,30 +120,22 @@ export const McpPortalProvider = () =>
       // Attributes `read` returns. Accounts without the AI Controls
       // entitlement reject the route with the typed `Forbidden` — treat
       // them as having no portals.
-      return yield* zeroTrust.listAccessAiControlMcpPortals
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((portal) =>
-                toAttributes(portal, accountId),
-              ),
-            ),
+      return yield* zeroTrust.listAccessAiControlMcpPortals.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((portal) => toAttributes(portal, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // The portal id is the API identity — changing it is a replacement.
       const oldId = output?.portalId ?? olds?.portalId;
-      if (
-        news.portalId !== undefined &&
-        oldId !== undefined &&
-        oldId !== news.portalId
-      ) {
+      if (news.portalId !== undefined && oldId !== undefined && oldId !== news.portalId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -162,16 +147,14 @@ export const McpPortalProvider = () =>
 
       // The portal id is deterministic (client-supplied or derived from
       // the logical id), so a direct read covers the cold case too.
-      const portalId =
-        output?.portalId ?? (yield* createPortalId(id, olds?.portalId));
+      const portalId = output?.portalId ?? (yield* createPortalId(id, olds?.portalId));
       const observed = yield* observePortal(acct, portalId);
       return observed ? toAttributes(observed, acct) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const portalId =
-        output?.portalId ?? (yield* createPortalId(id, news.portalId));
+      const portalId = output?.portalId ?? (yield* createPortalId(id, news.portalId));
       const name = news.name ?? portalId;
 
       // 1. Observe.
@@ -184,12 +167,8 @@ export const McpPortalProvider = () =>
           id: portalId,
           hostname: news.hostname,
           name,
-          ...(news.description !== undefined
-            ? { description: news.description }
-            : {}),
-          ...(news.allowCodeMode !== undefined
-            ? { allowCodeMode: news.allowCodeMode }
-            : {}),
+          ...(news.description !== undefined ? { description: news.description } : {}),
+          ...(news.allowCodeMode !== undefined ? { allowCodeMode: news.allowCodeMode } : {}),
           ...(news.secureWebGateway !== undefined
             ? { secureWebGateway: news.secureWebGateway }
             : {}),
@@ -217,15 +196,9 @@ export const McpPortalProvider = () =>
         id: portalId,
         name,
         hostname: news.hostname,
-        ...(news.description !== undefined
-          ? { description: news.description }
-          : {}),
-        ...(news.allowCodeMode !== undefined
-          ? { allowCodeMode: news.allowCodeMode }
-          : {}),
-        ...(news.secureWebGateway !== undefined
-          ? { secureWebGateway: news.secureWebGateway }
-          : {}),
+        ...(news.description !== undefined ? { description: news.description } : {}),
+        ...(news.allowCodeMode !== undefined ? { allowCodeMode: news.allowCodeMode } : {}),
+        ...(news.secureWebGateway !== undefined ? { secureWebGateway: news.secureWebGateway } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -259,19 +232,14 @@ type ObservedPortal = {
 const observePortal = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpPortal({ accountId, id })
-    .pipe(
-      Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)));
 
 const createPortalId = (id: string, portalId: string | undefined) =>
   Effect.gen(function* () {
     return portalId ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  portal: ObservedPortal,
-  accountId: string,
-): McpPortalAttributes => ({
+const toAttributes = (portal: ObservedPortal, accountId: string): McpPortalAttributes => ({
   portalId: portal.id,
   accountId,
   name: portal.name,

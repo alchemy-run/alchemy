@@ -1,3 +1,15 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as Api from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 /**
  * `domain.dns` on Neon websites, deployed for real: a StaticSite whose
  * custom hostname is published through `Cloudflare.DNS.Adapter()`. Asserts
@@ -10,18 +22,6 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Neon from "@/Neon";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as Api from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
 const { test } = Test.make({
@@ -70,8 +70,7 @@ const recordsUnder = (zoneId: string) =>
     Effect.map((chunk) =>
       Array.from(chunk).filter(
         (record) =>
-          trimDot(record.name) === HOSTNAME ||
-          trimDot(record.name).endsWith(`.${HOSTNAME}`),
+          trimDot(record.name) === HOSTNAME || trimDot(record.name).endsWith(`.${HOSTNAME}`),
       ),
     ),
   );
@@ -79,9 +78,7 @@ const recordsUnder = (zoneId: string) =>
 /** Wait until every authoritative nameserver of the zone answers the CNAME. */
 const waitForAuthoritativeCname = (target: string) =>
   Effect.gen(function* () {
-    const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(
-      Effect.orDie,
-    );
+    const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
     const servers = (yield* Effect.forEach(nameServers, (ns) =>
       Effect.tryPromise(() => resolve4(ns)).pipe(Effect.orDie),
     )).flat();
@@ -92,15 +89,13 @@ const waitForAuthoritativeCname = (target: string) =>
           r.setServers([server]);
           return r;
         });
-        const answers = yield* Effect.tryPromise(() =>
-          resolver.resolveCname(HOSTNAME),
-        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(HOSTNAME)).pipe(
+          Effect.orElseSucceed(() => [] as string[]),
+        );
         if (!answers.some((answer) => trimDot(answer) === trimDot(target))) {
           return yield* Effect.fail(new CnameNotPublished({ server }));
         }
-      }).pipe(
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-      ),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
     );
   });
 
@@ -109,9 +104,7 @@ const observeDomain = (fn: { projectId: string; branchId: string }) =>
     project_id: fn.projectId,
     branch_id: fn.branchId,
   }).pipe(
-    Effect.map(({ custom_domains }) =>
-      custom_domains.find((domain) => domain.domain === HOSTNAME),
-    ),
+    Effect.map(({ custom_domains }) => custom_domains.find((domain) => domain.domain === HOSTNAME)),
   );
 
 test.provider(
@@ -169,9 +162,7 @@ test.provider(
 
       const active = yield* observeDomain(fn).pipe(
         Effect.flatMap((live) =>
-          live?.status === "active" &&
-          live.dns_status === "ok" &&
-          live.binding_status === "present"
+          live?.status === "active" && live.dns_status === "ok" && live.binding_status === "present"
             ? Effect.succeed(live)
             : Effect.fail(
                 new DomainNotActive({
@@ -181,9 +172,7 @@ test.provider(
                 }),
               ),
         ),
-        Effect.tapError((error) =>
-          Effect.logInfo("Neon domain pending", error),
-        ),
+        Effect.tapError((error) => Effect.logInfo("Neon domain pending", error)),
         Effect.retry({
           while: (error) => error._tag === "DomainNotActive",
           schedule: Schedule.spaced("5 seconds"),
@@ -195,15 +184,8 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(`https://${HOSTNAME}/`).pipe(
         Effect.flatMap(
-          (
-            res,
-          ): Effect.Effect<
-            string,
-            HttpClientError.HttpClientError | SiteNotServing
-          > =>
-            res.status === 200
-              ? res.text
-              : Effect.fail(new SiteNotServing({ status: res.status })),
+          (res): Effect.Effect<string, HttpClientError.HttpClientError | SiteNotServing> =>
+            res.status === 200 ? res.text : Effect.fail(new SiteNotServing({ status: res.status })),
         ),
         Effect.timeout("10 seconds"),
         Effect.tapError((error) =>

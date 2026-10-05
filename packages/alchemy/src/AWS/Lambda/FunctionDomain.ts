@@ -66,9 +66,7 @@ export type FunctionDomain = string | FunctionDomainConfig;
  * duplicate hostnames). Raised as a defect while the stack program is
  * built, before anything is deployed.
  */
-export class InvalidFunctionDomain extends Data.TaggedError(
-  "InvalidFunctionDomain",
-)<{
+export class InvalidFunctionDomain extends Data.TaggedError("InvalidFunctionDomain")<{
   readonly functionId: string;
   readonly message: string;
 }> {}
@@ -77,16 +75,10 @@ export class InvalidFunctionDomain extends Data.TaggedError(
 export const normalizeFunctionDomain = (
   domain: FunctionDomain | undefined,
 ): FunctionDomainConfig | undefined =>
-  domain === undefined
-    ? undefined
-    : typeof domain === "string"
-      ? { name: domain }
-      : domain;
+  domain === undefined ? undefined : typeof domain === "string" ? { name: domain } : domain;
 
 /** `https://{name}` of a Function's custom domain. */
-export const functionDomainUrl = (
-  domain: FunctionDomain | undefined,
-): string | undefined => {
+export const functionDomainUrl = (domain: FunctionDomain | undefined): string | undefined => {
   const config = normalizeFunctionDomain(domain);
   return config === undefined ? undefined : `https://${config.name}`;
 };
@@ -156,20 +148,13 @@ export const composeFunctionDomain = (
 
       // API Gateway regional domains need a certificate in the API's
       // region, which is the Function's.
-      const region = Output.map(
-        fn.functionArn,
-        (arn: string) => arn.split(":")[3]!,
-      );
+      const region = Output.map(fn.functionArn, (arn: string) => arn.split(":")[3]!);
       const { certificateArn } = yield* domainCertificate(
         "Certificate",
         {
           domainName: domain.name,
-          ...(domain.aliases?.length
-            ? { subjectAlternativeNames: domain.aliases }
-            : {}),
-          ...(domain.hostedZoneId === undefined
-            ? {}
-            : { hostedZoneId: domain.hostedZoneId }),
+          ...(domain.aliases?.length ? { subjectAlternativeNames: domain.aliases } : {}),
+          ...(domain.hostedZoneId === undefined ? {} : { hostedZoneId: domain.hostedZoneId }),
           region: region as unknown as string,
         },
         domain.dns,

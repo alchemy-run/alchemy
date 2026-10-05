@@ -30,10 +30,7 @@ export interface UpdateVocabulary extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.UpdateVocabularyRequest,
-    ) => Effect.Effect<
-      transcribe.UpdateVocabularyResponse,
-      transcribe.UpdateVocabularyError
-    >
+    ) => Effect.Effect<transcribe.UpdateVocabularyResponse, transcribe.UpdateVocabularyError>
   >
 > {}
 export const UpdateVocabulary = Binding.Service<UpdateVocabulary>(

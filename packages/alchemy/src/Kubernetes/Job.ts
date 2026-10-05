@@ -1,23 +1,15 @@
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import { isResolved } from "../Diff.ts";
+import * as Output from "../Output.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
-import {
-  Platform,
-  type PlatformProps,
-  type PlatformServices,
-} from "../Platform.ts";
+import { Platform, type PlatformProps, type PlatformServices } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  packEnvValue,
-  unpackEnvValue,
-  RuntimeContext,
-} from "../RuntimeContext.ts";
+import { packEnvValue, unpackEnvValue, RuntimeContext } from "../RuntimeContext.ts";
 import type { HostRuntimeContext } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
-import * as Output from "../Output.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
   findClusterAdapter,
@@ -28,11 +20,7 @@ import {
   type WorkloadImageSource,
   type WorkloadServices,
 } from "./ClusterAdapter.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
@@ -40,10 +28,8 @@ import {
   reconcileObjects,
   KubernetesApiError,
 } from "./internal/client.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
-} from "./internal/objects.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
+import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
   connectionIdentity,
@@ -55,7 +41,6 @@ import {
   tryConnectionOf,
   workloadImageHash,
 } from "./internal/workload.ts";
-import { makeConnectionRegistry } from "./internal/registry.ts";
 import type { Providers } from "./Providers.ts";
 
 export const isJob = (value: any): value is Job => {
@@ -141,7 +126,9 @@ export interface JobPropsBase extends PlatformProps {
   /**
    * Cloud-specific workload-identity options, consumed by the cluster
    * platform's identity adapter (on EKS: `{ managedPolicyArns: [...] }`
-   * attaches extra managed policies to the generated pod-identity role).
+   * attaches extra managed policies to the generated pod-identity role; on
+   * GKE: `{ gcpServiceAccount }` runs the pods as an existing Google
+   * service account instead of the ServiceAccount's own principal).
    */
   identity?: WorkloadIdentityOptions;
   /**
@@ -221,7 +208,8 @@ export interface Job extends Resource<
     imageUri: string;
     /**
      * Workload-identity state provisioned by the cluster platform's
-     * adapter (on EKS: the pod-identity role + association).
+     * adapter (on EKS: the pod-identity role + association; on GKE: the
+     * Workload Identity principal and the IAM grants applied to it).
      */
     identity: IdentityState | undefined;
     /**
@@ -247,11 +235,7 @@ export type JobServices = WorkloadServices;
  * the pod; the process exits when it returns.
  */
 export type JobMain<InitServices = never> = void | {
-  run?: Effect.Effect<
-    void,
-    never,
-    InitServices | PlatformServices | RuntimeContext | Scope
-  >;
+  run?: Effect.Effect<void, never, InitServices | PlatformServices | RuntimeContext | Scope>;
 };
 
 export type JobShape = JobMain<JobServices>;
@@ -272,7 +256,11 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * your own Dockerfile), or `image` (a pre-built registry reference).
  * `main` and `context` images are built on the deploying machine and
  * pushed to the connection's registry (`Kubernetes.LocalCluster` includes
- * one; EKS uses ECR).
+ * one; EKS uses ECR; GKE uses Artifact Registry). On `AWS.EKS.Cluster`
+ * targets, bindings attach IAM policy statements to a generated
+ * pod-identity role; on `GCP.Container.Cluster` targets, GCP bindings grant
+ * their IAM roles to the Kubernetes ServiceAccount's Workload Identity
+ * Federation principal — exactly like `Kubernetes.Deployment`.
  * ### Creating a Job
  * **Example:** Remote image (external — no Effect runtime in the container)
  * ```typescript
@@ -371,8 +359,9 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * @resource
  * @product Workloads
  */
-export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
-  Platform("Kubernetes.Job", {
+export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Platform(
+  "Kubernetes.Job",
+  {
     aliases: ["AWS.EKS.Job"],
     createRuntimeContext: (id: string): JobRuntimeContext => {
       // A one-shot host context: `serve` (invoked by the Platform machinery
@@ -391,8 +380,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
             env[key] = output.pipe(Output.map(packEnvValue));
             return key;
           }),
-        get: <T>(key: string) =>
-          Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
+        get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
@@ -405,14 +393,13 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
             }
           })) as HostRuntimeContext["serve"],
         exports: Effect.sync(() => ({
-          program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
-            Effect.asVoid,
-          ),
+          program: Effect.all(runners, { concurrency: "unbounded" }).pipe(Effect.asVoid),
         })),
       };
       return context;
     },
-  });
+  },
+);
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
@@ -430,31 +417,23 @@ export const JobProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
+      // The base name doubles as the `app.kubernetes.io/name` label value
+      // (and the Service name), both capped at 63 characters.
       const toBaseName = (id: string, props: { name?: string } = {}) =>
         props.name
           ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 200, lowercase: true }).pipe(
+          : createPhysicalName({ id, maxLength: 63, lowercase: true }).pipe(
               Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")),
             );
 
       return {
-        stables: [
-          "connection",
-          "namespace",
-          "serviceAccountName",
-          "identity",
-          "registry",
-        ],
+        stables: ["connection", "namespace", "serviceAccountName", "identity", "registry"],
         // A Job's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources — no single enumeration
         // reconstructs the composite, so enumeration is empty; `read`
         // refreshes known instances.
         list: () => Effect.succeed([] as Job["Attributes"][]),
-        diff: Effect.fn(function* ({
-          olds = {} as JobProps,
-          news: input,
-          output,
-        }) {
+        diff: Effect.fn(function* ({ olds = {} as JobProps, news: input, output }) {
           // `exports` carries the program's runtime Effects (never plain
           // data); everything else must be resolved to diff.
           const { exports: _exports, ...declared } = input as typeof input & {
@@ -464,11 +443,7 @@ export const JobProvider = () =>
           const news = input as unknown as JobProps;
           const oldCluster = connectionIdentity(tryConnectionOf(olds.cluster));
           const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
-          if (
-            oldCluster !== undefined &&
-            newCluster !== undefined &&
-            oldCluster !== newCluster
-          ) {
+          if (oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) {
             return { action: "replace" } as const;
           }
           if (
@@ -489,9 +464,7 @@ export const JobProvider = () =>
               source,
               platform: imagePlatformOf(news.architecture, connection),
               isExternal: news.isExternal,
-              bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(
-                source.handler ?? "default",
-              ),
+              bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -503,9 +476,7 @@ export const JobProvider = () =>
           const connection = connectionOfOutput(output);
           if (!connection) return undefined;
           const transport = yield* connectCluster(connection).pipe(
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
             // Transient unreachability must not read as "gone".
             Effect.catch(() => Effect.succeed("unreachable" as const)),
           );
@@ -525,13 +496,7 @@ export const JobProvider = () =>
           if (observed === undefined) return undefined;
           return output;
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const connection = toConnection(news.cluster);
           const adapter = yield* findClusterAdapter(connection.auth.kind);
           const transport = yield* adapter.connect(connection);
@@ -581,9 +546,7 @@ export const JobProvider = () =>
             source,
             platform: imagePlatformOf(news.architecture, connection),
             isExternal: news.isExternal,
-            bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(
-              source.handler ?? "default",
-            ),
+            bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??
@@ -631,10 +594,7 @@ export const JobProvider = () =>
                     args: news.args,
                     env: Object.entries(containerEnv).map(([name, value]) => ({
                       name,
-                      value:
-                        typeof value === "string"
-                          ? value
-                          : JSON.stringify(value),
+                      value: typeof value === "string" ? value : JSON.stringify(value),
                     })),
                     resources: news.resources,
                   },
@@ -692,9 +652,7 @@ export const JobProvider = () =>
             desiredObjects,
           });
 
-          yield* session.note(
-            `Applied Kubernetes ${kind} ${namespace}/${jobName}`,
-          );
+          yield* session.note(`Applied Kubernetes ${kind} ${namespace}/${jobName}`);
 
           return {
             connection,

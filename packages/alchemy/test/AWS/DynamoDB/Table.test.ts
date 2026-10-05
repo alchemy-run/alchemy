@@ -1,3 +1,9 @@
+import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
@@ -5,12 +11,6 @@ import { Stream as KinesisStream } from "@/AWS/Kinesis";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
-import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,16 +31,11 @@ describe.skipIf(!!process.env.FAST)(
         yield* logTestStep("deploying base table");
         const table = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Table("TestTable", {
-              partitionKey: "id",
-              attributes: { id: "S" },
-            });
+            return yield* Table("TestTable", { partitionKey: "id", attributes: { id: "S" } });
           }),
         );
 
-        const actualTable = yield* DynamoDB.describeTable({
-          TableName: table.tableName,
-        });
+        const actualTable = yield* DynamoDB.describeTable({ TableName: table.tableName });
         expect(actualTable.Table?.TableArn).toEqual(table.tableArn);
 
         yield* logTestStep("destroying base table");
@@ -58,10 +53,7 @@ describe.skipIf(!!process.env.FAST)(
 
           const table = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Table("ListTable", {
-                partitionKey: "id",
-                attributes: { id: "S" },
-              });
+              return yield* Table("ListTable", { partitionKey: "id", attributes: { id: "S" } });
             }),
           );
 
@@ -96,22 +88,16 @@ describe.skipIf(!!process.env.FAST)(
                 attributes: { id: "S" },
               });
               yield* table.bind("TestTableStreamBinding", {
-                streamSpecification: {
-                  StreamEnabled: true,
-                  StreamViewType: "NEW_AND_OLD_IMAGES",
-                },
+                streamSpecification: { StreamEnabled: true, StreamViewType: "NEW_AND_OLD_IMAGES" },
               });
               return table;
             }),
           );
 
-          const created = yield* waitForTableStreamSpecification(
-            table.tableName,
-            {
-              StreamEnabled: true,
-              StreamViewType: "NEW_AND_OLD_IMAGES",
-            },
-          );
+          const created = yield* waitForTableStreamSpecification(table.tableName, {
+            StreamEnabled: true,
+            StreamViewType: "NEW_AND_OLD_IMAGES",
+          });
           expect(created.Table?.StreamSpecification).toEqual({
             StreamEnabled: true,
             StreamViewType: "NEW_AND_OLD_IMAGES",
@@ -126,22 +112,16 @@ describe.skipIf(!!process.env.FAST)(
                 attributes: { id: "S" },
               });
               yield* table.bind("TestTableStreamBinding", {
-                streamSpecification: {
-                  StreamEnabled: true,
-                  StreamViewType: "KEYS_ONLY",
-                },
+                streamSpecification: { StreamEnabled: true, StreamViewType: "KEYS_ONLY" },
               });
               return table;
             }),
           );
 
-          const updated = yield* waitForTableStreamSpecification(
-            table.tableName,
-            {
-              StreamEnabled: true,
-              StreamViewType: "KEYS_ONLY",
-            },
-          );
+          const updated = yield* waitForTableStreamSpecification(table.tableName, {
+            StreamEnabled: true,
+            StreamViewType: "KEYS_ONLY",
+          });
           expect(updated.Table?.StreamSpecification).toEqual({
             StreamEnabled: true,
             StreamViewType: "KEYS_ONLY",
@@ -150,17 +130,11 @@ describe.skipIf(!!process.env.FAST)(
           yield* logTestStep("removing stream binding");
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Table("StreamTable", {
-                partitionKey: "id",
-                attributes: { id: "S" },
-              });
+              return yield* Table("StreamTable", { partitionKey: "id", attributes: { id: "S" } });
             }),
           );
 
-          const disabled = yield* waitForTableStreamSpecification(
-            table.tableName,
-            undefined,
-          );
+          const disabled = yield* waitForTableStreamSpecification(table.tableName, undefined);
           expect(disabled.Table?.StreamSpecification).toBeUndefined();
 
           yield* logTestStep("destroying stream table");
@@ -192,23 +166,15 @@ describe.skipIf(!!process.env.FAST)(
             }),
           );
 
-          const createdTags = yield* waitForTableTags(table.tableArn, {
-            Environment: "test",
-          });
+          const createdTags = yield* waitForTableTags(table.tableArn, { Environment: "test" });
           expect(createdTags["Environment"]).toEqual("test");
           expect(table.tags?.["Environment"]).toEqual("test");
 
-          const createdBackups = yield* waitForPointInTimeRecovery(
-            table.tableName,
-            true,
+          const createdBackups = yield* waitForPointInTimeRecovery(table.tableName, true);
+          expect(createdBackups.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus).toEqual(
+            "ENABLED",
           );
-          expect(
-            createdBackups.PointInTimeRecoveryDescription
-              ?.PointInTimeRecoveryStatus,
-          ).toEqual("ENABLED");
-          expect(
-            createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays,
-          ).toEqual(7);
+          expect(createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays).toEqual(7);
 
           yield* logTestStep("updating tags and disabling PITR");
           const updated = yield* stack.deploy(
@@ -217,9 +183,7 @@ describe.skipIf(!!process.env.FAST)(
                 partitionKey: "id",
                 attributes: { id: "S" },
                 tags: { Environment: "prod", Team: "platform" },
-                pointInTimeRecoverySpecification: {
-                  pointInTimeRecoveryEnabled: false,
-                },
+                pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
               });
             }),
           );
@@ -233,14 +197,10 @@ describe.skipIf(!!process.env.FAST)(
           expect(updated.tags?.["Environment"]).toEqual("prod");
           expect(updated.tags?.["Team"]).toEqual("platform");
 
-          const updatedBackups = yield* waitForPointInTimeRecovery(
-            updated.tableName,
-            false,
+          const updatedBackups = yield* waitForPointInTimeRecovery(updated.tableName, false);
+          expect(updatedBackups.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus).toEqual(
+            "DISABLED",
           );
-          expect(
-            updatedBackups.PointInTimeRecoveryDescription
-              ?.PointInTimeRecoveryStatus,
-          ).toEqual("DISABLED");
 
           yield* logTestStep("destroying tagged table");
           yield* stack.destroy();
@@ -262,10 +222,7 @@ describe.skipIf(!!process.env.FAST)(
           yield* logTestStep("deploying table without a resource policy");
           const table = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Table("PolicyTable", {
-                partitionKey: "id",
-                attributes: { id: "S" },
-              });
+              return yield* Table("PolicyTable", { partitionKey: "id", attributes: { id: "S" } });
             }),
           );
 
@@ -290,17 +247,11 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("PolicyTable", {
                 partitionKey: "id",
                 attributes: { id: "S" },
-                resourcePolicy: policyFor(
-                  "AllowSameAccountDescribe",
-                  "dynamodb:DescribeTable",
-                ),
+                resourcePolicy: policyFor("AllowSameAccountDescribe", "dynamodb:DescribeTable"),
               });
             }),
           );
-          const created = yield* waitForResourcePolicy(
-            table.tableArn,
-            "AllowSameAccountDescribe",
-          );
+          const created = yield* waitForResourcePolicy(table.tableArn, "AllowSameAccountDescribe");
           expect(created).toContain("AllowSameAccountDescribe");
 
           yield* logTestStep("updating the resource policy");
@@ -309,33 +260,21 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("PolicyTable", {
                 partitionKey: "id",
                 attributes: { id: "S" },
-                resourcePolicy: policyFor(
-                  "AllowSameAccountGet",
-                  "dynamodb:GetItem",
-                ),
+                resourcePolicy: policyFor("AllowSameAccountGet", "dynamodb:GetItem"),
               });
             }),
           );
-          const updated = yield* waitForResourcePolicy(
-            table.tableArn,
-            "AllowSameAccountGet",
-          );
+          const updated = yield* waitForResourcePolicy(table.tableArn, "AllowSameAccountGet");
           expect(updated).toContain("AllowSameAccountGet");
           expect(updated).not.toContain("AllowSameAccountDescribe");
 
           yield* logTestStep("removing the resource policy");
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Table("PolicyTable", {
-                partitionKey: "id",
-                attributes: { id: "S" },
-              });
+              return yield* Table("PolicyTable", { partitionKey: "id", attributes: { id: "S" } });
             }),
           );
-          const removed = yield* waitForResourcePolicy(
-            table.tableArn,
-            undefined,
-          );
+          const removed = yield* waitForResourcePolicy(table.tableArn, undefined);
           expect(removed).toBeUndefined();
 
           yield* logTestStep("destroying resource policy test table");
@@ -377,9 +316,7 @@ describe.skipIf(!!process.env.FAST)(
               return { table, stream };
             });
 
-          yield* logTestStep(
-            "deploying stream + table with streaming destination",
-          );
+          yield* logTestStep("deploying stream + table with streaming destination");
           const { table, stream } = yield* stack.deploy(program(true));
 
           const enabled = yield* waitForKinesisDestination(
@@ -388,13 +325,9 @@ describe.skipIf(!!process.env.FAST)(
             "ACTIVE",
           );
           expect(enabled?.DestinationStatus).toEqual("ACTIVE");
-          expect(enabled?.ApproximateCreationDateTimePrecision).toEqual(
-            "MICROSECOND",
-          );
+          expect(enabled?.ApproximateCreationDateTimePrecision).toEqual("MICROSECOND");
 
-          yield* logTestStep(
-            "removing the streaming destination (stream stays deployed)",
-          );
+          yield* logTestStep("removing the streaming destination (stream stays deployed)");
           yield* stack.deploy(program(false));
           const disabled = yield* waitForKinesisDestination(
             table.tableName,
@@ -428,26 +361,17 @@ describe.skipIf(!!process.env.FAST)(
             }),
           );
 
-          const enabled = yield* waitForContributorInsights(
-            table.tableName,
-            true,
-          );
+          const enabled = yield* waitForContributorInsights(table.tableName, true);
           expect(["ENABLING", "ENABLED"]).toContain(enabled);
 
           yield* logTestStep("disabling Contributor Insights");
           yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Table("InsightsTable", {
-                partitionKey: "id",
-                attributes: { id: "S" },
-              });
+              return yield* Table("InsightsTable", { partitionKey: "id", attributes: { id: "S" } });
             }),
           );
 
-          const disabled = yield* waitForContributorInsights(
-            table.tableName,
-            false,
-          );
+          const disabled = yield* waitForContributorInsights(table.tableName, false);
           expect(["DISABLING", "DISABLED"]).toContain(disabled);
 
           yield* logTestStep("destroying Contributor Insights test table");
@@ -462,9 +386,7 @@ describe.skipIf(!!process.env.FAST)(
       "destroying a table with Contributor Insights still enabled leaves no CloudWatch rules",
       (stack) =>
         Effect.gen(function* () {
-          yield* logTestStep(
-            "starting Contributor Insights destroy-while-enabled test",
-          );
+          yield* logTestStep("starting Contributor Insights destroy-while-enabled test");
           yield* stack.destroy();
 
           yield* logTestStep("deploying table with Contributor Insights");
@@ -478,10 +400,7 @@ describe.skipIf(!!process.env.FAST)(
             }),
           );
 
-          const enabled = yield* waitForContributorInsights(
-            table.tableName,
-            true,
-          );
+          const enabled = yield* waitForContributorInsights(table.tableName, true);
           expect(["ENABLING", "ENABLED"]).toContain(enabled);
 
           // Destroy WITHOUT disabling insights first. DynamoDB's CloudWatch
@@ -510,27 +429,15 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("IndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S" },
                 localSecondaryIndexes: [
-                  {
-                    indexName: "lsi-by-sk",
-                    sortKey: "sk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
-                  },
+                  { indexName: "lsi-by-sk", sortKey: "sk", projection: { ProjectionType: "ALL" } },
                 ],
                 globalSecondaryIndexes: [
                   {
                     indexName: "gsi-by-lookup",
                     partitionKey: "gsi1pk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
+                    projection: { ProjectionType: "ALL" },
                   },
                 ],
               });
@@ -538,13 +445,9 @@ describe.skipIf(!!process.env.FAST)(
           );
 
           const actualTable = yield* Effect.gen(function* () {
-            const current = yield* DynamoDB.describeTable({
-              TableName: table.tableName,
-            });
+            const current = yield* DynamoDB.describeTable({ TableName: table.tableName });
             if (
-              current.Table?.GlobalSecondaryIndexes?.some(
-                (index) => index.IndexStatus !== "ACTIVE",
-              )
+              current.Table?.GlobalSecondaryIndexes?.some((index) => index.IndexStatus !== "ACTIVE")
             ) {
               return yield* Effect.fail(new GlobalSecondaryIndexNotActive());
             }
@@ -552,27 +455,22 @@ describe.skipIf(!!process.env.FAST)(
           }).pipe(
             Effect.retry({
               while: (error) => error._tag === "GlobalSecondaryIndexNotActive",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
             }),
           );
 
-          expect(
-            actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName),
-          ).toContain("lsi-by-sk");
-          expect(
-            actualTable?.GlobalSecondaryIndexes?.map(
-              (index) => index.IndexName,
-            ),
-          ).toContain("gsi-by-lookup");
-          expect(
-            table.localSecondaryIndexes?.map((index) => index.IndexName),
-          ).toContain("lsi-by-sk");
-          expect(
-            table.globalSecondaryIndexes?.map((index) => index.IndexName),
-          ).toContain("gsi-by-lookup");
+          expect(actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+            "lsi-by-sk",
+          );
+          expect(actualTable?.GlobalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+            "gsi-by-lookup",
+          );
+          expect(table.localSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+            "lsi-by-sk",
+          );
+          expect(table.globalSecondaryIndexes?.map((index) => index.IndexName)).toContain(
+            "gsi-by-lookup",
+          );
 
           yield* logTestStep("destroying indexed table");
           yield* stack.destroy();
@@ -592,12 +490,7 @@ describe.skipIf(!!process.env.FAST)(
           const multiAttrTable = Effect.gen(function* () {
             return yield* Table("MultiAttrKeyTable", {
               partitionKey: "matchId",
-              attributes: {
-                matchId: "S",
-                tournamentId: "S",
-                region: "S",
-                round: "S",
-              },
+              attributes: { matchId: "S", tournamentId: "S", region: "S", round: "S" },
               globalSecondaryIndexes: [
                 {
                   indexName: "TournamentRegionIndex",
@@ -621,9 +514,10 @@ describe.skipIf(!!process.env.FAST)(
           // must report the HASH attributes then the RANGE attributes in
           // declaration order.
           expect(
-            actualTable?.GlobalSecondaryIndexes?.[0]?.KeySchema?.map(
-              (element) => [element.AttributeName, element.KeyType],
-            ),
+            actualTable?.GlobalSecondaryIndexes?.[0]?.KeySchema?.map((element) => [
+              element.AttributeName,
+              element.KeyType,
+            ]),
           ).toEqual([
             ["tournamentId", "HASH"],
             ["region", "HASH"],
@@ -657,16 +551,10 @@ describe.skipIf(!!process.env.FAST)(
             IndexName: "TournamentRegionIndex",
             KeyConditionExpression: "tournamentId = :t AND #r = :r",
             ExpressionAttributeNames: { "#r": "region" },
-            ExpressionAttributeValues: {
-              ":t": { S: "WINTER2024" },
-              ":r": { S: "NA-EAST" },
-            },
+            ExpressionAttributeValues: { ":t": { S: "WINTER2024" }, ":r": { S: "NA-EAST" } },
           }).pipe(
             Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
               until: (response) => (response.Count ?? 0) === 2,
             }),
           );
@@ -676,8 +564,7 @@ describe.skipIf(!!process.env.FAST)(
           const byRound = yield* DynamoDB.query({
             TableName: table.tableName,
             IndexName: "TournamentRegionIndex",
-            KeyConditionExpression:
-              "tournamentId = :t AND #r = :r AND round = :round",
+            KeyConditionExpression: "tournamentId = :t AND #r = :r AND round = :round",
             ExpressionAttributeNames: { "#r": "region" },
             ExpressionAttributeValues: {
               ":t": { S: "WINTER2024" },
@@ -713,11 +600,7 @@ describe.skipIf(!!process.env.FAST)(
             Effect.gen(function* () {
               return yield* Table("ReorderedMultiAttrKeyTable", {
                 partitionKey: "id",
-                attributes: {
-                  id: "S",
-                  category: "S",
-                  subcategory: "S",
-                },
+                attributes: { id: "S", category: "S", subcategory: "S" },
                 globalSecondaryIndexes: [
                   {
                     indexName: "CategoryIndex",
@@ -730,17 +613,13 @@ describe.skipIf(!!process.env.FAST)(
             });
 
           yield* logTestStep("deploying table with ordered sort attributes");
-          const original = yield* stack.deploy(
-            makeTable(["subcategory", "id"]),
-          );
+          const original = yield* stack.deploy(makeTable(["subcategory", "id"]));
 
           // Swapping the two sort attributes defines a different index
           // (sort attributes are queried left-to-right in declaration order),
           // so the deploy must replace the table, not no-op.
           yield* logTestStep("reordering sort attributes (expect replacement)");
-          const replaced = yield* stack.deploy(
-            makeTable(["id", "subcategory"]),
-          );
+          const replaced = yield* stack.deploy(makeTable(["id", "subcategory"]));
           expect(replaced.tableName).not.toEqual(original.tableName);
 
           const replacedTable = yield* expectTableIndexes(replaced.tableName, {
@@ -767,9 +646,7 @@ describe.skipIf(!!process.env.FAST)(
       "update global secondary indexes across multiple deploys",
       (stack) =>
         Effect.gen(function* () {
-          yield* logTestStep(
-            "starting multi-stage global secondary index update test",
-          );
+          yield* logTestStep("starting multi-stage global secondary index update test");
           yield* stack.destroy();
 
           yield* logTestStep("deploying table without GSIs");
@@ -778,18 +655,12 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                },
+                attributes: { pk: "S", sk: "S" },
               });
             }),
           );
 
-          yield* expectTableIndexes(table.tableName, {
-            local: [],
-            global: [],
-          });
+          yield* expectTableIndexes(table.tableName, { local: [], global: [] });
 
           yield* logTestStep("adding first GSI");
           const oneAdded = yield* stack.deploy(
@@ -797,28 +668,19 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S" },
                 globalSecondaryIndexes: [
                   {
                     indexName: "gsi-by-lookup-1",
                     partitionKey: "gsi1pk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
+                    projection: { ProjectionType: "ALL" },
                   },
                 ],
               });
             }),
           );
           expect(oneAdded.tableName).toEqual(table.tableName);
-          yield* expectTableIndexes(oneAdded.tableName, {
-            local: [],
-            global: ["gsi-by-lookup-1"],
-          });
+          yield* expectTableIndexes(oneAdded.tableName, { local: [], global: ["gsi-by-lookup-1"] });
 
           yield* logTestStep("removing first GSI");
           const oneRemoved = yield* stack.deploy(
@@ -826,20 +688,12 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                  gsi2pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S", gsi2pk: "S" },
               });
             }),
           );
           expect(oneRemoved.tableName).toEqual(table.tableName);
-          yield* expectTableIndexes(oneRemoved.tableName, {
-            local: [],
-            global: [],
-          });
+          yield* expectTableIndexes(oneRemoved.tableName, { local: [], global: [] });
 
           yield* logTestStep("adding two GSIs sequentially through one deploy");
           const twoAdded = yield* stack.deploy(
@@ -847,26 +701,17 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                  gsi2pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S", gsi2pk: "S" },
                 globalSecondaryIndexes: [
                   {
                     indexName: "gsi-by-lookup-1",
                     partitionKey: "gsi1pk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
+                    projection: { ProjectionType: "ALL" },
                   },
                   {
                     indexName: "gsi-by-lookup-2",
                     partitionKey: "gsi2pk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
+                    projection: { ProjectionType: "ALL" },
                   },
                 ],
               });
@@ -884,19 +729,12 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                  gsi2pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S", gsi2pk: "S" },
                 globalSecondaryIndexes: [
                   {
                     indexName: "gsi-by-lookup-2",
                     partitionKey: "gsi2pk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
+                    projection: { ProjectionType: "ALL" },
                   },
                 ],
               });
@@ -914,20 +752,12 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("UpdatingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                  gsi1pk: "S",
-                  gsi2pk: "S",
-                },
+                attributes: { pk: "S", sk: "S", gsi1pk: "S", gsi2pk: "S" },
               });
             }),
           );
           expect(twoRemoved.tableName).toEqual(table.tableName);
-          yield* expectTableIndexes(twoRemoved.tableName, {
-            local: [],
-            global: [],
-          });
+          yield* expectTableIndexes(twoRemoved.tableName, { local: [], global: [] });
 
           yield* logTestStep("destroying GSI update test table");
           yield* stack.destroy();
@@ -950,18 +780,12 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("ReplacingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                },
+                attributes: { pk: "S", sk: "S" },
               });
             }),
           );
 
-          yield* expectTableIndexes(original.tableName, {
-            local: [],
-            global: [],
-          });
+          yield* expectTableIndexes(original.tableName, { local: [], global: [] });
 
           yield* logTestStep("deploying replacement with LSI");
           const withLsi = yield* stack.deploy(
@@ -969,18 +793,9 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("ReplacingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                },
+                attributes: { pk: "S", sk: "S" },
                 localSecondaryIndexes: [
-                  {
-                    indexName: "lsi-by-sk",
-                    sortKey: "sk",
-                    projection: {
-                      ProjectionType: "ALL",
-                    },
-                  },
+                  { indexName: "lsi-by-sk", sortKey: "sk", projection: { ProjectionType: "ALL" } },
                 ],
               });
             }),
@@ -988,10 +803,7 @@ describe.skipIf(!!process.env.FAST)(
 
           expect(withLsi.tableName).not.toEqual(original.tableName);
           yield* assertTableIsDeleted(original.tableName);
-          yield* expectTableIndexes(withLsi.tableName, {
-            local: ["lsi-by-sk"],
-            global: [],
-          });
+          yield* expectTableIndexes(withLsi.tableName, { local: ["lsi-by-sk"], global: [] });
 
           yield* logTestStep("deploying replacement without LSI again");
           const withoutLsiAgain = yield* stack.deploy(
@@ -999,20 +811,14 @@ describe.skipIf(!!process.env.FAST)(
               return yield* Table("ReplacingIndexedTable", {
                 partitionKey: "pk",
                 sortKey: "sk",
-                attributes: {
-                  pk: "S",
-                  sk: "S",
-                },
+                attributes: { pk: "S", sk: "S" },
               });
             }),
           );
 
           expect(withoutLsiAgain.tableName).not.toEqual(withLsi.tableName);
           yield* assertTableIsDeleted(withLsi.tableName);
-          yield* expectTableIndexes(withoutLsiAgain.tableName, {
-            local: [],
-            global: [],
-          });
+          yield* expectTableIndexes(withoutLsiAgain.tableName, { local: [], global: [] });
 
           yield* logTestStep("destroying replacement test table");
           yield* stack.destroy();
@@ -1056,12 +862,8 @@ describe.skipIf(!!process.env.FAST)(
           expect(replaced.partitionKey).toEqual("pk");
           yield* assertTableIsDeleted(original.tableName);
 
-          const successor = yield* DynamoDB.describeTable({
-            TableName: replaced.tableName,
-          });
-          expect(successor.Table?.KeySchema).toEqual([
-            { AttributeName: "pk", KeyType: "HASH" },
-          ]);
+          const successor = yield* DynamoDB.describeTable({ TableName: replaced.tableName });
+          expect(successor.Table?.KeySchema).toEqual([{ AttributeName: "pk", KeyType: "HASH" }]);
 
           yield* logTestStep("destroying key schema replacement test table");
           yield* stack.destroy();
@@ -1113,9 +915,7 @@ describe.skipIf(!!process.env.FAST)(
           expect(replaced.tableId).not.toEqual(original.tableId);
           expect(replaced.sortKey).toEqual("sk");
 
-          const successor = yield* DynamoDB.describeTable({
-            TableName: tableName,
-          });
+          const successor = yield* DynamoDB.describeTable({ TableName: tableName });
           expect(successor.Table?.TableId).toEqual(replaced.tableId);
           expect(successor.Table?.KeySchema).toEqual([
             { AttributeName: "id", KeyType: "HASH" },
@@ -1164,11 +964,7 @@ describe.skipIf(!!process.env.FAST)(
             // Phase 2: wipe local state — the table stays in DynamoDB.
             yield* Effect.gen(function* () {
               const state = yield* yield* State;
-              yield* state.delete({
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "AdoptableTable",
-              });
+              yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableTable" });
             }).pipe(Effect.provide(stack.state));
 
             // Phase 3: redeploy without `adopt(true)`. Read sees alchemy tags
@@ -1191,9 +987,7 @@ describe.skipIf(!!process.env.FAST)(
           }).pipe(
             // After the state wipe the table is out-of-band: guarantee the
             // idempotent delete on success, failure, and interruption.
-            Effect.ensuring(
-              reclaimOutOfBandTable(tableName).pipe(Effect.orDie),
-            ),
+            Effect.ensuring(reclaimOutOfBandTable(tableName).pipe(Effect.orDie)),
           );
         }),
       { timeout: 360_000 },
@@ -1230,11 +1024,7 @@ describe.skipIf(!!process.env.FAST)(
             // Wipe state for "Original"; table stays in DynamoDB.
             yield* Effect.gen(function* () {
               const state = yield* yield* State;
-              yield* state.delete({
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "Original",
-              });
+              yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Original" });
             }).pipe(Effect.provide(stack.state));
 
             // Phase 2: redeploy under "Different" with `adopt(true)`. Read
@@ -1265,9 +1055,7 @@ describe.skipIf(!!process.env.FAST)(
           }).pipe(
             // After the state wipe the table is out-of-band: guarantee the
             // idempotent delete on success, failure, and interruption.
-            Effect.ensuring(
-              reclaimOutOfBandTable(tableName).pipe(Effect.orDie),
-            ),
+            Effect.ensuring(reclaimOutOfBandTable(tableName).pipe(Effect.orDie)),
           );
         }),
       { timeout: 360_000 },
@@ -1295,10 +1083,7 @@ describe.skipIf(!!process.env.FAST)(
           const deployTable = () =>
             stack.deploy(
               Effect.gen(function* () {
-                return yield* Table("WedgedTable", {
-                  partitionKey: "id",
-                  attributes: { id: "S" },
-                });
+                return yield* Table("WedgedTable", { partitionKey: "id", attributes: { id: "S" } });
               }),
             );
 
@@ -1311,14 +1096,11 @@ describe.skipIf(!!process.env.FAST)(
           const stage = stack.stage;
           const fqns = yield* state.list({ stack: stack.name, stage });
           const rows = yield* Effect.forEach(fqns, (fqn) =>
-            state
-              .get({ stack: stack.name, stage, fqn })
-              .pipe(Effect.map((row) => ({ fqn, row }))),
+            state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
           );
           const wedged = rows.find(
             (r): r is { fqn: string; row: ResourceState } =>
-              isResourceState(r.row) &&
-              r.row.resourceType === "AWS.DynamoDB.Table",
+              isResourceState(r.row) && r.row.resourceType === "AWS.DynamoDB.Table",
           );
           if (!wedged) {
             return yield* Effect.die(
@@ -1333,24 +1115,16 @@ describe.skipIf(!!process.env.FAST)(
               ...wedged.row,
               status: "creating",
               attr: undefined,
-              props: {
-                ...wedged.row.props,
-                attributes: undefined,
-              },
+              props: { ...wedged.row.props, attributes: undefined },
             },
           });
 
           // Delete the table out-of-band so the recovery `read` misses.
-          yield* logTestStep(
-            `deleting ${created.tableName} out-of-band to force a read miss`,
-          );
+          yield* logTestStep(`deleting ${created.tableName} out-of-band to force a read miss`);
           yield* DynamoDB.deleteTable({ TableName: created.tableName }).pipe(
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
@@ -1361,9 +1135,7 @@ describe.skipIf(!!process.env.FAST)(
           const recovered = yield* deployTable();
           expect(recovered.tableName).toEqual(created.tableName);
 
-          const actual = yield* DynamoDB.describeTable({
-            TableName: recovered.tableName,
-          });
+          const actual = yield* DynamoDB.describeTable({ TableName: recovered.tableName });
           expect(actual.Table?.TableArn).toEqual(recovered.tableArn);
 
           yield* stack.destroy();
@@ -1382,10 +1154,7 @@ describe.skipIf(!!process.env.FAST)(
       yield* DynamoDB.deleteTable({ TableName: tableName }).pipe(
         Effect.retry({
           while: (e) => e._tag === "ResourceInUseException",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
         }),
         Effect.flatMap(() => assertTableIsDeleted(tableName)),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -1393,25 +1162,16 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
-      yield* Effect.logInfo(
-        `DynamoDB Table test: waiting for deletion of ${tableName}`,
-      );
-      yield* DynamoDB.describeTable({
-        TableName: tableName,
-      }).pipe(
+      yield* Effect.logInfo(`DynamoDB Table test: waiting for deletion of ${tableName}`);
+      yield* DynamoDB.describeTable({ TableName: tableName }).pipe(
         Effect.flatMap(() => Effect.fail(new TableStillExists())),
         Effect.retry({
           while: (e) => e._tag === "TableStillExists",
-          schedule: Schedule.max([
-            Schedule.fixed("1 second"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(30)]),
         }),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       );
-      yield* Effect.logInfo(
-        `DynamoDB Table test: confirmed deleted ${tableName}`,
-      );
+      yield* Effect.logInfo(`DynamoDB Table test: confirmed deleted ${tableName}`);
     });
 
     const waitForTableTags = Effect.fn(function* (
@@ -1421,16 +1181,12 @@ describe.skipIf(!!process.env.FAST)(
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for tags on ${tableArn} -> ${JSON.stringify(expected)}`,
       );
-      return yield* DynamoDB.listTagsOfResource({
-        ResourceArn: tableArn,
-      }).pipe(
+      return yield* DynamoDB.listTagsOfResource({ ResourceArn: tableArn }).pipe(
         Effect.flatMap((result) => {
           const tags = Object.fromEntries(
             (result.Tags ?? []).map((tag) => [tag.Key!, tag.Value!]),
           ) as Record<string, string>;
-          const matches = Object.entries(expected).every(
-            ([key, value]) => tags[key] === value,
-          );
+          const matches = Object.entries(expected).every(([key, value]) => tags[key] === value);
           if (!matches) {
             return Effect.logInfo(
               `DynamoDB Table test: tags not ready on ${tableArn}. expected=${JSON.stringify(expected)} actual=${JSON.stringify(tags)}`,
@@ -1442,53 +1198,35 @@ describe.skipIf(!!process.env.FAST)(
         }),
         Effect.retry({
           while: (error) => error._tag === "TableTagsNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
     });
 
-    const waitForPointInTimeRecovery = Effect.fn(function* (
-      tableName: string,
-      enabled: boolean,
-    ) {
+    const waitForPointInTimeRecovery = Effect.fn(function* (tableName: string, enabled: boolean) {
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for PITR on ${tableName} -> ${enabled ? "ENABLED" : "DISABLED"}`,
       );
-      return yield* DynamoDB.describeContinuousBackups({
-        TableName: tableName,
-      }).pipe(
+      return yield* DynamoDB.describeContinuousBackups({ TableName: tableName }).pipe(
         Effect.flatMap((result) => {
           const status =
             result.ContinuousBackupsDescription?.PointInTimeRecoveryDescription
               ?.PointInTimeRecoveryStatus;
-          if (
-            (enabled && status !== "ENABLED") ||
-            (!enabled && status !== "DISABLED")
-          ) {
+          if ((enabled && status !== "ENABLED") || (!enabled && status !== "DISABLED")) {
             return Effect.logInfo(
               `DynamoDB Table test: PITR not ready on ${tableName}. current=${status ?? "undefined"}`,
-            ).pipe(
-              Effect.andThen(Effect.fail(new PointInTimeRecoveryNotUpdated())),
-            );
+            ).pipe(Effect.andThen(Effect.fail(new PointInTimeRecoveryNotUpdated())));
           }
           if (!result.ContinuousBackupsDescription) {
             return Effect.fail(new PointInTimeRecoveryNotUpdated());
           }
           return Effect.logInfo(
             `DynamoDB Table test: PITR ready on ${tableName} -> ${status}`,
-          ).pipe(
-            Effect.andThen(Effect.succeed(result.ContinuousBackupsDescription)),
-          );
+          ).pipe(Effect.andThen(Effect.succeed(result.ContinuousBackupsDescription)));
         }),
         Effect.retry({
           while: (error) => error._tag === "PointInTimeRecoveryNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
     });
@@ -1500,13 +1238,10 @@ describe.skipIf(!!process.env.FAST)(
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for stream configuration on ${tableName} -> ${JSON.stringify(expected)}`,
       );
-      return yield* DynamoDB.describeTable({
-        TableName: tableName,
-      }).pipe(
+      return yield* DynamoDB.describeTable({ TableName: tableName }).pipe(
         Effect.flatMap((result) => {
           const actual = result.Table?.StreamSpecification;
-          const matches =
-            JSON.stringify(actual ?? undefined) === JSON.stringify(expected);
+          const matches = JSON.stringify(actual ?? undefined) === JSON.stringify(expected);
           if (!matches) {
             return Effect.logInfo(
               `DynamoDB Table test: stream configuration not ready on ${tableName}. actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`,
@@ -1518,20 +1253,14 @@ describe.skipIf(!!process.env.FAST)(
         }),
         Effect.retry({
           while: (error) => error._tag === "StreamSpecNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
         }),
       );
     });
 
     const expectTableIndexes = Effect.fn(function* (
       tableName: string,
-      expected: {
-        local: string[];
-        global: string[];
-      },
+      expected: { local: string[]; global: string[] },
     ) {
       const expectedLocal = [...expected.local].sort();
       const expectedGlobal = [...expected.global].sort();
@@ -1539,9 +1268,7 @@ describe.skipIf(!!process.env.FAST)(
         `DynamoDB Table test: waiting for indexes on ${tableName}. expectedLocal=${JSON.stringify(expectedLocal)} expectedGlobal=${JSON.stringify(expectedGlobal)}`,
       );
 
-      return yield* DynamoDB.describeTable({
-        TableName: tableName,
-      }).pipe(
+      return yield* DynamoDB.describeTable({ TableName: tableName }).pipe(
         Effect.flatMap((result) => {
           const table = result.Table;
           const actualLocal = [...(table?.LocalSecondaryIndexes ?? [])]
@@ -1582,13 +1309,9 @@ describe.skipIf(!!process.env.FAST)(
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for resource policy on ${tableArn} -> ${expectedSid ?? "absent"}`,
       );
-      return yield* DynamoDB.getResourcePolicy({
-        ResourceArn: tableArn,
-      }).pipe(
+      return yield* DynamoDB.getResourcePolicy({ ResourceArn: tableArn }).pipe(
         Effect.map((result) => result.Policy),
-        Effect.catchTag("PolicyNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
         Effect.flatMap((policy) => {
           const matches =
             expectedSid === undefined
@@ -1603,10 +1326,7 @@ describe.skipIf(!!process.env.FAST)(
         }),
         Effect.retry({
           while: (error) => error._tag === "ResourcePolicyNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
     });
@@ -1619,9 +1339,7 @@ describe.skipIf(!!process.env.FAST)(
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for Kinesis destination ${streamArn} on ${tableName} -> ${expectedStatus}`,
       );
-      return yield* DynamoDB.describeKinesisStreamingDestination({
-        TableName: tableName,
-      }).pipe(
+      return yield* DynamoDB.describeKinesisStreamingDestination({ TableName: tableName }).pipe(
         Effect.flatMap((result) => {
           const destination = (result.KinesisDataStreamDestinations ?? []).find(
             (candidate) => candidate.StreamArn === streamArn,
@@ -1629,50 +1347,35 @@ describe.skipIf(!!process.env.FAST)(
           if (destination?.DestinationStatus !== expectedStatus) {
             return Effect.logInfo(
               `DynamoDB Table test: Kinesis destination not ready on ${tableName}. actual=${destination?.DestinationStatus ?? "absent"} expected=${expectedStatus}`,
-            ).pipe(
-              Effect.andThen(Effect.fail(new KinesisDestinationNotUpdated())),
-            );
+            ).pipe(Effect.andThen(Effect.fail(new KinesisDestinationNotUpdated())));
           }
           return Effect.succeed(destination);
         }),
         Effect.retry({
           while: (error) => error._tag === "KinesisDestinationNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(18),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]),
         }),
       );
     });
 
-    const waitForContributorInsights = Effect.fn(function* (
-      tableName: string,
-      enabled: boolean,
-    ) {
+    const waitForContributorInsights = Effect.fn(function* (tableName: string, enabled: boolean) {
       yield* Effect.logInfo(
         `DynamoDB Table test: waiting for Contributor Insights on ${tableName} -> ${enabled ? "enabled" : "disabled"}`,
       );
-      return yield* DynamoDB.describeContributorInsights({
-        TableName: tableName,
-      }).pipe(
+      return yield* DynamoDB.describeContributorInsights({ TableName: tableName }).pipe(
         Effect.flatMap((result) => {
           const status = result.ContributorInsightsStatus;
           const isEnabled = status === "ENABLED" || status === "ENABLING";
           if (isEnabled !== enabled) {
             return Effect.logInfo(
               `DynamoDB Table test: Contributor Insights not ready on ${tableName}. actual=${status ?? "undefined"}`,
-            ).pipe(
-              Effect.andThen(Effect.fail(new ContributorInsightsNotUpdated())),
-            );
+            ).pipe(Effect.andThen(Effect.fail(new ContributorInsightsNotUpdated())));
           }
           return Effect.succeed(status);
         }),
         Effect.retry({
           while: (error) => error._tag === "ContributorInsightsNotUpdated",
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(15),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
         }),
       );
     });
@@ -1680,52 +1383,32 @@ describe.skipIf(!!process.env.FAST)(
     // Out-of-band proof that DynamoDB's Contributor Insights cleanup ran:
     // no `DynamoDBContributorInsights-*-<tableName>-*` CloudWatch rules may
     // survive the destroy — stranded rules can only be removed by AWS support.
-    const assertNoContributorInsightsRules = Effect.fn(function* (
-      tableName: string,
-    ) {
+    const assertNoContributorInsightsRules = Effect.fn(function* (tableName: string) {
       const rules = yield* CloudWatch.describeInsightRules({});
       const leftover = (rules.InsightRules ?? [])
         .map((rule) => rule.Name)
-        .filter(
-          (name): name is string =>
-            name !== undefined && name.includes(`-${tableName}-`),
-        );
+        .filter((name): name is string => name !== undefined && name.includes(`-${tableName}-`));
       expect(leftover).toEqual([]);
     });
 
-    const logTestStep = (message: string) =>
-      Effect.logInfo(`DynamoDB Table test: ${message}`);
+    const logTestStep = (message: string) => Effect.logInfo(`DynamoDB Table test: ${message}`);
 
     class TableStillExists extends Data.TaggedError("TableStillExists") {}
 
-    class StreamSpecNotUpdated extends Data.TaggedError(
-      "StreamSpecNotUpdated",
-    ) {}
+    class StreamSpecNotUpdated extends Data.TaggedError("StreamSpecNotUpdated") {}
 
     class TableTagsNotUpdated extends Data.TaggedError("TableTagsNotUpdated") {}
 
-    class PointInTimeRecoveryNotUpdated extends Data.TaggedError(
-      "PointInTimeRecoveryNotUpdated",
-    ) {}
+    class PointInTimeRecoveryNotUpdated extends Data.TaggedError("PointInTimeRecoveryNotUpdated") {}
 
-    class GlobalSecondaryIndexNotActive extends Data.TaggedError(
-      "GlobalSecondaryIndexNotActive",
-    ) {}
+    class GlobalSecondaryIndexNotActive extends Data.TaggedError("GlobalSecondaryIndexNotActive") {}
 
-    class TableIndexesNotUpdated extends Data.TaggedError(
-      "TableIndexesNotUpdated",
-    ) {}
+    class TableIndexesNotUpdated extends Data.TaggedError("TableIndexesNotUpdated") {}
 
-    class ResourcePolicyNotUpdated extends Data.TaggedError(
-      "ResourcePolicyNotUpdated",
-    ) {}
+    class ResourcePolicyNotUpdated extends Data.TaggedError("ResourcePolicyNotUpdated") {}
 
-    class KinesisDestinationNotUpdated extends Data.TaggedError(
-      "KinesisDestinationNotUpdated",
-    ) {}
+    class KinesisDestinationNotUpdated extends Data.TaggedError("KinesisDestinationNotUpdated") {}
 
-    class ContributorInsightsNotUpdated extends Data.TaggedError(
-      "ContributorInsightsNotUpdated",
-    ) {}
+    class ContributorInsightsNotUpdated extends Data.TaggedError("ContributorInsightsNotUpdated") {}
   },
 );

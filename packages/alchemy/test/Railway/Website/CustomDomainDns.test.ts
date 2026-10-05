@@ -1,3 +1,18 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
+import * as route53 from "@distilled.cloud/aws/route-53";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 /**
  * `domain.dns` on Railway websites, deployed for real: a StaticSite whose
  * custom hostname is published through a DNS adapter (Cloudflare, and a
@@ -18,35 +33,14 @@ import * as Railway from "@/Railway";
 import type { CustomDomainDnsRecord } from "@/Railway/CustomDomain";
 import { isResourceState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as route53 from "@distilled.cloud/aws/route-53";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as railway from "@distilled.cloud/railway";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    Railway.providers(),
-    Cloudflare.providers(),
-    AWS.providers(),
-  ),
+  providers: Layer.mergeAll(Railway.providers(), Cloudflare.providers(), AWS.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ZONE = "alchemy-test-2.us";
 const HOSTNAME = `rw-dns.${ZONE}`;
@@ -98,13 +92,10 @@ const normalize = (records: ReadonlyArray<PublishedRecord>) =>
     .map((record) => ({
       name: trimDot(record.name),
       type: record.type,
-      value:
-        record.type === "TXT" ? unquote(record.value) : trimDot(record.value),
+      value: record.type === "TXT" ? unquote(record.value) : trimDot(record.value),
     }))
     .sort((a, b) =>
-      `${a.name}|${a.type}|${a.value}`.localeCompare(
-        `${b.name}|${b.type}|${b.value}`,
-      ),
+      `${a.name}|${a.type}|${a.value}`.localeCompare(`${b.name}|${b.type}|${b.value}`),
     );
 
 const underHostname = (name: string, hostname: string) =>
@@ -116,9 +107,7 @@ const resolveZone = Effect.gen(function* () {
   if (!zone) {
     return yield* Effect.die(new Error(`zone "${ZONE}" not found`));
   }
-  const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(
-    Effect.orDie,
-  );
+  const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
   return { id: zone.id, nameServers };
 });
 
@@ -127,9 +116,7 @@ const cloudflareRecordsUnder = (zoneId: string, hostname: string) =>
   dns.listRecords.items({ zoneId, name: { endswith: hostname } }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).filter((record) =>
-        underHostname(record.name, hostname),
-      ),
+      Array.from(chunk).filter((record) => underHostname(record.name, hostname)),
     ),
   );
 
@@ -139,10 +126,7 @@ const route53RecordsUnder = (hostedZoneId: string, hostname: string) =>
     Effect.map((result) =>
       (result.ResourceRecordSets ?? [])
         .filter(
-          (set) =>
-            set.Type !== "NS" &&
-            set.Type !== "SOA" &&
-            underHostname(set.Name, hostname),
+          (set) => set.Type !== "NS" && set.Type !== "SOA" && underHostname(set.Name, hostname),
         )
         .flatMap((set) =>
           (set.ResourceRecords ?? []).map((record) => ({
@@ -175,28 +159,29 @@ const customDomainAttrs = (
     return row.attr as Railway.CustomDomain["Attributes"];
   }).pipe(Effect.provide(stack.state), Effect.orDie);
 
-const liveDomain = (customDomainId: string, projectId: string) =>
-  railway.customDomain(
-    { id: customDomainId, projectId },
-    {
-      id: true,
-      domain: true,
-      deletedAt: true,
-      syncStatus: true,
-      status: {
-        verified: true,
-        certificateStatus: true,
-        verificationDnsHost: true,
-        verificationToken: true,
-        dnsRecords: {
-          fqdn: true,
-          zone: true,
-          recordType: true,
-          requiredValue: true,
-        },
-      },
+const liveDomain = Query.fn((id: string, projectId: string) => {
+  const domain = RailwayApi.customDomain({ id, projectId });
+  return {
+    id: domain.id,
+    domain: domain.domain,
+    deletedAt: domain.deletedAt,
+    syncStatus: domain.syncStatus,
+    status: {
+      verified: domain.status.verified,
+      certificateStatus: domain.status.certificateStatus,
+      verificationDnsHost: domain.status.verificationDnsHost,
+      verificationToken: domain.status.verificationToken,
+      dnsRecords: domain.status.dnsRecords.pipe(
+        Query.map((record) => ({
+          fqdn: record.fqdn,
+          zone: record.zone,
+          recordType: record.recordType,
+          requiredValue: record.requiredValue,
+        })),
+      ),
     },
-  );
+  };
+});
 
 /**
  * Railway's raw `status.dnsRecords` (plus its ownership TXT) must each be
@@ -213,15 +198,12 @@ const expectRailwayRecordsPublished = (
       (record) =>
         record.type === type &&
         record.value === (type === "TXT" ? unquote(value) : trimDot(value)) &&
-        (record.name === trimDot(host) ||
-          record.name === `${trimDot(host)}.${trimDot(zone)}`),
+        (record.name === trimDot(host) || record.name === `${trimDot(host)}.${trimDot(zone)}`),
     );
   const required = live.status.dnsRecords.filter((record) =>
-    [
-      "DNS_RECORD_TYPE_CNAME",
-      "DNS_RECORD_TYPE_A",
-      "DNS_RECORD_TYPE_TXT",
-    ].includes(record.recordType),
+    ["DNS_RECORD_TYPE_CNAME", "DNS_RECORD_TYPE_A", "DNS_RECORD_TYPE_TXT"].includes(
+      record.recordType,
+    ),
   );
   expect(required.length).toBeGreaterThan(0);
   for (const record of required) {
@@ -272,9 +254,7 @@ const waitForAuthoritative = (
           ).pipe(Effect.orElseSucceed(() => [] as string[]));
           if (
             !answers.some(
-              (answer) =>
-                trimDot(answer) === trimDot(record.value) ||
-                answer === record.value,
+              (answer) => trimDot(answer) === trimDot(record.value) || answer === record.value,
             )
           ) {
             return yield* Effect.fail(
@@ -285,9 +265,7 @@ const waitForAuthoritative = (
               }),
             );
           }
-        }).pipe(
-          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-        ),
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
       ),
     );
   });
@@ -318,15 +296,8 @@ const waitUntilServing = (hostname: string) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.get(`https://${hostname}/`).pipe(
       Effect.flatMap(
-        (
-          res,
-        ): Effect.Effect<
-          string,
-          HttpClientError.HttpClientError | SiteNotServing
-        > =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new SiteNotServing({ status: res.status })),
+        (res): Effect.Effect<string, HttpClientError.HttpClientError | SiteNotServing> =>
+          res.status === 200 ? res.text : Effect.fail(new SiteNotServing({ status: res.status })),
       ),
       Effect.timeout("10 seconds"),
       Effect.tapError((error) =>
@@ -338,27 +309,25 @@ const waitUntilServing = (hostname: string) =>
     );
   });
 
+const readDomainDeletion = Query.fn((id: string, projectId: string) => {
+  const domain = RailwayApi.customDomain({ id, projectId });
+  return { deletedAt: domain.deletedAt, syncStatus: domain.syncStatus };
+});
+
 const waitUntilDomainGone = (customDomainId: string, projectId: string) =>
-  railway
-    .customDomain(
-      { id: customDomainId, projectId },
-      { deletedAt: true, syncStatus: true },
-    )
-    .pipe(
-      Effect.map((domain) =>
-        domain.deletedAt != null || domain.syncStatus === "DELETED"
-          ? ("gone" as const)
-          : ("found" as const),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed("gone" as const),
-      ),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 15,
-      }),
-    );
+  readDomainDeletion(customDomainId, projectId).pipe(
+    Effect.map((domain) =>
+      domain.deletedAt != null || domain.syncStatus === "DELETED"
+        ? ("gone" as const)
+        : ("found" as const),
+    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 15,
+    }),
+  );
 
 const cloneSite = cloneFixture(fixtureDir, {
   prefix: "alchemy-railway-dns-",
@@ -400,13 +369,10 @@ describe.sequential("Railway.Website domain.dns (live)", () => {
         expect(attrs.dnsRecords.length).toBeGreaterThan(0);
         expect(
           attrs.dnsRecords.some(
-            (record) =>
-              record.type === "CNAME" && trimDot(record.name) === HOSTNAME,
+            (record) => record.type === "CNAME" && trimDot(record.name) === HOSTNAME,
           ),
         ).toBe(true);
-        expect(attrs.dnsRecords.some((record) => record.type === "TXT")).toBe(
-          true,
-        );
+        expect(attrs.dnsRecords.some((record) => record.type === "TXT")).toBe(true);
 
         // Cloudflare holds exactly the records the CustomDomain reports, DNS-only.
         const published = yield* cloudflareRecordsUnder(zone.id, HOSTNAME);
@@ -433,19 +399,14 @@ describe.sequential("Railway.Website domain.dns (live)", () => {
         );
 
         yield* waitForAuthoritative(zone.nameServers, attrs.dnsRecords);
-        const verified = yield* waitUntilVerified(
-          attrs.customDomainId,
-          attrs.projectId,
-        );
+        const verified = yield* waitUntilVerified(attrs.customDomainId, attrs.projectId);
         expect(verified.status.verified).toBe(true);
         expect(yield* waitUntilServing(HOSTNAME)).toContain(MARKER);
 
         yield* stack.destroy();
 
         expect(yield* cloudflareRecordsUnder(zone.id, HOSTNAME)).toEqual([]);
-        expect(
-          yield* waitUntilDomainGone(attrs.customDomainId, attrs.projectId),
-        ).toBe("gone");
+        expect(yield* waitUntilDomainGone(attrs.customDomainId, attrs.projectId)).toBe("gone");
       }).pipe(logLevel),
     { tags, timeout: 900_000 },
   );
@@ -501,10 +462,7 @@ describe.sequential("Railway.Website domain.dns (live)", () => {
         expect(attrs.domain).toBe(R53_HOSTNAME);
 
         // Route 53 holds exactly the records the CustomDomain reports.
-        const published = yield* route53RecordsUnder(
-          hostedZoneId,
-          R53_HOSTNAME,
-        );
+        const published = yield* route53RecordsUnder(hostedZoneId, R53_HOSTNAME);
         expect(normalize(published)).toEqual(normalize(attrs.dnsRecords));
         expectRailwayRecordsPublished(
           yield* liveDomain(attrs.customDomainId, attrs.projectId),
@@ -522,10 +480,7 @@ describe.sequential("Railway.Website domain.dns (live)", () => {
         ).toEqual(nameServers.map(trimDot).sort());
 
         yield* waitForAuthoritative(nameServers, attrs.dnsRecords);
-        const verified = yield* waitUntilVerified(
-          attrs.customDomainId,
-          attrs.projectId,
-        );
+        const verified = yield* waitUntilVerified(attrs.customDomainId, attrs.projectId);
         expect(verified.status.verified).toBe(true);
         expect(yield* waitUntilServing(R53_HOSTNAME)).toContain(MARKER);
 
@@ -534,18 +489,14 @@ describe.sequential("Railway.Website domain.dns (live)", () => {
         expect(
           yield* route53.getHostedZone({ Id: hostedZoneId }).pipe(
             Effect.as("found" as const),
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed("gone" as const),
-            ),
+            Effect.catchTag("NoSuchHostedZone", () => Effect.succeed("gone" as const)),
           ),
         ).toBe("gone");
         const remaining = yield* dns.listRecords
           .items({ zoneId: zone.id, name: { exact: R53_ZONE }, type: "NS" })
           .pipe(Stream.runCollect);
         expect(Array.from(remaining)).toEqual([]);
-        expect(
-          yield* waitUntilDomainGone(attrs.customDomainId, attrs.projectId),
-        ).toBe("gone");
+        expect(yield* waitUntilDomainGone(attrs.customDomainId, attrs.projectId)).toBe("gone");
       }).pipe(logLevel),
     {
       tags: [...tags, "provider:aws", "provider:aws:route53"],

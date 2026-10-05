@@ -65,8 +65,7 @@ export interface TextEdit {
 /** HTML whitespace (deliberately excludes the non-breaking space). */
 export const WS = /[ \t\n\r\f]+/;
 
-export const normalize = (text: string) =>
-  text.split(WS).filter(Boolean).join(" ");
+export const normalize = (text: string) => text.split(WS).filter(Boolean).join(" ");
 
 const runText = (code: string, run: Run, dialect: Dialect) =>
   dialect.compare(
@@ -100,11 +99,7 @@ const rewriteRun = (
   const lineStartAt = (tokenIndex: number) =>
     tokenIndex === 0 ? runLineStart : tokens[tokenIndex - 1].raw.includes("\n");
   const render = (words: string[], lineStart: boolean) =>
-    words
-      .map((w, i) =>
-        dialect.escape(w, { kind, lineStart: lineStart && i === 0 }),
-      )
-      .join(" ");
+    words.map((w, i) => dialect.escape(w, { kind, lineStart: lineStart && i === 0 })).join(" ");
 
   if (oldWords.length === 0) {
     if (typed.length === 0) return raw;
@@ -117,10 +112,7 @@ const rewriteRun = (
   const max = Math.min(oldWords.length, newWords.length);
   while (p < max && oldWords[p] === newWords[p]) p++;
   let s = 0;
-  while (
-    s < max - p &&
-    oldWords[oldWords.length - 1 - s] === newWords[newWords.length - 1 - s]
-  )
+  while (s < max - p && oldWords[oldWords.length - 1 - s] === newWords[newWords.length - 1 - s])
     s++;
 
   const middleWords = typed.slice(p, typed.length - s);
@@ -141,11 +133,7 @@ const rewriteRun = (
     if (p > 0) {
       raws.splice(wordIdx[p - 1] + 1, 0, ` ${render(middleWords, false)}`);
     } else {
-      raws.splice(
-        wordIdx[0],
-        0,
-        `${render(middleWords, lineStartAt(wordIdx[0]))} `,
-      );
+      raws.splice(wordIdx[0], 0, `${render(middleWords, lineStartAt(wordIdx[0]))} `);
     }
   }
   return raws.join("");
@@ -174,21 +162,16 @@ export const applyRuns = (
   // non-blank ones. The first pairing whose texts all match wins.
   type Pairs = [run: number, node: number][];
   const candidates: Pairs[] = [];
-  if (runs.length === before.length)
-    candidates.push(runs.map((_, i) => [i, i]));
+  if (runs.length === before.length) candidates.push(runs.map((_, i) => [i, i]));
   const runIdx = texts.flatMap((t, i) => (t === "" ? [] : [i]));
   const domIdx = before.flatMap((t, i) => (normalize(t) === "" ? [] : [i]));
   if (runIdx.length === domIdx.length) {
     candidates.push(runIdx.map((r, i) => [r, domIdx[i]]));
   }
-  const pairs = candidates.find((c) =>
-    c.every(([r, d]) => texts[r] === rendered(before[d])),
-  );
+  const pairs = candidates.find((c) => c.every(([r, d]) => texts[r] === rendered(before[d])));
   if (!pairs) throw stale();
   const paired = new Set(pairs.map(([, d]) => d));
-  if (
-    before.some((t, d) => !paired.has(d) && rendered(t) !== rendered(after[d]))
-  ) {
+  if (before.some((t, d) => !paired.has(d) && rendered(t) !== rendered(after[d]))) {
     throw new CopyEditError(
       "That spot (between two pieces of markup) has no text in the source. Type inside an existing word run instead.",
     );
@@ -265,8 +248,7 @@ export const decodeEntities = (raw: string): string =>
 export const htmlDialect: Dialect = {
   tokenize(raw) {
     const tokens: TextToken[] = [];
-    const re =
-      /(\{\s*(?:"\s+"|'\s+')\s*\})|([ \t\n\r\f]+)|([^ \t\n\r\f{]+)|(\{)/g;
+    const re = /(\{\s*(?:"\s+"|'\s+')\s*\})|([ \t\n\r\f]+)|([^ \t\n\r\f{]+)|(\{)/g;
     for (const m of raw.matchAll(re)) {
       if (m[4]) {
         throw new CopyEditError(

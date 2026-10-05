@@ -1,7 +1,7 @@
-import * as Fly from "@/Fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 import { Pong, Ping } from "./rpc-cycle.ts";
 
 export default Pong.make(
@@ -18,9 +18,7 @@ export default Pong.make(
         return HttpServerResponse.text(`pong hears ${yield* ping.name()}`);
       }).pipe(
         Effect.catchCause((cause) =>
-          Effect.succeed(
-            HttpServerResponse.text(Cause.pretty(cause), { status: 502 }),
-          ),
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 502 })),
         ),
       ),
     };

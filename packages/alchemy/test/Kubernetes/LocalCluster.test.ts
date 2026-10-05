@@ -1,3 +1,8 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
 import * as Kubernetes from "@/Kubernetes";
 import { connectCluster, readObject } from "@/Kubernetes/internal/client.ts";
 import {
@@ -9,11 +14,6 @@ import { imagePlatformOf } from "@/Kubernetes/internal/workload.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
@@ -130,10 +130,7 @@ test.provider(
       expect(config.networking).toEqual({ podSubnet: "10.244.0.0/16" });
       expect(config.kind).toBe("Cluster");
       expect(config.nodes).toHaveLength(2);
-      expect(config.containerdConfigPatches).toEqual([
-        "# user patch",
-        REGISTRY_CONTAINERD_PATCH,
-      ]);
+      expect(config.containerdConfigPatches).toEqual(["# user patch", REGISTRY_CONTAINERD_PATCH]);
     }),
   { tags },
 );
@@ -183,32 +180,23 @@ describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
         yield* stack.destroy();
         // Out-of-band: the kind cluster and its registry container are gone.
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const clusters = yield* spawner.lines(
-          ChildProcess.make("kind", ["get", "clusters"]),
-        );
+        const clusters = yield* spawner.lines(ChildProcess.make("kind", ["get", "clusters"]));
         expect(clusters).not.toContain(cluster.name);
         const containers = yield* spawner.lines(
-          ChildProcess.make("docker", [
-            "ps",
-            "--all",
-            "--format",
-            "{{.Names}}",
-          ]),
+          ChildProcess.make("docker", ["ps", "--all", "--format", "{{.Names}}"]),
         );
         expect(containers).not.toContain(cluster.registryContainer);
       }),
       { timeout: 180_000 },
     );
 
-    test.provider(
-      "the cluster exposes a connection with its registry and architecture",
-      () =>
-        Effect.sync(() => {
-          expect(cluster.context).toBe("kind-alchemy-test-local");
-          expect(cluster.registry.server).toBe("localhost:5061");
-          expect(cluster.connection.registry?.server).toBe("localhost:5061");
-          expect(["amd64", "arm64"]).toContain(cluster.architecture);
-        }),
+    test.provider("the cluster exposes a connection with its registry and architecture", () =>
+      Effect.sync(() => {
+        expect(cluster.context).toBe("kind-alchemy-test-local");
+        expect(cluster.registry.server).toBe("localhost:5061");
+        expect(cluster.connection.registry?.server).toBe("localhost:5061");
+        expect(["amd64", "arm64"]).toContain(cluster.architecture);
+      }),
     );
 
     test.provider(
@@ -228,8 +216,7 @@ describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (job) =>
-                ((job as { status?: { succeeded?: number } }).status
-                  ?.succeeded ?? 0) >= 1,
+                ((job as { status?: { succeeded?: number } }).status?.succeeded ?? 0) >= 1,
               times: 45,
             }),
           );
@@ -240,9 +227,7 @@ describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
             };
           };
           expect(spec.status?.succeeded).toBe(1);
-          expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(
-            /^localhost:5061\//,
-          );
+          expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(/^localhost:5061\//);
         }),
       { timeout: 120_000 },
     );
@@ -264,14 +249,13 @@ describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (d) =>
-                ((d as { status?: { availableReplicas?: number } }).status
-                  ?.availableReplicas ?? 0) >= 1,
+                ((d as { status?: { availableReplicas?: number } }).status?.availableReplicas ??
+                  0) >= 1,
               times: 45,
             }),
           );
           expect(
-            (deployment as { status?: { availableReplicas?: number } }).status
-              ?.availableReplicas,
+            (deployment as { status?: { availableReplicas?: number } }).status?.availableReplicas,
           ).toBe(1);
         }),
       { timeout: 120_000 },

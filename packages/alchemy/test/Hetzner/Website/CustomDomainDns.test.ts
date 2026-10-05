@@ -1,14 +1,4 @@
-/**
- * Custom domains on a Hetzner website, deployed for real: `domain.dns`
- * publishes the `A` record through another DNS host (Cloudflare, resolved
- * publicly), and the default path (no `dns`) keeps the `Hetzner.RecordSet`
- * in `zone`. Hetzner sites serve plain HTTP (no TLS).
- */
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
@@ -20,8 +10,18 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import * as pathe from "pathe";
+/**
+ * Custom domains on a Hetzner website, deployed for real: `domain.dns`
+ * publishes the `A` record through another DNS host (Cloudflare, resolved
+ * publicly), and the default path (no `dns`) keeps the `Hetzner.RecordSet`
+ * in `zone`. Hetzner sites serve plain HTTP (no TLS).
+ */
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -29,10 +29,7 @@ const { test } = Test.make({
   providers: Layer.mergeAll(Hetzner.providers(), Cloudflare.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -56,8 +53,7 @@ const fixtureDir = pathe.resolve(
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const normalize = (name: string | undefined) =>
-  (name ?? "").replace(/\.$/, "").toLowerCase();
+const normalize = (name: string | undefined) => (name ?? "").replace(/\.$/, "").toLowerCase();
 
 class NotPublished extends Data.TaggedError("NotPublished")<{
   readonly server: string;
@@ -122,15 +118,13 @@ const waitForAuthoritativeA = (
           r.setServers([server]);
           return r;
         });
-        const answers = yield* Effect.tryPromise(() =>
-          resolver.resolve4(name),
-        ).pipe(Effect.orElseSucceed(() => [] as string[]));
+        const answers = yield* Effect.tryPromise(() => resolver.resolve4(name)).pipe(
+          Effect.orElseSucceed(() => [] as string[]),
+        );
         if (!expected.every((ip) => answers.includes(ip))) {
           return yield* Effect.fail(new NotPublished({ server, name }));
         }
-      }).pipe(
-        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
-      ),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
     );
   });
 
@@ -178,17 +172,13 @@ test.provider.skipIf(!hasHetznerCreds)(
         );
         const ipv4 = site.server!.ipv4!;
         const url = site.url!;
-        expect(url).toMatch(
-          new RegExp(`^http://${CLOUDFLARE_HOST.replaceAll(".", "\\.")}:\\d+$`),
-        );
+        expect(url).toMatch(new RegExp(`^http://${CLOUDFLARE_HOST.replaceAll(".", "\\.")}:\\d+$`));
 
         const a = yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A");
         expect(a.map((record) => record.content)).toEqual([ipv4]);
         expect(a[0]?.proxied).toBe(false);
 
-        const nameServers = yield* Effect.tryPromise(() =>
-          resolveNs(ZONE),
-        ).pipe(Effect.orDie);
+        const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
         yield* waitForAuthoritativeA(nameServers, CLOUDFLARE_HOST, [ipv4]);
         yield* expectUrlContains(`${url}/`, "StaticSite fixture v1", {
           timeout: "120 seconds",
@@ -197,9 +187,7 @@ test.provider.skipIf(!hasHetznerCreds)(
 
         const serverId = site.server!.serverId;
         yield* stack.destroy();
-        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A")).toEqual(
-          [],
-        );
+        expect(yield* cloudflareRecords(zoneId, CLOUDFLARE_HOST, "A")).toEqual([]);
         expect(yield* waitUntilServerGone(serverId)).toEqual("gone");
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
     }).pipe(logLevel),
@@ -228,9 +216,7 @@ test.provider.skipIf(!hasHetznerCreds)(
             return { site, zone };
           }),
         );
-        expect(zone.assignedNameservers).toHaveLength(
-          HETZNER_NAME_SERVER_COUNT,
-        );
+        expect(zone.assignedNameservers).toHaveLength(HETZNER_NAME_SERVER_COUNT);
         const ipv4 = site.server!.ipv4!;
         const url = site.url!;
         const port = new URL(url).port;
@@ -245,18 +231,12 @@ test.provider.skipIf(!hasHetznerCreds)(
         expect(rrset.records.map((record) => record.value)).toEqual([ipv4]);
 
         // Hetzner's name servers serve it (the zone is not delegated).
-        yield* waitForAuthoritativeA(zone.assignedNameservers, HETZNER_HOST, [
-          ipv4,
-        ]);
-        yield* expectUrlContains(
-          `http://${ipv4}:${port}/`,
-          "StaticSite fixture v1",
-          {
-            headers: { host: `${HETZNER_HOST}:${port}` },
-            timeout: "120 seconds",
-            label: "hetzner site on hetzner zone",
-          },
-        );
+        yield* waitForAuthoritativeA(zone.assignedNameservers, HETZNER_HOST, [ipv4]);
+        yield* expectUrlContains(`http://${ipv4}:${port}/`, "StaticSite fixture v1", {
+          headers: { host: `${HETZNER_HOST}:${port}` },
+          timeout: "120 seconds",
+          label: "hetzner site on hetzner zone",
+        });
 
         const serverId = site.server!.serverId;
         yield* stack.destroy();

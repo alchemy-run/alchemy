@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
 import BrowserEffectWorker from "./effect-worker.ts";
 
 const asyncWorkerMain = pathe.resolve(import.meta.dirname, "async-worker.ts");

@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 export const USERS = [
   { id: "u1", name: "Ada" },
@@ -41,8 +41,7 @@ export default class RpcUsers extends Fly.Service<RpcUsers>()(
   Effect.gen(function* () {
     return {
       listUsers: () => Effect.succeed(USERS),
-      getUser: (id: string) =>
-        Effect.succeed(USERS.find((user) => user.id === id)),
+      getUser: (id: string) => Effect.succeed(USERS.find((user) => user.id === id)),
       streamUsers: () => Stream.fromIterable(USERS),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

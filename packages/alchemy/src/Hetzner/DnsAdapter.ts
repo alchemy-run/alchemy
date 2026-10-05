@@ -23,9 +23,7 @@ export interface AdapterOptions {
    * Zone that owns the records: a zone id, a zone name, or a
    * `Hetzner.Zone` resource. Inferred from each hostname when omitted.
    */
-  readonly zone?:
-    | Input<string>
-    | { readonly zoneId: Input<number>; readonly name?: Input<string> };
+  readonly zone?: Input<string> | { readonly zoneId: Input<number>; readonly name?: Input<string> };
 }
 
 /**
@@ -49,17 +47,12 @@ export interface AdapterOptions {
  * });
  * ```
  */
-export const Adapter = (
-  options: AdapterOptions = {},
-): DnsConfig<typeof HETZNER_DNS> => {
+export const Adapter = (options: AdapterOptions = {}): DnsConfig<typeof HETZNER_DNS> => {
   const zone =
-    options.zone === undefined ||
-    typeof options.zone === "string" ||
-    Output.isOutput(options.zone)
+    options.zone === undefined || typeof options.zone === "string" || Output.isOutput(options.zone)
       ? (options.zone as Input<string> | undefined)
       : (Output.map(
-          (options.zone as { zoneId: Input<number> })
-            .zoneId as Output.Output<number>,
+          (options.zone as { zoneId: Input<number> }).zoneId as Output.Output<number>,
           (id) => String(id),
         ) as unknown as Input<string>);
   return {
@@ -102,11 +95,7 @@ export const adapter = {
         )
       : RecordList(`${id}-Addresses`, {
           zone,
-          records: addressRecords(
-            name,
-            target.ipv4,
-            target.ipv6,
-          ) as DnsRecord[],
+          records: addressRecords(name, target.ipv4, target.ipv6) as DnsRecord[],
         }),
   aliasSet: (id, { zone, names, target }) =>
     Effect.forEach(names ?? [], (name) => rejectApexCname(zone, name)).pipe(

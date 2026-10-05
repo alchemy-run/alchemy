@@ -1,17 +1,13 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  resolveZoneId,
-  type Reference as ZoneReference,
-} from "../Zone/lookup.ts";
+import { resolveZoneId, type Reference as ZoneReference } from "../Zone/lookup.ts";
 
 /** Record types a {@link Records} set can manage. */
 export type RecordsType = "A" | "AAAA" | "CNAME";
@@ -159,16 +155,14 @@ const resolveDesiredNames = (
       ? ((binding as ResourceBinding<RecordsBinding>).data.names ?? [])
       : ((binding as RecordsBinding).names ?? []),
   );
-  return [...new Set([...(declared ?? []), ...bound].map(normalizeName))].sort(
-    (a, b) => a.localeCompare(b),
+  return [...new Set([...(declared ?? []), ...bound].map(normalizeName))].sort((a, b) =>
+    a.localeCompare(b),
   );
 };
 
 const listAtName = (zoneId: string, name: string, type: RecordsType) =>
   dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
-    Stream.filter(
-      (record) => normalizeName(record.name) === name && record.type === type,
-    ),
+    Stream.filter((record) => normalizeName(record.name) === name && record.type === type),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
@@ -226,11 +220,9 @@ const deleteAtNames = (zoneId: string, type: RecordsType, names: string[]) =>
     (name) =>
       listAtName(zoneId, normalizeName(name), type).pipe(
         Effect.flatMap((found) =>
-          Effect.forEach(
-            found,
-            (record) => dns.deleteRecord({ zoneId, dnsRecordId: record.id }),
-            { discard: true },
-          ),
+          Effect.forEach(found, (record) => dns.deleteRecord({ zoneId, dnsRecordId: record.id }), {
+            discard: true,
+          }),
         ),
       ),
     { discard: true },
@@ -288,9 +280,7 @@ export const RecordsProvider = () =>
       const zoneId = output.zoneId;
       const observed = yield* Effect.forEach(output.names, (name) =>
         listAtName(zoneId, name, output.type).pipe(
-          Effect.map((records) =>
-            records[0] === undefined ? [] : [{ name, record: records[0] }],
-          ),
+          Effect.map((records) => (records[0] === undefined ? [] : [{ name, record: records[0] }])),
         ),
       );
       const found = observed.flat();
@@ -330,8 +320,7 @@ export const RecordsProvider = () =>
       // `output.names` is the cache of which records this resource managed
       // before — the only way to know what to garbage-collect. A zone move
       // leaves every previously managed name stale in the old zone.
-      const movedZone =
-        output?.zoneId !== undefined && output.zoneId !== zoneId;
+      const movedZone = output?.zoneId !== undefined && output.zoneId !== zoneId;
       const desiredSet = new Set(desired);
       const stale = (output?.names ?? []).filter(
         (name) => movedZone || !desiredSet.has(normalizeName(name)),

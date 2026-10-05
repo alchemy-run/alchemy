@@ -1,17 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic record names — disjoint from other suites and the same on
 // every run.
@@ -29,15 +28,12 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
 
-const unquote = (content: string | null | undefined) =>
-  (content ?? "").replace(/^"|"$/g, "");
+const unquote = (content: string | null | undefined) => (content ?? "").replace(/^"|"$/g, "");
 
 // The harness's freshly-minted scoped token intermittently 403s while it
 // propagates — ride that out on the out-of-band calls.
@@ -53,11 +49,7 @@ const retryForbidden = <A, E extends { readonly _tag: string }, R>(
   );
 
 /** Live values (TXT unquoted) of `(name, type)`, sorted. */
-const liveValues = (
-  zoneId: string,
-  name: string,
-  type: "A" | "CNAME" | "TXT",
-) =>
+const liveValues = (zoneId: string, name: string, type: "A" | "CNAME" | "TXT") =>
   retryForbidden(
     dns.listRecords.items({ zoneId, name: { exact: name }, type }).pipe(
       Stream.filter((r) => r.name === name && r.type === type),
@@ -124,17 +116,9 @@ test.provider(
       );
       expect(created.records).toHaveLength(4);
       expect(created.records.every((r) => r.zoneId === zoneId)).toBe(true);
-      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([
-        TARGET_1,
-      ]);
-      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([
-        FOREIGN,
-        OURS,
-      ]);
-      expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual([
-        "203.0.113.10",
-        "203.0.113.11",
-      ]);
+      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([TARGET_1]);
+      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([FOREIGN, OURS]);
+      expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual(["203.0.113.10", "203.0.113.11"]);
 
       // Change the CNAME target, drop an address, add a record.
       const updated = yield* stack.deploy(
@@ -149,15 +133,10 @@ test.provider(
         }),
       );
       expect(updated.records).toHaveLength(4);
-      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([
-        TARGET_2,
-      ]);
+      expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([TARGET_2]);
       expect(yield* liveValues(zoneId, A_NAME, "A")).toEqual(["203.0.113.10"]);
       expect(yield* liveValues(zoneId, ADDED_NAME, "TXT")).toEqual([OURS]);
-      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([
-        FOREIGN,
-        OURS,
-      ]);
+      expect(yield* liveValues(zoneId, TXT_NAME, "TXT")).toEqual([FOREIGN, OURS]);
 
       yield* stack.destroy();
       expect(yield* liveValues(zoneId, CNAME_NAME, "CNAME")).toEqual([]);
@@ -169,11 +148,6 @@ test.provider(
       yield* deleteForeignTxt(zoneId);
     }),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"],
   },
 );
