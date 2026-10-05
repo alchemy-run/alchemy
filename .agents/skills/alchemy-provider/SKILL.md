@@ -332,12 +332,24 @@ user's go-ahead from step 0 or step 6's cost rule),
 and put any setup a fresh account would need again into the test helper.
 Do one-time console work (free trials, free organizations, sign-ups) in the
 browser with the `puppeteer` skill, and ask the user only to sign in.
-A row stays `blocked` only when it needs payment, a vendor's approval, or
-hardware; report each one with the exact request that would unblock it.
+A row stays `blocked` only when it needs payment, a vendor's approval,
+hardware, or is skipped under the long-tail rule below; report each one
+with the exact request that would unblock it.
 
 Failure-path tests assert the typed error and finish in minutes. Give them
 a short timeout and never let them wait out a slow provisioning or delete;
 a single test case that runs for an hour is a bug in the test.
+
+Stop chasing the long tail once fix rounds stop paying off. When the
+remaining failures are slow provisioning, platform behavior, or test
+infrastructure the cloud needs (a reachable endpoint, a custom image),
+let the current run finish, then skip-gate each failing case with its
+exact error, mark the row `blocked: skipped` in the index, and list those
+rows in the next report so the user can reopen any. When the user sets a
+deadline, cap test fixing at half of it and spend the rest on the other
+deliverables (bindings, runtime, websites, examples, docs, PR). On Azure,
+fix rounds on one-hour tests kept running after the user asked to skip
+them, until the user set a one-hour deadline to wrap up.
 
 ## Step 7 — framework websites
 
