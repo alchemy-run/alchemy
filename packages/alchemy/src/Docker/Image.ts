@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -5,12 +6,13 @@ import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { sha256Object } from "../Util/sha256.ts";
+import { hashDockerBuildInputs } from "./BuildHash.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
-  parseRepoDigest,
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
@@ -49,7 +51,7 @@ export interface ImageProps {
    * @default Generated from stack, stage, logical id, and instance id.
    */
   name?: string;
-  /** Image tag. @default "latest" */
+  /** Image tag. Defaults to a build-input hash for registry images, otherwise "latest". */
   tag?: string;
   /** Registry credentials for push. */
   registry?: ImageRegistry;
@@ -67,15 +69,17 @@ export interface Image extends Resource<
   {
     /** Image repository/name without tag. */
     name: string;
-    /** Final image reference. Includes registry host when pushed there. */
+    /** Local tag, or immutable repository@digest for a registry publication. */
     imageRef: string;
-    /** Local image id after build/tag. */
-    imageId: string;
+    /** Local image id. Absent for registry publications; consume `repoDigest` instead. */
+    imageId?: string;
+    /** Build-input identity of a registry publication. */
+    buildHash?: string;
     /** Registry digest after push when available. */
     repoDigest?: string;
     /** Tag used for the local image. */
     tag: string;
-    /** Build timestamp in milliseconds since epoch. */
+    /** Local build or registry observation timestamp in milliseconds since epoch. */
     builtAt: number;
   },
   never,
@@ -90,6 +94,12 @@ export interface Image extends Resource<
  * CLI is configured to target. It is separate from `Cloudflare.Container`;
  * registry image references are the boundary between Docker-managed images and
  * cloud container platforms.
+ *
+ * With `registry` configured, images are published through Buildx and observed
+ * in the registry, without requiring a local image store. Plans hash the build
+ * inputs without building or publishing. Omit `tag` to reuse content-addressed
+ * publications across fresh runners. Published images are retained on deletion.
+ * Set `build.platform` explicitly when sharing builds across architectures.
  *
  * `Image` always builds from a Dockerfile. To pull (and optionally re-tag and
  * push) an existing registry image, use `Docker.RemoteImage`.
@@ -197,9 +207,51 @@ export const ImageProvider = () =>
         return { context, dockerfile };
       });
 
+      const publication = Effect.fn(function* (
+        id: string,
+        props: ImageProps & { registry: ImageRegistry },
+        instanceId: string,
+      ) {
+        const name = yield* dockerPhysicalName(id, props, instanceId);
+        const paths = yield* resolveBuildPaths(props.build);
+        const contextHash = yield* hashDockerBuildInputs(
+          {
+            ...paths,
+            platform: props.build.platform ?? "linux/amd64",
+            buildArgs: props.build.args,
+          },
+          "effective",
+        );
+        const buildHash = yield* sha256Object({
+          contextHash,
+          target: props.build.target,
+          options: props.build.options,
+        });
+        const tag = props.tag ?? buildHash;
+        const ref = withRegistryHost(`${name}:${tag}`, props.registry);
+        return { name, tag, ref, paths, buildHash };
+      });
+      const published = (props: ImageProps): props is ImageProps & { registry: ImageRegistry } =>
+        props.registry !== undefined && !props.skipPush;
+
       return Image.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          if (published(olds)) {
+            const desired = output ?? (yield* publication(id, olds, instanceId));
+            const ref = withRegistryHost(`${desired.name}:${desired.tag}`, olds.registry);
+            const digest = yield* docker.image.registryDigest(ref, olds.registry);
+            if (!digest) return undefined;
+            const repoDigest = `${repositoryFromImageRef(ref)}@${digest}`;
+            return {
+              name: desired.name,
+              tag: desired.tag,
+              imageRef: repoDigest,
+              repoDigest,
+              buildHash: output?.repoDigest === repoDigest ? output.buildHash : undefined,
+              builtAt: output?.builtAt ?? (yield* Clock.currentTimeMillis),
+            };
+          }
           const context = dockerContextName(olds.context);
           const ref =
             output?.imageRef ??
@@ -221,7 +273,28 @@ export const ImageProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
-          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
+          if (published(news)) {
+            const desired = yield* publication(id, news, instanceId);
+            if (
+              output.buildHash !== desired.buildHash ||
+              withRegistryHost(`${output.name}:${output.tag}`, news.registry) !== desired.ref ||
+              !published(olds)
+            ) {
+              return { action: "update" };
+            }
+            const digest = yield* docker.image.registryDigest(desired.ref, news.registry);
+            if (
+              !digest ||
+              output.repoDigest !== `${repositoryFromImageRef(desired.ref)}@${digest}`
+            ) {
+              return { action: "update" };
+            }
+            return;
+          }
+          if (
+            published(olds) ||
+            dockerContextName(olds.context) !== dockerContextName(news.context)
+          ) {
             return { action: "update" };
           }
           const { image } = yield* buildAndInspectImage(id, news, instanceId);
@@ -229,33 +302,71 @@ export const ImageProvider = () =>
             return { action: "update" };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const context = dockerContextName(news.context);
-          const { name, tag, image, ref } = yield* buildAndInspectImage(id, news, instanceId);
-
-          let repoDigest: string | undefined;
-          let targetImageRef: string = ref;
-          if (news.registry && !news.skipPush) {
-            yield* session.note(`Pushing image to registry "${news.registry.server}"`);
-            targetImageRef = withRegistryHost(ref, news.registry);
-            repoDigest = yield* docker.image
-              .push(ref, news.registry, undefined, context)
-              .pipe(Effect.map((result) => parseRepoDigest(ref, result.stdout)));
+        reconcile: Effect.fn(function* ({ id, instanceId, news, session, output }) {
+          if (published(news)) {
+            const { name, tag, ref, paths, buildHash } = yield* publication(id, news, instanceId);
+            // Only content-addressed tags can be reused without trusting prior state.
+            let digest =
+              news.tag === undefined
+                ? yield* docker.image.registryDigest(ref, news.registry)
+                : undefined;
+            if (
+              digest &&
+              output &&
+              withRegistryHost(`${output.name}:${output.tag}`, news.registry) === ref &&
+              output.repoDigest !== `${repositoryFromImageRef(ref)}@${digest}`
+            ) {
+              digest = undefined;
+            }
+            if (!digest) {
+              yield* session.note(`Publishing image ${ref}`);
+              yield* docker.image.build(
+                {
+                  tag: ref,
+                  context: paths.context,
+                  file: paths.dockerfile,
+                  platform: news.build.platform ?? "linux/amd64",
+                  target: news.build.target,
+                  "build-arg": news.build.args,
+                  "cache-from": news.build.cacheFrom,
+                  "cache-to": news.build.cacheTo,
+                  args: news.build.options,
+                  engineContext: dockerContextName(news.context),
+                },
+                undefined,
+                news.registry,
+              );
+              digest = yield* docker.image.registryDigest(ref, news.registry);
+            }
+            if (!digest)
+              return yield* Effect.fail(
+                new Error(`Published image is missing from the registry: ${ref}`),
+              );
+            return {
+              name,
+              tag,
+              imageRef: `${repositoryFromImageRef(ref)}@${digest}`,
+              repoDigest: `${repositoryFromImageRef(ref)}@${digest}`,
+              buildHash,
+              builtAt: yield* Clock.currentTimeMillis,
+            };
           }
+          const { name, tag, image, ref } = yield* buildAndInspectImage(id, news, instanceId);
 
           return {
             name,
-            imageRef: targetImageRef,
+            imageRef: ref,
             imageId: image.Id,
-            repoDigest,
             tag,
             builtAt: parseCreatedAt(image.Created),
           };
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.image
-            .remove(output.imageRef, undefined, dockerContextName(olds.context))
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
+          published(olds)
+            ? Effect.void
+            : docker.image
+                .remove(output.imageRef, undefined, dockerContextName(olds.context))
+                .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });
     }),

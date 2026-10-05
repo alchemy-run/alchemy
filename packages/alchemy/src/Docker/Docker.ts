@@ -104,6 +104,12 @@ export class Docker extends Context.Service<
       ) => Effect.Effect<CommandOutput, PlatformError>;
     };
     readonly image: {
+      /** Reads a manifest digest from the registry without pulling into an engine. */
+      readonly registryDigest: (
+        ref: string,
+        credentials: RegistryCredentials,
+      ) => Effect.Effect<string | undefined, PlatformError>;
+
       /**
        * Builds locally, or publishes to a registry when credentials are
        * supplied. With Buildx 0.26.0 or newer the image is exported straight
@@ -597,6 +603,19 @@ export const DockerLive = Layer.effect(
       }),
     );
 
+    const registryConfig = Effect.fn(function* (credentials: RegistryCredentials) {
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+      const config = yield* Effect.sync(() => {
+        const password = Redacted.isRedacted(credentials.password)
+          ? Redacted.value(credentials.password)
+          : credentials.password;
+        const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
+        return JSON.stringify({ auths: { [credentials.server]: { auth } } });
+      });
+      yield* fs.writeFileString(path.join(dir, "config.json"), config);
+      return dir;
+    });
+
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
         // Write the registry credentials directly into an isolated docker config
@@ -613,15 +632,7 @@ export const DockerLive = Layer.effect(
         // deploy fully self-contained: no credential helper, no keychain, no login
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
-        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
-        const config = yield* Effect.sync(() => {
-          const password = Redacted.isRedacted(credentials.password)
-            ? Redacted.value(credentials.password)
-            : credentials.password;
-          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
-        });
-        yield* fs.writeFileString(path.join(dir, "config.json"), config);
+        const dir = yield* registryConfig(credentials);
         if (platform === undefined) {
           return yield* run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir });
         }
@@ -685,6 +696,34 @@ export const DockerLive = Layer.effect(
         stop: (name, context) => run([...formatArgs({ context }), "container", "stop", name]),
       },
       image: {
+        registryDigest: Effect.fn(function* (ref, credentials) {
+          const dir = yield* registryConfig(credentials);
+          const args = ["buildx", "imagetools", "inspect", ref, "--format", "{{json .Manifest}}"];
+          return yield* run(args, { DOCKER_CONFIG: dir }).pipe(
+            Effect.flatMap((result) =>
+              Schema.decodeEffect(
+                Schema.Struct({
+                  digest: Schema.String.pipe(
+                    Schema.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
+                  ),
+                }).pipe(Schema.fromJsonString),
+              )(result.stdout),
+            ),
+            Effect.map((manifest) => manifest.digest),
+            Effect.catchTag("SchemaError", () =>
+              systemError({
+                _tag: "InvalidData",
+                args,
+                description: "Registry returned an invalid manifest descriptor.",
+              }),
+            ),
+            Effect.catchReason("PlatformError", "NotFound", (reason) =>
+              reason.description?.trim().endsWith(`${ref}: not found`)
+                ? Effect.undefined
+                : Effect.fail(new PlatformError(reason)),
+            ),
+          );
+        }, Effect.scoped),
         build: Effect.fn("Docker.image.build")(function* (
           { context: buildContext, engineContext, args, ...options },
           session,

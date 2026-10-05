@@ -11,8 +11,9 @@ what comes out the other end is an `imageRef` (and, after a push, a
 [Cloudflare Containers](/cloudflare/compute/containers) or an
 [AWS ECS task definition](/aws/compute/ecs).
 
-All you need is a Docker daemon reachable from the CLI — see
-[Setup](/docker/setup) if you haven't wired one up yet.
+Local images need a Docker daemon reachable from the CLI — see
+[Setup](/docker/setup). Registry images can use a remote Buildx builder; with
+Buildx 0.26 or later, publication does not load the image into a local daemon.
 
 ## Build from a Dockerfile
 
@@ -136,3 +137,30 @@ Reference:
 
 - [Image API reference](/providers/docker/image)
 - [RemoteImage API reference](/providers/docker/remoteimage)
+
+## Hosted builders and disposable CI runners
+
+Configure a Buildx builder in the runner before invoking Alchemy. Select it with
+Docker's standard `BUILDX_BUILDER` setting. Blacksmith's builder setup action,
+Docker Build Cloud, or another Buildx builder can supply the build infrastructure.
+
+For `Docker.Image` resources with `registry` configured and `skipPush` unset:
+
+- Alchemy hashes the Docker build context and build options during planning;
+  planning does not build or publish images.
+- Omitting `tag` uses that hash as the registry tag. A subsequent runner can reuse
+  the published image without a local Docker image store or build cache.
+- Buildx 0.26+ publishes directly to the registry. Older versions load the build
+  result into the selected Docker engine before pushing.
+- `imageRef` and `repoDigest` contain the immutable registry reference.
+  `imageId` is absent for registry publications.
+- Destroying the resource retains published artifacts. Registry retention policy
+  manages their lifetime independently of running containers.
+
+Registry builds default to `linux/amd64`; set `build.platform` explicitly for
+another architecture. Build-input identity does not detect updates to mutable
+base-image tags; pin base images by digest for reproducible builds.
+
+Build and runtime Docker contexts can differ: build in CI, then pass the published
+digest to a container using the production host's context. That host only needs
+to pull and run the image.

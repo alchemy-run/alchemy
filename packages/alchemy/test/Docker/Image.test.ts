@@ -50,7 +50,7 @@ describe(
           Docker.Image("tiny-image", { tag: "latest", build: { context: root } }),
         );
         expect(image.imageRef.endsWith(":latest")).toBe(true);
-        expect(image.imageId.length).toBeGreaterThan(0);
+        expect(image.imageId).toBeTruthy();
       }),
     );
 

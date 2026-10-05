@@ -115,7 +115,10 @@ describe("Docker registry errors", (it) => {
  * plugin version (or fails it like a missing plugin when `undefined`),
  * records every other invocation (args + env), and exits 0.
  */
-const fakeDocker = (buildxVersion: string | undefined) => {
+const fakeDocker = (
+  buildxVersion: string | undefined,
+  reply?: { stdout?: string; stderr?: string; exitCode?: number },
+) => {
   const calls: Array<{ args: ReadonlyArray<string>; env: Record<string, string | undefined> }> = [];
   const encode = (text: string) => new TextEncoder().encode(text);
   const spawner = ChildProcessSpawner.make((command) =>
@@ -129,11 +132,15 @@ const fakeDocker = (buildxVersion: string | undefined) => {
       const stdout =
         probe && !missing
           ? `github.com/docker/buildx ${buildxVersion} 503f948aadbddb6de3ec5581f766e1d27f6975a1\n`
-          : "";
-      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : "";
+          : (reply?.stdout ?? "");
+      const stderr = missing
+        ? "docker: 'buildx' is not a docker command.\n"
+        : (reply?.stderr ?? "");
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1),
-        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(missing ? 1 : 0)),
+        exitCode: Effect.succeed(
+          ChildProcessSpawner.ExitCode(missing ? 1 : (reply?.exitCode ?? 0)),
+        ),
         isRunning: Effect.succeed(false),
         kill: () => Effect.void,
         stdin: Sink.drain,
@@ -434,4 +441,55 @@ describe("Docker.image", (it) => {
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );
+});
+
+describe("Docker.image.registryDigest", (it) => {
+  for (const [name, reply, expected] of [
+    [
+      "manifest",
+      { stdout: JSON.stringify({ digest: `sha256:${"a".repeat(64)}` }) },
+      `sha256:${"a".repeat(64)}`,
+    ],
+    ["missing", { stderr: "ERROR: registry.invalid/app:tag: not found", exitCode: 1 }, undefined],
+  ] as const) {
+    it.effect(
+      `reads ${name} without a local engine`,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const fake = fakeDocker("v0.26.1", reply);
+          const digest = yield* Effect.gen(function* () {
+            const docker = yield* Docker;
+            return yield* docker.image.registryDigest("registry.invalid/app:tag", registry);
+          }).pipe(Effect.provide(fake.layer));
+          expect(digest).toBe(expected);
+          expect(fake.calls).toHaveLength(1);
+          expect(fake.calls[0]!.args.slice(0, 3)).toEqual(["buildx", "imagetools", "inspect"]);
+          const config = fake.calls[0]!.env.DOCKER_CONFIG!;
+          expect(config).toBeTruthy();
+          expect(yield* fs.exists(config)).toBe(false);
+        }),
+      { tags: ["unit", "provider:docker", "local"] },
+    );
+  }
+  for (const reply of [
+    { stderr: "ERROR: credential helper executable not found", exitCode: 1 },
+    { stderr: "ERROR: unexpected status: 401 Unauthorized", exitCode: 1 },
+    { stderr: "ERROR: unexpected status: 503 Service Unavailable", exitCode: 1 },
+    { stdout: '{"digest":"invalid"}' },
+  ]) {
+    it.effect(
+      `does not treat registry failure as absence: ${JSON.stringify(reply)}`,
+      () =>
+        Effect.gen(function* () {
+          const fake = fakeDocker("v0.26.1", reply);
+          const result = yield* Effect.gen(function* () {
+            const docker = yield* Docker;
+            return yield* docker.image.registryDigest("registry.invalid/app:tag", registry);
+          }).pipe(Effect.provide(fake.layer), Effect.result);
+          expect(result._tag).toBe("Failure");
+        }),
+      { tags: ["unit", "provider:docker", "local"] },
+    );
+  }
 });
