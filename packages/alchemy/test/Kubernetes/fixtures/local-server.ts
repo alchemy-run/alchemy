@@ -6,16 +6,14 @@ import { TestLocalCluster } from "./local.ts";
 /** An Effect HTTP server run as a Deployment on the local cluster. */
 export default Kubernetes.Deployment(
   "LocalEffectServer",
-  Effect.gen(function* () {
-    const cluster = yield* TestLocalCluster;
-    return {
-      cluster,
-      main: import.meta.url,
-      name: "local-effect-server",
-      port: 3000,
-      serviceType: "ClusterIP" as const,
-    };
-  }),
+  // `cluster` takes the cluster resource's Effect directly.
+  {
+    cluster: TestLocalCluster,
+    main: import.meta.url,
+    name: "local-effect-server",
+    port: 3000,
+    serviceType: "ClusterIP",
+  },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("ok")),

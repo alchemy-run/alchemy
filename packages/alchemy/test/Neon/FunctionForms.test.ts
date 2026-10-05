@@ -28,8 +28,9 @@ const Stack = Alchemy.Stack(
       project: scope,
       main: new URL("./fixtures/function-hono.ts", import.meta.url).href,
     });
+    // `project` takes the project resource's Effect directly.
     const bare = yield* Function("Bare", {
-      project: scope,
+      project,
       main: new URL("./fixtures/function-bare.ts", import.meta.url).href,
     });
     return {
