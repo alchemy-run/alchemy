@@ -287,22 +287,23 @@ export const applyObject = Effect.fn(function* ({
     method: "PATCH",
     path,
     body: object,
-  }).pipe(
-    // A freshly provisioned cluster's API server briefly 5xxes while
-    // warming up, and the creator's bootstrap access can propagate
-    // asynchronously (401/403 in the first minute) — retry transient
-    // failures for ~1 min.
-    Effect.retry({
-      while: (e): boolean =>
-        e instanceof KubernetesApiError &&
-        (e.statusCode >= 500 ||
-          e.statusCode === 429 ||
-          e.statusCode === 401 ||
-          e.statusCode === 403),
-      schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(10)]),
-    }),
-  );
+  }).pipe(retryWhileClusterWarms);
 });
+
+/**
+ * A freshly provisioned cluster's API server briefly 5xxes while warming
+ * up, and the creator's bootstrap access can propagate asynchronously
+ * (401/403 in the first minute) — retry those for ~1 min.
+ */
+export const retryWhileClusterWarms = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e): boolean =>
+      e instanceof KubernetesApiError &&
+      (e.statusCode >= 500 || e.statusCode === 429 || e.statusCode === 401 || e.statusCode === 403),
+    schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(10)]),
+  });
 
 export const deleteObject = Effect.fn(function* ({
   transport,

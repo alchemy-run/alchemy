@@ -10,9 +10,10 @@ import {
   deleteObject,
   readObject,
   isNotFound,
+  retryWhileClusterWarms,
 } from "./internal/client.ts";
 import type { KubernetesObjectRef } from "./internal/objects.ts";
-import { encodeSecretData } from "./internal/secret.ts";
+import { encodeSecretData, ensureNotControlled } from "./internal/secret.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -55,7 +56,8 @@ export interface SecretProps {
    * Secret values that are not UTF-8 text (keystores, PKCS#12 bundles, DER
    * certificates), supplied already base64-encoded — the same encoding the
    * Kubernetes `data` field uses. Passed through untouched, so the plaintext
-   * bytes never need to exist in state. Keys must not overlap `stringData`.
+   * bytes never need to exist in state. Values must be standard padded
+   * base64, checked at plan time. Keys must not overlap `stringData`.
    */
   binaryData?: Record<string, Redacted.Redacted<string>>;
 }
@@ -87,6 +89,11 @@ export interface Secret extends Resource<
  * only place it is unwrapped is the body of the API request. The values do
  * have to live in state so later updates can re-apply them, so use an
  * encrypted backend such as `Cloudflare.state()` for real credentials.
+ *
+ * Alchemy refuses to apply over a Secret that another controller owns (one
+ * with a `controller` owner reference, such as an External Secrets
+ * `ExternalSecret` or a `SealedSecret`), since that controller would
+ * overwrite the values again on its next sync.
  *
  * ### Creating a Secret
  * **Example:** Create an opaque token Secret
@@ -122,7 +129,11 @@ export interface Secret extends Resource<
  */
 export const Secret = Resource<Secret>("Kubernetes.Secret");
 
-export { SecretDataKeyConflict } from "./internal/secret.ts";
+export {
+  SecretControlledByOwner,
+  SecretDataKeyConflict,
+  SecretDataNotBase64,
+} from "./internal/secret.ts";
 
 export const SecretProvider = () =>
   Provider.effect(
@@ -187,6 +198,14 @@ export const SecretProvider = () =>
             name: news.name,
             namespace,
           };
+          // A controller-owned Secret (ExternalSecret, SealedSecret, ...)
+          // would be rewritten by its controller after the forced apply
+          // below, so the two would fight. Refuse instead.
+          const observed = yield* readObject({ transport, object: ref }).pipe(
+            retryWhileClusterWarms,
+            Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+          );
+          yield* ensureNotControlled({ namespace, name: news.name }, observed);
           // Server-side apply is a true upsert: create-if-missing and
           // converge-if-present in one call, `force: true` so alchemy owns
           // the fields it manages regardless of prior managers.

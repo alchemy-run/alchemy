@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Kubernetes from "@/Kubernetes";
-import { encodeSecretData } from "@/Kubernetes/internal/secret.ts";
+import { encodeSecretData, ensureNotControlled } from "@/Kubernetes/internal/secret.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
@@ -57,6 +57,71 @@ it.effect(
         expect(result.failure._tag).toBe("Kubernetes.SecretDataKeyConflict");
         expect(result.failure.keys).toEqual(["shared"]);
       }
+    }),
+  { tags: ["unit", ...tags] },
+);
+
+it.effect(
+  "rejects binaryData that is not standard base64 without echoing the value",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        encodeSecretData({
+          binaryData: {
+            ok: Redacted.make("AP8Q"),
+            wrapped: Redacted.make("AAAA\nAP8Q"),
+            raw: Redacted.make("not base64!"),
+            unpadded: Redacted.make("AP8"),
+          },
+        }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("Kubernetes.SecretDataNotBase64");
+        expect(result.failure.keys).toEqual(["raw", "unpadded"]);
+        expect(result.failure.message).not.toContain("not base64!");
+      }
+    }),
+  { tags: ["unit", ...tags] },
+);
+
+it.effect(
+  "refuses a live Secret that has a controller owner",
+  () =>
+    Effect.gen(function* () {
+      const ref = { namespace: "apps", name: "db-credentials" };
+      const owner = {
+        apiVersion: "external-secrets.io/v1",
+        kind: "ExternalSecret",
+        name: "db-credentials",
+        uid: "3f1c",
+        controller: true,
+      };
+      const result = yield* Effect.result(
+        ensureNotControlled(ref, { metadata: { ownerReferences: [owner] } }),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("Kubernetes.SecretControlledByOwner");
+        expect(result.failure.owner).toEqual(owner);
+        expect(result.failure.message).toContain("ExternalSecret db-credentials");
+      }
+    }),
+  { tags: ["unit", ...tags] },
+);
+
+it.effect(
+  "applies over a missing Secret or one with only non-controller owners",
+  () =>
+    Effect.gen(function* () {
+      const ref = { namespace: "apps", name: "db-credentials" };
+      yield* ensureNotControlled(ref, undefined);
+      yield* ensureNotControlled(ref, { metadata: {} });
+      yield* ensureNotControlled(ref, {
+        metadata: {
+          ownerReferences: [{ apiVersion: "apps/v1", kind: "Deployment", name: "api" }],
+        },
+      });
     }),
   { tags: ["unit", ...tags] },
 );
