@@ -8,7 +8,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import type { WorkerObservability } from "@/Cloudflare/Workers/Worker.ts";
-import { syncWorkerIssues } from "@/Cloudflare/Workers/WorkerIssues.ts";
+import { syncWorkerIssues } from "@/Cloudflare/Workers/WorkerProvider.ts";
 import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -46,7 +46,13 @@ describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
     ["disables Issues when omitted", true, {}, { issues: { enabled: false } }],
     ["skips an already enabled flag", true, observability, undefined],
     ["skips an already disabled flag", false, { issues: { enabled: false } }, undefined],
-    ["treats an absent flag as disabled", undefined, {}, undefined],
+    ["confirms an absent flag is disabled", undefined, {}, { issues: { enabled: false } }],
+    [
+      "enables Issues when the upload omits observability",
+      undefined,
+      { issues: { enabled: true } },
+      { issues: { enabled: true } },
+    ],
     [
       "omits nullable upload settings from PATCH",
       false,
@@ -99,15 +105,18 @@ describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
         }),
       );
       return Effect.gen(function* () {
-        yield* syncWorkerIssues("account", "worker", desired);
-        expect(calls.map((call) => call.method)).toEqual(
-          expectedPatch ? ["GET", "PATCH"] : ["GET"],
+        yield* syncWorkerIssues(
+          "account",
+          "worker",
+          desired,
+          observed === undefined ? undefined : { enabled: true, issues: { enabled: observed } },
         );
-        expect(
-          calls[0]?.url.endsWith("/accounts/account/workers/scripts/worker/script-settings"),
-        ).toBe(true);
+        expect(calls.map((call) => call.method)).toEqual(expectedPatch ? ["PATCH"] : []);
         if (expectedPatch) {
-          expect(calls[1]?.body).toEqual({ observability: expectedPatch });
+          expect(
+            calls[0]?.url.endsWith("/accounts/account/workers/scripts/worker/script-settings"),
+          ).toBe(true);
+          expect(calls[0]?.body).toEqual({ observability: expectedPatch });
         }
       }).pipe(
         Retry.none,
@@ -117,12 +126,12 @@ describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
     });
   }
 
-  it.live("retries registry propagation on both reads and patches", () => {
+  it.live("retries registry propagation on patches without rereading settings", () => {
     const calls: string[] = [];
     const client = HttpClient.make((request) =>
       Effect.sync(() => {
         calls.push(request.method);
-        const transient = calls.length === 1 || calls.length === 3;
+        const transient = calls.length <= 2;
         return HttpClientResponse.fromWeb(
           request,
           Response.json(
@@ -139,18 +148,21 @@ describe("Worker Issues reconciliation", { tags: ["unit", "local"] }, () => {
         );
       }),
     );
-    return syncWorkerIssues("account", "worker", { issues: { enabled: true } }).pipe(
+    return syncWorkerIssues(
+      "account",
+      "worker",
+      { issues: { enabled: true } },
+      { enabled: true, issues: { enabled: false } },
+    ).pipe(
       Retry.none,
-      Effect.tap(() =>
-        Effect.sync(() => expect(calls).toEqual(["GET", "GET", "PATCH", "GET", "PATCH"])),
-      ),
+      Effect.tap(() => Effect.sync(() => expect(calls).toEqual(["PATCH", "PATCH", "PATCH"]))),
       Effect.provide(credentials({ apiToken: "test" })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
   });
 
   it.live("propagates settings failures after bounded retries", () =>
-    syncWorkerIssues("account", "worker", observability).pipe(
+    syncWorkerIssues("account", "worker", observability, undefined).pipe(
       Retry.none,
       Effect.flip,
       Effect.tap((error) => Effect.sync(() => expect(error._tag).toBe("WorkerNotFound"))),
@@ -210,7 +222,7 @@ describe(
       }),
     );
 
-    test.provider("repairs a reset flag through script settings", (stack) =>
+    test.provider("repairs a reset flag on redeploy", (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         yield* stack.destroy();
@@ -222,7 +234,7 @@ describe(
         });
         expect((yield* readIssues(accountId, worker.workerName))?.issues?.enabled).toBe(false);
 
-        yield* syncWorkerIssues(accountId, worker.workerName, observability);
+        yield* stack.deploy(program(observability, "v2"));
         const actual = yield* readIssues(accountId, worker.workerName);
         expect(actual?.issues?.enabled).toBe(true);
         expect(actual?.logs).toMatchObject(observability.logs!);
@@ -233,11 +245,47 @@ describe(
           scriptName: worker.workerName,
           observability: { issues: { enabled: false } },
         });
-        yield* syncWorkerIssues(accountId, worker.workerName, { issues: { enabled: true } });
+        yield* stack.deploy(program({ issues: { enabled: true } }, "v3"));
         expect((yield* readIssues(accountId, worker.workerName))?.issues?.enabled).toBe(true);
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }),
+    );
+
+    test.provider("version uploads and gradual rollouts preserve parent Issues", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* stack.destroy();
+        const config = { issues: { enabled: true } };
+        const initial = yield* stack.deploy(program(config));
+
+        const deployVersion = (gradual: boolean) =>
+          Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("IssuesWorker", {
+              script: `export default { fetch() { return new Response("${gradual ? "v2" : "v1"}"); } };`,
+              bundle: false,
+              observability: gradual ? { issues: { enabled: false } } : config,
+              version: gradual ? { traffic: 0 } : undefined,
+            });
+            yield* Cloudflare.Worker("IssuesPreview", {
+              script: 'export default { fetch() { return new Response("preview"); } };',
+              bundle: false,
+              version: { parent },
+            });
+            return parent;
+          });
+
+        const preview = yield* stack.deploy(deployVersion(false));
+        expect(preview.workerName).toBe(initial.workerName);
+        expect((yield* readIssues(accountId, preview.workerName))?.issues?.enabled).toBe(true);
+
+        const gradual = yield* stack.deploy(deployVersion(true));
+        expect(gradual.workerName).toBe(initial.workerName);
+        expect((yield* readIssues(accountId, gradual.workerName))?.issues?.enabled).toBe(true);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(initial.workerName, accountId);
       }),
     );
 
