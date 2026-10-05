@@ -100,7 +100,7 @@ reason the platform forces. References:
 | Bindings as the host | every `Bindings.test.ts` | deploys a fixture host and calls the binding over HTTP |
 | Redeploy coverage | tests for anything that syncs grants or bindings on the host | deploy twice and assert the grant survives |
 | Leaks | after a full run, list owned resources in the test account | none |
-| Slow test cases | `rg '^(PASS\|FAIL)' .alchemy/log/test/<run>.log` and read the per-test times | no failure-path case runs longer than a few minutes |
+| Slow test cases | the runner's `✓`/`✗` result lines, which end with each test's duration (`pnpm test test/<P> ... \| rg '[✓✗]'`) | no failure-path case runs longer than a few minutes |
 | Blocked rows | `rg -n 'blocked' processes/<P>/catalog/INDEX.md` | each needs payment, vendor approval, or hardware and names the exact request; quotas and preview features were requested through the API |
 | Suite shape | how the suite was run | one process, whole provider directory; quotas shared with semaphores, never batched runs |
 
