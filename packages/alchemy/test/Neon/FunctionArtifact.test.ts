@@ -168,6 +168,23 @@ test.effect(
 );
 
 test.effect(
+  "native bundle keeps the entry's top-level route registrations",
+  () =>
+    Effect.gen(function* () {
+      const artifact = yield* buildFunctionArtifact({
+        ...scope,
+        main: new URL("./fixtures/function-hono.ts", import.meta.url).href,
+        isExternal: true,
+      });
+      const files = yield* validateFunctionZip(artifact.archive);
+      const entry = yield* Effect.sync(() => new TextDecoder().decode(files["index.mjs"]));
+      expect(entry).toContain("makeNativeFunctionBridge");
+      expect(entry).toContain("alchemy-neon-hono-log-probe");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
+);
+
+test.effect(
   "native bundle targets Node without a Bun or workerd bootstrap",
   () =>
     Effect.gen(function* () {

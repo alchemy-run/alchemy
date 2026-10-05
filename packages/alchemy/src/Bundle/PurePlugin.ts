@@ -73,6 +73,12 @@ export interface PurePluginOptions {
    * @default true
    */
   readonly markSideEffectFree?: boolean;
+  /**
+   * Absolute paths of extra modules to treat as entries, whose side effects
+   * are always preserved. Use this when a generated entry imports the real
+   * entry module, which then no longer appears in the bundle's `input`.
+   */
+  readonly entries?: ReadonlyArray<string>;
 }
 
 const PURE_COMMENT = "/*#__PURE__*/ ";
@@ -105,7 +111,7 @@ export const purePlugin = (options: PurePluginOptions = {}): rolldown.Plugin => 
   // statements (including `console.log` etc.) as eliminable, often
   // collapsing the whole bundle. We always preserve entries' side
   // effects, regardless of the package they belong to.
-  const entryPaths = new Set<string>();
+  const entryPaths = new Set<string>(options.entries);
 
   return {
     name: "alchemy:annotate-pure",
