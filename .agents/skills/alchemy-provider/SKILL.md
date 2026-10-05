@@ -325,8 +325,10 @@ Scarce account quotas (networks, clusters, IP addresses) are shared with a
 semaphore in a test helper, or moved to less-used regions. The suite still
 runs in one process: `pnpm test test/<Provider> --profile testing`.
 
-Unblock account prerequisites yourself as soon as a test hits them. Request
-quota increases and register preview features through the provider's API,
+Unblock account prerequisites in the dedicated test account yourself as
+soon as a test hits them. Request quota increases and register preview
+features through the provider's API (anything that raises spend needs the
+user's go-ahead from step 0 or step 6's cost rule),
 and put any setup a fresh account would need again into the test helper.
 Do one-time console work (free trials, free organizations, sign-ups) in the
 browser with the `puppeteer` skill, and ask the user only to sign in.
