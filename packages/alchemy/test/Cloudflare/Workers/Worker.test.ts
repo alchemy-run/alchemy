@@ -915,9 +915,12 @@ describe.concurrent(
           const observability = {
             enabled: true,
             headSamplingRate: 0.5,
-            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0.25, persist: true },
-            traces: { enabled: true, headSamplingRate: 0.1, persist: true },
+            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0, persist: false },
+            traces: { enabled: false, headSamplingRate: 0.1, persist: false },
           };
+          let original:
+            | Omit<NonNullable<workers.GetScriptSettingResponse["observability"]>, "issues">
+            | undefined;
           let scriptName = "";
           for (const [issues, version] of [
             [true, "v1"],
@@ -945,7 +948,26 @@ describe.concurrent(
             expect(settings.observability?.headSamplingRate).toBe(0.5);
             expect(settings.observability?.logs).toMatchObject(observability.logs);
             expect(settings.observability?.traces).toMatchObject(observability.traces);
+            const { issues: _, ...unchanged } = settings.observability!;
+            if (original) expect(unchanged).toEqual(original);
+            else original = unchanged;
             yield* expectUrlContains(worker.url!, version, { timeout: "30 seconds" });
+          }
+          // Exercise PATCH explicitly: a successful upload can make the fallback unnecessary.
+          for (const enabled of [true, false]) {
+            yield* workers.patchScriptSetting({
+              accountId,
+              scriptName,
+              observability: {
+                ...observability,
+                redactQueryString: true,
+                issues: { enabled },
+              },
+            });
+            const patched = yield* workers.getScriptSetting({ accountId, scriptName });
+            expect(patched.observability?.issues?.enabled).toBe(enabled);
+            const { issues: _, ...afterPatch } = patched.observability!;
+            expect(afterPatch).toEqual({ ...original, redactQueryString: true });
           }
 
           yield* stack.destroy();

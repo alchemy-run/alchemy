@@ -690,6 +690,19 @@ reconcile: Effect.fn(function* ({ id, news, output, session }) {
 
 9. Implement the test cases in `packages/alchemy/test/{Cloud}/{Service}/{Resource}.test.ts`.
 
+### Resource lifecycle testing convention
+
+Test resource behavior with **live `test.provider` tests** that deploy real resources through `stack.deploy`.
+
+- Add regression cases to the resource's existing test file. A Worker feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; keep the surrounding suite's structure.
+- Start and end with `stack.destroy()`. Use deterministic resource identities and verify deletion through the cloud API.
+- Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
+- Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
+- For a partial-update regression, configure non-default neighboring settings, exercise the update, and verify that unrelated settings remain unchanged. Ensure the relevant update path actually runs.
+- Keep production logic in its natural resource/provider location. Do not extract one-off reconciliation functions or modules solely to make them directly testable.
+
+Pure utility and engine unit tests remain appropriate for their own behavior; they do not replace live resource lifecycle coverage.
+
 Read through the established test cases before continuing so that you understand the pattern and structure of the test cases.
 
 - [S3 Bucket Test Cases](./test/AWS/S3/Bucket.test.ts)

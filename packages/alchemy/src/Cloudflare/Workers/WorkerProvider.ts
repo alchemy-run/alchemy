@@ -3872,25 +3872,32 @@ export const LiveWorkerProvider = () =>
           versionId === undefined &&
           (settings.observability?.issues?.enabled ?? false) !== issuesEnabled
         ) {
-          // Full uploads can reset Issues. Compare the observed settings and
-          // preserve resolved logs/traces when replacing observability.
+          // PATCH replaces observability; preserve the full observed configuration.
+          const observed = settings.observability;
           yield* workers
             .patchScriptSetting({
               accountId,
               scriptName: name,
               observability: {
-                ...observability,
-                headSamplingRate: observability.headSamplingRate ?? undefined,
-                logs: observability.logs
+                ...observed,
+                headSamplingRate: observed?.headSamplingRate ?? undefined,
+                redactQueryString: observed?.redactQueryString ?? undefined,
+                logs: observed?.logs
                   ? {
-                      ...observability.logs,
-                      headSamplingRate: observability.logs.headSamplingRate ?? undefined,
+                      ...observed.logs,
+                      destinations: observed.logs.destinations ?? undefined,
+                      headSamplingRate: observed.logs.headSamplingRate ?? undefined,
+                      persist: observed.logs.persist ?? undefined,
                     }
                   : undefined,
-                traces: observability.traces
+                traces: observed?.traces
                   ? {
-                      ...observability.traces,
-                      headSamplingRate: observability.traces.headSamplingRate ?? undefined,
+                      ...observed.traces,
+                      destinations: observed.traces.destinations ?? undefined,
+                      enabled: observed.traces.enabled ?? undefined,
+                      headSamplingRate: observed.traces.headSamplingRate ?? undefined,
+                      persist: observed.traces.persist ?? undefined,
+                      propagationPolicy: observed.traces.propagationPolicy ?? undefined,
                     }
                   : undefined,
                 issues: { enabled: issuesEnabled },
