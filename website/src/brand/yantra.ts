@@ -10,8 +10,8 @@ const YANTRA = {
   viewBox: [0, 0, 24, 24],
   center: 12,
   circleRadius: 9.5,
-  binduRadius: 1.1,
-  strokeWidth: 1.1,
+  binduRadius: 1.5,
+  strokeWidth: 1.5,
 } as const;
 
 /**
@@ -62,6 +62,13 @@ export const YANTRA_THEMES = {
     stroke: "#a3c473",
     /** `--alc-terracotta` (dark block), mirrored by `--alc-yantra-dot` */
     dot: "#d8835a",
+    /** `--alc-bg` (dark block) */
+    bg: "#14110d",
+  },
+  /** Monochrome: white strokes and bindu, for the dark background. */
+  mono: {
+    stroke: "#ffffff",
+    dot: "#ffffff",
     /** `--alc-bg` (dark block) */
     bg: "#14110d",
   },
