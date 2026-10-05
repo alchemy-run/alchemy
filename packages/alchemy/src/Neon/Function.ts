@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { BundleConfig } from "../Bundle/Bundle.ts";
 import type { Input } from "../Input.ts";
-import type { BranchScope } from "./BranchScope.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import type { Resource } from "../Resource.ts";
+import type { BranchScope } from "./BranchScope.ts";
 import type { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import {
   makeFunctionRuntimeContext,
@@ -49,8 +49,7 @@ export type FunctionBranchScope =
  * `branch` or `project` before any lifecycle operation runs, so only the
  * resolved shape reaches the provider.
  */
-export const branchScopeOf = <P extends FunctionBranchScope>(props: P) =>
-  props as P & BranchScope;
+export const branchScopeOf = <P extends FunctionBranchScope>(props: P) => props as P & BranchScope;
 
 export interface FunctionCommonProps extends PlatformProps {
   /** Immutable lowercase alphanumeric identifier, at most 20 characters. Generated when omitted. */

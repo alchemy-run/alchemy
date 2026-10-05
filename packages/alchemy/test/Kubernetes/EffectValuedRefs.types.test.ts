@@ -1,8 +1,8 @@
+import { expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Container from "@/GCP/Container";
 import * as Kubernetes from "@/Kubernetes";
 import * as Neon from "@/Neon";
-import { expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 // Resource Effects declared at module scope, as in a typical stack file.
 const Local = Kubernetes.LocalCluster("Local", { name: "local" });
@@ -19,7 +19,11 @@ const impl = Effect.gen(function* () {
 const typeCases = () =>
   Effect.gen(function* () {
     // A cluster prop accepts the cluster resource's Effect directly…
-    yield* Kubernetes.Deployment("Local", { main: import.meta.url, cluster: Local, port: 3000 }, impl);
+    yield* Kubernetes.Deployment(
+      "Local",
+      { main: import.meta.url, cluster: Local, port: 3000 },
+      impl,
+    );
     yield* Kubernetes.Deployment("Gke", { main: import.meta.url, cluster: Gke, port: 3000 }, impl);
     // …as well as the yielded resource.
     yield* Kubernetes.Deployment(
