@@ -194,7 +194,7 @@ export type StreamClass = {
 const normalizeStreamProps = (
   props: unknown,
 ): Effect.Effect<{ props: unknown; recordSchema: Schema.Top | undefined }> =>
-  Effect.suspend(() => {
+  Effect.suspend((): Effect.Effect<{ props: unknown; recordSchema: Schema.Top | undefined }> => {
     const schema = (props as { schema?: unknown } | undefined)?.schema;
     if (!isEffectSchema(schema)) {
       return Effect.succeed({ props, recordSchema: undefined });

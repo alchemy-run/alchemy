@@ -39,7 +39,7 @@ const fakeClient = (failures: ReadonlyArray<k2.ProduceError["_tag"]> = []) => {
   const client: WriteStreamClient<{ id: number }> = makeWriteStreamClient(
     { schema: Order },
     (records) =>
-      Effect.suspend(() => {
+      Effect.suspend((): Effect.Effect<void, k2.K2Unavailable | k2.K2AppendOutcomeUnknown> => {
         const tag = failures[attempt++];
         if (tag === "K2Unavailable") {
           return Effect.fail(new k2.K2Unavailable({ code: 10211, message: "unavailable" }));

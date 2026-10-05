@@ -38,12 +38,10 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(
-    token.startsWith("cfat_")
-      ? // Account-owned tokens verify against the account route.
-        accounts.verifyToken({ accountId: creds.accountId })
-      : user.verifyToken({}),
-  );
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );

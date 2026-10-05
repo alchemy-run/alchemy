@@ -13,14 +13,7 @@ const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const getSink = (accountId: string, sinkId: string) =>
-  pipelines.getSink({ accountId, sinkId }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
-    }),
-  );
+const getSink = (accountId: string, sinkId: string) => pipelines.getSink({ accountId, sinkId });
 
 const expectSinkGone = (accountId: string, sinkId: string) =>
   getSink(accountId, sinkId).pipe(
