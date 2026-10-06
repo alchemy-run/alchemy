@@ -5,6 +5,16 @@ import { describe, expect, test } from "alchemy-test";
 
 const fixture = fileURLToPath(new URL("./fixtures/bun-body-limit.ts", import.meta.url));
 
+// The fixture runs on the same Bun as the test runner, so `Bun.version` below
+// describes the server under test.
+const bunBinary = typeof Bun === "undefined" ? "bun" : process.execPath;
+
+// Bun enforces `maxRequestBodySize` on chunked bodies (no `Content-Length`)
+// only from 1.4.0. Earlier versions enforce it on bodies that declare their
+// length, so the chunked cases run only where Bun can refuse them.
+const enforcesChunkedLimit =
+  typeof Bun !== "undefined" && Bun.semver.order(Bun.version, "1.4.0") >= 0;
+
 const freePort = () =>
   new Promise<number>((resolve, reject) => {
     const server = createServer();
@@ -19,7 +29,7 @@ const freePort = () =>
 /** Runs the fixture under Bun, calls `use` with its base URL, then kills it. */
 const withServer = async (env: Record<string, string>, use: (baseUrl: string) => Promise<void>) => {
   const port = await freePort();
-  const child = spawn("bun", [fixture], {
+  const child = spawn(bunBinary, [fixture], {
     env: { ...process.env, PORT: String(port), ...env },
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -49,6 +59,11 @@ const chunkedBody = (bytes: number) => {
   });
 };
 
+/** Posts a body of `bytes` bytes with a `Content-Length` header. */
+const postSized = (baseUrl: string, bytes: number) =>
+  fetch(baseUrl, { method: "POST", body: new Uint8Array(bytes).fill(97) });
+
+/** Posts a chunked body of `bytes` bytes. */
 const post = (baseUrl: string, bytes: number) =>
   fetch(baseUrl, {
     method: "POST",
@@ -59,6 +74,30 @@ const post = (baseUrl: string, bytes: number) =>
 
 describe("BunHttpServer request body limit", { tags: ["unit", "local"] }, () => {
   test(
+    "refuses an oversized body with Content-Length with 413 when MAX_REQUEST_BODY_SIZE is set",
+    async () => {
+      await withServer({ MAX_REQUEST_BODY_SIZE: "4096" }, async (url) => {
+        expect((await postSized(url, 64 * 1024)).status).toBe(413);
+        // Control: a body under the limit is still served.
+        const ok = await postSized(url, 1024);
+        expect(ok.status).toBe(200);
+        expect(await ok.text()).toBe("1024");
+      });
+    },
+    { timeout: 30_000 },
+  );
+
+  test(
+    "refuses an oversized body with Content-Length with 413 when maxRequestBodySize is passed",
+    async () => {
+      await withServer({ BODY_LIMIT_OPTION: "4096" }, async (url) => {
+        expect((await postSized(url, 64 * 1024)).status).toBe(413);
+      });
+    },
+    { timeout: 30_000 },
+  );
+
+  test.runIf(enforcesChunkedLimit)(
     "refuses an oversized chunked body with 413 when MAX_REQUEST_BODY_SIZE is set",
     async () => {
       await withServer({ MAX_REQUEST_BODY_SIZE: "4096" }, async (url) => {
@@ -72,7 +111,7 @@ describe("BunHttpServer request body limit", { tags: ["unit", "local"] }, () => 
     { timeout: 30_000 },
   );
 
-  test(
+  test.runIf(enforcesChunkedLimit)(
     "refuses an oversized chunked body with 413 when maxRequestBodySize is passed",
     async () => {
       await withServer({ BODY_LIMIT_OPTION: "4096" }, async (url) => {
