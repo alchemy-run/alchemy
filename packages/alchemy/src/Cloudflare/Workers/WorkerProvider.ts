@@ -928,8 +928,7 @@ export const shouldObserveWorkerRoutes = (
   output: Pick<Worker["Attributes"], "routes"> | undefined,
 ): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
 
-const routeKey = (route: { pattern: string; zoneId: string }) =>
-  `${route.zoneId}:${route.pattern}`;
+const routeKey = (route: { pattern: string; zoneId: string }) => `${route.zoneId}:${route.pattern}`;
 
 /**
  * Order observed zone routes the way state records them. `listRoutes`
@@ -940,15 +939,11 @@ const routeKey = (route: { pattern: string; zoneId: string }) =>
  *
  * @internal exported for unit testing.
  */
-export const orderObservedWorkerRoutes = <
-  Route extends { pattern: string; zoneId: string },
->(
+export const orderObservedWorkerRoutes = <Route extends { pattern: string; zoneId: string }>(
   observed: readonly Route[],
   known: readonly { pattern: string; zoneId: string }[] | undefined,
 ): Route[] => {
-  const position = new Map(
-    (known ?? []).map((route, index) => [routeKey(route), index]),
-  );
+  const position = new Map((known ?? []).map((route, index) => [routeKey(route), index]));
   const rank = (route: Route) => position.get(routeKey(route)) ?? position.size;
   return [...observed].sort((a, b) => rank(a) - rank(b));
 };
@@ -1836,11 +1831,7 @@ export const LiveWorkerProvider = () =>
         listWorkerRoutesInZones(
           scriptName,
           (knownRoutes ?? []).map((route) => route.zoneId),
-        ).pipe(
-          Effect.map((routes) =>
-            orderObservedWorkerRoutes(routes, knownRoutes),
-          ),
-        );
+        ).pipe(Effect.map((routes) => orderObservedWorkerRoutes(routes, knownRoutes)));
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -5012,14 +5003,16 @@ export const LiveWorkerProvider = () =>
             // This is the last gradual-rollout upload receipt, not the active
             // traffic deployment. Preserve it only while that version exists.
             const uploadedVersionId = output?.versionId
-              ? yield* workers.getScriptVersion({
-                  accountId,
-                  scriptName: workerName,
-                  versionId: output.versionId,
-                }).pipe(
-                  Effect.map(() => output.versionId),
-                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
-                )
+              ? yield* workers
+                  .getScriptVersion({
+                    accountId,
+                    scriptName: workerName,
+                    versionId: output.versionId,
+                  })
+                  .pipe(
+                    Effect.map(() => output.versionId),
+                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                  )
               : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
