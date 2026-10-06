@@ -33,10 +33,7 @@ export interface GetPermissionPolicy extends Binding.Service<
   (
     ruleGroup: RuleGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      WAFV2.GetPermissionPolicyResponse,
-      WAFV2.GetPermissionPolicyError
-    >
+    () => Effect.Effect<WAFV2.GetPermissionPolicyResponse, WAFV2.GetPermissionPolicyError>
   >
 > {}
 

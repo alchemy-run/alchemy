@@ -3,8 +3,8 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { toWireDays } from "../../Util/Duration.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AccountPasswordPolicyProps extends Omit<
   iam.UpdateAccountPasswordPolicyRequest,
@@ -55,11 +55,7 @@ export const AccountPasswordPolicyProvider = () =>
     read: Effect.fn(function* () {
       const response = yield* iam
         .getAccountPasswordPolicy({})
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       return response?.PasswordPolicy;
     }),
     // Account-level singleton: IAM exposes no enumeration API, only

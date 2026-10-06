@@ -1,16 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import BatchTestFunctionLive, { BatchTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -36,12 +36,8 @@ const reapBatchJobLogGroup = Core.withProviders(
     const logGroupName = "/aws/batch/job";
     const streams = yield* logs.describeLogStreams.pages({ logGroupName }).pipe(
       Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.logStreams ?? []),
-      ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.map((pages) => Array.from(pages).flatMap((page) => page.logStreams ?? [])),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
     if (streams === undefined) return; // group never created / already reaped
 
@@ -52,9 +48,7 @@ const reapBatchJobLogGroup = Core.withProviders(
       (s) =>
         logs
           .deleteLogStream({ logGroupName, logStreamName: s.logStreamName! })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
       { concurrency: 4 },
     );
 
@@ -82,19 +76,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -106,20 +95,14 @@ const submit = (jobName: string) =>
       ),
     );
     expect(response.status).toBe(200);
-    const submitted = (yield* response.json) as {
-      jobId: string;
-      jobName: string;
-      jobArn?: string;
-    };
+    const submitted = (yield* response.json) as { jobId: string; jobName: string; jobArn?: string };
     submittedJobIds.add(submitted.jobId);
     return submitted;
   });
 
 /** Out-of-band job status via distilled. */
 const jobStatus = (jobId: string) =>
-  batch
-    .describeJobs({ jobs: [jobId] })
-    .pipe(Effect.map((res) => res.jobs?.[0]?.status));
+  batch.describeJobs({ jobs: [jobId] }).pipe(Effect.map((res) => res.jobs?.[0]?.status));
 
 const terminalJobStatuses = new Set(["SUCCEEDED", "FAILED"]);
 
@@ -143,19 +126,14 @@ const drainSubmittedJobs = Core.withProviders(
     const jobs = yield* describeSubmitted;
     yield* Effect.forEach(
       jobs.filter((job) => !terminalJobStatuses.has(job.status ?? "")),
-      (job) =>
-        batch.terminateJob({
-          jobId: job.jobId!,
-          reason: "Batch binding test teardown",
-        }),
+      (job) => batch.terminateJob({ jobId: job.jobId!, reason: "Batch binding test teardown" }),
       { concurrency: 4, discard: true },
     );
 
     yield* describeSubmitted.pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
-        until: (observed) =>
-          observed.every((job) => terminalJobStatuses.has(job.status ?? "")),
+        until: (observed) => observed.every((job) => terminalJobStatuses.has(job.status ?? "")),
         times: 10,
       }),
     );
@@ -180,9 +158,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Batch test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Batch test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo(
@@ -203,15 +179,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -248,9 +219,7 @@ describe(
                 times: 24,
               }),
             );
-            expect(["RUNNABLE", "STARTING", "RUNNING", "SUCCEEDED"]).toContain(
-              status,
-            );
+            expect(["RUNNABLE", "STARTING", "RUNNING", "SUCCEEDED"]).toContain(status);
           }),
         { timeout: 240_000 },
       );
@@ -282,14 +251,9 @@ describe(
           Effect.gen(function* () {
             const { jobId } = yield* submit("alchemy-e2e-describe");
 
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/status?jobId=${jobId}`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/status?jobId=${jobId}`));
             expect(response.status).toBe(200);
-            const body = (yield* response.json) as {
-              status?: string;
-              jobQueue?: string;
-            };
+            const body = (yield* response.json) as { status?: string; jobQueue?: string };
             expect(body.status).toBeTruthy();
             expect(body.jobQueue).toContain("job-queue/");
           }),
@@ -308,16 +272,11 @@ describe(
             // (Fargate placement takes ~a minute), so cancellation applies.
             const response = yield* send(
               HttpClientRequest.post(`${baseUrl}/cancel`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  jobId,
-                  reason: "alchemy e2e cancel test",
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ jobId, reason: "alchemy e2e cancel test" }),
               ),
             );
             expect(response.status).toBe(200);
-            expect((yield* response.json) as object).toEqual({
-              cancelled: true,
-            });
+            expect((yield* response.json) as object).toEqual({ cancelled: true });
 
             // Out-of-band: a cancelled-before-starting job lands in FAILED.
             // (SUCCEEDED only if the cancel raced past STARTING — accepted to
@@ -355,9 +314,7 @@ describe(
                 "SUCCEEDED",
               ]) {
                 const response = yield* send(
-                  HttpClientRequest.get(
-                    `${baseUrl}/jobs?jobStatus=${jobStatus}`,
-                  ),
+                  HttpClientRequest.get(`${baseUrl}/jobs?jobStatus=${jobStatus}`),
                 );
                 expect(response.status).toBe(200);
                 const body = (yield* response.json) as {
@@ -391,9 +348,7 @@ describe(
             // a 200 with a jobs array proves the call path end to end (the
             // snapshot only surfaces RUNNABLE jobs, so membership is racy and
             // not asserted).
-            const response = yield* send(
-              HttpClientRequest.get(`${baseUrl}/snapshot`),
-            );
+            const response = yield* send(HttpClientRequest.get(`${baseUrl}/snapshot`));
             expect(response.status).toBe(200);
             const body = (yield* response.json) as { jobs: unknown };
             expect(Array.isArray(body.jobs)).toBe(true);
@@ -413,9 +368,7 @@ describe(
             let rule: eventbridge.Rule | undefined;
             let nextToken: string | undefined;
             for (let page = 0; page < 10 && !rule; page++) {
-              const result = yield* eventbridge.listRules({
-                NextToken: nextToken,
-              });
+              const result = yield* eventbridge.listRules({ NextToken: nextToken });
               rule = (result.Rules ?? []).find((candidate) =>
                 candidate.Name?.includes("BatchJobEvents"),
               );
@@ -439,16 +392,11 @@ describe(
 
             const response = yield* send(
               HttpClientRequest.post(`${baseUrl}/terminate`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({
-                  jobId,
-                  reason: "alchemy e2e terminate test",
-                }),
+                HttpClientRequest.bodyJsonUnsafe({ jobId, reason: "alchemy e2e terminate test" }),
               ),
             );
             expect(response.status).toBe(200);
-            expect((yield* response.json) as object).toEqual({
-              terminated: true,
-            });
+            expect((yield* response.json) as object).toEqual({ terminated: true });
 
             // Out-of-band: a job terminated before running lands in FAILED.
             const status = yield* jobStatus(jobId).pipe(

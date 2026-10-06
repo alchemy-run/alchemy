@@ -42,7 +42,6 @@ export interface CreateApplicationPresignedUrl extends Binding.Service<
     >
   >
 > {}
-export const CreateApplicationPresignedUrl =
-  Binding.Service<CreateApplicationPresignedUrl>(
-    "AWS.KinesisAnalyticsV2.CreateApplicationPresignedUrl",
-  );
+export const CreateApplicationPresignedUrl = Binding.Service<CreateApplicationPresignedUrl>(
+  "AWS.KinesisAnalyticsV2.CreateApplicationPresignedUrl",
+);

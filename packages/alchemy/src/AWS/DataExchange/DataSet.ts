@@ -127,11 +127,7 @@ export const DataSetProvider = () =>
       const getById = Effect.fn(function* (dataSetId: string) {
         return yield* dataexchange
           .getDataSet({ DataSetId: dataSetId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       /**
@@ -140,12 +136,10 @@ export const DataSetProvider = () =>
        * failure) goes through the deterministic physical name.
        */
       const findByName = Effect.fn(function* (name: string) {
-        const head = yield* dataexchange.listDataSets
-          .items({ Origin: "OWNED" })
-          .pipe(
-            Stream.filter((dataSet) => dataSet.Name === name),
-            Stream.runHead,
-          );
+        const head = yield* dataexchange.listDataSets.items({ Origin: "OWNED" }).pipe(
+          Stream.filter((dataSet) => dataSet.Name === name),
+          Stream.runHead,
+        );
         if (head._tag === "None") return undefined;
         return yield* getById(head.value.Id);
       });
@@ -180,10 +174,7 @@ export const DataSetProvider = () =>
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           // The asset type is immutable; name and description update in place.
-          if (
-            (news.assetType ?? "S3_SNAPSHOT") !==
-            (olds.assetType ?? "S3_SNAPSHOT")
-          ) {
+          if ((news.assetType ?? "S3_SNAPSHOT") !== (olds.assetType ?? "S3_SNAPSHOT")) {
             return { action: "replace" } as const;
           }
         }),
@@ -197,9 +188,7 @@ export const DataSetProvider = () =>
 
           // 1. Observe — the output id is only a cache; fall back to the
           //    deterministic name when it's missing or stale.
-          let dataSet = output?.dataSetId
-            ? yield* getById(output.dataSetId)
-            : undefined;
+          let dataSet = output?.dataSetId ? yield* getById(output.dataSetId) : undefined;
           if (dataSet === undefined) {
             dataSet = yield* findByName(name);
           }
@@ -238,20 +227,15 @@ export const DataSetProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* dataexchange
-            .deleteDataSet({ DataSetId: output.dataSetId })
-            .pipe(
-              // A revision-deletion race can transiently reject the delete;
-              // the engine deletes revisions first, so retry briefly.
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* dataexchange.deleteDataSet({ DataSetId: output.dataSetId }).pipe(
+            // A revision-deletion race can transiently reject the delete;
+            // the engine deletes revisions first, so retry briefly.
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
 
         list: () =>

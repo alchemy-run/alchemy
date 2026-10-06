@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
 import {
   activeReplicaRegions,
   observedRegion,
   regionPlacementPatch,
   serviceRegionPlacement,
 } from "@/Railway/ServiceRegion.ts";
-import { describe, expect, it } from "alchemy-test";
 
 describe("Railway service region placement", () => {
   it("reads deploy.multiRegionConfig and ignores the legacy region field", () => {

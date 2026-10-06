@@ -32,12 +32,7 @@ export interface DescribeBackup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeBackupRequest,
-    ) => Effect.Effect<
-      DynamoDB.DescribeBackupOutput,
-      DynamoDB.DescribeBackupError
-    >
+    ) => Effect.Effect<DynamoDB.DescribeBackupOutput, DynamoDB.DescribeBackupError>
   >
 > {}
-export const DescribeBackup = Binding.Service<DescribeBackup>(
-  "AWS.DynamoDB.DescribeBackup",
-);
+export const DescribeBackup = Binding.Service<DescribeBackup>("AWS.DynamoDB.DescribeBackup");

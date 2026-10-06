@@ -1,28 +1,23 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetBillingAlert } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilArchived = (id: string) =>
   GetBillingAlert({ id }).pipe(
     Effect.map((alert) =>
-      alert.status === "archived"
-        ? ("archived" as const)
-        : ("present" as const),
+      alert.status === "archived" ? ("archived" as const) : ("present" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("archived" as const)),
     Effect.repeat({
@@ -117,12 +112,7 @@ test.provider(
       expect(archived).toEqual("archived");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:alert",
-      "provider:stripe:billingmeter",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:alert", "provider:stripe:billingmeter", "live"],
     timeout: 120_000,
   },
 );
@@ -192,12 +182,7 @@ test.provider(
       expect(gone).toEqual("archived");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:alert",
-      "provider:stripe:billingmeter",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:alert", "provider:stripe:billingmeter", "live"],
     timeout: 120_000,
   },
 );
@@ -241,17 +226,10 @@ test.provider(
       expect(archived).toEqual("archived");
 
       const after = yield* provider.list();
-      expect(
-        after.find((alert) => alert.id === deployed.alert.id),
-      ).toBeUndefined();
+      expect(after.find((alert) => alert.id === deployed.alert.id)).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:stripe",
-      "provider:stripe:alert",
-      "provider:stripe:billingmeter",
-      "live",
-    ],
+    tags: ["provider:stripe", "provider:stripe:alert", "provider:stripe:billingmeter", "live"],
     timeout: 120_000,
   },
 );

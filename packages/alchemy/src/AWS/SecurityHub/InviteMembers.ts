@@ -27,12 +27,7 @@ export interface InviteMembers extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.InviteMembersRequest,
-    ) => Effect.Effect<
-      securityhub.InviteMembersResponse,
-      securityhub.InviteMembersError
-    >
+    ) => Effect.Effect<securityhub.InviteMembersResponse, securityhub.InviteMembersError>
   >
 > {}
-export const InviteMembers = Binding.Service<InviteMembers>(
-  "AWS.SecurityHub.InviteMembers",
-);
+export const InviteMembers = Binding.Service<InviteMembers>("AWS.SecurityHub.InviteMembers");

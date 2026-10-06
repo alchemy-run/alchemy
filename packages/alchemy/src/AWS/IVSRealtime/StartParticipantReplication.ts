@@ -58,7 +58,6 @@ export interface StartParticipantReplication extends Binding.Service<
     >
   >
 > {}
-export const StartParticipantReplication =
-  Binding.Service<StartParticipantReplication>(
-    "AWS.IVSRealtime.StartParticipantReplication",
-  );
+export const StartParticipantReplication = Binding.Service<StartParticipantReplication>(
+  "AWS.IVSRealtime.StartParticipantReplication",
+);

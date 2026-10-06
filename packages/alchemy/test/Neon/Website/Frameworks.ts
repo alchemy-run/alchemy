@@ -1,5 +1,5 @@
-import * as Website from "@/Neon/Website/index.ts";
 import type { FrameworkSiteProps } from "@/Neon/Website/FrameworkSite.ts";
+import * as Website from "@/Neon/Website/index.ts";
 
 export const frameworks = [
   { slug: "vite", name: "Vite", website: Website.Vite, interactive: true },

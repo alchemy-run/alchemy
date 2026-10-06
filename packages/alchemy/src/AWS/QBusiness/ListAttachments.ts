@@ -37,12 +37,7 @@ export interface ListAttachments extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListAttachmentsRequest,
-    ) => Effect.Effect<
-      qbusiness.ListAttachmentsResponse,
-      qbusiness.ListAttachmentsError
-    >
+    ) => Effect.Effect<qbusiness.ListAttachmentsResponse, qbusiness.ListAttachmentsError>
   >
 > {}
-export const ListAttachments = Binding.Service<ListAttachments>(
-  "AWS.QBusiness.ListAttachments",
-);
+export const ListAttachments = Binding.Service<ListAttachments>("AWS.QBusiness.ListAttachments");

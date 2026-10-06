@@ -86,17 +86,13 @@ export const ChannelAssociationProvider = () =>
         channelArn: string,
       ) {
         return yield* pinNotificationsRegion(
-          notifications.listChannels
-            .items({ notificationConfigurationArn })
-            .pipe(
-              Stream.filter((arn) => arn === channelArn),
-              Stream.runHead,
-              Effect.map(Option.getOrUndefined),
-              // The parent configuration may already be gone.
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          notifications.listChannels.items({ notificationConfigurationArn }).pipe(
+            Stream.filter((arn) => arn === channelArn),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+            // The parent configuration may already be gone.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          ),
         );
       });
 
@@ -109,8 +105,7 @@ export const ChannelAssociationProvider = () =>
 
         read: Effect.fn(function* ({ olds, output }) {
           const configArn =
-            output?.notificationConfigurationArn ??
-            olds?.notificationConfigurationArn;
+            output?.notificationConfigurationArn ?? olds?.notificationConfigurationArn;
           const channelArn = output?.channelArn ?? olds?.channelArn;
           if (configArn === undefined || channelArn === undefined) {
             return undefined;
@@ -125,8 +120,7 @@ export const ChannelAssociationProvider = () =>
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
-            news.notificationConfigurationArn !==
-              olds.notificationConfigurationArn ||
+            news.notificationConfigurationArn !== olds.notificationConfigurationArn ||
             news.channelArn !== olds.channelArn
           ) {
             return { action: "replace" } as const;
@@ -148,8 +142,7 @@ export const ChannelAssociationProvider = () =>
               notifications
                 .associateChannel({
                   arn: news.channelArn,
-                  notificationConfigurationArn:
-                    news.notificationConfigurationArn,
+                  notificationConfigurationArn: news.notificationConfigurationArn,
                 })
                 .pipe(Effect.catchTag("ConflictException", () => Effect.void)),
             );
@@ -170,12 +163,9 @@ export const ChannelAssociationProvider = () =>
             notifications
               .disassociateChannel({
                 arn: output.channelArn,
-                notificationConfigurationArn:
-                  output.notificationConfigurationArn,
+                notificationConfigurationArn: output.notificationConfigurationArn,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       });

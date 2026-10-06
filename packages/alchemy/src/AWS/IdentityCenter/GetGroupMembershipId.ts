@@ -32,10 +32,7 @@ export interface GetGroupMembershipId extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.GetGroupMembershipIdRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.GetGroupMembershipIdRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.GetGroupMembershipIdResponse,
       identitystore.GetGroupMembershipIdError

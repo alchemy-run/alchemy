@@ -1,15 +1,4 @@
 import {
-  Branch,
-  type BranchEndpointConfig,
-  type BranchProps,
-} from "@/Neon/Branch";
-import type { PostgresOrigin } from "@/Neon/PostgresOrigin";
-import { Project } from "@/Neon/Project";
-import { providers } from "@/Neon/Providers";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
-import {
   createProjectBranch,
   deleteProjectBranch,
   deleteProjectEndpoint,
@@ -20,20 +9,24 @@ import {
   updateProjectBranch,
   updateProjectEndpoint,
 } from "@distilled.cloud/neon";
-import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
-import * as Result from "effect/Result";
-import { waitForOperations } from "@/Neon/Project";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
+import { Branch, type BranchEndpointConfig, type BranchProps } from "@/Neon/Branch";
+import type { PostgresOrigin } from "@/Neon/PostgresOrigin";
+import { Project } from "@/Neon/Project";
+import { waitForOperations } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const expectPooledOrigin = (branch: {
   pooledConnectionUri: string;
@@ -56,14 +49,7 @@ const expectPooledOrigin = (branch: {
 // branch, then assert the deployed branch appears in the exhaustive result.
 describe.concurrent(
   "branch lifecycle",
-  {
-    tags: [
-      "provider:neon",
-      "provider:neon:branch",
-      "provider:neon:project",
-      "live",
-    ],
-  },
+  { tags: ["provider:neon", "provider:neon:branch", "provider:neon:project", "live"] },
   () => {
     test.provider("list enumerates the deployed branch", (stack) =>
       Effect.gen(function* () {
@@ -92,98 +78,86 @@ describe.concurrent(
       }).pipe(logLevel),
     );
 
-    test.provider(
-      "updating project in-place does not replace the branch",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
+    test.provider("updating project in-place does not replace the branch", (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-          const initial = yield* stack.deploy(
-            Effect.gen(function* () {
-              const project = yield* Project("UpdateBranchProject", {
-                enableLogicalReplication: false,
-              });
-              const branch = yield* Branch("UpdateBranch", {
-                project,
-              });
-              return { project, branch };
-            }),
-          );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Project("UpdateBranchProject", {
+              enableLogicalReplication: false,
+            });
+            const branch = yield* Branch("UpdateBranch", { project });
+            return { project, branch };
+          }),
+        );
 
-          const updated = yield* stack.deploy(
-            Effect.gen(function* () {
-              const project = yield* Project("UpdateBranchProject", {
-                enableLogicalReplication: true,
-              });
-              const branch = yield* Branch("UpdateBranch", {
-                project,
-              });
-              return { project, branch };
-            }),
-          );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Project("UpdateBranchProject", {
+              enableLogicalReplication: true,
+            });
+            const branch = yield* Branch("UpdateBranch", { project });
+            return { project, branch };
+          }),
+        );
 
-          expect(updated.branch.projectId).toEqual(updated.project.projectId);
-          expect(updated.branch.branchId).toEqual(initial.branch.branchId);
-          expectPooledOrigin(updated.branch);
+        expect(updated.branch.projectId).toEqual(updated.project.projectId);
+        expect(updated.branch.branchId).toEqual(initial.branch.branchId);
+        expectPooledOrigin(updated.branch);
 
-          yield* stack.destroy();
-        }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
     );
 
-    test.provider(
-      "replaces branch when project changes to another pre-existing project",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
+    test.provider("replaces branch when project changes to another pre-existing project", (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-          const initial = yield* stack.deploy(
-            Effect.gen(function* () {
-              const projectA = yield* Project("ReplaceBranchProjectA");
-              const projectB = yield* Project("ReplaceBranchProjectB");
-              const branch = yield* Branch("ReplaceBranchExistingProject", {
-                project: projectA,
-                name: "cross-project-replacement",
-              });
-              return { projectA, projectB, branch };
-            }),
-          );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            const projectA = yield* Project("ReplaceBranchProjectA");
+            const projectB = yield* Project("ReplaceBranchProjectB");
+            const branch = yield* Branch("ReplaceBranchExistingProject", {
+              project: projectA,
+              name: "cross-project-replacement",
+            });
+            return { projectA, projectB, branch };
+          }),
+        );
 
-          const replaced = yield* stack.deploy(
-            Effect.gen(function* () {
-              const projectA = yield* Project("ReplaceBranchProjectA");
-              const projectB = yield* Project("ReplaceBranchProjectB");
-              const branch = yield* Branch("ReplaceBranchExistingProject", {
-                project: projectB,
-                name: "cross-project-replacement",
-              });
-              return { projectA, projectB, branch };
-            }),
-          );
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            const projectA = yield* Project("ReplaceBranchProjectA");
+            const projectB = yield* Project("ReplaceBranchProjectB");
+            const branch = yield* Branch("ReplaceBranchExistingProject", {
+              project: projectB,
+              name: "cross-project-replacement",
+            });
+            return { projectA, projectB, branch };
+          }),
+        );
 
-          expect(replaced.branch.projectId).toEqual(
-            replaced.projectB.projectId,
-          );
-          expect(replaced.branch.branchId).not.toEqual(initial.branch.branchId);
+        expect(replaced.branch.projectId).toEqual(replaced.projectB.projectId);
+        expect(replaced.branch.branchId).not.toEqual(initial.branch.branchId);
 
-          const fetched = yield* getProjectBranch({
-            project_id: replaced.projectB.projectId,
-            branch_id: replaced.branch.branchId,
-          });
-          expect(fetched.branch.id).toEqual(replaced.branch.branchId);
+        const fetched = yield* getProjectBranch({
+          project_id: replaced.projectB.projectId,
+          branch_id: replaced.branch.branchId,
+        });
+        expect(fetched.branch.id).toEqual(replaced.branch.branchId);
 
-          const oldBranch = yield* getProjectBranch({
-            project_id: initial.projectA.projectId,
-            branch_id: initial.branch.branchId,
-          }).pipe(
-            Effect.as("found" as const),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed("not-found" as const),
-            ),
-          );
-          expect(oldBranch).toEqual("not-found");
+        const oldBranch = yield* getProjectBranch({
+          project_id: initial.projectA.projectId,
+          branch_id: initial.branch.branchId,
+        }).pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+        );
+        expect(oldBranch).toEqual("not-found");
 
-          yield* stack.destroy();
-        }).pipe(logLevel),
+        yield* stack.destroy();
+      }).pipe(logLevel),
     );
 
     test.provider("replaces branch when project is replaced", (stack) =>
@@ -192,12 +166,8 @@ describe.concurrent(
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            const project = yield* Project("ReplaceProject", {
-              region: "aws-us-east-1",
-            });
-            const branch = yield* Branch("ReplaceBranchReplaceProject", {
-              project,
-            });
+            const project = yield* Project("ReplaceProject", { region: "aws-us-east-1" });
+            const branch = yield* Branch("ReplaceBranchReplaceProject", { project });
             return { project, branch };
           }),
         );
@@ -208,21 +178,15 @@ describe.concurrent(
         // This should cause the branch to be replaced.
         const replaced = yield* stack.deploy(
           Effect.gen(function* () {
-            const project = yield* Project("ReplaceProject", {
-              region: "aws-us-west-2",
-            });
-            const branch = yield* Branch("ReplaceBranchReplaceProject", {
-              project,
-            });
+            const project = yield* Project("ReplaceProject", { region: "aws-us-west-2" });
+            const branch = yield* Branch("ReplaceBranchReplaceProject", { project });
             return { project, branch };
           }),
         );
 
         expect(replaced.project.region).toEqual("aws-us-west-2");
         expect(replaced.branch.projectId).toEqual(replaced.project.projectId);
-        expect(replaced.branch.projectId).not.toEqual(
-          initial.project.projectId,
-        );
+        expect(replaced.branch.projectId).not.toEqual(initial.project.projectId);
         expect(replaced.branch.branchId).not.toEqual(initial.branch.branchId);
 
         const fetched = yield* getProjectBranch({
@@ -236,9 +200,7 @@ describe.concurrent(
           branch_id: initial.branch.branchId,
         }).pipe(
           Effect.as("found" as const),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed("not-found" as const),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
         );
         expect(oldBranch).toEqual("not-found");
 
@@ -267,35 +229,21 @@ describe.concurrent(
             stack.deploy(
               Effect.gen(function* () {
                 const project = yield* Project("EndpointProject");
-                const branch = yield* Branch("EndpointBranch", {
-                  project,
-                  endpoints,
-                });
+                const branch = yield* Branch("EndpointBranch", { project, endpoints });
                 return { project, branch };
               }),
             );
           const initial = yield* deploy([
-            {
-              type: "read_write",
-              autoscalingLimitMinCu: 0.25,
-              autoscalingLimitMaxCu: 0.25,
-            },
-            {
-              type: "read_only",
-              autoscalingLimitMinCu: 0.25,
-              autoscalingLimitMaxCu: 0.25,
-            },
+            { type: "read_write", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 0.25 },
+            { type: "read_only", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 0.25 },
           ]);
           const scope = {
             project_id: initial.project.projectId,
             branch_id: initial.branch.branchId,
           };
-          const initialEndpoints = (yield* listProjectBranchEndpoints(scope))
-            .endpoints;
+          const initialEndpoints = (yield* listProjectBranchEndpoints(scope)).endpoints;
           expect(initialEndpoints).toHaveLength(2);
-          const first = initialEndpoints.find(
-            (endpoint) => endpoint.type === "read_write",
-          )!;
+          const first = initialEndpoints.find((endpoint) => endpoint.type === "read_write")!;
           const drift = yield* updateProjectEndpoint({
             project_id: scope.project_id,
             endpoint_id: first.id,
@@ -303,45 +251,30 @@ describe.concurrent(
           });
           yield* waitForOperations(drift.operations);
           const updated = yield* deploy([
-            {
-              type: "read_write",
-              autoscalingLimitMinCu: 0.25,
-              autoscalingLimitMaxCu: 1,
-            },
+            { type: "read_write", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 1 },
           ]);
           expect(updated.branch.branchId).toBe(initial.branch.branchId);
-          const updatedEndpoints = (yield* listProjectBranchEndpoints(scope))
-            .endpoints;
+          const updatedEndpoints = (yield* listProjectBranchEndpoints(scope)).endpoints;
           expect(updatedEndpoints).toHaveLength(1);
           const current = updatedEndpoints[0]!;
           expect(current.id).toBe(first.id);
           expect(current.autoscaling_limit_max_cu).toBe(1);
           const removed = yield* deploy();
-          const defaults = (yield* getProject({ project_id: scope.project_id }))
-            .project.default_endpoint_settings;
-          const reset = (yield* listProjectBranchEndpoints(scope))
-            .endpoints[0]!;
-          expect(reset.autoscaling_limit_min_cu).toBe(
-            defaults?.autoscaling_limit_min_cu ?? 0.25,
-          );
-          expect(reset.autoscaling_limit_max_cu).toBe(
-            defaults?.autoscaling_limit_max_cu ?? 2,
-          );
+          const defaults = (yield* getProject({ project_id: scope.project_id })).project
+            .default_endpoint_settings;
+          const reset = (yield* listProjectBranchEndpoints(scope)).endpoints[0]!;
+          expect(reset.autoscaling_limit_min_cu).toBe(defaults?.autoscaling_limit_min_cu ?? 0.25);
+          expect(reset.autoscaling_limit_max_cu).toBe(defaults?.autoscaling_limit_max_cu ?? 2);
           const deletion = yield* deleteProjectEndpoint({
             project_id: scope.project_id,
             endpoint_id: reset.id,
           });
           yield* waitForOperations(deletion.operations);
           const recovered = yield* deploy([
-            {
-              type: "read_write",
-              autoscalingLimitMinCu: 0.25,
-              autoscalingLimitMaxCu: 0.5,
-            },
+            { type: "read_write", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 0.5 },
           ]);
           expect(recovered.branch.branchId).toBe(removed.branch.branchId);
-          const replacement = (yield* listProjectBranchEndpoints(scope))
-            .endpoints[0]!;
+          const replacement = (yield* listProjectBranchEndpoints(scope)).endpoints[0]!;
           expect(replacement.id).not.toBe(reset.id);
           const uri = yield* getConnectionURI({
             ...scope,
@@ -385,21 +318,13 @@ describe.concurrent(
             fqn: "ObservedBranch",
             instanceId: "observed-branch",
             bindings: [],
-            session: {
-              emit: () => Effect.void,
-              done: () => Effect.void,
-              note: () => Effect.void,
-            },
+            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
           };
           const news = {
             project: { projectId: initial.project.projectId },
             name: initial.branch.branchName,
           };
-          const read = yield* provider.read!({
-            ...context,
-            olds: news,
-            output: undefined,
-          });
+          const read = yield* provider.read!({ ...context, olds: news, output: undefined });
           expect(Unowned.is(read)).toBe(true);
           const drift = yield* updateProjectBranch({
             project_id: initial.project.projectId,
@@ -421,10 +346,7 @@ describe.concurrent(
             output: adopted,
           });
           expect(unchanged.branchId).toBe(adopted.branchId);
-          yield* deleteBranchOutOfBand(
-            initial.project.projectId,
-            initial.branch.branchId,
-          );
+          yield* deleteBranchOutOfBand(initial.project.projectId, initial.branch.branchId);
           const recovered = yield* deploy(true);
           expect(recovered.branch.branchId).not.toBe(initial.branch.branchId);
           const persisted = yield* deploy(true);
@@ -460,17 +382,13 @@ describe.concurrent(
           const program = (allow: boolean) =>
             Effect.gen(function* () {
               const project = yield* base;
-              return yield* Branch("AdoptedBranch", {
-                project,
-                name: "foreign-branch",
-              }).pipe(adopt(allow));
+              return yield* Branch("AdoptedBranch", { project, name: "foreign-branch" }).pipe(
+                adopt(allow),
+              );
             });
-          const refused = yield* stack
-            .deploy(program(false))
-            .pipe(Effect.result);
+          const refused = yield* stack.deploy(program(false)).pipe(Effect.result);
           expect(Result.isFailure(refused)).toBe(true);
-          if (Result.isFailure(refused))
-            expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+          if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
           const adopted = yield* stack.deploy(program(true));
           expect(adopted.branchId).toBe(foreign.branch.id);
           expect(
@@ -561,9 +479,7 @@ describe.concurrent(
           expect(reparented.branch.branchId).not.toBe(initial.branch.branchId);
           expect(reparented.branch.branchName).toBe(initial.branch.branchName);
           expect(reparented.branch.initSource).toBe("parent-data");
-          expect(reparented.branch.parentBranchId).toBe(
-            initial.parent.branchId,
-          );
+          expect(reparented.branch.parentBranchId).toBe(initial.parent.branchId);
           const removal = yield* stack.plan(program());
           expect(removal.resources.NamedBranch).toMatchObject({
             action: "replace",
@@ -574,9 +490,7 @@ describe.concurrent(
             branch_id: reparented.branch.branchId,
           });
           expect(current.branch.parent_id).toBe(initial.parent.branchId);
-          expect(
-            (yield* stack.plan(program(props))).resources.NamedBranch.action,
-          ).toBe("noop");
+          expect((yield* stack.plan(program(props))).resources.NamedBranch.action).toBe("noop");
           expect((yield* stack.deploy(program(props))).branch.branchId).toBe(
             reparented.branch.branchId,
           );
@@ -603,13 +517,12 @@ describe.concurrent(
               ),
             ).toBe(true);
           }
-          expect(
-            (yield* stack.plan(program(schemaProps))).resources.NamedBranch
-              .action,
-          ).toBe("noop");
-          expect(
-            (yield* stack.deploy(program(schemaProps))).branch.branchId,
-          ).toBe(schema.branch.branchId);
+          expect((yield* stack.plan(program(schemaProps))).resources.NamedBranch.action).toBe(
+            "noop",
+          );
+          expect((yield* stack.deploy(program(schemaProps))).branch.branchId).toBe(
+            schema.branch.branchId,
+          );
           yield* stack.destroy();
           expect(
             yield* getProjectBranch({
@@ -651,18 +564,13 @@ describe.concurrent(
           const initial = yield* stack.deploy(program());
           expect(initial.branch.initSource).toBe("schema-only");
           expect(initial.branch.parentBranchId).toBeUndefined();
-          expect(
-            (yield* stack.plan(program())).resources.SchemaBranch.action,
-          ).toBe("noop");
-          expect((yield* stack.deploy(program())).branch.branchId).toBe(
-            initial.branch.branchId,
-          );
-          const props = {
-            parentBranch: { branchId: initial.parent.branchId },
-          };
-          expect(
-            (yield* stack.plan(program(props))).resources.SchemaBranch,
-          ).toMatchObject({ action: "replace", deleteFirst: true });
+          expect((yield* stack.plan(program())).resources.SchemaBranch.action).toBe("noop");
+          expect((yield* stack.deploy(program())).branch.branchId).toBe(initial.branch.branchId);
+          const props = { parentBranch: { branchId: initial.parent.branchId } };
+          expect((yield* stack.plan(program(props))).resources.SchemaBranch).toMatchObject({
+            action: "replace",
+            deleteFirst: true,
+          });
           const replaced = yield* stack.deploy(program(props));
           expect(replaced.branch.branchId).not.toBe(initial.branch.branchId);
           expect(replaced.branch.branchName).toBe(initial.branch.branchName);
@@ -676,13 +584,12 @@ describe.concurrent(
           expect(current.branch.init_source).toBe("parent-schema");
           expect(current.branch.parent_id).toBeUndefined();
           for (const next of [{}, { parentBranch: undefined }]) {
-            expect(
-              (yield* stack.plan(program(next))).resources.SchemaBranch,
-            ).toMatchObject({ action: "replace", deleteFirst: true });
+            expect((yield* stack.plan(program(next))).resources.SchemaBranch).toMatchObject({
+              action: "replace",
+              deleteFirst: true,
+            });
           }
-          expect(
-            (yield* stack.plan(program(props))).resources.SchemaBranch.action,
-          ).toBe("noop");
+          expect((yield* stack.plan(program(props))).resources.SchemaBranch.action).toBe("noop");
           expect((yield* stack.deploy(program(props))).branch.branchId).toBe(
             replaced.branch.branchId,
           );
@@ -749,43 +656,20 @@ describe.concurrent(
             fqn: "LateBranch",
             instanceId: "late-branch",
             bindings: [],
-            session: {
-              emit: () => Effect.void,
-              done: () => Effect.void,
-              note: () => Effect.void,
-            },
+            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
           };
-          const news = {
-            project: { projectId: initial.project.projectId },
-            name,
-            protected: true,
-          };
+          const news = { project: { projectId: initial.project.projectId }, name, protected: true };
           const late = yield* provider
-            .reconcile({
-              ...context,
-              news,
-              olds: undefined,
-              output: undefined,
-            })
+            .reconcile({ ...context, news, olds: undefined, output: undefined })
             .pipe(Effect.result);
           expect(Result.isFailure(late)).toBe(true);
-          if (Result.isFailure(late))
-            expect(late.failure).toBeInstanceOf(OwnedBySomeoneElse);
-          yield* deleteBranchOutOfBand(
-            initial.project.projectId,
-            initial.cached.branchId,
-          );
+          if (Result.isFailure(late)) expect(late.failure).toBeInstanceOf(OwnedBySomeoneElse);
+          yield* deleteBranchOutOfBand(initial.project.projectId, initial.cached.branchId);
           const cached = yield* provider
-            .reconcile({
-              ...context,
-              news,
-              olds: news,
-              output: initial.cached,
-            })
+            .reconcile({ ...context, news, olds: news, output: initial.cached })
             .pipe(Effect.result);
           expect(Result.isFailure(cached)).toBe(true);
-          if (Result.isFailure(cached))
-            expect(cached.failure).toBeInstanceOf(OwnedBySomeoneElse);
+          if (Result.isFailure(cached)) expect(cached.failure).toBeInstanceOf(OwnedBySomeoneElse);
           const observed = yield* getProjectBranch({
             project_id: initial.project.projectId,
             branch_id: initial.foreign.branchId,
@@ -811,27 +695,20 @@ describe.concurrent(
 );
 
 /** Rewrite the deployed branch's state row into a wedged `creating` row. */
-const wedgeBranchRow = (
-  stack: { name: string; stage: string },
-  project: unknown,
-) =>
+const wedgeBranchRow = (stack: { name: string; stage: string }, project: unknown) =>
   Effect.gen(function* () {
     const state = yield* yield* State;
     const stage = stack.stage;
     const fqns = yield* state.list({ stack: stack.name, stage });
     const rows = yield* Effect.forEach(fqns, (fqn) =>
-      state
-        .get({ stack: stack.name, stage, fqn })
-        .pipe(Effect.map((row) => ({ fqn, row }))),
+      state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
     );
     const wedged = rows.find(
       (r): r is { fqn: string; row: ResourceState } =>
         isResourceState(r.row) && r.row.resourceType === "Neon.Branch",
     );
     if (!wedged) {
-      return yield* Effect.die(
-        new Error("no Branch state row found after deploy"),
-      );
+      return yield* Effect.die(new Error("no Branch state row found after deploy"));
     }
     yield* state.set({
       stack: stack.name,
@@ -841,10 +718,7 @@ const wedgeBranchRow = (
         ...wedged.row,
         status: "creating",
         attr: undefined,
-        props: {
-          ...wedged.row.props,
-          project,
-        },
+        props: { ...wedged.row.props, project },
       },
     });
   });
@@ -852,14 +726,10 @@ const wedgeBranchRow = (
 /** Delete the branch out-of-band and wait (bounded) until it is gone. */
 const deleteBranchOutOfBand = (projectId: string, branchId: string) =>
   Effect.gen(function* () {
-    yield* deleteProjectBranch({
-      project_id: projectId,
-      branch_id: branchId,
-    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    const gone = yield* getProjectBranch({
-      project_id: projectId,
-      branch_id: branchId,
-    }).pipe(
+    yield* deleteProjectBranch({ project_id: projectId, branch_id: branchId }).pipe(
+      Effect.catchTag("NotFound", () => Effect.void),
+    );
+    const gone = yield* getProjectBranch({ project_id: projectId, branch_id: branchId }).pipe(
       Effect.as("found" as const),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
       Effect.repeat({
@@ -899,10 +769,7 @@ test.provider(
 
       // Delete the branch out-of-band so recovery must recreate it (a
       // recovery `read` returning attributes would skip the create path).
-      yield* deleteBranchOutOfBand(
-        initial.project.projectId,
-        initial.branch.branchId,
-      );
+      yield* deleteBranchOutOfBand(initial.project.projectId, initial.branch.branchId);
 
       const recovered = yield* deployBranch();
       expect(recovered.branch.branchId).toBeDefined();
@@ -919,12 +786,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:neon",
-      "provider:neon:branch",
-      "provider:neon:project",
-      "live",
-    ],
+    tags: ["provider:neon", "provider:neon:branch", "provider:neon:project", "live"],
     timeout: 120_000,
   },
 );
@@ -955,10 +817,7 @@ test.provider(
       // `project` prop deserialized as `undefined`.
       yield* wedgeBranchRow(stack, undefined);
 
-      yield* deleteBranchOutOfBand(
-        initial.project.projectId,
-        initial.branch.branchId,
-      );
+      yield* deleteBranchOutOfBand(initial.project.projectId, initial.branch.branchId);
 
       const recovered = yield* deployBranch();
       expect(recovered.branch.branchId).toBeDefined();
@@ -975,12 +834,7 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:neon",
-      "provider:neon:branch",
-      "provider:neon:project",
-      "live",
-    ],
+    tags: ["provider:neon", "provider:neon:branch", "provider:neon:project", "live"],
     timeout: 120_000,
   },
 );

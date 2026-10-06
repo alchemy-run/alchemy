@@ -26,12 +26,7 @@ export interface ListInstanceGroups extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<SVC.ListInstanceGroupsInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.ListInstanceGroupsOutput,
-      SVC.ListInstanceGroupsError
-    >
+    ) => Effect.Effect<SVC.ListInstanceGroupsOutput, SVC.ListInstanceGroupsError>
   >
 > {}
-export const ListInstanceGroups = Binding.Service<ListInstanceGroups>(
-  "AWS.EMR.ListInstanceGroups",
-);
+export const ListInstanceGroups = Binding.Service<ListInstanceGroups>("AWS.EMR.ListInstanceGroups");

@@ -35,7 +35,6 @@ export interface ListOrganizationInsights extends Binding.Service<
     >
   >
 > {}
-export const ListOrganizationInsights =
-  Binding.Service<ListOrganizationInsights>(
-    "AWS.DevOpsGuru.ListOrganizationInsights",
-  );
+export const ListOrganizationInsights = Binding.Service<ListOrganizationInsights>(
+  "AWS.DevOpsGuru.ListOrganizationInsights",
+);

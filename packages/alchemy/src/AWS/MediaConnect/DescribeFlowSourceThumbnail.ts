@@ -39,7 +39,6 @@ export interface DescribeFlowSourceThumbnail extends Binding.Service<
     >
   >
 > {}
-export const DescribeFlowSourceThumbnail =
-  Binding.Service<DescribeFlowSourceThumbnail>(
-    "AWS.MediaConnect.DescribeFlowSourceThumbnail",
-  );
+export const DescribeFlowSourceThumbnail = Binding.Service<DescribeFlowSourceThumbnail>(
+  "AWS.MediaConnect.DescribeFlowSourceThumbnail",
+);

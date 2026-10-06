@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { VpcLink } from "@/AWS/ApiGatewayV2";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { VpcLink } from "@/AWS/ApiGatewayV2";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -32,9 +32,7 @@ test.provider.skipIf(!!process.env.FAST)(
 // reach AVAILABLE (and a comparable window to release its ENIs on delete),
 // which exceeds the suite's provisioning-wait budget. Set
 // AWS_TEST_APIGWV2_VPCLINK=1 to run it against the default VPC's subnets.
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.AWS_TEST_APIGWV2_VPCLINK,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.AWS_TEST_APIGWV2_VPCLINK)(
   "create, rename, delete VPC link",
   (stack) =>
     Effect.gen(function* () {
@@ -70,9 +68,7 @@ test.provider.skipIf(
       // Rename in place (name is the only mutable prop).
       const renamed = yield* deployLink("v2");
       expect(renamed.vpcLinkId).toBe(link.vpcLinkId);
-      const afterRename = yield* agw2.getVpcLink({
-        VpcLinkId: link.vpcLinkId,
-      });
+      const afterRename = yield* agw2.getVpcLink({ VpcLinkId: link.vpcLinkId });
       expect(afterRename.Name).toBe("alchemy-v2link-v2");
 
       yield* stack.destroy();
@@ -80,19 +76,12 @@ test.provider.skipIf(
       const gone = yield* agw2.getVpcLink({ VpcLinkId: link.vpcLinkId }).pipe(
         // DELETING still resolves; the link is fully gone on NotFound.
         Effect.map((r) => r.VpcLinkStatus ?? "unknown"),
-        Effect.catchTag("NotFoundException", () =>
-          Effect.succeed("deleted" as const),
-        ),
+        Effect.catchTag("NotFoundException", () => Effect.succeed("deleted" as const)),
       );
       expect(["deleted", "DELETING"]).toContain(gone);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:apigatewayv2",
-      "provider:aws:ec2",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:apigatewayv2", "provider:aws:ec2", "live"],
     timeout: 480_000,
   },
 );
