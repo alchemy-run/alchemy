@@ -5177,10 +5177,7 @@ export const LiveWorkerProvider = () =>
                   error._tag === "WorkerHasNoVersions" ||
                   error._tag === "DispatchNamespaceScriptNotFound" ||
                   error._tag === "DispatchNamespaceNotFound"),
-              schedule: Schedule.max([
-                Schedule.exponential(250),
-                Schedule.recurs(6),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
             }),
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
             Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
