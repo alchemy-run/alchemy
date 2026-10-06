@@ -96,7 +96,7 @@ export const RuntimeLive = Layer.effect(
         return { className: namespace.className, container: namespace.container };
       });
       if (!containers.length) {
-        return { imageNames: new Map() };
+        return { containerOptions: new Map() };
       }
       // Local development with containers relies on pulling/building `linux/amd64`
       // images, which the Docker daemon on Windows cannot do (it runs Windows
@@ -110,7 +110,7 @@ export const RuntimeLive = Layer.effect(
         });
       }
       // workerd container options per Durable Object class name.
-      const imageNames = new Map<
+      const containerOptions = new Map<
         string,
         WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions
       >();
@@ -171,18 +171,18 @@ export const RuntimeLive = Layer.effect(
         containers,
         Effect.fnUntraced(function* ({ className, container }) {
           if ("images" in container) {
-            imageNames.set(className, {
+            containerOptions.set(className, {
               images: yield* prepareNamedImages(className, container.images),
             });
           } else {
-            imageNames.set(className, {
+            containerOptions.set(className, {
               imageName: yield* prepareImage(className, container),
             });
           }
         }),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.zip(docker.getWorkerdDockerConfiguration, { concurrent: true }));
-      return { imageNames, containerEngine };
+      return { containerOptions, containerEngine };
     });
 
     return Runtime.of({
@@ -195,7 +195,7 @@ export const RuntimeLive = Layer.effect(
         };
         const [
           { config, context, bindings, tails, streamingTails },
-          { containerEngine, imageNames },
+          { containerEngine, containerOptions },
         ] = yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
           concurrency: "unbounded",
         });
@@ -226,7 +226,7 @@ export const RuntimeLive = Layer.effect(
                     bindings,
                     modules: worker.modules.map(moduleToWorkerd),
                     durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => {
-                      const container = imageNames.get(namespace.className);
+                      const container = containerOptions.get(namespace.className);
                       return {
                         className: namespace.className,
                         enableSql: namespace.sql,

@@ -2,6 +2,7 @@ import type * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import {
   ContainerImagePreparationError,
@@ -25,26 +26,25 @@ export const waitForContainerImage = <E, R>(options: {
     };
     yield* options.session.note(`Preparing ${options.name} image… 0m 0s`, { kind: "status" });
     yield* Effect.gen(function* () {
-      while (true) {
-        const result = yield* options.prepare;
-        const time = elapsed(yield* Clock.currentTimeMillis);
-        if (result.status === "ready") {
-          yield* options.session.note(`Prepared ${options.name} image (${time}).`, {
-            kind: "status",
-          });
-          return;
-        }
-        if (result.status === "error") {
-          return yield* new ContainerImagePreparationError({
-            image: options.image,
-            status: "error",
-            message: result.reason ?? `Cloudflare could not prepare image '${options.name}'.`,
-          });
-        }
-        yield* options.session.note(`Preparing ${options.name} image… ${time}`, { kind: "status" });
-        yield* Effect.sleep("5 seconds");
+      const result = yield* options.prepare;
+      const time = elapsed(yield* Clock.currentTimeMillis);
+      if (result.status === "ready") {
+        yield* options.session.note(`Prepared ${options.name} image (${time}).`, {
+          kind: "status",
+        });
+        return true;
       }
+      if (result.status === "error") {
+        return yield* new ContainerImagePreparationError({
+          image: options.image,
+          status: "error",
+          message: result.reason ?? `Cloudflare could not prepare image '${options.name}'.`,
+        });
+      }
+      yield* options.session.note(`Preparing ${options.name} image… ${time}`, { kind: "status" });
+      return false;
     }).pipe(
+      Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (ready) => ready }),
       Effect.timeoutOrElse({
         duration: timeout,
         orElse: () =>

@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { deepEqual } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
+import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import type {
   AnyContainerApplicationProps,
@@ -185,3 +186,25 @@ export const durableObjectSettingsPatch = (
       : {}),
   };
 };
+
+/** Common attributes before a Durable Object-managed application exists remotely. */
+export const durableObjectPlaceholder = (
+  identity: Pick<
+    ContainerApplication["Attributes"],
+    "applicationId" | "applicationName" | "accountId" | "createdAt" | "observability"
+  >,
+): ContainerApplication["Attributes"] => ({
+  ...identity,
+  schedulingPolicy: "durable_object",
+  instances: undefined,
+  maxInstances: undefined,
+  constraints: undefined,
+  affinities: undefined,
+  configuration: {},
+  durableObjects: undefined,
+  version: undefined,
+  dev: undefined,
+});
+
+export const namedImageHash = (images: Record<string, string>) =>
+  Effect.map(sha256Object(images), (image) => ({ image, images }));

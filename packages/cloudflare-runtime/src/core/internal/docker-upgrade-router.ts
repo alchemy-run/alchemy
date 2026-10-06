@@ -1,5 +1,6 @@
 import * as NodeNet from "node:net";
 import type * as NodeStream from "node:stream";
+import * as Effect from "effect/Effect";
 import { connectDockerSocket } from "./connect-docker-socket.ts";
 
 /** Give up on a client that sends more header bytes than this. */
@@ -18,18 +19,21 @@ const isTcpUpgrade = (headers: string) => /^upgrade:\s*tcp\s*$/im.test(headers);
  *
  * This router reads each connection's request headers, then pipes the whole
  * connection either straight to the Docker socket (`Upgrade: tcp`) or to the
- * HTTP proxy (everything else). Every socket it opens is added to `sockets`
- * so the owner can destroy them on shutdown.
+ * HTTP proxy (everything else). Its scope destroys all sockets on shutdown.
  */
-export const makeDockerUpgradeRouter = ({
+export const makeDockerUpgradeRouter = Effect.fnUntraced(function* ({
   dockerSocketPath,
   httpProxyPort,
-  sockets,
 }: {
   dockerSocketPath: string;
   httpProxyPort: number;
-  sockets: Set<NodeStream.Duplex>;
-}): NodeNet.Server => {
+}) {
+  const sockets = new Set<NodeStream.Duplex>();
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      for (const socket of sockets) socket.destroy();
+    }),
+  );
   const track = (socket: NodeStream.Duplex) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -80,4 +84,4 @@ export const makeDockerUpgradeRouter = ({
     };
     client.on("data", onData);
   });
-};
+});

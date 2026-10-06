@@ -42,6 +42,8 @@ import {
 import {
   ContainerConfigurationError,
   isDurableObjectContainer,
+  durableObjectPlaceholder,
+  namedImageHash,
   durableObjectSettingsPatch,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
@@ -535,7 +537,7 @@ export const LiveContainerProvider = () =>
         build: ImageBuild,
         imageRef: string,
         session?: Pick<ScopedPlanStatusSession, "note">,
-        reuseRemotePublication = false,
+        { reuseRemotePublication = false }: { reuseRemotePublication?: boolean } = {},
       ) {
         const platform = publicationPlatform;
 
@@ -670,7 +672,7 @@ export const LiveContainerProvider = () =>
         imageHash: string,
         previousImageRef: string | undefined,
         session?: Pick<ScopedPlanStatusSession, "note">,
-        reuseRemotePublication = false,
+        { reuseRemotePublication = false }: { reuseRemotePublication?: boolean } = {},
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const key = JSON.stringify([
@@ -683,7 +685,7 @@ export const LiveContainerProvider = () =>
           imageHash,
         ]);
         const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session, reuseRemotePublication).pipe(
+          publishImage(id, props, build, imageRef, session, { reuseRemotePublication }).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
                 ? Effect.sync(() => {
@@ -715,6 +717,52 @@ export const LiveContainerProvider = () =>
               ? undefined
               : (yield* resolvePublishedImageRef(props, previousImageRef)).digest,
         };
+      });
+
+      const resolveDeploymentImage = Effect.fn(function* ({
+        id,
+        news,
+        existing,
+        build,
+        imageRef,
+        imageHash,
+        session,
+      }: {
+        id: string;
+        news: AnyContainerApplicationProps;
+        existing: ContainerApplication["Attributes"];
+        build: ImageBuild;
+        imageRef: string;
+        imageHash: string;
+        session: Pick<ScopedPlanStatusSession, "note">;
+      }) {
+        yield* validateContainerConfiguration(news, existing.schedulingPolicy);
+        const existingImage = existing.configuration.image;
+        if (!existingImage) {
+          return yield* new ContainerConfigurationError({
+            message: `Container application '${existing.applicationName}' has no deployment image.`,
+          });
+        }
+        let deploymentImageRef = existingImage;
+        let imageDigest = existing.hash?.digest;
+        if (imageHash !== existing.hash?.image) {
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            build,
+            imageRef,
+            imageHash,
+            existing.hash?.digest === undefined ? existingImage : undefined,
+            session,
+          );
+          const existingDigest = existing.hash?.digest ?? published.previousDigest;
+          deploymentImageRef =
+            published.digest === existingDigest && news.publish?.repository === undefined
+              ? existingImage
+              : published.imageRef;
+          imageDigest = published.digest;
+        }
+        return { deploymentImageRef, imageDigest };
       });
 
       // ---------------------------------------------------------------
@@ -798,7 +846,7 @@ export const LiveContainerProvider = () =>
               session,
               // The registry tag keyed by image inputs is the durable publication checkpoint.
               // Reuse it after an interrupted preparation, including mirrored images.
-              true,
+              { reuseRemotePublication: true },
             );
             imageRef = published.imageRef;
           }
@@ -812,7 +860,7 @@ export const LiveContainerProvider = () =>
         return {
           images,
           devImages,
-          hash: { image: yield* sha256Object(hashes), images: hashes },
+          hash: yield* namedImageHash(hashes),
         };
       });
 
@@ -1145,32 +1193,15 @@ export const LiveContainerProvider = () =>
         yield* Effect.logInfo(`Cloudflare Container update: preparing ${existing.applicationName}`);
         const env = makeContainerEnv(news, accountId, bindings);
         const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
-        yield* validateContainerConfiguration(news, existing.schedulingPolicy);
-        const existingImage = existing.configuration.image;
-        if (!existingImage) {
-          return yield* new ContainerConfigurationError({
-            message: `Container application '${existing.applicationName}' has no deployment image.`,
-          });
-        }
-        let deploymentImageRef = existingImage;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined ? existingImage : undefined,
-            session,
-          );
-          const existingDigest = existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.publish?.repository === undefined
-              ? existingImage
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
+        const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
+          id,
+          news,
+          existing,
+          build,
+          imageRef,
+          imageHash,
+          session,
+        });
         const configuration = desiredConfiguration(news, env, deploymentImageRef);
         const scaling = scalingDefaults(news);
         const configurationHash = yield* applicationConfigurationHash(
@@ -1283,12 +1314,9 @@ export const LiveContainerProvider = () =>
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
-          if (isResolved(news)) {
-            yield* validateContainerConfiguration(news, output?.schedulingPolicy);
-          }
-          if (!isResolved(news) || !isResolved(newBindings)) {
-            return undefined;
-          }
+          if (!isResolved(news)) return;
+          yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          if (!isResolved(newBindings)) return;
           const { accountId } = yield* yield* CloudflareEnvironment;
 
           const oldName = output?.applicationName ?? (yield* createApplicationName(id, olds.name));
@@ -1367,19 +1395,13 @@ export const LiveContainerProvider = () =>
             // exist yet; reconcile creates it. Publish the images now so the
             // Worker's first upload can already reference them.
             return {
-              applicationId: "",
-              applicationName: name,
-              accountId,
-              schedulingPolicy: "durable_object",
-              instances: 0,
-              maxInstances: undefined,
-              configuration: {},
-              constraints: undefined,
-              affinities: undefined,
-              durableObjects: undefined,
-              createdAt: "",
-              version: 0,
-              dev: undefined,
+              ...durableObjectPlaceholder({
+                applicationId: "",
+                applicationName: name,
+                accountId,
+                createdAt: "",
+                observability: news.observability,
+              }),
               ...(yield* publishNamedImages(id, news, undefined, session)),
             } satisfies ContainerApplication["Attributes"];
           }
@@ -1542,32 +1564,15 @@ export const LiveContainerProvider = () =>
                 });
               }
             }
-            yield* validateContainerConfiguration(news, existing.schedulingPolicy);
-            const existingImage = existing.configuration.image;
-            if (!existingImage) {
-              return yield* new ContainerConfigurationError({
-                message: `Container application '${existing.applicationName}' has no deployment image.`,
-              });
-            }
-            let deploymentImageRef = existingImage;
-            let imageDigest = existing.hash?.digest;
-            if (imageHash !== existing.hash?.image) {
-              const published = yield* buildAndPushImage(
-                id,
-                news,
-                build,
-                imageRef,
-                imageHash,
-                existing.hash?.digest === undefined ? existingImage : undefined,
-                session,
-              );
-              const existingDigest = existing.hash?.digest ?? published.previousDigest;
-              deploymentImageRef =
-                published.digest === existingDigest && news.publish?.repository === undefined
-                  ? existingImage
-                  : published.imageRef;
-              imageDigest = published.digest;
-            }
+            const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
+              id,
+              news,
+              existing,
+              build,
+              imageRef,
+              imageHash,
+              session,
+            });
             const configuration = desiredConfiguration(news, env, deploymentImageRef);
             const configurationHash = yield* applicationConfigurationHash(
               scalingDefaults(news),

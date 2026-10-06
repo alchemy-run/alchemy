@@ -27,6 +27,8 @@ import {
 } from "./ContainerBundle.ts";
 import {
   isDurableObjectContainer,
+  durableObjectPlaceholder,
+  namedImageHash,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
@@ -191,7 +193,7 @@ export const LocalContainerProvider = () =>
         }
         return {
           devImages,
-          hash: { image: yield* sha256Object(hashes), images: hashes },
+          hash: yield* namedImageHash(hashes),
         };
       });
 
@@ -248,21 +250,14 @@ export const LocalContainerProvider = () =>
           // runtime image reference is just the name.
           const imageNames = Object.keys(news.images ?? {});
           return {
-            applicationId: output?.applicationId ?? generateLocalId(),
-            applicationName: yield* createContainerApplicationName(id, news.name),
-            accountId,
-            schedulingPolicy: "durable_object",
-            instances: 0,
-            maxInstances: undefined,
-            constraints: undefined,
-            affinities: undefined,
-            configuration: {},
-            observability: news.observability,
+            ...durableObjectPlaceholder({
+              applicationId: output?.applicationId ?? generateLocalId(),
+              applicationName: yield* createContainerApplicationName(id, news.name),
+              accountId,
+              createdAt: output?.createdAt ?? new Date().toISOString(),
+              observability: news.observability,
+            }),
             images: Object.fromEntries(imageNames.map((name) => [name, name])),
-            durableObjects: undefined,
-            createdAt: output?.createdAt ?? new Date().toISOString(),
-            version: 1,
-            dev: undefined,
             ...(yield* prepareNamedImages(id, news)),
           } satisfies ContainerApplication["Attributes"];
         }

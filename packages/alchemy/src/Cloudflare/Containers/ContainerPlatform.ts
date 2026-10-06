@@ -8,16 +8,21 @@ import { serveRpc } from "../../Rpc.ts";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
 import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import { ContainerTypeId, type Container, type ContainerStartupOptions } from "./Container.ts";
+import {
+  ContainerTypeId,
+  type Container,
+  type ContainerStartupOptions,
+  type ContainerError,
+} from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
+import { fromContainer } from "./ContainerClient.ts";
 import { workerContainerBinding } from "./ContainerConfiguration.ts";
 
 const toHttpUrl = (url: string) =>
@@ -65,26 +70,26 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
   // const _httpEffect = yield* init;
   return Effect.gen(function* () {
     const state = yield* DurableObjectState;
+    const client = fromContainer(() => state.container);
+    // Legacy methods expose native failures as defects rather than typed errors.
+    const legacy = <A, R>(effect: Effect.Effect<A, ContainerError, R>) =>
+      Effect.catch(effect, (error) => Effect.die(error.cause));
     return {
       id: container.LogicalId,
-      running: Effect.sync(() => state.container!.running ?? false),
-      destroy: (error?: any) => Effect.promise(() => state.container!.destroy(error)),
-      signal: (signo: number) => Effect.sync(() => state.container!.signal(signo)),
-      getTcpPort: (port: number) =>
-        Effect.sync(() => fromCloudflareFetcher(httpSchemePort(state.container!.getTcpPort(port)))),
+      running: legacy(client.running).pipe(Effect.map((running) => running ?? false)),
+      start: (options?: ContainerStartupOptions) => legacy(client.start(options)),
+      destroy: (error?: unknown) => legacy(client.destroy(error)),
+      signal: (signo: number) => legacy(client.signal(signo)),
+      getTcpPort: (port: number) => legacy(client.getTcpPort(port)),
       setInactivityTimeout: (durationMs: number | bigint) =>
-        Effect.promise(() => state.container!.setInactivityTimeout(durationMs)),
+        legacy(client.setInactivityTimeout(durationMs)),
       interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-        toCloudflareFetcher(binding).pipe(
-          Effect.map((binding) => state.container!.interceptOutboundHttp(addr, binding)),
-        ),
+        legacy(client.interceptOutboundHttp(addr, binding)),
       interceptAllOutboundHttp: (binding: Fetcher) =>
-        toCloudflareFetcher(binding).pipe(
-          Effect.map((binding) => state.container!.interceptAllOutboundHttp(binding)),
-        ),
-      monitor: () => Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
-      start: (options?: ContainerStartupOptions) =>
-        Effect.sync(() => state.container!.start(options)),
+        legacy(client.interceptAllOutboundHttp(binding)),
+      // An unattached legacy client has nothing to monitor.
+      monitor: () =>
+        Effect.suspend(() => (state.container ? legacy(client.monitor()) : Effect.void)),
     };
   });
 });
