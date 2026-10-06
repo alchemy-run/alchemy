@@ -201,7 +201,7 @@ export class FirewallWaitTimedOut extends Data.TaggedError("DigitalOcean.Firewal
   readonly lastStatus: FirewallStatus | undefined;
 }> {
   override get message() {
-    return `Firewall ${this.firewallId} did not show ${this.waitingFor} in time (last status: ${this.lastStatus ?? "missing"}).`;
+    return `Firewall ${this.firewallId} timed out waiting for ${this.waitingFor} (last status: ${this.lastStatus ?? "missing"}).`;
   }
 }
 
@@ -210,14 +210,6 @@ export class FirewallApplyFailed extends Data.TaggedError("DigitalOcean.Firewall
 }> {
   override get message() {
     return `DigitalOcean failed to apply firewall ${this.firewallId} to its droplets.`;
-  }
-}
-
-export class FirewallStillExists extends Data.TaggedError("DigitalOcean.FirewallStillExists")<{
-  readonly firewallId: string;
-}> {
-  override get message() {
-    return `Firewall ${this.firewallId} still exists after delete.`;
   }
 }
 
@@ -395,6 +387,9 @@ const observeOwned = Effect.fn(function* (
   return yield* observeByName(generatedName);
 });
 
+const lastStatusOf = (last: Option.Option<ApiFirewall>) =>
+  Option.getOrUndefined(Option.map(last, (firewall) => firewall.status));
+
 const waitUntilPropagated = (firewallId: string) =>
   pollUntil(observeById(firewallId), {
     ...FIREWALL_POLL,
@@ -404,7 +399,7 @@ const waitUntilPropagated = (firewallId: string) =>
       new FirewallWaitTimedOut({
         firewallId,
         waitingFor: "its rules on every droplet",
-        lastStatus: Option.getOrUndefined(Option.map(last, (firewall) => firewall.status)),
+        lastStatus: lastStatusOf(last),
       }),
   }).pipe(
     Effect.map((observed) => observed.value),
@@ -418,7 +413,12 @@ const waitUntilGone = (firewallId: string) =>
   pollUntil(observeById(firewallId), {
     ...FIREWALL_POLL,
     until: Option.isNone,
-    onTimeout: () => new FirewallStillExists({ firewallId }),
+    onTimeout: (last) =>
+      new FirewallWaitTimedOut({
+        firewallId,
+        waitingFor: "deletion",
+        lastStatus: lastStatusOf(last),
+      }),
   });
 
 const createFirewall = (desired: DesiredFirewall) =>

@@ -245,15 +245,7 @@ export class DropletWaitTimedOut extends Data.TaggedError("DigitalOcean.DropletW
 }> {
   override get message() {
     const last = this.lastStatus ?? "not found";
-    return `Droplet ${this.dropletId} did not reach ${this.waitingFor} in time (last status: ${last}).`;
-  }
-}
-
-export class DropletStillExists extends Data.TaggedError("DigitalOcean.DropletStillExists")<{
-  readonly dropletId: number;
-}> {
-  override get message() {
-    return `Droplet ${this.dropletId} still exists after its destroy was requested.`;
+    return `Droplet ${this.dropletId} timed out waiting for ${this.waitingFor} (last status: ${last}).`;
   }
 }
 
@@ -263,16 +255,7 @@ export class DropletActionFailed extends Data.TaggedError("DigitalOcean.DropletA
   readonly status: ActionStatus;
 }> {
   override get message() {
-    return `Droplet ${this.dropletId} action ${this.actionId} ended with status '${this.status}'.`;
-  }
-}
-
-export class DropletActionTimedOut extends Data.TaggedError("DigitalOcean.DropletActionTimedOut")<{
-  readonly dropletId: number;
-  readonly actionId: number;
-}> {
-  override get message() {
-    return `Droplet ${this.dropletId} action ${this.actionId} did not finish in time.`;
+    return `Droplet ${this.dropletId} action ${this.actionId} did not complete (last status: '${this.status}').`;
   }
 }
 
@@ -513,6 +496,9 @@ const observeByIdOrTag = Effect.fn(function* (dropletId: number | undefined, tag
   return yield* observeNewestTagged(tag);
 });
 
+const lastStatusOf = (last: Option.Option<ApiDroplet>) =>
+  Option.getOrUndefined(Option.map(last, (droplet) => droplet.status));
+
 // GET can lag a change by up to a minute, and answers 404 right after
 // create, so every change is polled until observed.
 const waitForDroplet = (
@@ -531,7 +517,7 @@ const waitForDroplet = (
       new DropletWaitTimedOut({
         dropletId,
         waitingFor: wait.waitingFor,
-        lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
+        lastStatus: lastStatusOf(last),
       }),
   }).pipe(Effect.map((observed) => observed.value));
 
@@ -548,7 +534,12 @@ const waitUntilGone = (dropletId: number) =>
   pollUntil(observeById(dropletId), {
     ...PROVISIONING_POLL,
     until: Option.isNone,
-    onTimeout: () => new DropletStillExists({ dropletId }),
+    onTimeout: (last) =>
+      new DropletWaitTimedOut({
+        dropletId,
+        waitingFor: "deletion",
+        lastStatus: lastStatusOf(last),
+      }),
   });
 
 // A 404 on a new action is read lag.
@@ -562,7 +553,7 @@ const waitForAction = (dropletId: number, actionId: number) =>
   pollUntil(observeActionStatus(dropletId, actionId), {
     ...ACTION_POLL,
     until: isFinished,
-    onTimeout: () => new DropletActionTimedOut({ dropletId, actionId }),
+    onTimeout: (status) => new DropletActionFailed({ dropletId, actionId, status }),
   }).pipe(
     Effect.filterOrFail(
       (status) => status === "completed",
@@ -681,7 +672,7 @@ const waitUntilAcceptsDestroy = (dropletId: number) =>
       new DropletWaitTimedOut({
         dropletId,
         waitingFor: "a state that accepts destroy",
-        lastStatus: Option.getOrUndefined(Option.map(last, (droplet) => droplet.status)),
+        lastStatus: lastStatusOf(last),
       }),
   });
 

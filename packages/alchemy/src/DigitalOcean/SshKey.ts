@@ -96,15 +96,7 @@ export class SshKeyWaitTimedOut extends Data.TaggedError("DigitalOcean.SshKeyWai
   readonly waitingFor: string;
 }> {
   override get message() {
-    return `SSH key ${this.sshKeyId} did not show ${this.waitingFor} in time.`;
-  }
-}
-
-export class SshKeyStillExists extends Data.TaggedError("DigitalOcean.SshKeyStillExists")<{
-  readonly sshKeyId: number;
-}> {
-  override get message() {
-    return `SSH key ${this.sshKeyId} still exists after delete.`;
+    return `SSH key ${this.sshKeyId} timed out waiting for ${this.waitingFor}.`;
   }
 }
 
@@ -212,7 +204,7 @@ const waitUntilGone = (sshKeyId: number) =>
   pollUntil(observeById(sshKeyId), {
     ...SSH_KEY_POLL,
     until: Option.isNone,
-    onTimeout: () => new SshKeyStillExists({ sshKeyId }),
+    onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: "deletion" }),
   });
 
 // A concurrent deploy of this resource can register the key first. A

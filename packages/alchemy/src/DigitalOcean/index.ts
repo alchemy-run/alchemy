@@ -3,10 +3,8 @@ export * from "./Credentials.ts";
 export {
   Droplet,
   DropletActionFailed,
-  DropletActionTimedOut,
   DropletCreateFailed,
   DropletProvider,
-  DropletStillExists,
   DropletTagReserved,
   DropletWaitTimedOut,
   type DropletAttributes,
@@ -17,7 +15,6 @@ export {
   Firewall,
   FirewallApplyFailed,
   FirewallProvider,
-  FirewallStillExists,
   FirewallWaitTimedOut,
   type FirewallAttributes,
   type FirewallInboundRule,
@@ -33,7 +30,6 @@ export type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 export {
   SshKey,
   SshKeyProvider,
-  SshKeyStillExists,
   SshKeyUnparseable,
   SshKeyWaitTimedOut,
   type SshKeyAttributes,
