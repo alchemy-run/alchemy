@@ -14,7 +14,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 class KeyStillExists extends Data.TaggedError("KeyStillExists")<{ hash: string }> {}
 
-/** Typed wait-until-gone: getKey must settle on `NotFound`. */
+/** Typed wait-until-gone: getKey must settle on `KeyNotFound`. */
 const waitForKeyDeleted = (hash: string) =>
   SDK.getKey({ hash }).pipe(
     Effect.flatMap(() => Effect.fail(new KeyStillExists({ hash }))),
@@ -23,7 +23,7 @@ const waitForKeyDeleted = (hash: string) =>
       schedule: Schedule.spaced("1 second"),
       times: 10,
     }),
-    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catchTag("KeyNotFound", () => Effect.void),
   );
 
 const observeKey = (hash: string) =>

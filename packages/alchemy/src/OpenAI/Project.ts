@@ -126,7 +126,7 @@ const projectName = (id: string, name: string | undefined) =>
 const getLiveProject = (projectId: string) =>
   OpenAI.projects.getProject({ project_id: projectId }).pipe(
     Effect.map((project) => (isArchived(project) ? undefined : project)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),
   );
 
 /** Active (non-archived) projects with exactly this name. */
@@ -215,6 +215,6 @@ export const ProjectProvider = () =>
       if (project === undefined) return;
       yield* OpenAI.projects
         .archiveProject({ project_id: output.projectId })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag("ProjectNotFound", () => Effect.void));
     }),
   });

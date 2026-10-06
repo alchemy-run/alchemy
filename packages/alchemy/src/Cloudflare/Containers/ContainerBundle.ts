@@ -223,8 +223,10 @@ const runtimeDefaultBase = (runtime: "bun" | "node") =>
  */
 export const withImageLayers = <P extends AnyContainerApplicationProps>(
   props: P,
-  bindings: ReadonlyArray<{ readonly data?: { readonly image?: ReadonlyArray<ImageLayer> } }>,
-): P => {
+  bindings: ReadonlyArray<{
+    readonly data?: { readonly image?: ReadonlyArray<ImageLayer>; readonly [key: string]: unknown };
+  }>,
+): P & { imageLayers?: ImageLayer[] } => {
   const layers = dedupeImageLayers(bindings.flatMap((b) => b.data?.image ?? []));
   return layers.length > 0 ? { ...props, imageLayers: layers } : props;
 };

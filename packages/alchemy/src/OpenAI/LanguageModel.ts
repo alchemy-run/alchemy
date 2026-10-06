@@ -508,34 +508,6 @@ const inBandError = (
 const failedResponse = (method: Method, response: ResponseShape) =>
   inBandError(method, response.error ?? {});
 
-/**
- * The SSE `error` event. On the wire its payload is nested
- * (`{ type: "error", error: { type, code, message } }`) while distilled's
- * `ResponseErrorEvent` declares flat `code`/`message`; accept both until the
- * SDK schema is patched.
- */
-const StreamErrorEvent = Schema.Struct({
-  code: Schema.optional(Schema.NullOr(Schema.String)),
-  message: Schema.optional(Schema.String),
-  error: Schema.optional(
-    Schema.Struct({
-      type: Schema.optional(Schema.NullOr(Schema.String)),
-      code: Schema.optional(Schema.NullOr(Schema.String)),
-      message: Schema.optional(Schema.String),
-    }),
-  ),
-});
-
-const streamError = (method: Method, event: unknown) =>
-  Schema.decodeUnknownEffect(StreamErrorEvent)(event).pipe(
-    Effect.mapError(() => invalidOutput(method, "Invalid Responses stream error event")),
-    Effect.flatMap((decoded) =>
-      Effect.fail(
-        inBandError(method, decoded.error ?? { code: decoded.code, message: decoded.message }),
-      ),
-    ),
-  );
-
 const responseParts = (response: ResponseShape, method: Method) =>
   Effect.gen(function* () {
     if (response.status === "failed") return yield* failedResponse(method, response);
@@ -670,7 +642,8 @@ const eventStream = (
               case "response.failed":
                 return yield* failedResponse(method, event.response);
               case "error":
-                return yield* streamError(method, event);
+                // The SSE `error` event nests its failure under `error`.
+                return yield* inBandError(method, event.error);
             }
             return out;
           }),

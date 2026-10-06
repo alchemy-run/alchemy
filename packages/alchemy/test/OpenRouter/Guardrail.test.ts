@@ -13,7 +13,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 class GuardrailStillExists extends Data.TaggedError("GuardrailStillExists")<{ id: string }> {}
 
-/** Typed wait-until-gone: getGuardrail must settle on `NotFound`. */
+/** Typed wait-until-gone: getGuardrail must settle on `GuardrailNotFound`. */
 const waitForGuardrailDeleted = (id: string) =>
   SDK.getGuardrail({ id }).pipe(
     Effect.flatMap(() => Effect.fail(new GuardrailStillExists({ id }))),
@@ -22,7 +22,7 @@ const waitForGuardrailDeleted = (id: string) =>
       schedule: Schedule.spaced("1 second"),
       times: 10,
     }),
-    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catchTag("GuardrailNotFound", () => Effect.void),
   );
 
 const assignedKeys = (id: string) =>

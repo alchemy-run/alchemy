@@ -185,7 +185,7 @@ export const ApiKeyProvider = () =>
       const observe = (hash: string) =>
         getKey({ hash }).pipe(
           Effect.map((response) => response.data),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("KeyNotFound", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -231,7 +231,9 @@ export const ApiKeyProvider = () =>
               workspace_id: news.workspaceId,
             }).pipe(OpenRouter.Retry.none);
             observed = created.data;
-            secret = Redacted.make(created.key);
+            // The SDK delivers the secret as `Redacted`; the `string` arm
+            // only exists in its type.
+            secret = Redacted.isRedacted(created.key) ? created.key : Redacted.make(created.key);
           }
 
           // Sync — PATCH only the aspects whose observed value differs.
@@ -260,7 +262,7 @@ export const ApiKeyProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteKey({ hash: output.hash }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
+            Effect.catchTag("KeyNotFound", () => Effect.void),
           );
         }),
       };

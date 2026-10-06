@@ -327,7 +327,7 @@ export const GuardrailProvider = () =>
       const observe = (id: string) =>
         getGuardrail({ id }).pipe(
           Effect.map((response) => response.data),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("GuardrailNotFound", () => Effect.succeed(undefined)),
         );
 
       /** Every key hash assigned to the guardrail (offset-paginated, bounded). */
@@ -421,7 +421,7 @@ export const GuardrailProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteGuardrail({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
+            Effect.catchTag("GuardrailNotFound", () => Effect.void),
           );
         }),
       };

@@ -74,7 +74,7 @@ describe.skipIf(!process.env.OPENAI_ADMIN_KEY)("OpenAI.ServiceAccount", { tags }
           })
           .pipe(Effect.result);
         expect(Result.isFailure(gone)).toBe(true);
-        if (Result.isFailure(gone)) expect(gone.failure._tag).toBe("NotFound");
+        if (Result.isFailure(gone)) expect(gone.failure._tag).toBe("ServiceAccountNotFound");
 
         yield* stack.destroy();
         const archived = yield* SDK.projects.getProject({ project_id: project.projectId });

@@ -144,7 +144,7 @@ const findRateLimit = (projectId: string, model: string) =>
     Stream.filter((limit) => limit.model === model),
     Stream.runHead,
     Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag(["ProjectNotFound", "NotFound"], () => Effect.succeed(undefined)),
   );
 
 const projectIsLive = (projectId: string) =>
@@ -152,7 +152,7 @@ const projectIsLive = (projectId: string) =>
     Effect.map(
       (project) => project.status !== "archived" && (project.archived_at ?? null) === null,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+    Effect.catchTag("ProjectNotFound", () => Effect.succeed(false)),
   );
 
 export const ProjectRateLimitProvider = () =>
@@ -238,6 +238,6 @@ export const ProjectRateLimitProvider = () =>
           rate_limit_id: observed.id,
           ...body,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["ProjectNotFound", "NotFound"], () => Effect.void));
     }),
   });

@@ -100,7 +100,7 @@ const deployStub = (name: string): Harness => ({
  */
 export const makeHarnessServer = <R>(
   options: HarnessServerOptions<R>,
-): Effect.Effect<Harness, SessionError, Exclude<R, Scope.Scope>> =>
+): Effect.Effect<Harness, never, Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       const host = yield* Binding.Host;
@@ -131,7 +131,11 @@ export const makeHarnessServer = <R>(
     }
     // The host process owns the harness for its whole life.
     const scope = yield* Scope.make();
-    const driver = yield* options.driver.pipe(Effect.provideService(Scope.Scope, scope));
+    // A harness that can't start leaves its host nothing to serve: a defect.
+    const driver = yield* options.driver.pipe(
+      Effect.provideService(Scope.Scope, scope),
+      Effect.orDie,
+    );
     const store = yield* Layer.build(MemorySessionStore).pipe(Scope.provide(scope));
     return yield* makeHarness(driver).pipe(
       Effect.provideContext(store),

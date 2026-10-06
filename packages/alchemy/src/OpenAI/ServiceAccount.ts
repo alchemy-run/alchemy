@@ -116,13 +116,17 @@ const projectIsLive = (projectId: string) =>
     Effect.map(
       (project) => project.status !== "archived" && (project.archived_at ?? null) === null,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+    Effect.catchTag("ProjectNotFound", () => Effect.succeed(false)),
   );
 
 const getAccount = (projectId: string, serviceAccountId: string) =>
   OpenAI.projects
     .getProjectServiceAccount({ project_id: projectId, service_account_id: serviceAccountId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(
+      Effect.catchTag(["ServiceAccountNotFound", "ProjectNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const findAccountsByName = (projectId: string, name: string) =>
   OpenAI.projects.listProjectServiceAccounts.items({ project_id: projectId, limit: 100 }).pipe(
@@ -135,10 +139,12 @@ const findAccountsByName = (projectId: string, name: string) =>
 const keyExists = (projectId: string, apiKeyId: string) =>
   OpenAI.projects.getProjectApiKey({ project_id: projectId, api_key_id: apiKeyId }).pipe(
     Effect.as(true),
-    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+    Effect.catchTag(["ProjectApiKeyNotFound", "ProjectNotFound"], () => Effect.succeed(false)),
   );
 
-const redact = (value: string) => Redacted.make(value);
+/** The SDK delivers key values as `Redacted`; the `string` arm only exists in its type. */
+const redact = (value: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(value) ? value : Redacted.make(value);
 
 export const ServiceAccountProvider = () =>
   Provider.succeed(ServiceAccount, {
@@ -265,6 +271,6 @@ export const ServiceAccountProvider = () =>
           project_id: output.projectId,
           service_account_id: output.serviceAccountId,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["ServiceAccountNotFound", "ProjectNotFound"], () => Effect.void));
     }),
   });
